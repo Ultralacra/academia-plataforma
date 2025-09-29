@@ -11,6 +11,7 @@ import {
   UserCheck,
   BookOpen,
   HelpCircle,
+  ChevronDown,
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,23 +34,39 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { useMemo, useState, useEffect } from "react";
 
-const adminItems = [
+type MenuItem = {
+  title: string;
+  url?: string;
+  icon: any;
+  children?: MenuItem[];
+};
+
+const adminItems: MenuItem[] = [
   { title: "Dashboard", url: "/admin", icon: Home },
-  { title: "Estudiantes", url: "/admin/students", icon: GraduationCap },
+  // Nueva sección con dropdown
+  {
+    title: "Métricas",
+    icon: BarChart3,
+    children: [
+      { title: "Alumnos", url: "/admin/students", icon: GraduationCap },
+      { title: "Equipos", url: "/admin/teams", icon: Users },
+      { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
+    ],
+  },
   { title: "Coaches", url: "/admin/coaches", icon: UserCheck },
-  { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
   { title: "Reportes", url: "/admin/reports", icon: BarChart3 },
 ];
 
-const coachItems = [
+const coachItems: MenuItem[] = [
   { title: "Dashboard", url: "/coach", icon: Home },
   { title: "Mis Estudiantes", url: "/coach/students", icon: Users },
   { title: "Tickets", url: "/coach/tickets", icon: MessageSquare },
   { title: "Contenido", url: "/coach/content", icon: BookOpen },
 ];
 
-const studentItems = [
+const studentItems: MenuItem[] = [
   { title: "Dashboard", url: "/student", icon: Home },
   { title: "Mi Curso", url: "/student/course", icon: BookOpen },
   { title: "Soporte", url: "/student/support", icon: MessageSquare },
@@ -59,7 +76,7 @@ export function AppSidebar() {
   const { user } = useAuth();
   const pathname = usePathname();
 
-  const getMenuItems = () => {
+  const menuItems = useMemo(() => {
     switch (user?.role) {
       case "admin":
         return adminItems;
@@ -70,9 +87,7 @@ export function AppSidebar() {
       default:
         return [];
     }
-  };
-
-  const menuItems = getMenuItems();
+  }, [user?.role]);
 
   const initials = (user?.name ?? user?.email ?? "U")
     .split(" ")
@@ -89,9 +104,24 @@ export function AppSidebar() {
       ? "Estudiante"
       : "Invitado";
 
+  // Estado de despliegue del dropdown "Métricas"
+  const [metricsOpen, setMetricsOpen] = useState(false);
+
+  // Abre automáticamente "Métricas" si estamos en alguna de sus rutas
+  useEffect(() => {
+    if (!pathname) return;
+    if (
+      pathname.startsWith("/admin/students") ||
+      pathname.startsWith("/admin/teams") ||
+      pathname.startsWith("/admin/tickets")
+    ) {
+      setMetricsOpen(true);
+    }
+  }, [pathname]);
+
   return (
     <Sidebar className="border-r">
-      {/* Hacemos el contenido en columnas y ocupando todo el alto */}
+      {/* Contenido en columnas y todo el alto */}
       <SidebarContent className="flex h-full flex-col">
         {/* Header */}
         <div className="p-3">
@@ -125,7 +155,7 @@ export function AppSidebar() {
 
         <Separator className="mx-3" />
 
-        {/* Menú: ocupa el espacio disponible, con scroll oculto */}
+        {/* Menú principal */}
         <div className="flex-1 overflow-y-auto no-scrollbar">
           <SidebarGroup>
             <SidebarGroupLabel className="px-3">Navegación</SidebarGroupLabel>
@@ -134,40 +164,125 @@ export function AppSidebar() {
                 <TooltipProvider>
                   {menuItems.map((item) => {
                     const Icon = item.icon;
-                    const active =
-                      pathname === item.url ||
-                      (item.url !== "/" && pathname?.startsWith(item.url));
+
+                    // Si no tiene hijos, es un link normal
+                    if (!item.children?.length) {
+                      const active =
+                        pathname === item.url ||
+                        (!!item.url &&
+                          item.url !== "/" &&
+                          pathname?.startsWith(item.url));
+                      return (
+                        <SidebarMenuItem key={item.title}>
+                          <Tooltip delayDuration={300}>
+                            <TooltipTrigger asChild>
+                              <SidebarMenuButton
+                                asChild
+                                className={cn(
+                                  "transition-all",
+                                  active
+                                    ? "bg-primary/10 text-primary hover:bg-primary/15"
+                                    : "hover:bg-muted"
+                                )}
+                              >
+                                <Link
+                                  href={item.url ?? "#"}
+                                  className="flex items-center gap-3"
+                                >
+                                  <Icon
+                                    className={cn(
+                                      "h-4 w-4",
+                                      active && "text-primary"
+                                    )}
+                                  />
+                                  <span className="truncate">{item.title}</span>
+                                </Link>
+                              </SidebarMenuButton>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="text-xs">
+                              {item.title}
+                            </TooltipContent>
+                          </Tooltip>
+                        </SidebarMenuItem>
+                      );
+                    }
+
+                    // Si tiene hijos, renderizamos dropdown
+                    const isAnyChildActive = item.children.some((c) =>
+                      pathname?.startsWith(c.url ?? "")
+                    );
+
                     return (
                       <SidebarMenuItem key={item.title}>
-                        <Tooltip delayDuration={300}>
-                          <TooltipTrigger asChild>
-                            <SidebarMenuButton
-                              asChild
+                        {/* Botón que abre/cierra el dropdown */}
+                        <button
+                          type="button"
+                          onClick={() => setMetricsOpen((v) => !v)}
+                          className={cn(
+                            "w-full flex items-center justify-between rounded-md px-2.5 py-2 text-sm transition-all",
+                            metricsOpen || isAnyChildActive
+                              ? "bg-primary/10 text-primary hover:bg-primary/15"
+                              : "hover:bg-muted"
+                          )}
+                        >
+                          <span className="flex items-center gap-3">
+                            <Icon
                               className={cn(
-                                "transition-all",
-                                active
-                                  ? "bg-primary/10 text-primary hover:bg-primary/15"
-                                  : "hover:bg-muted"
+                                "h-4 w-4",
+                                (metricsOpen || isAnyChildActive) &&
+                                  "text-primary"
                               )}
-                            >
-                              <Link
-                                href={item.url}
-                                className="flex items-center gap-3"
-                              >
-                                <Icon
-                                  className={cn(
-                                    "h-4 w-4",
-                                    active && "text-primary"
-                                  )}
-                                />
-                                <span className="truncate">{item.title}</span>
-                              </Link>
-                            </SidebarMenuButton>
-                          </TooltipTrigger>
-                          <TooltipContent side="right" className="text-xs">
-                            {item.title}
-                          </TooltipContent>
-                        </Tooltip>
+                            />
+                            <span className="truncate">{item.title}</span>
+                          </span>
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 transition-transform",
+                              metricsOpen ? "rotate-180" : "rotate-0"
+                            )}
+                          />
+                        </button>
+
+                        {/* Submenú colapsable */}
+                        <div
+                          className={cn(
+                            "mt-1 grid overflow-hidden transition-all",
+                            metricsOpen
+                              ? "grid-rows-[1fr] opacity-100"
+                              : "grid-rows-[0fr] opacity-0"
+                          )}
+                        >
+                          <div className="min-h-0">
+                            <ul className="my-1 ml-8 border-l pl-3 space-y-1">
+                              {item.children.map((child) => {
+                                const CIcon = child.icon;
+                                const active =
+                                  pathname === child.url ||
+                                  (!!child.url &&
+                                    child.url !== "/" &&
+                                    pathname?.startsWith(child.url));
+                                return (
+                                  <li key={child.title}>
+                                    <Link
+                                      href={child.url ?? "#"}
+                                      className={cn(
+                                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                                        active
+                                          ? "bg-primary/10 text-primary hover:bg-primary/15"
+                                          : "hover:bg-muted"
+                                      )}
+                                    >
+                                      <CIcon className="h-4 w-4" />
+                                      <span className="truncate">
+                                        {child.title}
+                                      </span>
+                                    </Link>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        </div>
                       </SidebarMenuItem>
                     );
                   })}
@@ -179,7 +294,7 @@ export function AppSidebar() {
 
         <Separator className="mx-3 mt-2" />
 
-        {/* Footer fijo (no provoca scroll) */}
+        {/* Footer fijo */}
         <div className="p-3">
           <Link
             href={

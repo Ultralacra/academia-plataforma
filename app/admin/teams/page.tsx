@@ -2,13 +2,13 @@
 
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import TicketsContent from "./components/tickets-content";
+import TeamsMetricsContent from "./TeamsMetricsContent";
 
-export default function TicketsPage() {
+export default function TeamsMetricsPage() {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <DashboardLayout>
-        <TicketsContent />
+        <TeamsMetricsContent />
       </DashboardLayout>
     </ProtectedRoute>
   );

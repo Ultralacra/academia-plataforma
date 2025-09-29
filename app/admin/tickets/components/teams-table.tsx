@@ -1,0 +1,91 @@
+"use client";
+
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Users } from "lucide-react";
+
+export default function TeamsTable({
+  grouped,
+  openTeam,
+  loading,
+}: {
+  grouped: Map<
+    number,
+    {
+      team: { id: number; nombre: string };
+      tickets: any[];
+      countByEstado: Record<string, number>;
+    }
+  >;
+  openTeam: (id: number) => void;
+  loading: boolean;
+}) {
+  const rows = Array.from(grouped.values())
+    .map((g) => {
+      const total = g.tickets.length;
+      const pendientes =
+        g.countByEstado["PENDIENTE"] ?? g.countByEstado["pendiente"] ?? 0;
+      const enProgreso =
+        g.countByEstado["EN PROGRESO"] ?? g.countByEstado["en progreso"] ?? 0;
+      const resueltos =
+        g.countByEstado["RESUELTO"] ?? g.countByEstado["resuelto"] ?? 0;
+      return {
+        id: g.team.id,
+        name: g.team.nombre,
+        total,
+        pendientes,
+        enProgreso,
+        resueltos,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  return (
+    <Card>
+      <CardHeader className="pb-0">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Users className="h-4 w-4" /> Resumen por equipo
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="overflow-x-auto pt-2">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-600">
+              <th className="px-4 py-2">Equipo</th>
+              <th className="px-4 py-2">Total</th>
+              <th className="px-4 py-2">Pendientes</th>
+              <th className="px-4 py-2">En Progreso</th>
+              <th className="px-4 py-2">Resueltos</th>
+              <th className="px-4 py-2">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.id} className="border-b">
+                <td className="px-4 py-2 font-medium">{r.name}</td>
+                <td className="px-4 py-2">{r.total}</td>
+                <td className="px-4 py-2">{r.pendientes}</td>
+                <td className="px-4 py-2">{r.enProgreso}</td>
+                <td className="px-4 py-2">{r.resueltos}</td>
+                <td className="px-4 py-2">
+                  <button
+                    className="rounded-xl border px-3 py-1.5 text-xs hover:bg-gray-50"
+                    onClick={() => openTeam(r.id)}
+                  >
+                    Ver equipo
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && !loading && (
+              <tr>
+                <td className="px-4 py-6 text-center text-gray-500" colSpan={6}>
+                  No hay datos para los filtros seleccionados.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}

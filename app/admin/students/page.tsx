@@ -1,22 +1,15 @@
-"use client"
+"use client";
 
-import { ProtectedRoute } from "@/components/auth/protected-route"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { StudentManagement } from "@/components/admin/student-management"
+import { ProtectedRoute } from "@/components/auth/protected-route";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import StudentManagement from "./components/student-management";
 
 function StudentsPage() {
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Gestión de Estudiantes</h1>
-          <p className="text-muted-foreground">Administra todos los estudiantes de la academia</p>
-        </div>
-
-        <StudentManagement />
-      </div>
+      <StudentManagement />
     </DashboardLayout>
-  )
+  );
 }
 
 export default function StudentsPageWrapper() {
@@ -24,5 +17,5 @@ export default function StudentsPageWrapper() {
     <ProtectedRoute allowedRoles={["admin"]}>
       <StudentsPage />
     </ProtectedRoute>
-  )
+  );
 }
