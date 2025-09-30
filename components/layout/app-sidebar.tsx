@@ -8,9 +8,6 @@ import {
   GraduationCap,
   MessageSquare,
   BarChart3,
-  UserCheck,
-  BookOpen,
-  HelpCircle,
   ChevronDown,
 } from "lucide-react";
 import {
@@ -23,7 +20,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
@@ -43,9 +39,9 @@ type MenuItem = {
   children?: MenuItem[];
 };
 
+/* Menú admin SIN Coaches y SIN Reportes */
 const adminItems: MenuItem[] = [
   { title: "Dashboard", url: "/admin", icon: Home },
-  // Nueva sección con dropdown
   {
     title: "Métricas",
     icon: BarChart3,
@@ -55,20 +51,17 @@ const adminItems: MenuItem[] = [
       { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
     ],
   },
-  { title: "Coaches", url: "/admin/coaches", icon: UserCheck },
-  { title: "Reportes", url: "/admin/reports", icon: BarChart3 },
 ];
 
 const coachItems: MenuItem[] = [
   { title: "Dashboard", url: "/coach", icon: Home },
   { title: "Mis Estudiantes", url: "/coach/students", icon: Users },
   { title: "Tickets", url: "/coach/tickets", icon: MessageSquare },
-  { title: "Contenido", url: "/coach/content", icon: BookOpen },
 ];
 
 const studentItems: MenuItem[] = [
   { title: "Dashboard", url: "/student", icon: Home },
-  { title: "Mi Curso", url: "/student/course", icon: BookOpen },
+  { title: "Mi Curso", url: "/student/course", icon: GraduationCap },
   { title: "Soporte", url: "/student/support", icon: MessageSquare },
 ];
 
@@ -89,12 +82,6 @@ export function AppSidebar() {
     }
   }, [user?.role]);
 
-  const initials = (user?.name ?? user?.email ?? "U")
-    .split(" ")
-    .slice(0, 2)
-    .map((s) => s[0]?.toUpperCase())
-    .join("");
-
   const roleLabel =
     user?.role === "admin"
       ? "Administrador"
@@ -104,10 +91,8 @@ export function AppSidebar() {
       ? "Estudiante"
       : "Invitado";
 
-  // Estado de despliegue del dropdown "Métricas"
   const [metricsOpen, setMetricsOpen] = useState(false);
 
-  // Abre automáticamente "Métricas" si estamos en alguna de sus rutas
   useEffect(() => {
     if (!pathname) return;
     if (
@@ -120,34 +105,30 @@ export function AppSidebar() {
   }, [pathname]);
 
   return (
-    <Sidebar className="border-r">
-      {/* Contenido en columnas y todo el alto */}
-      <SidebarContent className="flex h-full flex-col">
-        {/* Header */}
+    <Sidebar className="border-r overflow-x-hidden">
+      <SidebarContent className="flex h-full flex-col overflow-x-hidden">
+        {/* Header: logo a la izquierda + nombre y rol en línea */}
         <div className="p-3">
-          <div className="rounded-xl bg-gradient-to-br from-primary/15 via-primary/10 to-transparent border p-3">
+          <div className="rounded-xl border p-3">
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10 ring-2 ring-primary/20">
-                <AvatarImage
-                  src={(user as any)?.image ?? ""}
-                  alt={user?.name ?? "Avatar"}
-                />
-                <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-medium truncate">
-                    {user?.name ?? user?.email ?? "Usuario"}
-                  </p>
-                  {user?.role && (
-                    <Badge variant="outline" className="h-5 text-[10px] px-1.5">
-                      {roleLabel}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground truncate">
-                  Academia Platform
+              <img
+                src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
+                alt="Logo"
+                className="h-10 w-10 rounded-full ring-4 ring-black/5 object-cover"
+                loading="eager"
+              />
+              <div className="flex items-center gap-2 min-w-0">
+                <p className="font-medium truncate">
+                  {user?.name ?? user?.email ?? "Usuario"}
                 </p>
+                {user?.role && (
+                  <Badge
+                    variant="outline"
+                    className="h-5 text-[10px] px-1.5 border-black/20 text-black"
+                  >
+                    {roleLabel}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -156,7 +137,7 @@ export function AppSidebar() {
         <Separator className="mx-3" />
 
         {/* Menú principal */}
-        <div className="flex-1 overflow-y-auto no-scrollbar">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">
           <SidebarGroup>
             <SidebarGroupLabel className="px-3">Navegación</SidebarGroupLabel>
             <SidebarGroupContent>
@@ -165,7 +146,7 @@ export function AppSidebar() {
                   {menuItems.map((item) => {
                     const Icon = item.icon;
 
-                    // Si no tiene hijos, es un link normal
+                    // Link simple
                     if (!item.children?.length) {
                       const active =
                         pathname === item.url ||
@@ -179,20 +160,27 @@ export function AppSidebar() {
                               <SidebarMenuButton
                                 asChild
                                 className={cn(
-                                  "transition-all",
+                                  "transition-all group relative overflow-hidden",
                                   active
-                                    ? "bg-primary/10 text-primary hover:bg-primary/15"
-                                    : "hover:bg-muted"
+                                    ? "bg-black/5 text-black"
+                                    : "hover:bg-black/5"
                                 )}
                               >
                                 <Link
                                   href={item.url ?? "#"}
                                   className="flex items-center gap-3"
                                 >
+                                  {/* Indicador activo ámbar dentro (sin offsets negativos) */}
+                                  <span
+                                    className={cn(
+                                      "absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-sm bg-amber-500",
+                                      active ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
                                   <Icon
                                     className={cn(
                                       "h-4 w-4",
-                                      active && "text-primary"
+                                      active ? "text-black" : "text-slate-700"
                                     )}
                                   />
                                   <span className="truncate">{item.title}</span>
@@ -207,22 +195,21 @@ export function AppSidebar() {
                       );
                     }
 
-                    // Si tiene hijos, renderizamos dropdown
+                    // Dropdown con hijos
                     const isAnyChildActive = item.children.some((c) =>
                       pathname?.startsWith(c.url ?? "")
                     );
 
                     return (
                       <SidebarMenuItem key={item.title}>
-                        {/* Botón que abre/cierra el dropdown */}
                         <button
                           type="button"
                           onClick={() => setMetricsOpen((v) => !v)}
                           className={cn(
                             "w-full flex items-center justify-between rounded-md px-2.5 py-2 text-sm transition-all",
                             metricsOpen || isAnyChildActive
-                              ? "bg-primary/10 text-primary hover:bg-primary/15"
-                              : "hover:bg-muted"
+                              ? "bg-black/5 text-black"
+                              : "hover:bg-black/5"
                           )}
                         >
                           <span className="flex items-center gap-3">
@@ -230,7 +217,7 @@ export function AppSidebar() {
                               className={cn(
                                 "h-4 w-4",
                                 (metricsOpen || isAnyChildActive) &&
-                                  "text-primary"
+                                  "text-black"
                               )}
                             />
                             <span className="truncate">{item.title}</span>
@@ -253,7 +240,7 @@ export function AppSidebar() {
                           )}
                         >
                           <div className="min-h-0">
-                            <ul className="my-1 ml-8 border-l pl-3 space-y-1">
+                            <ul className="my-1 ml-6 border-l pl-3 space-y-1 relative">
                               {item.children.map((child) => {
                                 const CIcon = child.icon;
                                 const active =
@@ -262,17 +249,31 @@ export function AppSidebar() {
                                     child.url !== "/" &&
                                     pathname?.startsWith(child.url));
                                 return (
-                                  <li key={child.title}>
+                                  <li key={child.title} className="relative">
                                     <Link
                                       href={child.url ?? "#"}
                                       className={cn(
-                                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors relative overflow-hidden",
                                         active
-                                          ? "bg-primary/10 text-primary hover:bg-primary/15"
-                                          : "hover:bg-muted"
+                                          ? "bg-black/5 text-black"
+                                          : "hover:bg-black/5"
                                       )}
                                     >
-                                      <CIcon className="h-4 w-4" />
+                                      {/* Indicador activo ámbar dentro */}
+                                      <span
+                                        className={cn(
+                                          "absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-sm bg-amber-500",
+                                          active ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      <CIcon
+                                        className={cn(
+                                          "h-4 w-4",
+                                          active
+                                            ? "text-black"
+                                            : "text-slate-700"
+                                        )}
+                                      />
                                       <span className="truncate">
                                         {child.title}
                                       </span>
@@ -290,30 +291,6 @@ export function AppSidebar() {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-        </div>
-
-        <Separator className="mx-3 mt-2" />
-
-        {/* Footer fijo */}
-        <div className="p-3">
-          <Link
-            href={
-              user?.role === "student" ? "/student/support" : "/coach/tickets"
-            }
-            className="group flex items-center gap-3 w-full rounded-lg border p-2.5 hover:bg-muted transition-colors"
-          >
-            <div className="rounded-md p-2 bg-muted group-hover:bg-background">
-              <HelpCircle className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-medium leading-none">
-                ¿Necesitas ayuda?
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                Abre un ticket de soporte
-              </p>
-            </div>
-          </Link>
         </div>
       </SidebarContent>
     </Sidebar>

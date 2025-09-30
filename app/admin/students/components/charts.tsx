@@ -1,3 +1,4 @@
+// app/admin/students/components/charts.tsx
 "use client";
 
 import {
@@ -13,6 +14,7 @@ import {
   Bar,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
 type DistItem = { name: string; value: number };
@@ -71,6 +73,53 @@ function withTopNAndOthers(data: DistItem[], topN = 8): DistItem[] {
   const tail = sorted.slice(topN);
   const others = tail.reduce((acc, x) => acc + (x.value ?? 0), 0);
   return [...head, { name: "Otros", value: others }];
+}
+
+/* ───────────────────── Skeletons ───────────────────── */
+export function PieCardSkeleton({ className }: { className?: string }) {
+  return (
+    <Card className={cn("min-h-[360px] overflow-hidden", className)}>
+      <CardHeader className="pb-0">
+        <Skeleton className="h-4 w-40" />
+      </CardHeader>
+      <CardContent className="flex h-full flex-col pt-2">
+        <div className="flex-1 flex items-center justify-center">
+          <Skeleton className="h-40 w-40 rounded-full" />
+        </div>
+        <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between rounded-md border bg-card px-2.5 py-1.5"
+            >
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3 w-3 rounded-full" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-3 w-10" />
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function BarCardSkeleton({ className }: { className?: string }) {
+  return (
+    <Card className={cn("min-h-[360px] overflow-hidden", className)}>
+      <CardHeader className="pb-0">
+        <Skeleton className="h-4 w-52" />
+      </CardHeader>
+      <CardContent className="h-full pt-2">
+        <div className="h-[280px] w-full flex items-end gap-2">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Skeleton key={i} className="h-[20vh] w-4 rounded-sm" />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
 /* ───────────────────── Pie (donut) ───────────────────── */

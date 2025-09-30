@@ -1,3 +1,4 @@
+// app/admin/students/components/TeamModal.tsx
 "use client";
 
 import {
@@ -24,10 +25,7 @@ export default function TeamModal({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* 
-        w-[92vw] para móviles, sm:max-w-2xl para desktop,
-        max-h-[85vh] y overflow-hidden para que no “salga” de la pantalla.
-      */}
+      {/* w-[92vw] para móviles, sm:max-w-2xl para desktop */}
       <DialogContent className="w-[92vw] sm:max-w-2xl max-h-[85vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

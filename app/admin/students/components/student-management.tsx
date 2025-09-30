@@ -1,3 +1,4 @@
+// app/admin/students/components/student-management.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -29,7 +30,7 @@ import {
   ExternalLink,
   Users,
 } from "lucide-react";
-import { PieCard, BarCard } from "./charts";
+import { PieCard, BarCard, PieCardSkeleton, BarCardSkeleton } from "./charts";
 import TeamModal from "./TeamModal";
 import {
   Select,
@@ -38,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /* ─────────────────────────────────────────
    Helpers
@@ -63,31 +65,19 @@ const dtDateOnly = new Intl.DateTimeFormat("es-ES", {
   year: "numeric",
 });
 function cleanMonthDots(s: string) {
-  // quita el punto en meses abreviados (sep., oct., etc.)
   return s.replaceAll(".", "");
 }
-/** Muestra:
- * - "24 sep 2025, 13:45" si tiene hora (ISO con T)
- * - "24 sep 2025" si viene como YYYY-MM-DD
- * - "—" si vacío
- */
 function formatDateSmart(value?: string | null) {
   if (!value) return "—";
-
-  // ISO con hora (…T…Z)
   if (value.includes("T")) {
     const d = new Date(value);
     if (!isNaN(d.getTime())) return cleanMonthDots(dtDateTime.format(d));
   }
-
-  // Solo fecha YYYY-MM-DD
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) {
     const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
     return cleanMonthDots(dtDateOnly.format(d));
   }
-
-  // Fallback
   const d = new Date(value);
   if (!isNaN(d.getTime())) return cleanMonthDots(dtDateTime.format(d));
   return value;
@@ -228,6 +218,24 @@ export default function StudentManagement() {
       a.date.localeCompare(b.date)
     );
   }, [filtered]);
+
+  /* ─────────── helpers de skeleton para tabla ─────────── */
+  const TableSkeleton = () => (
+    <div className="rounded-md border overflow-hidden">
+      <div className="p-3">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div
+            key={i}
+            className="grid grid-cols-10 gap-3 items-center py-2 border-b last:border-b-0"
+          >
+            {Array.from({ length: 10 }).map((__, j) => (
+              <Skeleton key={j} className="h-3 w-full" />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -414,27 +422,40 @@ export default function StudentManagement() {
       </Card>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <PieCard title="Distribución por Estado" data={distByState} />
-        <PieCard title="Distribución por Etapa" data={distByStage} />
-        <BarCard title="Clientes por día de ingreso" data={byJoinDate} />
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <PieCardSkeleton />
+          <PieCardSkeleton />
+          <BarCardSkeleton />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <PieCard title="Distribución por Estado" data={distByState} />
+          <PieCard title="Distribución por Etapa" data={distByStage} />
+          <BarCard title="Clientes por día de ingreso" data={byJoinDate} />
+        </div>
+      )}
 
       {/* Resultados + Tabla paginada local */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle>Resultados</CardTitle>
           <CardDescription>
-            {loading
-              ? "Cargando..."
-              : `${pageItems.length} de ${totalFiltered} (mostrando 25 por página)`}
+            {loading ? (
+              <Skeleton className="h-4 w-64" />
+            ) : (
+              `${pageItems.length} de ${totalFiltered} (mostrando 25 por página)`
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Consultando clientes...
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Consultando clientes...
+              </div>
+              <TableSkeleton />
             </div>
           ) : (
             <>
@@ -509,13 +530,9 @@ export default function StudentManagement() {
                           )}
                         </TableCell>
                         <TableCell>{c.stage ?? "—"}</TableCell>
-
-                        {/* ←──────── Fechas formateadas aquí */}
                         <TableCell>{formatDateSmart(c.joinDate)}</TableCell>
                         <TableCell>{c.ticketsCount ?? 0}</TableCell>
                         <TableCell>{formatDateSmart(c.lastActivity)}</TableCell>
-                        {/* ────────────────────────────────→ */}
-
                         <TableCell>{c.inactivityDays ?? "—"}</TableCell>
                       </TableRow>
                     ))}
