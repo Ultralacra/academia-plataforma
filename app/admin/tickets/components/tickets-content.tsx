@@ -12,9 +12,9 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react";
-import { Charts } from "./Charts";
-import KPIs from "./KPIs";
-import TeamsTable from "./TeamsTable";
+import { Charts } from "./charts";
+import KPIs from "./kpis";
+import TeamsTable from "./teams-table";
 
 /* ---------------------------------------
    UI helpers lightweight (sin shadcn)
