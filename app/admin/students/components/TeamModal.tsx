@@ -8,19 +8,30 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ExternalLink, Users } from "lucide-react";
-import { type TeamMember } from "@/lib/data-service";
+import { Users, ExternalLink, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+export type CoachMember = {
+  name: string;
+  puesto?: string | null;
+  area?: string | null;
+  url?: string | null;
+};
 
 export default function TeamModal({
   open,
   onOpenChange,
   studentName,
+  studentCode,
   members,
+  loading,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   studentName: string;
-  members: TeamMember[];
+  studentCode?: string | null;
+  members: CoachMember[];
+  loading?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -28,54 +39,69 @@ export default function TeamModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5 text-primary" />
-            Equipo asignado
+            Equipo del alumno
           </DialogTitle>
           <DialogDescription>
-            Miembros asociados a{" "}
-            <span className="font-medium text-foreground">{studentName}</span>
+            {studentName}
+            {studentCode ? (
+              <span className="ml-2 rounded bg-muted px-2 py-0.5 text-[11px]">
+                {studentCode}
+              </span>
+            ) : null}
           </DialogDescription>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh] pr-3">
-          {members.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Este estudiante no tiene equipo asociado.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {members.map((m, idx) => (
-                <li
-                  key={`${m.name}-${idx}`}
-                  className="flex items-center justify-between rounded-lg border bg-card px-3 py-2"
-                >
-                  <div className="flex min-w-0 flex-col">
-                    <span className="font-medium truncate">{m.name}</span>
-                    {m.url ? (
-                      <span className="text-xs text-muted-foreground truncate">
-                        {m.url}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        Sin enlace
-                      </span>
-                    )}
-                  </div>
-                  {m.url && (
-                    <a
-                      href={m.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center rounded-md border px-2 py-1 text-xs hover:bg-primary/10 hover:border-primary"
-                      title="Abrir enlace"
-                    >
-                      Abrir <ExternalLink className="ml-1 h-3 w-3" />
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </ScrollArea>
+        {loading ? (
+          <div className="flex items-center justify-center py-10 text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Cargando coaches…
+          </div>
+        ) : (
+          <ScrollArea className="max-h-[60vh] pr-3">
+            {members.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Este alumno no tiene coaches asociados.
+              </p>
+            ) : (
+              <ul className="space-y-2">
+                {members.map((m, idx) => (
+                  <li
+                    key={`${m.name}-${idx}`}
+                    className="flex items-center justify-between rounded-lg border bg-card px-3 py-2"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium truncate">{m.name}</span>
+                        {m.puesto ? (
+                          <Badge
+                            variant="secondary"
+                            className="h-5 text-[11px]"
+                          >
+                            {m.puesto}
+                          </Badge>
+                        ) : null}
+                        {m.area ? (
+                          <Badge className="h-5 text-[11px]">{m.area}</Badge>
+                        ) : null}
+                      </div>
+                      {m.url ? (
+                        <a
+                          href={m.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-xs text-primary underline"
+                          title="Abrir perfil"
+                        >
+                          Abrir perfil <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ScrollArea>
+        )}
       </DialogContent>
     </Dialog>
   );

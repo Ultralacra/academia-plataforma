@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   PieChart,
@@ -15,10 +16,15 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
 
+/* ===================== Tipos ===================== */
 type DistItem = { name: string; value: number };
 type BarItem = { date: string; count: number };
 
+/* ===================== Colores ===================== */
 const COLORS = [
   "#7C3AED",
   "#F97316",
@@ -74,7 +80,7 @@ function withTopNAndOthers(data: DistItem[], topN = 8): DistItem[] {
   return [...head, { name: "Otros", value: others }];
 }
 
-/* ───────────── Skeletons ───────────── */
+/* ===================== Skeletons ===================== */
 export function PieCardSkeleton({ className }: { className?: string }) {
   return (
     <Card className={cn("min-h-[360px] overflow-hidden", className)}>
@@ -121,7 +127,7 @@ export function BarCardSkeleton({ className }: { className?: string }) {
   );
 }
 
-/* ───────────── Pie (donut) ───────────── */
+/* ===================== Pie (donut) ===================== */
 export function PieCard({
   title,
   data,
@@ -221,7 +227,7 @@ export function PieCard({
   );
 }
 
-/* ───────────── Bar ───────────── */
+/* ===================== Bar (original) ===================== */
 export function BarCard({
   title,
   data,
@@ -240,6 +246,137 @@ export function BarCard({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
+            margin={{ top: 10, right: 12, bottom: 16, left: 8 }}
+            barCategoryGap={12}
+          >
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tickFormatter={fmtLabelDate}
+              minTickGap={12}
+              tick={{ fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              allowDecimals={false}
+              width={30}
+              tick={{ fontSize: 11 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <RTooltip
+              content={<PrettyTooltip />}
+              labelFormatter={(v) => fmtLabelDate(String(v))}
+            />
+            <Bar
+              dataKey="count"
+              name="Clientes"
+              fill="#3B82F6"
+              radius={[6, 6, 0, 0]}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ===================== Bar con rango de fechas ===================== */
+/** Igual que BarCard pero con controles de rango (no altera filtros globales) */
+export function BarCardWithRange({
+  title,
+  data,
+  className,
+  initialFrom = "",
+  initialTo = "",
+}: {
+  title: string;
+  data: BarItem[];
+  className?: string;
+  initialFrom?: string; // "YYYY-MM-DD"
+  initialTo?: string; // "YYYY-MM-DD"
+}) {
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
+
+  const isISO = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+  const filtered = useMemo(() => {
+    const rows = (data ?? []).filter((d) => isISO(d.date));
+    if (!from && !to) return rows;
+    return rows.filter((d) => {
+      if (from && d.date < from) return false; // ISO-8601 permite comparaciones lexicográficas
+      if (to && d.date > to) return false;
+      return true;
+    });
+  }, [data, from, to]);
+
+  const total = filtered.reduce((a, b) => a + (b?.count ?? 0), 0);
+
+  return (
+    <Card className={cn("min-h-[360px] overflow-hidden", className)}>
+      <CardHeader className="pb-0">
+        <div className="flex items-start justify-between gap-3">
+          <CardTitle className="text-base">{title}</CardTitle>
+
+          {/* Controles de rango */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <Input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="h-8 w-[130px]"
+                aria-label="Fecha desde"
+              />
+              <span className="text-xs text-muted-foreground">—</span>
+              <Input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="h-8 w-[130px]"
+                aria-label="Fecha hasta"
+              />
+            </div>
+            {(from || to) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => {
+                  setFrom("");
+                  setTo("");
+                }}
+                title="Limpiar rango"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Subtítulo con info del rango aplicado */}
+        <div className="mt-1 text-xs text-muted-foreground">
+          {from || to ? (
+            <>
+              Rango: <strong>{from || "inicio"}</strong> a{" "}
+              <strong>{to || "hoy"}</strong> · {filtered.length} días · Total:{" "}
+              <strong>{total}</strong>
+            </>
+          ) : (
+            <>
+              Mostrando <strong>todos</strong> los días · Total:{" "}
+              <strong>{total}</strong>
+            </>
+          )}
+        </div>
+      </CardHeader>
+
+      <CardContent className="h-full pt-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={filtered}
             margin={{ top: 10, right: 12, bottom: 16, left: 8 }}
             barCategoryGap={12}
           >

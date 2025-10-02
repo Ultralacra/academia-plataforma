@@ -23,6 +23,11 @@ export type TeamWithCounts = Team & {
   ticketsCount?: number | null;
 };
 
+export type CoachMember = TeamMember & {
+  puesto?: string | null;
+  area?: string | null;
+};
+
 export type ClientItem = {
   id: number;
   code?: string | null;
@@ -503,6 +508,46 @@ export function ticketsByDay(tickets: Ticket[]) {
   );
 }
 
+
+// lib/data-service.ts
+export async function getClientCoaches(alumnoCode: string): Promise<{
+  alumno: string;
+  alumno_nombre: string;
+  coaches: CoachMember[];
+}> {
+  const q = toQuery({ alumno: alumnoCode });
+
+  // 👈 usar el endpoint correcto
+  const json = await apiFetch<{
+    code: number;
+    status: "success" | string;
+    data: Array<{
+      id: number;
+      id_relacion: string;
+      id_coach: string;
+      id_alumno: string;
+      updated_at: string;
+      created_at: string;
+      alumno_nombre: string;
+      coach_nombre: string;
+      puesto: string | null;
+      area: string | null;
+    }>;
+  }>(`${endpoints.coachClient.list}${q}`);
+
+  const rows = Array.isArray(json.data) ? json.data : [];
+  const alumno_nombre = rows[0]?.alumno_nombre ?? alumnoCode;
+
+  const coaches: CoachMember[] = rows.map((r) => ({
+    name: r.coach_nombre,
+    puesto: r.puesto ?? null,
+    area: r.area ?? null,
+  }));
+
+  return { alumno: alumnoCode, alumno_nombre, coaches };
+}
+
+
 /* =======================
    Export
 ======================= */
@@ -518,6 +563,7 @@ export const dataService = {
 
   // Tickets
   getTickets,   // consulta 10 000 por defecto (paginación local)
+  getClientCoaches, // ⟵ añade esta línea
 
   // Utils
   groupTicketsByTeam,
