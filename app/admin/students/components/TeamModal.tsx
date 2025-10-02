@@ -1,4 +1,3 @@
-// app/admin/students/components/TeamModal.tsx
 "use client";
 
 import {
@@ -25,7 +24,6 @@ export default function TeamModal({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* w-[92vw] para móviles, sm:max-w-2xl para desktop */}
       <DialogContent className="w-[92vw] sm:max-w-2xl max-h-[85vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -38,7 +36,6 @@ export default function TeamModal({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Scroll solo del contenido, dejando el header fijo */}
         <ScrollArea className="max-h-[60vh] pr-3">
           {members.length === 0 ? (
             <p className="text-sm text-muted-foreground">

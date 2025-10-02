@@ -32,6 +32,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
 
+/* ====================== Tipos ====================== */
 type MenuItem = {
   title: string;
   url?: string;
@@ -39,9 +40,16 @@ type MenuItem = {
   children?: MenuItem[];
 };
 
-/* Menú admin SIN Coaches y SIN Reportes */
+/* ====================== Menús (admin con top-level Coachs/Alumnos/Tickets + grupo “Métricas”) ====================== */
 const adminItems: MenuItem[] = [
   { title: "Dashboard", url: "/admin", icon: Home },
+
+  // NUEVOS top-level (mismo nivel que “Métricas”)
+  { title: "Coachs", url: "/admin/teamsv2", icon: Users },
+  { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
+  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare },
+
+  // Grupo colapsable renombrado a “Métricas”
   {
     title: "Métricas",
     icon: BarChart3,
@@ -53,18 +61,21 @@ const adminItems: MenuItem[] = [
   },
 ];
 
+/* Coach */
 const coachItems: MenuItem[] = [
   { title: "Dashboard", url: "/coach", icon: Home },
-  { title: "Mis Estudiantes", url: "/coach/students", icon: Users },
+  { title: "Alumnos", url: "/coach/students", icon: GraduationCap },
   { title: "Tickets", url: "/coach/tickets", icon: MessageSquare },
 ];
 
+/* Student */
 const studentItems: MenuItem[] = [
   { title: "Dashboard", url: "/student", icon: Home },
   { title: "Mi Curso", url: "/student/course", icon: GraduationCap },
   { title: "Soporte", url: "/student/support", icon: MessageSquare },
 ];
 
+/* ====================== Sidebar ====================== */
 export function AppSidebar() {
   const { user } = useAuth();
   const pathname = usePathname();
@@ -95,92 +106,88 @@ export function AppSidebar() {
 
   useEffect(() => {
     if (!pathname) return;
-    if (
-      pathname.startsWith("/admin/students") ||
-      pathname.startsWith("/admin/teams") ||
-      pathname.startsWith("/admin/tickets")
-    ) {
-      setMetricsOpen(true);
-    }
+    // Abre “Métricas” si navegamos a alguna subruta de métricas
+    if (pathname.startsWith("/admin/metrics")) setMetricsOpen(true);
   }, [pathname]);
 
   return (
-    <Sidebar className="border-r overflow-x-hidden">
+    <Sidebar className="border-r bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
       <SidebarContent className="flex h-full flex-col overflow-x-hidden">
-        {/* Header: logo a la izquierda + nombre y rol en línea */}
+        {/* Header — estilo Notion */}
         <div className="p-3">
-          <div className="rounded-xl border p-3">
-            <div className="flex items-center gap-3">
-              <img
-                src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
-                alt="Logo"
-                className="h-10 w-10 rounded-full ring-4 ring-black/5 object-cover"
-                loading="eager"
-              />
-              <div className="flex items-center gap-2 min-w-0">
-                <p className="font-medium truncate">
-                  {user?.name ?? user?.email ?? "Usuario"}
-                </p>
-                {user?.role && (
-                  <Badge
-                    variant="outline"
-                    className="h-5 text-[10px] px-1.5 border-black/20 text-black"
-                  >
-                    {roleLabel}
-                  </Badge>
-                )}
-              </div>
+          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
+            <img
+              src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
+              alt="Logo"
+              className="h-8 w-8 rounded-md object-cover ring-1 ring-black/5"
+              loading="eager"
+            />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-neutral-900">
+                {user?.name ?? user?.email ?? "Usuario"}
+              </p>
+              <Badge
+                variant="outline"
+                className="mt-0.5 h-5 px-1.5 text-[10px] border-neutral-200 text-neutral-600"
+              >
+                {roleLabel}
+              </Badge>
             </div>
           </div>
         </div>
 
         <Separator className="mx-3" />
 
-        {/* Menú principal */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar">
+        {/* Navegación — Notion-like */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <SidebarGroup>
-            <SidebarGroupLabel className="px-3">Navegación</SidebarGroupLabel>
+            <SidebarGroupLabel className="px-3 text-[11px] uppercase tracking-wide text-neutral-500">
+              Navegación
+            </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                <TooltipProvider>
+                <TooltipProvider delayDuration={300}>
                   {menuItems.map((item) => {
                     const Icon = item.icon;
 
-                    // Link simple
+                    // Enlace simple
                     if (!item.children?.length) {
                       const active =
                         pathname === item.url ||
                         (!!item.url &&
                           item.url !== "/" &&
                           pathname?.startsWith(item.url));
+
                       return (
                         <SidebarMenuItem key={item.title}>
-                          <Tooltip delayDuration={300}>
+                          <Tooltip>
                             <TooltipTrigger asChild>
                               <SidebarMenuButton
                                 asChild
                                 className={cn(
-                                  "transition-all group relative overflow-hidden",
+                                  "group relative overflow-hidden rounded-md px-2.5 py-1.5 text-sm",
                                   active
-                                    ? "bg-black/5 text-black"
-                                    : "hover:bg-black/5"
+                                    ? "bg-neutral-100 text-neutral-900"
+                                    : "hover:bg-neutral-50 text-neutral-700"
                                 )}
                               >
                                 <Link
                                   href={item.url ?? "#"}
-                                  className="flex items-center gap-3"
+                                  className="flex items-center gap-2.5"
                                 >
-                                  {/* Indicador activo ámbar dentro (sin offsets negativos) */}
+                                  {/* Dot activo al estilo Notion */}
                                   <span
                                     className={cn(
-                                      "absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-sm bg-amber-500",
+                                      "absolute left-2 top-1/2 -translate-y-1/2 h-[6px] w-[6px] rounded-full bg-amber-500 transition-opacity",
                                       active ? "opacity-100" : "opacity-0"
                                     )}
                                   />
                                   <Icon
                                     className={cn(
                                       "h-4 w-4",
-                                      active ? "text-black" : "text-slate-700"
+                                      active
+                                        ? "text-neutral-900"
+                                        : "text-neutral-600"
                                     )}
                                   />
                                   <span className="truncate">{item.title}</span>
@@ -195,8 +202,8 @@ export function AppSidebar() {
                       );
                     }
 
-                    // Dropdown con hijos
-                    const isAnyChildActive = item.children.some((c) =>
+                    // Grupo “Métricas”
+                    const isAnyChildActive = item.children?.some((c) =>
                       pathname?.startsWith(c.url ?? "")
                     );
 
@@ -206,25 +213,25 @@ export function AppSidebar() {
                           type="button"
                           onClick={() => setMetricsOpen((v) => !v)}
                           className={cn(
-                            "w-full flex items-center justify-between rounded-md px-2.5 py-2 text-sm transition-all",
+                            "group flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-sm",
                             metricsOpen || isAnyChildActive
-                              ? "bg-black/5 text-black"
-                              : "hover:bg-black/5"
+                              ? "bg-neutral-100 text-neutral-900"
+                              : "hover:bg-neutral-50 text-neutral-700"
                           )}
                         >
-                          <span className="flex items-center gap-3">
+                          <span className="flex items-center gap-2.5">
                             <Icon
                               className={cn(
                                 "h-4 w-4",
                                 (metricsOpen || isAnyChildActive) &&
-                                  "text-black"
+                                  "text-neutral-900"
                               )}
                             />
                             <span className="truncate">{item.title}</span>
                           </span>
                           <ChevronDown
                             className={cn(
-                              "h-4 w-4 transition-transform",
+                              "h-4 w-4 transition-transform text-neutral-500",
                               metricsOpen ? "rotate-180" : "rotate-0"
                             )}
                           />
@@ -240,8 +247,8 @@ export function AppSidebar() {
                           )}
                         >
                           <div className="min-h-0">
-                            <ul className="my-1 ml-6 border-l pl-3 space-y-1 relative">
-                              {item.children.map((child) => {
+                            <ul className="my-1 ml-5 border-l border-neutral-200 pl-3 space-y-0.5">
+                              {item.children?.map((child) => {
                                 const CIcon = child.icon;
                                 const active =
                                   pathname === child.url ||
@@ -253,16 +260,16 @@ export function AppSidebar() {
                                     <Link
                                       href={child.url ?? "#"}
                                       className={cn(
-                                        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors relative overflow-hidden",
+                                        "relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
                                         active
-                                          ? "bg-black/5 text-black"
-                                          : "hover:bg-black/5"
+                                          ? "bg-neutral-100 text-neutral-900"
+                                          : "hover:bg-neutral-50 text-neutral-700"
                                       )}
                                     >
-                                      {/* Indicador activo ámbar dentro */}
+                                      {/* Dot activo */}
                                       <span
                                         className={cn(
-                                          "absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[3px] rounded-sm bg-amber-500",
+                                          "absolute left-0 top-1/2 -translate-y-1/2 h-[6px] w-[6px] rounded-full bg-amber-500",
                                           active ? "opacity-100" : "opacity-0"
                                         )}
                                       />
@@ -270,8 +277,8 @@ export function AppSidebar() {
                                         className={cn(
                                           "h-4 w-4",
                                           active
-                                            ? "text-black"
-                                            : "text-slate-700"
+                                            ? "text-neutral-900"
+                                            : "text-neutral-600"
                                         )}
                                       />
                                       <span className="truncate">
@@ -291,6 +298,14 @@ export function AppSidebar() {
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
+        </div>
+
+        {/* Footer minimal — Notion-like */}
+        <Separator className="mx-3 mt-2" />
+        <div className="px-3 py-2">
+          <p className="text-[11px] text-neutral-500">
+            {new Date().getFullYear()} • Workspace
+          </p>
         </div>
       </SidebarContent>
     </Sidebar>

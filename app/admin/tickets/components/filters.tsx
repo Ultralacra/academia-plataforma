@@ -36,16 +36,18 @@ export default function Filters({
   total: number;
 }) {
   return (
-    <Card>
+    <Card className="border-gray-200 shadow-none">
       <CardHeader className="pb-2">
-        <CardTitle>Filtros</CardTitle>
-        <CardDescription>{total} resultados en la vista</CardDescription>
+        <CardTitle className="text-[15px]">Filtros</CardTitle>
+        <CardDescription className="text-xs">
+          {total} resultados en la vista
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-          <div className="md:col-span-4">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+          <div className="md:col-span-5">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="pl-9"
                 placeholder="Buscar por asunto, alumno, id externo…"
@@ -59,7 +61,7 @@ export default function Filters({
             <select
               value={values.estado}
               onChange={(e) => onChange.estado(e.target.value)}
-              className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
             >
               {options.estado.map((s) => (
                 <option key={s} value={s}>
@@ -73,7 +75,7 @@ export default function Filters({
             <select
               value={values.tipo}
               onChange={(e) => onChange.tipo(e.target.value)}
-              className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
             >
               {options.tipo.map((s) => (
                 <option key={s} value={s}>
@@ -83,25 +85,31 @@ export default function Filters({
             </select>
           </div>
 
-          <div className="md:col-span-2">
+          <div className="md:col-span-1">
             <Input
               type="date"
               value={values.fechaDesde}
               onChange={(e) => onChange.fechaDesde(e.target.value)}
+              className="rounded-xl"
             />
+            <p className="mt-1 text-[11px] text-muted-foreground">Desde</p>
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-1">
             <Input
               type="date"
               value={values.fechaHasta}
               onChange={(e) => onChange.fechaHasta(e.target.value)}
+              className="rounded-xl"
             />
+            <p className="mt-1 text-[11px] text-muted-foreground">Hasta</p>
           </div>
         </div>
 
-        <Button variant="outline" onClick={onChange.reset}>
-          Reiniciar filtros
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={onChange.reset}>
+            Reiniciar filtros
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

@@ -1,4 +1,3 @@
-// app/admin/students/components/charts.tsx
 "use client";
 
 import {
@@ -75,7 +74,7 @@ function withTopNAndOthers(data: DistItem[], topN = 8): DistItem[] {
   return [...head, { name: "Otros", value: others }];
 }
 
-/* ───────────────────── Skeletons ───────────────────── */
+/* ───────────── Skeletons ───────────── */
 export function PieCardSkeleton({ className }: { className?: string }) {
   return (
     <Card className={cn("min-h-[360px] overflow-hidden", className)}>
@@ -122,7 +121,7 @@ export function BarCardSkeleton({ className }: { className?: string }) {
   );
 }
 
-/* ───────────────────── Pie (donut) ───────────────────── */
+/* ───────────── Pie (donut) ───────────── */
 export function PieCard({
   title,
   data,
@@ -146,10 +145,7 @@ export function PieCard({
       <CardHeader className="pb-0">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
-
-      {/* flex-col + overflow-hidden para que la leyenda scrollee dentro */}
       <CardContent className="flex h-full flex-col pt-2 overflow-hidden">
-        {/* Altura fija del gráfico para reservar espacio a la leyenda */}
         <div className="relative h-[200px]">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart margin={{ top: 8, right: 12, bottom: 8, left: 12 }}>
@@ -188,7 +184,6 @@ export function PieCard({
             </PieChart>
           </ResponsiveContainer>
 
-          {/* centro del donut */}
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="text-center">
               <div className="text-2xl font-bold leading-none">{total}</div>
@@ -199,7 +194,6 @@ export function PieCard({
           </div>
         </div>
 
-        {/* Leyenda: ocupa el resto y scrollea internamente */}
         <div className="mt-3 flex-1 overflow-y-auto pr-1">
           <ul className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-2">
             {withPerc.map((d, idx) => (
@@ -227,7 +221,7 @@ export function PieCard({
   );
 }
 
-/* ───────────────────── Bar ───────────────────── */
+/* ───────────── Bar ───────────── */
 export function BarCard({
   title,
   data,

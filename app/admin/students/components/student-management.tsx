@@ -1,7 +1,7 @@
-// app/admin/students/components/student-management.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { dataService, type ClientItem } from "@/lib/data-service";
 import {
   Card,
@@ -29,21 +29,19 @@ import {
   ChevronRight,
   ExternalLink,
   Users,
+  ChevronsUpDown,
+  Check,
+  X,
 } from "lucide-react";
 import { PieCard, BarCard, PieCardSkeleton, BarCardSkeleton } from "./charts";
 import TeamModal from "./TeamModal";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
 /* ─────────────────────────────────────────
-   Helpers
-────────────────────────────────────────── */
+      Helpers
+    ────────────────────────────────────────── */
 function uniq(arr: (string | null | undefined)[]) {
   return Array.from(new Set(arr.filter(Boolean) as string[]));
 }
@@ -84,21 +82,208 @@ function formatDateSmart(value?: string | null) {
 }
 
 /* ─────────────────────────────────────────
-   Componente
-────────────────────────────────────────── */
+      MultiSelect FIXED (sin Radix) — abre siempre
+    ────────────────────────────────────────── */
+type MultiSelectProps = {
+  placeholder?: string;
+  options: string[]; // lista de opciones (sin "all")
+  value: string[]; // seleccionadas
+  onChange: (next: string[]) => void;
+  className?: string;
+};
+
+function MultiSelect({
+  placeholder = "Seleccionar...",
+  options,
+  value,
+  onChange,
+  className,
+}: MultiSelectProps) {
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [pos, setPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 240,
+  });
+
+  // abrir y calcular posición absoluta (fixed)
+  const openMenu = () => {
+    const el = btnRef.current;
+    if (!el) {
+      setOpen(true);
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    setOpen(true);
+  };
+
+  // cerrar en click-afuera / ESC / resize / scroll
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (btnRef.current?.contains(target)) return;
+      // si clic fuera del panel
+      const panel = document.getElementById("ms-panel");
+      if (panel && panel.contains(target)) return;
+      setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onRelayout = () => {
+      const el = btnRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, width: r.width });
+    };
+    window.addEventListener("mousedown", onDown);
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onRelayout);
+    window.addEventListener("scroll", onRelayout, true);
+    return () => {
+      window.removeEventListener("mousedown", onDown);
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onRelayout);
+      window.removeEventListener("scroll", onRelayout, true);
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return q ? options.filter((o) => o?.toLowerCase().includes(q)) : options;
+  }, [options, search]);
+
+  const toggle = (opt: string) => {
+    const has = value.includes(opt);
+    onChange(has ? value.filter((v) => v !== opt) : [...value, opt]);
+  };
+
+  const clearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange([]);
+  };
+
+  const label = value.length
+    ? value.length === 1
+      ? value[0]
+      : `${value.length} seleccionadas`
+    : placeholder;
+
+  return (
+    <>
+      <Button
+        ref={btnRef}
+        type="button"
+        variant="outline"
+        onClick={openMenu}
+        className={cn(
+          "w-full justify-between",
+          value.length ? "text-foreground" : "text-muted-foreground",
+          className
+        )}
+      >
+        <span className="truncate">{label}</span>
+        <div className="flex items-center gap-1">
+          {!!value.length && (
+            <X
+              className="h-4 w-4 opacity-70 hover:opacity-100"
+              onClick={clearAll}
+            />
+          )}
+          <ChevronsUpDown className="h-4 w-4 opacity-70" />
+        </div>
+      </Button>
+
+      {open &&
+        createPortal(
+          <div
+            id="ms-panel"
+            style={{
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              width: pos.width,
+              zIndex: 9999,
+            }}
+            className="rounded-md border bg-popover shadow-xl"
+          >
+            <div className="p-2 border-b">
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar..."
+              />
+            </div>
+            <div className="max-h-64 overflow-auto p-1">
+              {filtered.length === 0 ? (
+                <div className="p-3 text-sm text-muted-foreground">
+                  Sin opciones
+                </div>
+              ) : (
+                <ul className="space-y-1">
+                  {filtered.map((opt) => {
+                    const checked = value.includes(opt);
+                    return (
+                      <li key={opt}>
+                        <button
+                          type="button"
+                          onClick={() => toggle(opt)}
+                          className="w-full flex items-center gap-2 px-2 py-2 rounded-md hover:bg-muted text-sm"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={() => toggle(opt)}
+                            className="h-4 w-4"
+                          />
+                          <span className="flex-1 text-left">{opt}</span>
+                          {checked && <Check className="h-4 w-4" />}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+            <div className="p-2 flex justify-end gap-2 border-t">
+              <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+                Cerrar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  onChange([]);
+                  setSearch("");
+                }}
+              >
+                Limpiar
+              </Button>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
+  );
+}
+
+/* ─────────────────────────────────────────
+      Componente principal
+    ────────────────────────────────────────── */
 export default function StudentManagement() {
   // Datos base (hasta 1000 desde la API)
   const [loading, setLoading] = useState(true);
   const [allItems, setAllItems] = useState<ClientItem[]>([]);
 
-  // Filtros que viajan al servidor (disparan la consulta de 1000)
+  // Filtros que viajan al servidor
   const [search, setSearch] = useState("");
   const [fechaDesde, setFechaDesde] = useState<string>("");
   const [fechaHasta, setFechaHasta] = useState<string>("");
 
-  // Filtros client-side
-  const [stateFilter, setStateFilter] = useState<string>("all");
-  const [stageFilter, setStageFilter] = useState<string>("all");
+  // Filtros client-side (multi)
+  const [statesFilter, setStatesFilter] = useState<string[]>([]);
+  const [stagesFilter, setStagesFilter] = useState<string[]>([]);
   const [lastFrom, setLastFrom] = useState<string>("");
   const [lastTo, setLastTo] = useState<string>("");
   const [inactFrom, setInactFrom] = useState<string>("");
@@ -115,7 +300,7 @@ export default function StudentManagement() {
     members: ClientItem["teamMembers"];
   } | null>(null);
 
-  // Consulta al server (hasta 1000) con debounce en filtros de server
+  // Consulta al server (hasta 1000) con debounce
   useEffect(() => {
     const t = setTimeout(async () => {
       setLoading(true);
@@ -126,7 +311,7 @@ export default function StudentManagement() {
           fechaHasta: fechaHasta || undefined,
         });
         setAllItems(res.items ?? []);
-        setPage(1); // reset página UI
+        setPage(1);
       } catch (e) {
         console.error(e);
         setAllItems([]);
@@ -137,11 +322,26 @@ export default function StudentManagement() {
     return () => clearTimeout(t);
   }, [search, fechaDesde, fechaHasta]);
 
-  /* Filtro client-side sobre los 1000 */
+  /* Conjuntos de opciones */
+  const stateOptions = useMemo(
+    () => uniq(allItems.map((i) => i.state)).sort(),
+    [allItems]
+  );
+  const stageOptions = useMemo(
+    () => uniq(allItems.map((i) => i.stage)).sort(),
+    [allItems]
+  );
+
+  /* Filtro client-side */
   const filtered = useMemo(() => {
     return (allItems ?? []).filter((i) => {
-      const okState = stateFilter === "all" || i.state === stateFilter;
-      const okStage = stageFilter === "all" || i.stage === stageFilter;
+      const okState =
+        statesFilter.length === 0 ||
+        (i.state ? statesFilter.includes(i.state) : false);
+
+      const okStage =
+        stagesFilter.length === 0 ||
+        (i.stage ? stagesFilter.includes(i.stage) : false);
 
       const okLastFrom = !lastFrom || (i.lastActivity ?? "") >= lastFrom;
       const okLastTo = !lastTo || (i.lastActivity ?? "") <= lastTo;
@@ -159,31 +359,21 @@ export default function StudentManagement() {
     });
   }, [
     allItems,
-    stateFilter,
-    stageFilter,
+    statesFilter,
+    stagesFilter,
     lastFrom,
     lastTo,
     inactFrom,
     inactTo,
   ]);
 
-  // Paginación local (sobre filtered)
+  // Paginación local
   const totalFiltered = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSizeUI));
   const pageItems = useMemo(() => {
     const start = (page - 1) * pageSizeUI;
     return filtered.slice(start, start + pageSizeUI);
   }, [filtered, page]);
-
-  // opciones selects desde el conjunto filtrado
-  const states = useMemo(
-    () => ["all", ...uniq(filtered.map((i) => i.state))],
-    [filtered]
-  );
-  const stages = useMemo(
-    () => ["all", ...uniq(filtered.map((i) => i.stage))],
-    [filtered]
-  );
 
   /* Gráficas */
   const distByState = useMemo(() => {
@@ -219,7 +409,7 @@ export default function StudentManagement() {
     );
   }, [filtered]);
 
-  /* ─────────── helpers de skeleton para tabla ─────────── */
+  /* Skeleton tabla */
   const TableSkeleton = () => (
     <div className="rounded-md border overflow-hidden">
       <div className="p-3">
@@ -237,6 +427,19 @@ export default function StudentManagement() {
     </div>
   );
 
+  const resetAll = () => {
+    setSearch("");
+    setFechaDesde("");
+    setFechaHasta("");
+    setStatesFilter([]);
+    setStagesFilter([]);
+    setLastFrom("");
+    setLastTo("");
+    setInactFrom("");
+    setInactTo("");
+    setPage(1);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -249,21 +452,7 @@ export default function StudentManagement() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setSearch("");
-              setFechaDesde("");
-              setFechaHasta("");
-              setStateFilter("all");
-              setStageFilter("all");
-              setLastFrom("");
-              setLastTo("");
-              setInactFrom("");
-              setInactTo("");
-              setPage(1);
-            }}
-          >
+          <Button variant="outline" onClick={resetAll}>
             Reiniciar
           </Button>
         </div>
@@ -321,48 +510,76 @@ export default function StudentManagement() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Estado</label>
-              <Select
-                value={stateFilter}
-                onValueChange={(v) => {
+            <div className="md:col-span-2">
+              <label className="text-xs text-muted-foreground">Estados</label>
+              <MultiSelect
+                options={stateOptions}
+                value={statesFilter}
+                onChange={(v) => {
                   setPage(1);
-                  setStateFilter(v);
+                  setStatesFilter(v);
                 }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Estado" />
-                </SelectTrigger>
-                <SelectContent>
-                  {states.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s === "all" ? "Todos" : s}
-                    </SelectItem>
+                placeholder="Seleccionar estados"
+              />
+              {!!statesFilter.length && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {statesFilter.map((s) => (
+                    <Badge
+                      key={s}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      {s}
+                      <button
+                        className="ml-1 opacity-70 hover:opacity-100"
+                        onClick={() =>
+                          setStatesFilter((prev) => prev.filter((x) => x !== s))
+                        }
+                        aria-label={`Quitar ${s}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Etapa</label>
-              <Select
-                value={stageFilter}
-                onValueChange={(v) => {
+
+            <div className="md:col-span-2">
+              <label className="text-xs text-muted-foreground">Etapas</label>
+              <MultiSelect
+                options={stageOptions}
+                value={stagesFilter}
+                onChange={(v) => {
                   setPage(1);
-                  setStageFilter(v);
+                  setStagesFilter(v);
                 }}
-              >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Etapa" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stages.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s === "all" ? "Todas" : s}
-                    </SelectItem>
+                placeholder="Seleccionar etapas"
+              />
+              {!!stagesFilter.length && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {stagesFilter.map((s) => (
+                    <Badge
+                      key={s}
+                      variant="secondary"
+                      className="flex items-center gap-1"
+                    >
+                      {s}
+                      <button
+                        className="ml-1 opacity-70 hover:opacity-100"
+                        onClick={() =>
+                          setStagesFilter((prev) => prev.filter((x) => x !== s))
+                        }
+                        aria-label={`Quitar ${s}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
             </div>
+
             <div>
               <label className="text-xs text-muted-foreground">
                 Últ. actividad (desde)
@@ -389,6 +606,7 @@ export default function StudentManagement() {
                 }}
               />
             </div>
+
             <div>
               <label className="text-xs text-muted-foreground">
                 Inactividad mín. (d)

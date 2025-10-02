@@ -12,18 +12,9 @@ import {
   AlertTriangle,
   X,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip as RTooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Charts } from "./Charts";
+import KPIs from "./KPIs";
+import TeamsTable from "./TeamsTable";
 
 /* ---------------------------------------
    UI helpers lightweight (sin shadcn)
@@ -67,12 +58,9 @@ function Modal({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div
-        className={`relative mx-4 w-full ${maxWidth} rounded-2xl border bg-white shadow-2xl`}
+        className={`relative mx-4 w-full ${maxWidth} rounded-2xl border border-gray-200 bg-white shadow-none`}
         role="dialog"
         aria-modal="true"
       >
@@ -94,7 +82,9 @@ function Modal({
 
 function Card({ children, className = "" }: any) {
   return (
-    <div className={`rounded-2xl border bg-white shadow-sm ${className}`}>
+    <div
+      className={`rounded-2xl border border-gray-200 bg-white shadow-none ${className}`}
+    >
       {children}
     </div>
   );
@@ -139,7 +129,7 @@ function Input({ value, onChange, placeholder, leftIcon, type = "text" }: any) {
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white/80 px-3 py-2 text-sm outline-none transition focus:ring-4 focus:ring-sky-100 ${
+        className={`w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:ring-4 focus:ring-sky-100 ${
           leftIcon ? "pl-9" : ""
         }`}
       />
@@ -161,7 +151,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none transition focus:ring-4 focus:ring-violet-100"
+      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:ring-4 focus:ring-violet-100"
     >
       {placeholder ? (
         <option value="" disabled hidden>
@@ -187,7 +177,7 @@ function Button({
   const variants: Record<string, string> = {
     default: "bg-sky-600 text-white hover:bg-sky-700 focus:ring-sky-200",
     outline:
-      "border bg-white text-gray-700 hover:bg-gray-50 focus:ring-gray-100",
+      "border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 focus:ring-gray-100",
     ghost: "text-gray-700 hover:bg-gray-100",
   };
   const sizes: Record<string, string> = {
@@ -243,7 +233,7 @@ export default function TicketsContent() {
   // Paginación UI local
   const [page, setPage] = useState(1);
 
-  // Modal
+  // Modal (si luego conectas con groupTicketsByTeam)
   const [openTeamModal, setOpenTeamModal] = useState(false);
   const [activeTeamId, setActiveTeamId] = useState<number | null>(null);
 
@@ -263,9 +253,8 @@ export default function TicketsContent() {
           dataService.getTickets({ search, fechaDesde, fechaHasta }),
         ]);
         setTeams(tms.data ?? []);
-        // getTickets ahora devuelve { items }
         setAllTickets(tks.items ?? []);
-        setPage(1); // reset paginación UI
+        setPage(1);
       } catch (e) {
         console.error(e);
         setTeams([]);
@@ -273,11 +262,11 @@ export default function TicketsContent() {
       } finally {
         setLoading(false);
       }
-    }, 300);
+    }, 250);
     return () => clearTimeout(t);
   }, [search, fechaDesde, fechaHasta]);
 
-  // Filtros “solo cliente” sobre los 10k
+  // Filtros cliente
   const filtered: Ticket[] = useMemo(() => {
     const base = allTickets ?? [];
     let items = base;
@@ -355,7 +344,6 @@ export default function TicketsContent() {
     return arr.slice(start, start + PAGE_SIZE_UI);
   }, [filtered, page]);
 
-  // Modal helpers (si usas el match por equipo)
   const openTeam = (id: number) => {
     setActiveTeamId(id);
     setOpenTeamModal(true);
@@ -363,17 +351,16 @@ export default function TicketsContent() {
 
   return (
     <div className="space-y-6">
-      {/* Título + filtros */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Tickets</h1>
-          <p className="text-sm text-gray-500">
-            Consulta 10 000 del backend y paginación local (25 por página).
-          </p>
-        </div>
+      {/* Header de página (Notion-like) */}
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
+        <p className="text-sm text-muted-foreground">
+          Hasta 10k resultados del backend · Paginación local (25 por página)
+        </p>
       </div>
 
-      <Card>
+      {/* Filtros en “toolbar” */}
+      <Card className="rounded-2xl border border-gray-200 bg-white shadow-none">
         <CardHeader
           title="Filtros"
           icon={<Filter className="h-5 w-5" />}
@@ -381,7 +368,7 @@ export default function TicketsContent() {
         />
         <CardBody>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
-            <div className="md:col-span-4">
+            <div className="md:col-span-5">
               <Input
                 placeholder="Buscar por asunto, alumno, id externo..."
                 value={search}
@@ -418,12 +405,12 @@ export default function TicketsContent() {
                 }))}
               />
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-1">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="h-4 w-4 text-gray-400" />
                 <input
                   type="date"
-                  className="w-full rounded-xl border px-3 py-2 text-sm focus:ring-4 focus:ring-amber-100"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-4 focus:ring-amber-100"
                   value={fechaDesde}
                   onChange={(e) => {
                     setPage(1);
@@ -431,13 +418,14 @@ export default function TicketsContent() {
                   }}
                 />
               </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">Desde</p>
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-1">
               <div className="flex items-center gap-2">
                 <CalendarIcon className="h-4 w-4 text-gray-400" />
                 <input
                   type="date"
-                  className="w-full rounded-xl border px-3 py-2 text-sm focus:ring-4 focus:ring-amber-100"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-4 focus:ring-amber-100"
                   value={fechaHasta}
                   onChange={(e) => {
                     setPage(1);
@@ -445,147 +433,28 @@ export default function TicketsContent() {
                   }}
                 />
               </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">Hasta</p>
             </div>
           </div>
         </CardBody>
       </Card>
 
-      {/* Métricas */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-        <Card>
-          <CardBody className="flex items-center gap-3">
-            <div className="rounded-xl bg-sky-50 p-3">
-              <Users className="h-5 w-5 text-sky-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Total</p>
-              <p className="text-xl font-semibold">{metrics.total}</p>
-            </div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody className="flex items-center gap-3">
-            <div className="rounded-xl bg-amber-50 p-3">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Pendientes</p>
-              <p className="text-xl font-semibold text-amber-600">
-                {metrics.pend}
-              </p>
-            </div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody className="flex items-center gap-3">
-            <div className="rounded-xl bg-indigo-50 p-3">
-              <Clock className="h-5 w-5 text-indigo-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">En progreso</p>
-              <p className="text-xl font-semibold text-indigo-600">
-                {metrics.prog}
-              </p>
-            </div>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardBody className="flex items-center gap-3">
-            <div className="rounded-xl bg-emerald-50 p-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Resueltos</p>
-              <p className="text-xl font-semibold text-emerald-600">
-                {metrics.res}
-              </p>
-            </div>
-          </CardBody>
-        </Card>
-      </div>
+      {/* KPIs compactos (Notion vibes) */}
+      <KPIs metrics={metrics} loading={loading} />
 
       {/* Gráficas */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader
-            title="Tickets por día"
-            subtitle="Agrupado por fecha de creación"
-          />
-          <CardBody className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={ticketsPorDia}>
-                <defs>
-                  <linearGradient id="gradSky" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#0284c7" stopOpacity={0.4} />
-                    <stop
-                      offset="100%"
-                      stopColor="#0284c7"
-                      stopOpacity={0.05}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" />
-                <YAxis allowDecimals={false} />
-                <RTooltip />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  stroke="#0284c7"
-                  fill="url(#gradSky)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader
-            title="Distribución por estado"
-            subtitle="Acumulado en la vista filtrada"
-          />
-          <CardBody className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={[
-                  {
-                    name: "Estados",
-                    PENDIENTE: (filtered ?? []).filter(
-                      (t) => (t.estado ?? "").toUpperCase() === "PENDIENTE"
-                    ).length,
-                    "EN PROGRESO": (filtered ?? []).filter(
-                      (t) => (t.estado ?? "").toUpperCase() === "EN PROGRESO"
-                    ).length,
-                    RESUELTO: (filtered ?? []).filter(
-                      (t) => (t.estado ?? "").toUpperCase() === "RESUELTO"
-                    ).length,
-                  },
-                ]}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis allowDecimals={false} />
-                <Legend />
-                <RTooltip />
-                <Bar dataKey="PENDIENTE" fill="#f59e0b" />
-                <Bar dataKey="EN PROGRESO" fill="#6366f1" />
-                <Bar dataKey="RESUELTO" fill="#10b981" />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardBody>
-        </Card>
-      </div>
+      <Charts ticketsPorDia={ticketsPorDia} tickets={filtered} />
 
       {/* Tabla tickets (paginación local) */}
-      <Card>
+      <Card className="rounded-2xl border border-gray-200 bg-white shadow-none">
         <CardHeader
           title="Listado de tickets"
           subtitle="Vista filtrada y paginada localmente"
         />
         <CardBody className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead>
-              <tr className="border-b bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-600">
+            <thead className="sticky top-0 z-[1] bg-white">
+              <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-600">
                 <th className="px-4 py-2">ID Externo</th>
                 <th className="px-4 py-2">Asunto</th>
                 <th className="px-4 py-2">Alumno</th>
@@ -593,13 +462,18 @@ export default function TicketsContent() {
                 <th className="px-4 py-2">Tipo</th>
                 <th className="px-4 py-2">Creación</th>
                 <th className="px-4 py-2">Deadline</th>
-                <th className="px-4 py-2"># Equipo URLs</th>
+                <th className="px-4 py-2 text-right"># URLs</th>
               </tr>
             </thead>
             <tbody>
               {(pageItems ?? []).map((t) => (
-                <tr key={t.id} className="border-b">
-                  <td className="px-4 py-2">{t.id_externo ?? "-"}</td>
+                <tr
+                  key={t.id}
+                  className="border-b hover:bg-muted/40 transition-colors"
+                >
+                  <td className="px-4 py-2 font-mono text-xs">
+                    {t.id_externo ?? "-"}
+                  </td>
                   <td className="px-4 py-2">{t.nombre ?? "-"}</td>
                   <td className="px-4 py-2">{t.alumno_nombre ?? "-"}</td>
                   <td className="px-4 py-2">
@@ -615,13 +489,13 @@ export default function TicketsContent() {
                     })()}
                   </td>
                   <td className="px-4 py-2">
-                    <Badge color="default">
-                      {(t.tipo ?? "SIN TIPO").toUpperCase()}
-                    </Badge>
+                    <Badge>{(t.tipo ?? "SIN TIPO").toUpperCase()}</Badge>
                   </td>
                   <td className="px-4 py-2">{fmtDateTime(t.creacion)}</td>
                   <td className="px-4 py-2">{fmtDateTime(t.deadline)}</td>
-                  <td className="px-4 py-2">{t.equipo_urls?.length ?? 0}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">
+                    {t.equipo_urls?.length ?? 0}
+                  </td>
                 </tr>
               ))}
               {!loading && (pageItems ?? []).length === 0 && (
@@ -646,7 +520,7 @@ export default function TicketsContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => setPage((p: number) => Math.max(1, p - 1))}
                 disabled={page <= 1}
               >
                 Anterior
@@ -654,7 +528,9 @@ export default function TicketsContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setPage((p: number) => Math.min(totalPages, p + 1))
+                }
                 disabled={page >= totalPages}
               >
                 Siguiente

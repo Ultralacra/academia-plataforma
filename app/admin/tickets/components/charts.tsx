@@ -12,7 +12,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import type { Ticket } from "@/lib/data-service";
 
-/* ====== util: tooltip ====== */
+/* ====== utils para fechas y tooltip ====== */
 const dtFull = new Intl.DateTimeFormat("es", {
   day: "2-digit",
   month: "2-digit",
@@ -20,10 +20,45 @@ const dtFull = new Intl.DateTimeFormat("es", {
   hour: "2-digit",
   minute: "2-digit",
 });
+
 function parseYYYYMMDD(d?: string) {
   if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
   const [y, m, day] = d.split("-").map(Number);
   return new Date(y, (m || 1) - 1, day || 1);
+}
+
+// "YYYY-MM-DD" a partir de Date
+function yyyymmdd(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+// Rellena una ventana de N días con 0s para días sin datos
+function densifyDays(
+  points: { date: string; count: number }[],
+  windowDays = 14
+) {
+  if (!points?.length) return [];
+  // tomamos el día más reciente de la serie
+  const maxKey = points.reduce(
+    (acc, p) => (p.date > acc ? p.date : acc),
+    points[0].date
+  );
+  const max = parseYYYYMMDD(maxKey) ?? new Date(maxKey);
+  const start = new Date(max);
+  start.setDate(start.getDate() - (windowDays - 1));
+
+  const map = new Map(points.map((p) => [p.date, Number(p.count) || 0]));
+  const out: { date: string; count: number }[] = [];
+  for (let i = 0; i < windowDays; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    const k = yyyymmdd(d);
+    out.push({ date: k, count: map.get(k) ?? 0 });
+  }
+  return out;
 }
 
 /* ====== componente ====== */
@@ -34,12 +69,15 @@ export function Charts({
   ticketsPorDia: { date: string; count: number }[];
   tickets: Ticket[];
 }) {
-  /* — media móvil 7 días (sobre la misma serie) — */
+  // Serie densificada para que el área se pinte aunque solo haya 1 día con datos
+  const base = densifyDays(ticketsPorDia ?? [], 14);
+
+  // media móvil 7 días sobre la serie densificada
   const seriesMA = (() => {
     const out: { date: string; count: number; ma7: number | null }[] = [];
     let acc = 0;
     const buf: number[] = [];
-    ticketsPorDia.forEach((p) => {
+    base.forEach((p) => {
       const v = p.count ?? 0;
       buf.push(v);
       acc += v;
@@ -50,7 +88,10 @@ export function Charts({
     return out;
   })();
 
-  /* — agregados por estado para panel compacto — */
+  const insufficient =
+    seriesMA.length < 2 || seriesMA.every((p) => (p.count ?? 0) === 0);
+
+  // agregados por estado para panel compacto
   const counts = (() => {
     const m = new Map<string, number>();
     (tickets ?? []).forEach((t) => {
@@ -92,7 +133,7 @@ export function Charts({
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-      {/* === Área: Tickets por día (sin eje X visible) === */}
+      {/* === Área: Tickets por día === */}
       <Card className="lg:col-span-2">
         <CardHeader className="pb-0">
           <CardTitle className="text-base">Tickets por día</CardTitle>
@@ -101,57 +142,68 @@ export function Charts({
           </p>
         </CardHeader>
         <CardContent className="h-64 pt-2">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={seriesMA}
-              margin={{ top: 8, right: 16, bottom: 4, left: 8 }}
-            >
-              <defs>
-                <linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0284c7" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#0284c7" stopOpacity={0.06} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              {/* eje X COMPLETAMENTE oculto */}
-              <XAxis
-                dataKey="date"
-                hide
-                tick={false}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                allowDecimals={false}
-                width={34}
-                tickLine={false}
-                axisLine={false}
-                tick={{ fontSize: 11 }}
-              />
-              <RTooltip content={<TooltipArea />} />
-              <Area
-                type="monotone"
-                dataKey="count"
-                stroke="#0284c7"
-                fill="url(#gradArea)"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-              {/* línea de media móvil */}
-              <Area
-                type="monotone"
-                dataKey="ma7"
-                stroke="#0ea5e9"
-                fillOpacity={0}
-                strokeDasharray="5 4"
-                strokeWidth={2}
-                isAnimationActive={false}
-                dot={false}
-                connectNulls
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {insufficient ? (
+            <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+              No hay suficientes días para dibujar la curva. Amplía el rango de
+              fechas para ver la tendencia.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={seriesMA}
+                margin={{ top: 8, right: 16, bottom: 4, left: 8 }}
+              >
+                <defs>
+                  <linearGradient id="gradArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#0284c7" stopOpacity={0.35} />
+                    <stop
+                      offset="100%"
+                      stopColor="#0284c7"
+                      stopOpacity={0.06}
+                    />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" />
+                {/* eje X oculto para estilo Notion-like */}
+                <XAxis
+                  dataKey="date"
+                  hide
+                  tick={false}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  allowDecimals={false}
+                  width={34}
+                  tickLine={false}
+                  axisLine={false}
+                  tick={{ fontSize: 11 }}
+                />
+                <RTooltip content={<TooltipArea />} />
+                <Area
+                  type="monotone"
+                  dataKey="count"
+                  stroke="#0284c7"
+                  fill="url(#gradArea)"
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4 }}
+                />
+                {/* línea de media móvil */}
+                <Area
+                  type="monotone"
+                  dataKey="ma7"
+                  stroke="#0ea5e9"
+                  fillOpacity={0}
+                  strokeDasharray="5 4"
+                  strokeWidth={2}
+                  isAnimationActive={false}
+                  dot={false}
+                  connectNulls
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 

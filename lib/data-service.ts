@@ -5,16 +5,22 @@ import { apiFetch, endpoints, toQuery } from "./api-config";
    Tipos
 ======================= */
 export type TeamMember = { name: string; url?: string | null };
+
 export type Team = {
   id: number;
   codigo: string;
   nombre: string;
   puesto?: string | null;
   area?: string | null;
-  alumnos: TeamMember[];
-  nAlumnos?: number | null;
+  alumnos: TeamMember[];     // listado (cuando exista)
+  nAlumnos?: number | null;  // contador
   created_at?: string;
   updated_at?: string;
+};
+
+// Extensión útil cuando solo tenemos contadores (nueva API)
+export type TeamWithCounts = Team & {
+  ticketsCount?: number | null;
 };
 
 export type ClientItem = {
@@ -28,14 +34,17 @@ export type ClientItem = {
   // metadatos opcionales para filtros
   state?: string | null;
   stage?: string | null;
-  joinDate?: string | null;      // YYYY-MM-DD
-  lastActivity?: string | null;  // YYYY-MM-DD
+  joinDate?: string | null;      // YYYY-MM-DD o ISO
+  lastActivity?: string | null;  // YYYY-MM-DD o ISO
   inactivityDays?: number | null;
 
   // otros
   contractUrl?: string | null;
   ticketsCount?: number | null;
 };
+
+// ⚠️ Alias para que StudentsContent pueda importar este tipo:
+export type StudentItem = ClientItem;
 
 export type Ticket = {
   id: number;
@@ -54,7 +63,7 @@ export type Ticket = {
 ======================= */
 function parseTeamAlumnos(raw: string | null | undefined): TeamMember[] {
   if (!raw) return [];
-  // formato: "Nombre (url), Nombre 2 (url)..."
+  // formato esperado en API antigua: "Nombre (url), Nombre 2 (url)..."
   return raw
     .split(/,\s+/)
     .map((s) => {
@@ -70,15 +79,26 @@ function parseEquipoUrls(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return raw.map(String).map((s) => s.trim()).filter(Boolean);
   }
-  // La API te llega como string: "url1, url2, url3"
+  // Algunas variantes llegan como string: "url1, url2, url3"
   return String(raw)
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
 }
 
+/** Normaliza nombres con saltos de línea, comas o comillas sueltas */
+function cleanClientName(raw: any): string {
+  if (raw == null) return "—";
+  let s = String(raw);
+  s = s.split("\n")[0];           // primera línea
+  s = s.replace(/,+.*$/, "");     // corta basura tipo ",,,..."
+  s = s.replace(/^"+|"+$/g, "");  // quita comillas de borde
+  s = s.replace(/\s+/g, " ").trim(); // espacios repetidos
+  return s || "—";
+}
+
 /* =======================
-   TEAMS
+   TEAMS (versión ORIGINAL + compat flat {data:[...]})
 ======================= */
 export async function getTeams(opts: {
   page?: number;
@@ -94,10 +114,14 @@ export async function getTeams(opts: {
     fechaDesde: opts.fechaDesde ?? "",
     fechaHasta: opts.fechaHasta ?? "",
   });
+
   const json = await apiFetch<{
     code: number;
     status: string;
-    getTeam: {
+    // formato nuevo:
+    data?: any[];
+    // formato antiguo:
+    getTeam?: {
       data: any[];
       total: number;
       page: number;
@@ -106,14 +130,61 @@ export async function getTeams(opts: {
     };
   }>(`${endpoints.team.list}${q}`);
 
-  const data: Team[] =
-    json.getTeam?.data?.map((r: any) => ({
+  /* ── NUEVO: { code, status, data: [...] } ───────────────── */
+  if (Array.isArray((json as any).data)) {
+    const rows = (json as any).data as any[];
+
+    const data: Team[] = rows.map((r: any) => ({
       id: r.id,
       codigo: r.codigo,
       nombre: r.nombre,
       puesto: r.puesto ?? null,
       area: r.area ?? null,
-      alumnos: parseTeamAlumnos(r.alumnos),
+      alumnos: [], // sin detalle en este endpoint
+      nAlumnos:
+        typeof r.alumnos === "number"
+          ? r.alumnos
+          : r.n_alumnos ?? r.nAlumnos ?? null,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+    }));
+
+    // paginación local amigable para que las vistas no cambien
+    const total = data.length;
+    const pageSize = (opts.pageSize ?? total) || 25;
+    const page = opts.page ?? 1;
+    const totalPages = Math.max(1, Math.ceil(total / (pageSize || 1)));
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+
+    return {
+      data: data.slice(start, end),
+      total,
+      page,
+      pageSize,
+      totalPages,
+    };
+  }
+
+  /* ── ANTIGUO: { getTeam: { data, ... } } ─────────────────── */
+  const payload = json.getTeam ?? {
+    data: [] as any[],
+    total: 0,
+    page: opts.page ?? 1,
+    pageSize: opts.pageSize ?? 25,
+    totalPages: 1,
+  };
+
+  const data: Team[] =
+    (payload.data ?? []).map((r: any) => ({
+      id: r.id,
+      codigo: r.codigo,
+      nombre: r.nombre,
+      puesto: r.puesto ?? null,
+      area: r.area ?? null,
+      alumnos: parseTeamAlumnos(
+        typeof r.alumnos === "string" ? r.alumnos : null
+      ),
       nAlumnos: r.n_alumnos ?? r.nAlumnos ?? null,
       created_at: r.created_at,
       updated_at: r.updated_at,
@@ -121,27 +192,26 @@ export async function getTeams(opts: {
 
   return {
     data,
-    total: json.getTeam?.total ?? data.length,
-    page: json.getTeam?.page ?? 1,
-    pageSize: json.getTeam?.pageSize ?? data.length,
-    totalPages: json.getTeam?.totalPages ?? 1,
+    total: payload.total ?? data.length,
+    page: payload.page ?? (opts.page ?? 1),
+    pageSize: payload.pageSize ?? (opts.pageSize ?? data.length),
+    totalPages: payload.totalPages ?? 1,
   };
 }
 
 /* =======================
-   CLIENTS (Alumnos) — consulta hasta 1000, paginación local
+   TEAMS V2 (lee { code, status, data: [...] })
 ======================= */
-export async function getClients(opts: {
-  page?: number;            // ignorado para server; útil si quisieras logs
-  pageSize?: number;        // ignorado para server; usamos 1000 fijo por defecto
+export async function getTeamsV2(opts: {
+  page?: number;
+  pageSize?: number;
   search?: string;
   fechaDesde?: string;
   fechaHasta?: string;
 }) {
-  // Pedimos un máximo de 1000 al servidor
   const q = toQuery({
-    page: 1,
-    pageSize: 1000, // <— como pediste
+    page: opts.page ?? 1,
+    pageSize: opts.pageSize ?? 25,
     search: opts.search ?? "",
     fechaDesde: opts.fechaDesde ?? "",
     fechaHasta: opts.fechaHasta ?? "",
@@ -150,6 +220,68 @@ export async function getClients(opts: {
   const json = await apiFetch<{
     code: number;
     status: string;
+    data: any[];
+  }>(`${endpoints.team.list}${q}`);
+
+  const rows = json.data ?? [];
+
+  const data: TeamWithCounts[] = rows.map((r: any) => ({
+    id: r.id,
+    codigo: r.codigo,
+    nombre: r.nombre,
+    puesto: r.puesto ?? null,
+    area: r.area ?? null,
+    alumnos: [],
+    nAlumnos: r.alumnos ?? null,
+    ticketsCount: r.tickets ?? null,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+  }));
+
+  // Meta “friendly” + paginación local
+  const total = data.length;
+  const pageSize = (opts.pageSize ?? total) || 25;
+  const page = opts.page ?? 1;
+  const totalPages = Math.max(1, Math.ceil(total / (pageSize || 1)));
+
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  const pagedData = data.slice(start, end);
+
+  return {
+    data: pagedData,
+    total,
+    page,
+    pageSize,
+    totalPages,
+  };
+}
+
+/* =======================
+   CLIENTS (Alumnos) — consulta hasta 1000, paginación local
+======================= */
+export async function getClients(opts: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  fechaDesde?: string;
+  fechaHasta?: string;
+}) {
+  // Pedimos un máximo de 1000 al servidor (paginación local en el front)
+  const q = toQuery({
+    page: 1,
+    pageSize: 1000,
+    search: opts.search ?? "",
+    fechaDesde: opts.fechaDesde ?? "",
+    fechaHasta: opts.fechaHasta ?? "",
+  });
+
+  const json = await apiFetch<{
+    code: number;
+    status: string;
+    // NUEVO formato
+    data?: any[];
+    // formatos antiguos
     clients?: {
       data: any[];
       total: number;
@@ -166,18 +298,52 @@ export async function getClients(opts: {
     };
   }>(`${endpoints.client.list}${q}`);
 
-  const payload = json.clients ?? json.getClients ?? {
-    data: [],
-    total: 0,
-    page: 1,
-    pageSize: 1000,
-    totalPages: 1,
-  };
+  // 1) NUEVO: payload plano { data: [...] }
+  if (Array.isArray((json as any).data)) {
+    const rows = (json as any).data as any[];
+
+    const items: ClientItem[] = rows.map((r: any) => ({
+      id: r.id,
+      code: r.codigo ?? r.code ?? null,
+      name: cleanClientName(r.nombre ?? r.name),
+      // la nueva API ya no manda equipo; mantenemos compatibilidad
+      teamMembers: Array.isArray(r.teamMembers)
+        ? r.teamMembers
+        : parseTeamAlumnos(r.equipo ?? r.alumnos ?? null),
+
+      state: r.estado ?? r.state ?? null,
+      stage: r.etapa ?? r.stage ?? null,
+      // puede venir ISO con tiempo; el UI ya lo formatea
+      joinDate: r.ingreso ?? r.joinDate ?? null,
+      lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
+      inactivityDays: r.inactividad ?? r.inactivityDays ?? null,
+
+      contractUrl: r.contrato ?? r.contractUrl ?? null,
+      ticketsCount: r.tickets ?? r.ticketsCount ?? null,
+    }));
+
+    return {
+      items,
+      total: items.length,
+    };
+  }
+
+  // 2) LEGADO: { clients: {...} } o { getClients: {...} }
+  const payload =
+    json.clients ??
+    json.getClients ??
+    ({
+      data: [],
+      total: 0,
+      page: 1,
+      pageSize: 1000,
+      totalPages: 1,
+    } as const);
 
   const items: ClientItem[] = (payload.data ?? []).map((r: any) => ({
     id: r.id,
     code: r.codigo ?? r.code ?? null,
-    name: r.nombre ?? r.name ?? "—",
+    name: cleanClientName(r.nombre ?? r.name),
     teamMembers: Array.isArray(r.teamMembers)
       ? r.teamMembers
       : parseTeamAlumnos(r.equipo ?? r.alumnos ?? null),
@@ -198,6 +364,21 @@ export async function getClients(opts: {
   };
 }
 
+/* ============
+   Alias para Students
+   (para que StudentsContent use dataService.getStudents y StudentItem)
+=========== */
+export async function getStudents(opts: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  fechaDesde?: string;
+  fechaHasta?: string;
+}) {
+  // Simplemente reutilizamos la normalización de getClients
+  return getClients(opts);
+}
+
 /* =======================
    TICKETS — consulta hasta 10 000, paginación local
 ======================= */
@@ -211,60 +392,51 @@ export async function getTickets(opts: {
 }) {
   const q = toQuery({
     page: 1,
-    pageSize: 10000, // <— como pediste
+    pageSize: 10000, // seguimos pidiendo mucho y paginamos localmente
     search: opts.search ?? "",
     fechaDesde: opts.fechaDesde ?? "",
     fechaHasta: opts.fechaHasta ?? "",
   });
 
+  // Soportar NUEVA respuesta plana { code, status, data: [...] }
+  // y también las envolturas antiguas { getTickets: { data, total, ... } } o { tickets: { ... } }
   const json = await apiFetch<{
-    code: number;
-    status: string;
-    tickets?: {
-      data: any[];
-      total: number;
-      page: number;
-      pageSize: number;
-      totalPages: number;
-    };
-    getTickets?: {
-      data: any[];
-      total: number;
-      page: number;
-      pageSize: number;
-      totalPages: number;
-    };
+    code?: number;
+    status?: string;
+    // nueva
+    data?: any[];
+    // antiguas
+    tickets?: { data: any[]; total?: number };
+    getTickets?: { data: any[]; total?: number };
   }>(`${endpoints.ticket.list}${q}`);
 
-  // Soportar ambas envolturas: "getTickets" (tu API) o "tickets"
-  const payload =
-    json.getTickets ??
-    json.tickets ?? {
-      data: [],
-      total: 0,
-      page: 1,
-      pageSize: 10000,
-      totalPages: 1,
-    };
+  const rows: any[] =
+    (json as any)?.data ??
+    (json as any)?.getTickets?.data ??
+    (json as any)?.tickets?.data ??
+    [];
 
-  const items: Ticket[] =
-    (payload.data ?? []).map((r: any) => ({
-      id: r.id,
-      id_externo: r.id_externo ?? r.external_id ?? null,
-      nombre: r.nombre ?? r.subject ?? null,
-      alumno_nombre: r.alumno_nombre ?? r.client_name ?? null,
-      estado: r.estado ?? r.status ?? null,
-      tipo: r.tipo ?? r.type ?? null,
-      creacion: r.creacion ?? r.created_at ?? r.createdAt,
-      deadline: r.deadline ?? null,
-      // tu API manda "equipo" (string con comas); también soportamos "equipo_urls"
-      equipo_urls: parseEquipoUrls(r.equipo_urls ?? r.equipo ?? r.team_urls),
-    })) ?? [];
+  const items: Ticket[] = rows.map((r: any) => ({
+    id: r.id,
+    // en la nueva viene "codigo" (uuid). Lo mapeamos a id_externo para mantener compat.
+    id_externo: r.id_externo ?? r.external_id ?? r.codigo ?? null,
+    nombre: r.nombre ?? r.subject ?? null,
+    alumno_nombre: r.alumno_nombre ?? r.client_name ?? null,
+    estado: r.estado ?? r.status ?? null,
+    tipo: r.tipo ?? r.type ?? null,
+    // la nueva usa "created_at"
+    creacion: r.creacion ?? r.created_at ?? r.createdAt,
+    deadline: r.deadline ?? null,
+    // ahora no llega el equipo; dejamos array vacío si no existe
+    equipo_urls: parseEquipoUrls(r.equipo_urls ?? r.equipo ?? r.team_urls),
+  }));
 
-  // Devolvemos items + metadatos neutros para paginar localmente
+  const totalAntiguo =
+    (json as any)?.getTickets?.total ?? (json as any)?.tickets?.total;
+
   return {
     items,
-    total: payload.total ?? items.length,
+    total: typeof totalAntiguo === "number" ? totalAntiguo : items.length,
     page: 1,
     pageSize: items.length,
     totalPages: 1,
@@ -335,9 +507,19 @@ export function ticketsByDay(tickets: Ticket[]) {
    Export
 ======================= */
 export const dataService = {
-  getTeams,
-  getClients,     // <- consulta 1000 por defecto (paginación local)
-  getTickets,     // <- consulta 10 000 por defecto (paginación local)
+  // Teams
+  getTeams,     // versión original (soporta {data} y {getTeam})
+  getTeamsV2,   // versión nueva (lee { data: [...] })
+
+  // Clients / Students
+  getClients,   // consulta 1000 por defecto (paginación local)
+  getStudents,  // ⟵ alias usado por StudentsContent
+                //     (devuelve el mismo shape que getClients)
+
+  // Tickets
+  getTickets,   // consulta 10 000 por defecto (paginación local)
+
+  // Utils
   groupTicketsByTeam,
   ticketsByDay,
 };

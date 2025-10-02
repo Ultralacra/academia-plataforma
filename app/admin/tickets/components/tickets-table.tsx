@@ -29,10 +29,10 @@ export default function TicketsTable({
   loading: boolean;
 }) {
   return (
-    <Card>
+    <Card className="border-gray-200 shadow-none">
       <CardHeader className="pb-2">
-        <CardTitle>Listado de tickets</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-[15px]">Listado de tickets</CardTitle>
+        <CardDescription className="text-xs">
           {loading
             ? "Cargando..."
             : `${items.length} de ${total} (mostrando ${pageSize} por página)`}
@@ -40,8 +40,8 @@ export default function TicketsTable({
       </CardHeader>
       <CardContent className="overflow-x-auto">
         <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-600">
+          <thead className="sticky top-0 z-[1] bg-white">
+            <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-600">
               <th className="px-4 py-2">ID Externo</th>
               <th className="px-4 py-2">Asunto</th>
               <th className="px-4 py-2">Alumno</th>
@@ -49,22 +49,29 @@ export default function TicketsTable({
               <th className="px-4 py-2">Tipo</th>
               <th className="px-4 py-2">Creación</th>
               <th className="px-4 py-2">Deadline</th>
-              <th className="px-4 py-2"># Equipo URLs</th>
+              <th className="px-4 py-2 text-right"># URLs</th>
             </tr>
           </thead>
           <tbody>
             {items.map((t) => (
-              <tr key={t.id} className="border-b">
-                <td className="px-4 py-2">{t.id_externo ?? "-"}</td>
+              <tr
+                key={t.id}
+                className="border-b hover:bg-muted/40 transition-colors"
+              >
+                <td className="px-4 py-2 font-mono text-xs">
+                  {t.id_externo ?? "-"}
+                </td>
                 <td className="px-4 py-2">{t.nombre ?? "-"}</td>
                 <td className="px-4 py-2">{t.alumno_nombre ?? "-"}</td>
                 <td className="px-4 py-2">{t.estado ?? "—"}</td>
-                <td className="px-4 py-2">{t.tipo ?? "—"}</td>
+                <td className="px-4 py-2">{(t.tipo ?? "—").toUpperCase()}</td>
                 <td className="px-4 py-2">{fmtDate(t.creacion)}</td>
                 <td className="px-4 py-2">
                   {t.deadline ? fmtDate(t.deadline) : "—"}
                 </td>
-                <td className="px-4 py-2">{t.equipo_urls.length}</td>
+                <td className="px-4 py-2 text-right tabular-nums">
+                  {t.equipo_urls?.length ?? 0}
+                </td>
               </tr>
             ))}
             {items.length === 0 && !loading && (
@@ -79,7 +86,7 @@ export default function TicketsTable({
 
         {/* paginación local */}
         <div className="mt-4 flex items-center justify-between">
-          <div className="text-sm text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             Página <strong>{page}</strong> de <strong>{totalPages}</strong>
           </div>
           <div className="flex items-center gap-2">
