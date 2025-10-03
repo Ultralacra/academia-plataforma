@@ -1,115 +1,160 @@
 "use client";
 
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
+  FileText,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  CalendarDays,
+  Flame,
+} from "lucide-react";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import type { TicketsMetrics } from "./metrics";
 
-export default function TeamModal({
-  open,
-  onOpenChange,
-  bucket,
-  fmtDate,
+/* Chip simple */
+function Kpi({
+  icon,
+  label,
+  value,
+  hint,
+  color = "default",
 }: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  bucket: {
-    team: { nombre: string; alumnos: { name: string; url?: string | null }[] };
-    tickets: {
-      id: number;
-      nombre?: string | null;
-      id_externo?: string | null;
-      alumno_nombre?: string | null;
-      creacion: string;
-      tipo?: string | null;
-    }[];
-    membersHit: Record<string, number>;
-  } | null;
-  fmtDate: (iso?: string | null) => string;
+  icon: React.ReactNode;
+  label: string;
+  value: string | number;
+  hint?: string;
+  color?: "default" | "blue" | "green" | "amber" | "red" | "violet";
 }) {
+  const map: Record<string, string> = {
+    default: "border-gray-200",
+    blue: "border-sky-200",
+    green: "border-emerald-200",
+    amber: "border-amber-200",
+    red: "border-rose-200",
+    violet: "border-violet-200",
+  };
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl border-gray-200 shadow-none">
-        <DialogHeader>
-          <DialogTitle className="text-[15px]">
-            {bucket ? `Equipo: ${bucket.team.nombre}` : "Equipo"}
-          </DialogTitle>
-        </DialogHeader>
+    <div className={`rounded-xl border ${map[color]} p-3`}>
+      <div className="flex items-center gap-2 text-xs text-gray-600">
+        <div className="rounded-md bg-white p-1.5 border">{icon}</div>
+        <span className="font-medium">{label}</span>
+      </div>
+      <div className="mt-2 text-2xl font-semibold tabular-nums">{value}</div>
+      {hint ? <div className="mt-1 text-xs text-gray-500">{hint}</div> : null}
+    </div>
+  );
+}
 
-        {!bucket ? (
-          <div className="text-sm text-muted-foreground">Sin datos</div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <h4 className="mb-2 text-sm font-semibold">Miembros</h4>
-              <div className="space-y-2">
-                {bucket.team.alumnos.map((m, i) => {
-                  const hits = m.url ? bucket.membersHit[m.url] ?? 0 : 0;
-                  return (
-                    <div
-                      key={`${m.name}-${i}`}
-                      className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2"
-                    >
-                      <div>
-                        <p className="text-sm font-medium">{m.name}</p>
-                        {m.url ? (
-                          <a
-                            href={m.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs text-primary underline"
-                          >
-                            {m.url}
-                          </a>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            sin URL
-                          </p>
-                        )}
-                      </div>
-                      <Badge variant="secondary" className="tabular-nums">
-                        {hits} hits
-                      </Badge>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+export default function KPIs({
+  metrics,
+  loading,
+}: {
+  metrics: TicketsMetrics;
+  loading?: boolean;
+}) {
+  const range =
+    metrics.from && metrics.to
+      ? `${metrics.from} → ${metrics.to} (${metrics.days || 0} días)`
+      : "—";
 
-            <div>
-              <h4 className="mb-2 text-sm font-semibold">
-                Tickets relacionados
-              </h4>
-              <div className="space-y-2">
-                {bucket.tickets.slice(0, 60).map((t) => (
-                  <div
-                    key={t.id}
-                    className="rounded-xl border border-gray-200 p-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium">
-                        {t.nombre ?? "Sin título"}{" "}
-                        <span className="text-xs text-muted-foreground">
-                          ({t.id_externo ?? "-"})
-                        </span>
-                      </p>
-                      <Badge variant="outline">
-                        {(t.tipo ?? "N/A").toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {t.alumno_nombre ?? "—"} • {fmtDate(t.creacion)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+  return (
+    <Card className="border-gray-200 shadow-none">
+      <CardHeader className="pb-0">
+        <CardTitle className="text-base">Métricas de tickets</CardTitle>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Rango considerado: {range}
+        </p>
+      </CardHeader>
+      <CardContent className="grid grid-cols-1 gap-3 pt-3 md:grid-cols-5">
+        <Kpi
+          icon={<FileText className="h-4 w-4 text-sky-600" />}
+          label="Total"
+          value={loading ? "…" : metrics.total}
+          hint="Tickets en la vista actual"
+          color="blue"
+        />
+        <Kpi
+          icon={<CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+          label="Resueltos"
+          value={loading ? "…" : metrics.resueltos}
+          hint={`${
+            metrics.total
+              ? Math.round((metrics.resueltos / metrics.total) * 100)
+              : 0
+          }% del total`}
+          color="green"
+        />
+        <Kpi
+          icon={<AlertTriangle className="h-4 w-4 text-amber-600" />}
+          label="Pendientes"
+          value={loading ? "…" : metrics.pendientes}
+          hint={`${
+            metrics.total
+              ? Math.round((metrics.pendientes / metrics.total) * 100)
+              : 0
+          }% del total`}
+          color="amber"
+        />
+        <Kpi
+          icon={<Clock className="h-4 w-4 text-violet-600" />}
+          label="En progreso"
+          value={loading ? "…" : metrics.enProgreso}
+          hint={`${
+            metrics.total
+              ? Math.round((metrics.enProgreso / metrics.total) * 100)
+              : 0
+          }% del total`}
+          color="violet"
+        />
+        <Kpi
+          icon={<CalendarDays className="h-4 w-4 text-sky-600" />}
+          label="Promedio por día"
+          value={loading ? "…" : metrics.avgPerDay || 0}
+          hint={metrics.days ? `En ${metrics.days} días` : "Sin rango"}
+          color="blue"
+        />
+      </CardContent>
+
+      {/* Extra: hoy / 7 / 30 + pico + días en blanco */}
+      <CardContent className="grid grid-cols-1 gap-3 pt-1 md:grid-cols-5">
+        <Kpi
+          icon={<CalendarDays className="h-4 w-4 text-gray-600" />}
+          label="Hoy"
+          value={loading ? "…" : metrics.today}
+          hint="Tickets creados hoy"
+        />
+        <Kpi
+          icon={<CalendarDays className="h-4 w-4 text-gray-600" />}
+          label="Últ. 7 días"
+          value={loading ? "…" : metrics.last7}
+          hint="Anclado al final del rango"
+        />
+        <Kpi
+          icon={<CalendarDays className="h-4 w-4 text-gray-600" />}
+          label="Últ. 30 días"
+          value={loading ? "…" : metrics.last30}
+          hint="Anclado al final del rango"
+        />
+        <Kpi
+          icon={<Flame className="h-4 w-4 text-rose-600" />}
+          label="Día más activo"
+          value={
+            loading
+              ? "…"
+              : metrics.busiestDay
+              ? `${metrics.busiestDay.count}`
+              : "—"
+          }
+          hint={metrics.busiestDay ? metrics.busiestDay.date : "Sin datos"}
+          color="red"
+        />
+        <Kpi
+          icon={<CalendarDays className="h-4 w-4 text-gray-600" />}
+          label="Días sin actividad"
+          value={loading ? "…" : metrics.quietDays}
+          hint="Dentro del rango"
+        />
+      </CardContent>
+    </Card>
   );
 }

@@ -2,22 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService, type Ticket, type Team } from "@/lib/data-service";
-import {
-  Search,
-  Filter,
-  Calendar as CalendarIcon,
-  Users,
-  Clock,
-  CheckCircle2,
-  AlertTriangle,
-  X,
-} from "lucide-react";
+import { Search, Filter, Calendar as CalendarIcon } from "lucide-react";
 import { Charts } from "./charts";
 import KPIs from "./kpis";
 import TeamsTable from "./teams-table";
+import { computeTicketMetrics, type TicketsMetrics } from "./metrics";
 
 /* ---------------------------------------
-   UI helpers lightweight (sin shadcn)
+  UI helpers lightweight (sin shadcn)
 --------------------------------------- */
 function Badge({
   children,
@@ -41,45 +33,6 @@ function Badge({
     </span>
   );
 }
-
-function Modal({
-  open,
-  onClose,
-  title,
-  children,
-  maxWidth = "max-w-2xl",
-}: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-  maxWidth?: string;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div
-        className={`relative mx-4 w-full ${maxWidth} rounded-2xl border border-gray-200 bg-white shadow-none`}
-        role="dialog"
-        aria-modal="true"
-      >
-        <div className="flex items-center justify-between border-b px-5 py-3">
-          <h3 className="text-base font-semibold">{title}</h3>
-          <button
-            onClick={onClose}
-            className="rounded-md p-1.5 hover:bg-gray-100"
-            aria-label="Cerrar"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
-      </div>
-    </div>
-  );
-}
-
 function Card({ children, className = "" }: any) {
   return (
     <div
@@ -140,12 +93,10 @@ function Select({
   value,
   onChange,
   options,
-  placeholder,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
-  placeholder?: string;
 }) {
   return (
     <select
@@ -153,11 +104,6 @@ function Select({
       onChange={(e) => onChange(e.target.value)}
       className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:ring-4 focus:ring-violet-100"
     >
-      {placeholder ? (
-        <option value="" disabled hidden>
-          {placeholder}
-        </option>
-      ) : null}
       {options.map((o) => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -172,7 +118,6 @@ function Button({
   variant = "default",
   size = "md",
   className = "",
-  type = "button",
 }: any) {
   const variants: Record<string, string> = {
     default: "bg-sky-600 text-white hover:bg-sky-700 focus:ring-sky-200",
@@ -186,7 +131,6 @@ function Button({
   };
   return (
     <button
-      type={type}
       onClick={onClick}
       className={`inline-flex items-center gap-2 ${variants[variant]} ${sizes[size]} focus:outline-none focus:ring-4 transition ${className}`}
     >
@@ -196,7 +140,7 @@ function Button({
 }
 
 /* ---------------------------------------
-   Utils
+  Utils
 --------------------------------------- */
 const PAGE_SIZE_UI = 25;
 
@@ -215,29 +159,25 @@ function fmtDateTime(iso?: string | null) {
 }
 
 /* ---------------------------------------
-   TicketsContent (paginación local)
+  TicketsContent (paginación local)
 --------------------------------------- */
 export default function TicketsContent() {
-  // Datos “completos” (hasta 10k desde el server)
+  // Datos
   const [teams, setTeams] = useState<Team[]>([]);
   const [allTickets, setAllTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filtros cliente
+  // Filtros
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<string>("all");
   const [tipo, setTipo] = useState<string>("all");
   const [fechaDesde, setFechaDesde] = useState<string>("");
   const [fechaHasta, setFechaHasta] = useState<string>("");
 
-  // Paginación UI local
+  // Paginación UI
   const [page, setPage] = useState(1);
 
-  // Modal (si luego conectas con groupTicketsByTeam)
-  const [openTeamModal, setOpenTeamModal] = useState(false);
-  const [activeTeamId, setActiveTeamId] = useState<number | null>(null);
-
-  // Cargar (hasta 10k) cuando cambian filtros que van al servidor
+  // Carga del backend (hasta 10k)
   useEffect(() => {
     const t = setTimeout(async () => {
       setLoading(true);
@@ -314,28 +254,19 @@ export default function TicketsContent() {
     return ["all", ...Array.from(set)];
   }, [allTickets]);
 
-  // Métricas
-  const metrics = useMemo(() => {
-    const total = (filtered ?? []).length;
-    const pend = (filtered ?? []).filter(
-      (t) => (t.estado ?? "").toLowerCase() === "pendiente"
-    ).length;
-    const prog = (filtered ?? []).filter(
-      (t) => (t.estado ?? "").toLowerCase() === "en progreso"
-    ).length;
-    const res = (filtered ?? []).filter(
-      (t) => (t.estado ?? "").toLowerCase() === "resuelto"
-    ).length;
-    return { total, pend, prog, res };
-  }, [filtered]);
+  // 📊 NUEVO: métricas completas
+  const metrics: TicketsMetrics = useMemo(
+    () => computeTicketMetrics(filtered ?? []),
+    [filtered]
+  );
 
-  // Chart data (tickets por día) sobre filtrados
+  // Serie por día (para el area chart) — puedes seguir usando la de tu dataService
   const ticketsPorDia = useMemo(
     () => dataService.ticketsByDay(filtered ?? []),
     [filtered]
   );
 
-  // paginación local segura
+  // Paginación local
   const total = (filtered ?? []).length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE_UI));
   const pageItems = useMemo(() => {
@@ -344,14 +275,9 @@ export default function TicketsContent() {
     return arr.slice(start, start + PAGE_SIZE_UI);
   }, [filtered, page]);
 
-  const openTeam = (id: number) => {
-    setActiveTeamId(id);
-    setOpenTeamModal(true);
-  };
-
   return (
     <div className="space-y-6">
-      {/* Header de página (Notion-like) */}
+      {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
         <p className="text-sm text-muted-foreground">
@@ -359,8 +285,8 @@ export default function TicketsContent() {
         </p>
       </div>
 
-      {/* Filtros en “toolbar” */}
-      <Card className="rounded-2xl border border-gray-200 bg-white shadow-none">
+      {/* Filtros */}
+      <Card>
         <CardHeader
           title="Filtros"
           icon={<Filter className="h-5 w-5" />}
@@ -439,14 +365,14 @@ export default function TicketsContent() {
         </CardBody>
       </Card>
 
-      {/* KPIs compactos (Notion vibes) */}
+      {/* KPIs nuevas */}
       <KPIs metrics={metrics} loading={loading} />
 
       {/* Gráficas */}
       <Charts ticketsPorDia={ticketsPorDia} tickets={filtered} />
 
       {/* Tabla tickets (paginación local) */}
-      <Card className="rounded-2xl border border-gray-200 bg-white shadow-none">
+      <Card>
         <CardHeader
           title="Listado de tickets"
           subtitle="Vista filtrada y paginada localmente"
@@ -477,20 +403,9 @@ export default function TicketsContent() {
                   <td className="px-4 py-2">{t.nombre ?? "-"}</td>
                   <td className="px-4 py-2">{t.alumno_nombre ?? "-"}</td>
                   <td className="px-4 py-2">
-                    {(() => {
-                      const est = (t.estado ?? "").toUpperCase();
-                      if (est === "RESUELTO")
-                        return <Badge color="green">RESUELTO</Badge>;
-                      if (est === "EN PROGRESO")
-                        return <Badge color="blue">EN PROGRESO</Badge>;
-                      if (est === "PENDIENTE")
-                        return <Badge color="amber">PENDIENTE</Badge>;
-                      return <Badge>{est || "SIN ESTADO"}</Badge>;
-                    })()}
+                    {(t.estado ?? "—").toUpperCase()}
                   </td>
-                  <td className="px-4 py-2">
-                    <Badge>{(t.tipo ?? "SIN TIPO").toUpperCase()}</Badge>
-                  </td>
+                  <td className="px-4 py-2">{(t.tipo ?? "—").toUpperCase()}</td>
                   <td className="px-4 py-2">{fmtDateTime(t.creacion)}</td>
                   <td className="px-4 py-2">{fmtDateTime(t.deadline)}</td>
                   <td className="px-4 py-2 text-right tabular-nums">
@@ -539,18 +454,6 @@ export default function TicketsContent() {
           </div>
         </CardBody>
       </Card>
-
-      {/* (Opcional) Modal de equipo si lo conectas con groupTicketsByTeam */}
-      <Modal
-        open={openTeamModal}
-        onClose={() => setOpenTeamModal(false)}
-        title="Equipo"
-        maxWidth="max-w-3xl"
-      >
-        <div className="text-sm text-gray-500">
-          Conecta aquí tu detalle por equipo si lo necesitas.
-        </div>
-      </Modal>
 
       {loading && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-white/60">
