@@ -27,7 +27,7 @@ export function useAuth() {
 
       switch (user.role) {
         case "admin":
-          router.push("/admin")
+          router.push("/admin/students")
           break
         case "coach":
           router.push("/coach")

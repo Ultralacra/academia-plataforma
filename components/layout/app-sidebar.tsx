@@ -42,12 +42,12 @@ type MenuItem = {
 
 /* ====================== Menús (admin con top-level Coachs/Alumnos/Tickets + grupo “Métricas”) ====================== */
 const adminItems: MenuItem[] = [
-  { title: "Dashboard", url: "/admin", icon: Home },
-
+  /*  { title: "Dashboard", url: "/admin", icon: Home },
+   */
   // NUEVOS top-level (mismo nivel que “Métricas”)
   { title: "Coachs", url: "/admin/teamsv2", icon: Users },
   { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
-  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare },
+  /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
   // Grupo colapsable renombrado a “Métricas”
   {
