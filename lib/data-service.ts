@@ -549,6 +549,49 @@ export async function getClientCoaches(alumnoCode: string): Promise<{
 
 
 /* =======================
+   TEAMS CREATED (nueva API)
+======================= */
+export type TeamCreatedTotal = {
+  code: number;
+  status: string;
+  data: { total_teams: number };
+};
+
+export type TeamCreatedDetailItem = {
+  codigo_cliente: string;
+  nombre_cliente: string;
+  cantidad_tickets: number;
+  equipos: {
+    codigo_equipo: string;
+    nombre_coach: string;
+    puesto: string;
+    area: string;
+  }[];
+};
+
+export type TeamCreatedDetail = {
+  code: number;
+  status: string;
+  data: TeamCreatedDetailItem[];
+};
+
+
+/* =======================
+   TEAMS CREATED ENDPOINTS
+======================= */
+export async function getTeamsCreated() {
+  const json = await apiFetch<TeamCreatedTotal>(endpoints.team.created);
+  return json; // { code, status, data: { total_teams } }
+}
+
+export async function getTeamsCreatedDetail() {
+  const json = await apiFetch<TeamCreatedDetail>(endpoints.team.createdDetail);
+  return json; // { code, status, data: [...] }
+}
+
+
+
+/* =======================
    Export
 ======================= */
 export const dataService = {
@@ -568,4 +611,10 @@ export const dataService = {
   // Utils
   groupTicketsByTeam,
   ticketsByDay,
+
+
+  // Teams created  ← añade estas dos
+  getTeamsCreated,
+  getTeamsCreatedDetail,
+
 };

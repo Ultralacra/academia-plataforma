@@ -3,7 +3,11 @@ export const API_HOST =
   process.env.NEXT_PUBLIC_API_HOST ?? "https://v001.vercel.app/v1";
 
 export const endpoints = {
-  team: { list: "/team/get/team" },
+  team: {
+    list: "/team/get/team",
+    created: "/team/get/team-created",               // ← nuevo
+    createdDetail: "/team/get/detail/team-created",  // ← nuevo
+  },
   client: { list: "/client/get/clients" },
   ticket: { list: "/ticket/get/ticket" },
   coachClient: {
@@ -24,7 +28,10 @@ export function toQuery(params: Record<string, any>) {
   return qs ? `?${qs}` : "";
 }
 
-export async function apiFetch<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+export async function apiFetch<T = unknown>(
+  path: string,
+  init?: RequestInit
+): Promise<T> {
   const res = await fetch(buildUrl(path), {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },

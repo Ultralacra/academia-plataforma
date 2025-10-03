@@ -519,7 +519,7 @@ export function buildTeamsMetrics({
   );
   const sumArr = (arr: string[]) =>
     arr.reduce((acc, d) => acc + (perDay.get(d) ?? 0), 0);
-  const ticketsPer = {
+  let ticketsPer = {
     day: perDay.get(todayISO) ?? 0,
     week: sumArr(last7),
     month: sumArr(last30),
@@ -530,7 +530,7 @@ export function buildTeamsMetrics({
   const allDays = Array.from({ length: 60 }).map((_, i) =>
     isoDay(addDays(today, -59 + i))
   );
-  const daily: TicketsSeries["daily"] = allDays.map((d) => ({
+  let daily: TicketsSeries["daily"] = allDays.map((d) => ({
     date: d,
     count: perDay.get(d) ?? 0,
   }));
@@ -549,7 +549,7 @@ export function buildTeamsMetrics({
     const wk = weekKey(d);
     perWeek.set(wk, (perWeek.get(wk) ?? 0) + 1);
   });
-  const weekly: TicketsSeries["weekly"] = Array.from({ length: 26 }).map(
+  let weekly: TicketsSeries["weekly"] = Array.from({ length: 26 }).map(
     (_, i) => {
       const monday = addDays(today, -7 * (25 - i));
       const wk = weekKey(monday);
@@ -567,7 +567,7 @@ export function buildTeamsMetrics({
     const mk = monthKey(d);
     perMonth.set(mk, (perMonth.get(mk) ?? 0) + 1);
   });
-  const monthly: TicketsSeries["monthly"] = Array.from({ length: 12 }).map(
+  let monthly: TicketsSeries["monthly"] = Array.from({ length: 12 }).map(
     (_, i) => {
       const d = new Date(today.getFullYear(), today.getMonth() - (11 - i), 1);
       const mk = monthKey(d);
@@ -576,7 +576,7 @@ export function buildTeamsMetrics({
   );
 
   /* ── Respuesta por coach / equipo y productividad por coach ─ */
-  const respByCoach: RespByCoach[] = Array.from(coachAgg.values())
+  let respByCoach: RespByCoach[] = Array.from(coachAgg.values())
     .map((c) => ({
       coach: c.name,
       response: c.avgResponseMin,
@@ -586,7 +586,7 @@ export function buildTeamsMetrics({
     .sort((a, b) => b.tickets - a.tickets)
     .slice(0, 14);
 
-  const respByTeam: RespByTeam[] = Array.from(teamAgg, ([team, v]) => ({
+  let respByTeam: RespByTeam[] = Array.from(teamAgg, ([team, v]) => ({
     team,
     response: v.n ? Math.round(v.resp / v.n) : 0,
     resolution: v.n ? Math.round(v.reso / v.n) : 0,
@@ -595,7 +595,7 @@ export function buildTeamsMetrics({
     .sort((a, b) => b.tickets - a.tickets)
     .slice(0, 14);
 
-  const prodByCoach: ProdByCoach[] = Array.from(coachAgg.values())
+  let prodByCoach: ProdByCoach[] = Array.from(coachAgg.values())
     .map((c) => ({
       coach: c.name,
       tickets: c.tickets,
@@ -605,16 +605,89 @@ export function buildTeamsMetrics({
     .sort((a, b) => b.tickets - a.tickets)
     .slice(0, 14);
 
+  /* ──────────────────────────────────────────────────────────────
+     DEV FALLBACK: si no hay data → inyecta datos fake determinísticos
+  ────────────────────────────────────────────────────────────── */
+  if (respByCoach.length === 0 || respByTeam.length === 0 || prodByCoach.length === 0) {
+    const rng = makeRng("dev-fake|teams");
+
+    // 1) Coaches fake si hace falta
+    if (respByCoach.length === 0 || prodByCoach.length === 0) {
+      const coachNames = ["Klever","Matias","Johan","Pedro","Vanessa","Alma","Camila","Diego"];
+      const tmpCoach: RespByCoach[] = [];
+      const tmpProd: ProdByCoach[] = [];
+      coachNames.forEach((name) => {
+        const baseTickets = 8 + Math.floor(rng() * 25);     // 8..32
+        const resp = 10 + Math.floor(rng() * 180);          // 10..190 min
+        const reso = resp + 60 + Math.floor(rng() * 1200);  // +1h..+21h
+        const sessions = 4 + Math.floor(rng() * 20);
+        const hours = Math.round((sessions * (0.8 + rng() * 1.2)) * 10) / 10;
+
+        tmpCoach.push({ coach: name, response: resp, resolution: reso, tickets: baseTickets });
+        tmpProd.push({ coach: name, tickets: baseTickets, sessions, hours });
+      });
+
+      respByCoach = tmpCoach;
+      prodByCoach = tmpProd;
+    }
+
+    // 2) Equipos fake si hace falta
+    if (respByTeam.length === 0) {
+      const teamNames =
+        teams.length > 0 ? teams.map(t => t.nombre).slice(0, 8)
+                         : ["Equipo A","Equipo B","Equipo C","Equipo D","Equipo E","Equipo F","Equipo G","Equipo H"];
+      respByTeam = teamNames.map((team) => {
+        const r = makeRng("dev-fake|" + team);
+        const resp = 12 + Math.floor(r() * 160);
+        const reso = resp + 80 + Math.floor(r() * 900);
+        const tks = 6 + Math.floor(r() * 20);
+        return { team, response: resp, resolution: reso, tickets: tks };
+      });
+    }
+
+    // 3) Series fake si no hubo tickets
+    const noTickets = (tickets?.length ?? 0) === 0;
+    if (noTickets) {
+      const start = addDays(today, -59);
+      daily = Array.from({ length: 60 }, (_, i) => {
+        const d = addDays(start, i);
+        const r = makeRng("dev-fake|day|" + i);
+        return { date: isoDay(d), count: Math.floor(r() * 18) }; // 0..17
+      });
+
+      const weekKeyLocal = (d: Date) => {
+        const x = new Date(d);
+        const day = x.getDay() || 7;
+        if (day !== 1) x.setDate(x.getDate() - (day - 1));
+        return isoDay(x);
+      };
+      weekly = Array.from({ length: 26 }, (_, i) => {
+        const monday = addDays(today, -7 * (25 - i));
+        const r = makeRng("dev-fake|week|" + i);
+        return { week: weekKeyLocal(monday), count: 10 + Math.floor(r() * 40) };
+      });
+
+      monthly = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(today.getFullYear(), today.getMonth() - (11 - i), 1);
+        const r = makeRng("dev-fake|month|" + i);
+        return { month: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2, "0")}`, count: 40 + Math.floor(r() * 140) };
+      });
+
+      ticketsPer = {
+        day: daily[daily.length - 1]?.count ?? 0,
+        week: weekly.slice(-1)[0]?.count ?? 0,
+        month: monthly.reduce((a, b) => a + b.count, 0),
+      };
+    }
+  }
+
   /* ── Totales y salida ─ */
   const totals = {
     teams: teams.length,
     studentsTotal: students.length,
-    studentsActive: students.filter((s) => classifyStudent(s) === "ACTIVO")
-      .length,
-    studentsInactive: students.filter((s) => classifyStudent(s) === "INACTIVO")
-      .length,
-    studentsPaused: students.filter((s) => classifyStudent(s) === "PAUSA")
-      .length,
+    studentsActive: students.filter((s) => classifyStudent(s) === "ACTIVO").length,
+    studentsInactive: students.filter((s) => classifyStudent(s) === "INACTIVO").length,
+    studentsPaused: students.filter((s) => classifyStudent(s) === "PAUSA").length,
     successCases,
     ticketsTotal: tickets.length,
     avgResponseMin,
@@ -640,8 +713,6 @@ export function buildTeamsMetrics({
     respByCoach,
     respByTeam,
     prodByCoach,
-    coaches: Array.from(coachAgg.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    ),
+    coaches: Array.from(coachAgg.values()).sort((a, b) => a.name.localeCompare(b.name)),
   };
 }

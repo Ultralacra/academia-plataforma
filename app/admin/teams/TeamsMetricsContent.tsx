@@ -19,6 +19,7 @@ import { buildTeamsMetrics, type TeamsMetrics } from "./metrics-faker";
 import TicketsSeriesChart from "./TicketsSeries";
 import ResponseCharts from "./ResponseCharts";
 import ProductivityCharts from "./ProductivityCharts";
+import CreatedMetricsContent from "./CreatedMetricsContent";
 
 export default function TeamsMetricsContent() {
   // filtros simples
@@ -131,43 +132,15 @@ export default function TeamsMetricsContent() {
         }}
         per={model.ticketsPer}
       />
-      {/* Fases: promedios y activos */}
-      <PhaseAverages data={model.avgPhaseDays} />
-      <PhaseActives data={model.activeByPhase} />
-      {/* Charts existentes */}
-      <Charts
-        alumnosPorEquipo={model.alumnosPorEquipo}
-        areasCount={model.areasCount}
-      />
-      {/* Métricas por coach */}
-      <CoachTable rows={model.coaches} />
-      {/* Tabla de equipos */}
-      <TeamsTable
-        data={pageData}
-        total={total}
-        page={page}
-        pageSize={pageSize}
-        totalPages={totalPages}
-        onPageChange={setPage}
-        onPageSizeChange={(n) => {
-          setPageSize(n);
-          setPage(1);
-        }}
-        onOpenAlumnos={openAlumnos}
-        loading={loading}
-      />
-      {/* Modal de alumnos del equipo */}
       <StudentsModal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         team={teamSel}
       />
-      // SERIE DE TICKETS por día/semana/mes
       <TicketsSeriesChart series={model.ticketsSeries} />
-      // RESPUESTA por coach / equipo
       <ResponseCharts byCoach={model.respByCoach} byTeam={model.respByTeam} />
-      // PRODUCTIVIDAD por coach (tickets, sesiones, horas)
       <ProductivityCharts rows={model.prodByCoach} />
+      <CreatedMetricsContent />
     </div>
   );
 }
