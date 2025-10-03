@@ -6,6 +6,7 @@ import RetentionKPIs from "./retention-kpis";
 import NoTasksKPIs from "./no-tasks-kpis";
 import TransitionsPanel from "./transitions-panel";
 import type { LifecycleItem } from "./phase-faker";
+import type { ClientItem } from "@/lib/data-service";
 
 export default function ChartsSection({
   loading,
@@ -14,6 +15,7 @@ export default function ChartsSection({
   byJoinDate,
   phaseItems = [],
   lifecycleItems = [],
+  students = [], // <-- DEFAULT
   onOpenList,
 }: {
   loading: boolean;
@@ -29,6 +31,7 @@ export default function ChartsSection({
     paso_f5?: string | null;
   }>;
   lifecycleItems?: LifecycleItem[];
+  students?: ClientItem[]; // <-- NUEVO
   onOpenList: (
     title: string,
     rows: Array<{
@@ -54,22 +57,26 @@ export default function ChartsSection({
         </div>
       )}
 
-      {/* Promedios por fase (usa faker de pasos) */}
+      {/* Promedios por fase */}
       <div className="mt-2">
         <PhaseMetrics items={phaseItems} />
       </div>
 
-      {/* Retención (usa lifecycleItems) */}
+      {/* Retención / permanencia */}
       <div className="mt-2">
         <RetentionKPIs items={lifecycleItems ?? []} />
       </div>
 
-      {/* Sin tareas */}
+      {/* Sin tareas (pasa lifecycle + students) */}
       <div className="mt-2">
-        <NoTasksKPIs items={lifecycleItems ?? []} onOpenList={onOpenList} />
+        <NoTasksKPIs
+          items={lifecycleItems ?? []}
+          students={students} // <-- IMPORTANTE
+          onOpenList={onOpenList}
+        />
       </div>
 
-      {/* Transiciones con tabs y click para ver listado */}
+      {/* Transiciones */}
       <div className="mt-2">
         <TransitionsPanel
           items={lifecycleItems ?? []}

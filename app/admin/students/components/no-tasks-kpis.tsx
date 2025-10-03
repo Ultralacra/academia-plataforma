@@ -3,37 +3,62 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Clock, ListChecks } from "lucide-react";
-import { studentsNoTasksSince, type LifecycleItem } from "./phase-faker";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { List } from "lucide-react";
+import type { LifecycleItem } from "./phase-faker";
+import type { ClientItem } from "@/lib/data-service";
 
-/* ---- presets y helpers ---- */
-const PRESETS = [
+/* ---------------- fecha utils ---------------- */
+function isoDay(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+function parseMaybe(s?: string | null) {
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+function fmtDateES(iso?: string | null) {
+  if (!iso) return "—";
+  const d = parseMaybe(iso);
+  if (!d) return "—";
+  return d
+    .toLocaleDateString("es-ES", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
+    .replace(".", "");
+}
+function diffDays(a: Date, b: Date) {
+  const ms = b.getTime() - a.getTime();
+  return Math.round(ms / (1000 * 60 * 60 * 24));
+}
+
+/* ------------ presets / modo rango ----------- */
+type Preset = "7d" | "14d" | "1m" | "3m" | "range";
+const PRESETS: Array<{ key: Preset; label: string; days?: number }> = [
   { key: "7d", label: "7 días", days: 7 },
-  { key: "2w", label: "2 semanas", days: 14 },
+  { key: "14d", label: "2 semanas", days: 14 },
   { key: "1m", label: "1 mes", days: 30 },
   { key: "3m", label: "3 meses", days: 90 },
-  { key: "custom", label: "Personalizado", days: 0 },
-] as const;
-
-type Unit = "d" | "w" | "m"; // días, semanas, meses
-
-function addDays(base: Date, days: number) {
-  const d = new Date(base);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-const f = new Intl.DateTimeFormat("es", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-});
+  { key: "range", label: "Rango" },
+];
 
 export default function NoTasksKPIs({
   items,
+  students = [], // <-- DEFAULT, evita crash
   onOpenList,
 }: {
   items: LifecycleItem[];
+  students?: ClientItem[];
   onOpenList: (
     title: string,
     rows: Array<{
@@ -43,129 +68,190 @@ export default function NoTasksKPIs({
     }>
   ) => void;
 }) {
-  const [preset, setPreset] = useState<(typeof PRESETS)[number]>(PRESETS[0]);
-  const [num, setNum] = useState<number>(7);
-  const [unit, setUnit] = useState<Unit>("d");
+  const [tab, setTab] = useState<Preset>("1m");
 
-  const thresholdDays = useMemo(() => {
-    if (preset.key !== "custom") return preset.days;
-    const n = Number.isFinite(num) ? Math.max(1, Math.floor(num)) : 7;
-    const mult = unit === "d" ? 1 : unit === "w" ? 7 : 30;
-    return n * mult;
-  }, [preset, num, unit]);
-
-  const list = useMemo(
-    () => studentsNoTasksSince(items, thresholdDays),
-    [items, thresholdDays]
+  // para rango
+  const today = useMemo(() => new Date(isoDay(new Date())), []);
+  const [from, setFrom] = useState<string>(
+    isoDay(new Date(today.getTime() - 30 * 86400000))
   );
+  const [to, setTo] = useState<string>(isoDay(today));
 
-  const today = new Date();
-  const cutoff = addDays(today, -thresholdDays);
-  const label =
-    preset.key === "custom"
-      ? `≥ ${num} ${unit === "d" ? "días" : unit === "w" ? "semanas" : "meses"}`
-      : `≥ ${thresholdDays} días`;
+  /** map rápido por código del alumno (para fallback de lastActivity) */
+  const studentByCode = useMemo(() => {
+    const m: Record<string, ClientItem> = {};
+    (students ?? []).forEach((s) => {
+      if (s.code) m[s.code] = s;
+    });
+    return m;
+  }, [students]);
+
+  /** determina la "última entrega" conocida del alumno */
+  function lastTaskFor(it: LifecycleItem): Date | null {
+    const pref = parseMaybe(it.lastTaskAt);
+    if (pref) return pref;
+    if (it.code && studentByCode[it.code]?.lastActivity) {
+      const d = parseMaybe(studentByCode[it.code].lastActivity);
+      if (d) return d;
+    }
+    return null;
+  }
+
+  /** días de inactividad hasta 'to' */
+  function daysSinceLast(it: LifecycleItem, toISO: string) {
+    const last = lastTaskFor(it);
+    const toD = parseMaybe(toISO);
+    if (!last || !toD) return null;
+    return diffDays(last, toD);
+  }
+
+  /** cálculo principal */
+  const view = useMemo(() => {
+    // minDays: umbral de “sin tareas desde …”
+    let minDays = 30;
+    let toISO = isoDay(today);
+    if (tab === "range") {
+      // interpretamos el rango como ventana de observación:
+      // minDays = diferencia entre from y to (ej. 30 días)
+      // y contamos alumnos cuya última entrega fue <= from
+      const f = parseMaybe(from);
+      const t = parseMaybe(to);
+      if (f && t && f <= t) {
+        minDays = diffDays(f, t);
+        toISO = isoDay(t);
+      }
+    } else {
+      const preset = PRESETS.find((p) => p.key === tab)!;
+      minDays = preset.days ?? 30;
+      toISO = isoDay(today);
+    }
+
+    const rows = (items ?? []).map((it) => {
+      const d = daysSinceLast(it, toISO);
+      return { it, days: d ?? -1 };
+    });
+
+    const matched = rows
+      .filter((r) => r.days >= minDays)
+      .sort((a, b) => b.days - a.days);
+
+    const count = matched.length;
+
+    return {
+      minDays,
+      toISO,
+      count,
+      listRows: matched.slice(0, 2000).map(({ it, days }) => ({
+        code: it.code ?? undefined,
+        name: it.name ?? undefined,
+        subtitle:
+          (it.lastTaskAt
+            ? `Últ. entrega: ${fmtDateES(it.lastTaskAt)} · `
+            : "") + (days >= 0 ? `${days} días` : "sin dato"),
+      })),
+    };
+  }, [items, tab, from, to, today, students, studentByCode]);
+
+  const title = "Sin enviar tareas (última entrega)";
+  const rightNowText =
+    tab === "range"
+      ? `Considera alumnos cuya última entrega es anterior a ${fmtDateES(
+          from
+        )}.`
+      : `Considera alumnos cuya última entrega es anterior a ${fmtDateES(
+          isoDay(today)
+        )}.`;
 
   return (
-    <Card className="shadow-none border-gray-200">
-      <CardHeader className="pb-1">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle className="text-sm">
-              Sin enviar tareas (última entrega)
-            </CardTitle>
-            <div className="text-xs text-muted-foreground mt-1">
-              Considera alumnos cuya última entrega es anterior a{" "}
-              <strong>{f.format(cutoff)}</strong>.
-            </div>
-          </div>
+    <Card>
+      <CardHeader className="pb-0">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle>{title}</CardTitle>
 
-          {/* Selector de rango */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {PRESETS.map((p) => {
-              const active = p.key === preset.key;
-              return (
-                <button
-                  key={p.key}
-                  onClick={() => setPreset(p)}
-                  className={`h-8 rounded-full px-3 text-xs transition ${
-                    active
-                      ? "bg-foreground text-background"
-                      : "border border-gray-200 hover:bg-muted"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-
-            {/* Controles de personalizado */}
-            {preset.key === "custom" && (
-              <div className="flex items-center gap-1.5">
-                <Input
-                  type="number"
-                  min={1}
-                  value={Number.isFinite(num) ? num : ""}
-                  onChange={(e) => setNum(parseInt(e.target.value || "0", 10))}
-                  className="h-8 w-16"
-                  aria-label="Cantidad"
-                />
-                <select
-                  value={unit}
-                  onChange={(e) => setUnit(e.target.value as Unit)}
-                  className="h-8 w-[110px] rounded-md border border-gray-200 bg-white px-2 text-sm"
-                  aria-label="Unidad"
-                >
-                  <option value="d">días</option>
-                  <option value="w">semanas</option>
-                  <option value="m">meses</option>
-                </select>
-              </div>
-            )}
+          {/* Tabs de rango */}
+          <div className="flex gap-2">
+            {PRESETS.map((p) => (
+              <Button
+                key={p.key}
+                variant={tab === p.key ? "default" : "outline"}
+                size="sm"
+                className="h-8"
+                onClick={() => setTab(p.key)}
+              >
+                {p.label}
+              </Button>
+            ))}
           </div>
         </div>
+
+        <div className="text-xs text-muted-foreground mt-1">{rightNowText}</div>
       </CardHeader>
 
-      <CardContent>
-        <div className="rounded-2xl border p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="h-7 w-7 grid place-items-center rounded-full bg-slate-100 text-slate-700">
-                <Clock className="h-4 w-4" />
-              </span>
-              <span>{label}</span>
+      <CardContent className="pt-3">
+        {/* Controles de RANGO (tipo “desde / hasta”) */}
+        {tab === "range" && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <div className="text-xs text-muted-foreground">Desde</div>
+            <input
+              type="date"
+              className="h-8 rounded-md border px-2 text-sm"
+              value={from}
+              max={to}
+              onChange={(e) => setFrom(e.target.value)}
+            />
+            <div className="text-xs text-muted-foreground">Hasta</div>
+            <input
+              type="date"
+              className="h-8 rounded-md border px-2 text-sm"
+              value={to}
+              min={from}
+              onChange={(e) => setTo(e.target.value)}
+            />
+          </div>
+        )}
+
+        {/* KPI principal */}
+        <div className="rounded-lg border bg-card p-4 flex items-center justify-between">
+          <div>
+            <div className="text-sm text-muted-foreground">
+              ≥ {view.minDays} días
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8"
-              onClick={() =>
-                onOpenList(
-                  `Sin enviar tareas ${label}`,
-                  list.map((r) => ({
-                    code: r.code,
-                    name: r.name,
-                    subtitle: r.lastTaskAt
-                      ? `Últ. entrega: ${r.lastTaskAt}`
-                      : "—",
-                  }))
+            <div className="mt-1 text-3xl font-semibold tabular-nums">
+              {view.count}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Umbral de inactividad: {view.minDays} días · Desde{" "}
+              {fmtDateES(
+                isoDay(
+                  new Date(
+                    parseMaybe(view.toISO)!.getTime() - view.minDays * 86400000
+                  )
                 )
-              }
-              title="Ver lista de alumnos"
-            >
-              <ListChecks className="mr-2 h-4 w-4" />
-              Ver lista
-            </Button>
+              )}
+            </div>
           </div>
 
-          <div className="mt-2 text-4xl font-semibold tabular-nums">
-            {list.length}
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Umbral de inactividad: <strong>{thresholdDays}</strong> días · Desde{" "}
-            <strong>{f.format(cutoff)}</strong>
-          </div>
+          {/* Ver lista */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8">
+                <List className="h-4 w-4 mr-1" />
+                Ver lista
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onClick={() =>
+                  onOpenList(
+                    `Sin tareas — ≥ ${view.minDays} días`,
+                    view.listRows
+                  )
+                }
+              >
+                Abrir listado
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardContent>
     </Card>

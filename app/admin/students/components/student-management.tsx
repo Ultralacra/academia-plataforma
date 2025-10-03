@@ -18,9 +18,7 @@ import {
 } from "./phase-faker";
 
 export default function StudentManagement() {
-  /* =============================
-     Server filters + fetch
-  ============================== */
+  // ============================ Server filters + fetch
   const [loading, setLoading] = useState(true);
   const [allItems, setAllItems] = useState<ClientItem[]>([]);
   const [search, setSearch] = useState("");
@@ -48,9 +46,7 @@ export default function StudentManagement() {
     return () => clearTimeout(t);
   }, [search, fechaDesde, fechaHasta]);
 
-  /* =============================
-     Client filters
-  ============================== */
+  // ============================ Client filters
   const [statesFilter, setStatesFilter] = useState<string[]>([]);
   const [stagesFilter, setStagesFilter] = useState<string[]>([]);
   const [lastFrom, setLastFrom] = useState<string>("");
@@ -101,9 +97,7 @@ export default function StudentManagement() {
     inactTo,
   ]);
 
-  /* =============================
-     Paginación local
-  ============================== */
+  // ============================ Paginación local
   const pageSizeUI = 25;
   const [page, setPage] = useState(1);
   const totalFiltered = filtered.length;
@@ -113,9 +107,7 @@ export default function StudentManagement() {
     return filtered.slice(start, start + pageSizeUI);
   }, [filtered, page]);
 
-  /* =============================
-     Data para charts (distribuciones) 
-  ============================== */
+  // ============================ Distribuciones
   const distByState = useMemo(() => {
     const map = new Map<string, number>();
     filtered.forEach((i) =>
@@ -149,9 +141,7 @@ export default function StudentManagement() {
     );
   }, [filtered]);
 
-  /* =============================
-     Faker: fases + lifecycle
-  ============================== */
+  // ============================ Faker: fases + lifecycle
   const phaseItems = useMemo(() => buildPhaseItems(filtered), [filtered]);
   const lifecycleItems = useMemo(
     () => buildLifecycleItems(filtered),
@@ -165,9 +155,7 @@ export default function StudentManagement() {
     return m;
   }, [lifecycleItems]);
 
-  /* =============================
-     Modal: coaches del alumno
-  ============================== */
+  // ============================ Modal: coaches por alumno
   const [teamOpen, setTeamOpen] = useState(false);
   const [modalStudentName, setModalStudentName] = useState("");
   const [modalStudentCode, setModalStudentCode] = useState<string | null>(null);
@@ -199,9 +187,7 @@ export default function StudentManagement() {
     }
   };
 
-  /* =============================
-     Modal: listados dinámicos (transiciones / no tareas)
-  ============================== */
+  // ============================ Modal: listados (transiciones / no tareas)
   const [listOpen, setListOpen] = useState(false);
   const [listTitle, setListTitle] = useState("");
   const [listRows, setListRows] = useState<
@@ -221,9 +207,7 @@ export default function StudentManagement() {
     setListOpen(true);
   };
 
-  /* =============================
-     Reset
-  ============================== */
+  // ============================ Reset
   const resetAll = () => {
     setSearch("");
     setFechaDesde("");
@@ -237,12 +221,9 @@ export default function StudentManagement() {
     setPage(1);
   };
 
-  /* =============================
-     Render
-  ============================== */
+  // ============================ Render
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Estudiantes</h2>
@@ -258,7 +239,6 @@ export default function StudentManagement() {
         </div>
       </div>
 
-      {/* Filtros que pegan a la API */}
       <ApiFilters
         search={search}
         setSearch={setSearch}
@@ -268,7 +248,6 @@ export default function StudentManagement() {
         setFechaHasta={setFechaHasta}
       />
 
-      {/* Filtros client-side */}
       <ClientFilters
         stateOptions={stateOptions}
         stageOptions={stageOptions}
@@ -304,7 +283,7 @@ export default function StudentManagement() {
         }}
       />
 
-      {/* Charts + métricas + listados clicables */}
+      {/* >>> IMPORTANTE: pasamos students={filtered} <<< */}
       <ChartsSection
         loading={loading}
         distByState={distByState}
@@ -312,10 +291,10 @@ export default function StudentManagement() {
         byJoinDate={byJoinDate}
         phaseItems={phaseItems}
         lifecycleItems={lifecycleItems}
+        students={filtered}
         onOpenList={openList}
       />
 
-      {/* Tabla */}
       <ResultsTable
         loading={loading}
         pageItems={pageItems}
@@ -328,7 +307,6 @@ export default function StudentManagement() {
         lifecycleByCode={lifecycleByCode}
       />
 
-      {/* Modal coaches */}
       <TeamModal
         open={teamOpen}
         onOpenChange={setTeamOpen}
@@ -338,7 +316,6 @@ export default function StudentManagement() {
         loading={loadingCoaches}
       />
 
-      {/* Modal de listados (transiciones / no tareas) */}
       <StudentsListModal
         open={listOpen}
         onOpenChange={setListOpen}

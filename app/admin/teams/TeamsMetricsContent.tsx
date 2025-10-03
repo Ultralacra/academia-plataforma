@@ -1,123 +1,112 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { dataService, type Team } from "@/lib/data-service";
+import {
+  dataService,
+  type Team,
+  type ClientItem,
+  type Ticket,
+} from "@/lib/data-service";
 import Filters from "./Filters";
 import KPIs from "./KPIs";
 import Charts from "./Charts";
 import TeamsTable from "./TeamsTable";
 import StudentsModal from "./StudentsModal";
+import { PhaseAverages, PhaseActives } from "./PhaseTimes";
+import TicketsSummary from "./TicketsSummary";
+import CoachTable from "./CoachTable";
+import { buildTeamsMetrics, type TeamsMetrics } from "./metrics-faker";
+import TicketsSeriesChart from "./TicketsSeries";
+import ResponseCharts from "./ResponseCharts";
+import ProductivityCharts from "./ProductivityCharts";
 
 export default function TeamsMetricsContent() {
-  // Datos
-  const [data, setData] = useState<Team[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Filtros controlados (auto-apply)
+  // filtros simples
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
 
-  // Paginación (client-side sobre el resultado actual)
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  // data
+  const [loading, setLoading] = useState(true);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [students, setStudents] = useState<ClientItem[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
 
-  // Modal alumnos
-  const [openModal, setOpenModal] = useState(false);
-  const [activeTeam, setActiveTeam] = useState<Team | null>(null);
+  // modal listados
+  const [modalOpen, setModalOpen] = useState(false);
+  const [teamSel, setTeamSel] = useState<Team | null>(null);
 
-  // Carga remota (filtro server por fechas / search si tu endpoint lo soporta)
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
     (async () => {
       setLoading(true);
       try {
-        const res = await dataService.getTeams({
-          page: 1, // traemos primera página del backend (usamos paginación local para navegar rápido)
-          pageSize: 500, // ancho para listar/filtrar en cliente (ajusta si es necesario)
-          search,
-          fechaDesde: desde,
-          fechaHasta: hasta,
+        const [t, s, tk] = await Promise.all([
+          dataService.getTeamsV2({ page: 1, pageSize: 1000, search }),
+          dataService.getClients({ page: 1, pageSize: 1000, search }),
+          dataService.getTickets({ page: 1, pageSize: 10000, search }),
+        ]);
+
+        if (!alive) return;
+
+        // Filtrado por fecha (rango) aplicado en cliente sobre fechas de creación / ingreso
+        const teamsData = t.data ?? [];
+        const studentsData = (s.items ?? []).filter((x) => {
+          if (!desde && !hasta) return true;
+          const d = x.joinDate ? new Date(x.joinDate) : null;
+          if (!d) return false;
+          const okFrom = !desde || x.joinDate! >= desde;
+          const okTo = !hasta || x.joinDate! <= hasta;
+          return okFrom && okTo;
         });
-        if (!mounted) return;
-        setData(res.data);
-        setPage(1); // reset de página al cambiar filtros
+        const ticketsData = (tk.items ?? []).filter((x) => {
+          if (!desde && !hasta) return true;
+          const k = x.creacion.slice(0, 10);
+          const okFrom = !desde || k >= desde;
+          const okTo = !hasta || k <= hasta;
+          return okFrom && okTo;
+        });
+
+        setTeams(teamsData);
+        setStudents(studentsData);
+        setTickets(ticketsData);
+      } catch (e) {
+        console.error(e);
+        setTeams([]);
+        setStudents([]);
+        setTickets([]);
       } finally {
-        if (mounted) setLoading(false);
+        if (alive) setLoading(false);
       }
     })();
     return () => {
-      mounted = false;
+      alive = false;
     };
   }, [search, desde, hasta]);
 
-  // Filtro local adicional
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return data;
-    return data.filter((t) =>
-      [t.nombre, t.codigo, t.area ?? "", t.puesto ?? ""]
-        .join(" ")
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [data, search]);
-
-  // KPIs
-  const totalEquipos = filtered.length;
-  const totalAlumnos = filtered.reduce(
-    (acc, t) => acc + (t.nAlumnos ?? t.alumnos.length),
-    0
+  // modelo de métricas (con faker determinístico)
+  const model: TeamsMetrics = useMemo(
+    () => buildTeamsMetrics({ teams, students, tickets }),
+    [teams, students, tickets]
   );
 
-  const areasCount = useMemo(() => {
-    const map: Record<string, number> = {};
-    filtered.forEach((t) => {
-      const a = (t.area ?? "SIN ÁREA").toUpperCase();
-      map[a] = (map[a] ?? 0) + 1;
-    });
-    return Object.entries(map).map(([area, count]) => ({ area, count }));
-  }, [filtered]);
-
-  const alumnosPorEquipo = useMemo(
-    () =>
-      filtered
-        .map((t) => ({
-          name: t.nombre,
-          alumnos: t.nAlumnos ?? t.alumnos.length,
-        }))
-        .sort((a, b) => b.alumnos - a.alumnos)
-        .slice(0, 12),
-    [filtered]
-  );
-
-  // Paginación client-side
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  // tabla paginada local
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const total = teams.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageData = useMemo(() => {
     const start = (page - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, page, pageSize]);
+    return teams.slice(start, start + pageSize);
+  }, [teams, page, pageSize]);
 
-  // Modal alumnos
-  const openAlumnos = (team: Team) => {
-    setActiveTeam(team);
-    setOpenModal(true);
+  const openAlumnos = (t: Team) => {
+    setTeamSel(t);
+    setModalOpen(true);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Métricas de equipos
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Filtros en vivo, gráficas y listado con acceso a alumnos por equipo.
-          </p>
-        </div>
-      </div>
-
       {/* Filtros */}
       <Filters
         search={search}
@@ -127,23 +116,38 @@ export default function TeamsMetricsContent() {
         onDesde={setDesde}
         onHasta={setHasta}
       />
-
-      {/* KPIs */}
+      {/* KPIs principales */}
       <KPIs
-        totalEquipos={totalEquipos}
-        totalAlumnos={totalAlumnos}
-        areas={areasCount.length}
+        totalEquipos={model.totals.teams}
+        totalAlumnos={model.totals.studentsTotal}
+        areas={new Set(teams.map((t) => t.area || "Sin área")).size}
       />
-
-      {/* Charts */}
-      <Charts alumnosPorEquipo={alumnosPorEquipo} areasCount={areasCount} />
-
-      {/* Tabla + paginación */}
+      {/* Tickets (respuesta, resolución, actividad) */}
+      <TicketsSummary
+        totals={{
+          ticketsTotal: model.totals.ticketsTotal,
+          avgResponseMin: model.totals.avgResponseMin,
+          avgResolutionMin: model.totals.avgResolutionMin,
+        }}
+        per={model.ticketsPer}
+      />
+      {/* Fases: promedios y activos */}
+      <PhaseAverages data={model.avgPhaseDays} />
+      <PhaseActives data={model.activeByPhase} />
+      {/* Charts existentes */}
+      <Charts
+        alumnosPorEquipo={model.alumnosPorEquipo}
+        areasCount={model.areasCount}
+      />
+      {/* Métricas por coach */}
+      <CoachTable rows={model.coaches} />
+      {/* Tabla de equipos */}
       <TeamsTable
         data={pageData}
-        total={filtered.length}
+        total={total}
         page={page}
         pageSize={pageSize}
+        totalPages={totalPages}
         onPageChange={setPage}
         onPageSizeChange={(n) => {
           setPageSize(n);
@@ -151,15 +155,19 @@ export default function TeamsMetricsContent() {
         }}
         onOpenAlumnos={openAlumnos}
         loading={loading}
-        totalPages={totalPages}
       />
-
-      {/* Modal de alumnos */}
+      {/* Modal de alumnos del equipo */}
       <StudentsModal
-        open={openModal}
-        onClose={() => setOpenModal(false)}
-        team={activeTeam}
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        team={teamSel}
       />
+      // SERIE DE TICKETS por día/semana/mes
+      <TicketsSeriesChart series={model.ticketsSeries} />
+      // RESPUESTA por coach / equipo
+      <ResponseCharts byCoach={model.respByCoach} byTeam={model.respByTeam} />
+      // PRODUCTIVIDAD por coach (tickets, sesiones, horas)
+      <ProductivityCharts rows={model.prodByCoach} />
     </div>
   );
 }

@@ -1,19 +1,19 @@
-// components/students/StudentsContent.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService, type StudentItem } from "@/lib/data-service";
-import { Search } from "lucide-react";
 import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from "@/components/ui/card";
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  Calendar,
+  FileText,
+  Activity,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 /* ===== helpers ===== */
 const dtDateTime = new Intl.DateTimeFormat("es-ES", {
@@ -55,20 +55,14 @@ export default function StudentsContent() {
   const [loading, setLoading] = useState(true);
   const [all, setAll] = useState<StudentItem[]>([]);
 
-  // filtros al servidor
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
 
-  // filtros cliente
-  const [estado, setEstado] = useState<string>("all");
-  const [etapa, setEtapa] = useState<string>("all");
-
-  // paginación UI local
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
 
-  // cargar (hasta 1000) con debounce
+  // Load data with debounce
   useEffect(() => {
     const t = setTimeout(async () => {
       setLoading(true);
@@ -90,226 +84,241 @@ export default function StudentsContent() {
     return () => clearTimeout(t);
   }, [search, desde, hasta]);
 
-  // opciones dinámicas
-  const estadoOpts = useMemo(
-    () => ["all", ...uniq(all.map((i) => i.state))],
-    [all]
-  );
-  const etapaOpts = useMemo(
-    () => ["all", ...uniq(all.map((i) => i.stage))],
-    [all]
-  );
-
-  // filtro cliente
-  const filtered = useMemo(() => {
-    return (all ?? []).filter((i) => {
-      const okEstado =
-        estado === "all" ||
-        (i.state ? i.state.toLowerCase() === estado.toLowerCase() : false);
-      const okEtapa =
-        etapa === "all" ||
-        (i.stage ? i.stage.toLowerCase() === etapa.toLowerCase() : false);
-      return okEstado && okEtapa;
-    });
-  }, [all, estado, etapa]);
-
-  // paginación local
-  const total = filtered.length;
+  const total = all.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
+    return all.slice(start, start + PAGE_SIZE);
+  }, [all, page]);
 
   const reset = () => {
     setSearch("");
     setDesde("");
     setHasta("");
-    setEstado("all");
-    setEtapa("all");
     setPage(1);
   };
 
+  const hasFilters = search || desde || hasta;
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+    <div className="space-y-6 p-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Alumnos</h1>
-          <p className="text-sm text-muted-foreground">
-            Hasta 1000 resultados del backend · Paginación local (25 por página)
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+            Alumnos
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {loading ? "Cargando..." : `${total} estudiantes`}
           </p>
         </div>
-        <Badge variant="secondary">{total} resultados</Badge>
+        {hasFilters && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={reset}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Limpiar filtros
+          </Button>
+        )}
       </div>
 
-      {/* Filtros (search + fechas al server) */}
-      <Card className="bg-gradient-to-br from-primary/5 via-transparent to-transparent">
-        <CardHeader className="pb-2">
-          <CardTitle>Filtros</CardTitle>
-          <CardDescription>
-            Se aplican sobre la consulta al servidor
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-            <div className="md:col-span-6">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  placeholder="Buscar por nombre o código…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="md:col-span-3">
-              <Input
-                type="date"
-                value={desde}
-                onChange={(e) => setDesde(e.target.value)}
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Desde (ingreso)
-              </p>
-            </div>
-            <div className="md:col-span-3">
-              <Input
-                type="date"
-                value={hasta}
-                onChange={(e) => setHasta(e.target.value)}
-              />
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                Hasta (ingreso)
-              </p>
-            </div>
-          </div>
-          <Button variant="outline" onClick={reset}>
-            Reiniciar filtros
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[240px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            className="pl-9 h-9 bg-background border-border/50 focus-visible:ring-1 focus-visible:ring-ring/20 transition-all"
+            placeholder="Buscar estudiantes..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
 
-      {/* Filtros cliente (estado / etapa) */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Refinar en cliente</CardTitle>
-          <CardDescription>
-            Aplica sobre los resultados cargados
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div>
-            <label className="text-xs text-muted-foreground">Estado</label>
-            <select
-              value={estado}
-              onChange={(e) => {
-                setEstado(e.target.value);
-                setPage(1);
-              }}
-              className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
-            >
-              {estadoOpts.map((v) => (
-                <option key={v} value={v}>
-                  {v === "all" ? "Todos" : v}
-                </option>
-              ))}
-            </select>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="date"
+              value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+              className="pl-9 h-9 w-[160px] bg-background border-border/50 focus-visible:ring-1 focus-visible:ring-ring/20 transition-all"
+            />
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground">Etapa</label>
-            <select
-              value={etapa}
-              onChange={(e) => {
-                setEtapa(e.target.value);
-                setPage(1);
-              }}
-              className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm"
-            >
-              {etapaOpts.map((v) => (
-                <option key={v} value={v}>
-                  {v === "all" ? "Todas" : v}
-                </option>
-              ))}
-            </select>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Tabla */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Listado</CardTitle>
-          <CardDescription>
-            {loading
-              ? "Cargando…"
-              : `${pageItems.length} de ${total} (25 por página)`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <span className="text-muted-foreground text-sm">→</span>
+
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="date"
+              value={hasta}
+              onChange={(e) => setHasta(e.target.value)}
+              className="pl-9 h-9 w-[160px] bg-background border-border/50 focus-visible:ring-1 focus-visible:ring-ring/20 transition-all"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="border border-border/50 rounded-lg overflow-hidden bg-card">
+        <div className="overflow-x-auto">
+          <table className="w-full">
             <thead>
-              <tr className="border-b bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-600">
-                <th className="px-4 py-2">Código</th>
-                <th className="px-4 py-2">Nombre</th>
-                <th className="px-4 py-2">Estado</th>
-                <th className="px-4 py-2">Etapa</th>
-                <th className="px-4 py-2">Ingreso</th>
-                <th className="px-4 py-2">Tickets</th>
-                <th className="px-4 py-2">Últ. actividad</th>
-                <th className="px-4 py-2">Inactividad (d)</th>
-                <th className="px-4 py-2">Contrato</th>
+              <tr className="border-b border-border/50 bg-muted/30">
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Código
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Nombre
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Estado
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Etapa
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Ingreso
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <div className="flex items-center gap-1.5">
+                    <FileText className="h-3.5 w-3.5" />
+                    Tickets
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  <div className="flex items-center gap-1.5">
+                    <Activity className="h-3.5 w-3.5" />
+                    Última actividad
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Inactividad
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Contrato
+                </th>
               </tr>
             </thead>
-            <tbody>
-              {pageItems.map((c) => (
-                <tr key={c.id} className="border-b">
-                  <td className="px-4 py-2 font-mono text-xs">
-                    {c.code ?? "—"}
-                  </td>
-                  <td className="px-4 py-2 font-medium">{c.name}</td>
-                  <td className="px-4 py-2">
-                    {c.state ? <Badge variant="outline">{c.state}</Badge> : "—"}
-                  </td>
-                  <td className="px-4 py-2">{c.stage ?? "—"}</td>
-                  <td className="px-4 py-2">{fmtDateSmart(c.joinDate)}</td>
-                  <td className="px-4 py-2">{c.ticketsCount ?? 0}</td>
-                  <td className="px-4 py-2">{fmtDateSmart(c.lastActivity)}</td>
-                  <td className="px-4 py-2">{c.inactivityDays ?? "—"}</td>
-                  <td className="px-4 py-2">
-                    {c.contractUrl ? (
-                      <a
-                        href={c.contractUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary underline"
-                      >
-                        Abrir
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {pageItems.length === 0 && !loading && (
+            <tbody className="divide-y divide-border/30">
+              {loading ? (
                 <tr>
-                  <td
-                    className="px-4 py-6 text-center text-gray-500"
-                    colSpan={9}
-                  >
-                    No hay alumnos para los filtros seleccionados.
+                  <td colSpan={9} className="px-4 py-12 text-center">
+                    <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      <span className="text-sm">Cargando estudiantes...</span>
+                    </div>
                   </td>
                 </tr>
+              ) : pageItems.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-12 text-center">
+                    <div className="text-muted-foreground">
+                      <p className="text-sm font-medium">
+                        No se encontraron estudiantes
+                      </p>
+                      <p className="text-xs mt-1">
+                        Intenta ajustar los filtros de búsqueda
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                pageItems.map((student) => (
+                  <tr
+                    key={student.id}
+                    className="group hover:bg-muted/20 transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <code className="text-xs font-mono text-muted-foreground bg-muted/50 px-2 py-1 rounded">
+                        {student.code ?? "—"}
+                      </code>
+                    </td>
+                    <td className="px-4 py-3">
+                      {student.code ? (
+                        <Link
+                          href={`/admin/alumnos/${encodeURIComponent(
+                            student.code
+                          )}`}
+                          className="font-medium text-foreground hover:text-primary transition-colors inline-flex items-center gap-1.5 group/link"
+                        >
+                          {student.name}
+                          <span className="opacity-0 group-hover/link:opacity-100 transition-opacity">
+                            →
+                          </span>
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-foreground">
+                          {student.name}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {student.state ? (
+                        <Badge variant="secondary" className="font-normal">
+                          {student.state}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-foreground">
+                      {student.stage ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {fmtDateSmart(student.joinDate)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-md bg-muted/50 text-xs font-medium text-foreground">
+                        {student.ticketsCount ?? 0}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {fmtDateSmart(student.lastActivity)}
+                    </td>
+                    <td className="px-4 py-3">
+                      {student.inactivityDays ? (
+                        <span className="text-sm text-muted-foreground">
+                          {student.inactivityDays}d
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {student.contractUrl ? (
+                        <a
+                          href={student.contractUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          Ver contrato
+                          <FileText className="h-3.5 w-3.5" />
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
+        </div>
 
-          {/* paginación local */}
-          <div className="mt-4 flex items-center justify-between">
+        {!loading && pageItems.length > 0 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border/50 bg-muted/10">
             <div className="text-sm text-muted-foreground">
-              Página <strong>{page}</strong> de <strong>{totalPages}</strong>
+              Mostrando{" "}
+              <span className="font-medium text-foreground">
+                {(page - 1) * PAGE_SIZE + 1}
+              </span>{" "}
+              a{" "}
+              <span className="font-medium text-foreground">
+                {Math.min(page * PAGE_SIZE, total)}
+              </span>{" "}
+              de <span className="font-medium text-foreground">{total}</span>{" "}
+              estudiantes
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -317,27 +326,30 @@ export default function StudentsContent() {
                 size="sm"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
+                className="h-8 gap-1"
               >
+                <ChevronLeft className="h-4 w-4" />
                 Anterior
               </Button>
+              <div className="flex items-center gap-1 px-2">
+                <span className="text-sm font-medium">{page}</span>
+                <span className="text-sm text-muted-foreground">de</span>
+                <span className="text-sm font-medium">{totalPages}</span>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
+                className="h-8 gap-1"
               >
                 Siguiente
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* nota */}
-      <p className="text-xs text-muted-foreground">
-        * La vista pagina localmente: si necesitas más de 1000, habilitamos
-        paginación real en backend o ampliamos el límite.
-      </p>
+        )}
+      </div>
     </div>
   );
 }
