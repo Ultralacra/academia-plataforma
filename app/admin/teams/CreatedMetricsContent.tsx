@@ -21,9 +21,14 @@ type Props = {
     avgResolution?: number | string;
     statusDist?: Record<string, number>;
   }>;
+  /** NUEVO: tickets por coach desde prodByCoachV2 */
+  prodByCoachV2?: Array<{ coach: string; tickets: number }>;
 };
 
-export default function CreatedMetricsContent({ initialRows }: Props) {
+export default function CreatedMetricsContent({
+  initialRows,
+  prodByCoachV2,
+}: Props) {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<CreatedTeamMetric[]>([]);
   const [totals, setTotals] = useState<{
@@ -36,6 +41,15 @@ export default function CreatedMetricsContent({ initialRows }: Props) {
     tickets: 0,
   });
 
+  // Mapa rápido coach -> ticketsV2
+  const v2Map = useMemo(() => {
+    const m = new Map<string, number>();
+    (prodByCoachV2 ?? []).forEach((x) => {
+      m.set(String(x.coach).trim().toLowerCase(), Number(x.tickets) || 0);
+    });
+    return m;
+  }, [prodByCoachV2]);
+
   // Helper para normalizar el row a CreatedTeamMetric
   const normalize = (r: any): CreatedTeamMetric => {
     const status = r?.statusDist ?? {};
@@ -45,21 +59,25 @@ export default function CreatedMetricsContent({ initialRows }: Props) {
     const avgResNum = Number(r.avgResolution ?? 0) || 0;
     const avgRespNum = Number(r.avgResponse ?? 0) || 0;
 
+    const coach = String(r.nombre_coach ?? "").trim();
+    const v2 = v2Map.get(coach.toLowerCase());
+
     return {
       codigo_equipo: String(r.codigo_equipo ?? ""),
-      nombre_coach: String(r.nombre_coach ?? ""),
+      nombre_coach: coach,
       puesto: (r.puesto ?? "—") as string,
       area: (r.area ?? "—") as string,
       tickets: Number(r.tickets ?? 0) || 0,
       // Tus componentes de “created” siempre han mostrado **minutos**;
-      // si tu backend envía horas, podrías multiplicar por 60 aquí:
-      avgResponse: Math.round(avgRespNum), // en min (si ya viene en min)
-      avgResolution: Math.round(avgResNum), // en min (si ya viene en min)
+      // si tu backend envía horas, podrías multiplicar por 60 aquí si lo necesitas.
+      avgResponse: Math.round(avgRespNum),
+      avgResolution: Math.round(avgResNum),
       statusDist: {
         Abiertos: Number(status.Abiertos ?? 0) || 0,
         Cerrados: Number(status.Cerrados ?? 0) || 0,
         "En Proceso": Number(enProceso ?? 0) || 0,
       },
+      ticketsV2: typeof v2 === "number" ? v2 : undefined,
     };
   };
 
@@ -126,7 +144,7 @@ export default function CreatedMetricsContent({ initialRows }: Props) {
     return () => {
       alive = false;
     };
-  }, [initialRows]);
+  }, [initialRows, v2Map]);
 
   const kpis = useMemo(
     () => ({
@@ -144,10 +162,10 @@ export default function CreatedMetricsContent({ initialRows }: Props) {
         coaches={kpis.coaches}
         tickets={kpis.tickets}
       />
-      <CreatedCharts rows={rows} />
-      <CreatedResponseCharts rows={rows} />
+      {/*  <CreatedCharts rows={rows} /> */}
+      {/*  <CreatedResponseCharts rows={rows} /> */}
       <CreatedStatusChart rows={rows} />
-      <CreatedTable rows={rows} loading={loading} />
+      {/*  <CreatedTable rows={rows} loading={loading} /> */}
     </div>
   );
 }

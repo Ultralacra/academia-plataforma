@@ -10,6 +10,7 @@ import ResponseCharts from "./ResponseCharts";
 import ProductivityCharts from "./ProductivityCharts";
 import Charts from "./Charts";
 import CreatedMetricsContent from "./CreatedMetricsContent";
+import TicketsByTeamTable, { TicketsByTeamApiRow } from "./TicketsByTeamTable";
 
 type TicketsSeriesVM = {
   daily: Array<{ date: string; count: number }>;
@@ -41,15 +42,13 @@ function RangeBadge({
 }
 
 export default function TeamsMetricsContent() {
-  // filtros simples
+  // filtros
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
 
-  // estado de carga y modelo
   const [loading, setLoading] = useState(true);
 
-  // “view model” ya normalizado para los componentes existentes
   const [vm, setVm] = useState<{
     meta?: {
       range?: { from?: string | null; to?: string | null };
@@ -84,6 +83,7 @@ export default function TeamsMetricsContent() {
       sessions: number;
       hours: number;
     }[];
+    prodByCoachV2: { coach: string; tickets: number }[];
     createdBlock: {
       rows: Array<{
         area: string | null;
@@ -97,6 +97,7 @@ export default function TeamsMetricsContent() {
       }>;
       totals?: { coaches?: number; teams?: number; tickets?: number };
     } | null;
+    ticketsByTeam: TicketsByTeamApiRow[];
   }>({
     meta: undefined,
     totals: {
@@ -113,7 +114,9 @@ export default function TeamsMetricsContent() {
     respByCoach: [],
     respByTeam: [],
     prodByCoach: [],
+    prodByCoachV2: [],
     createdBlock: null,
+    ticketsByTeam: [],
   });
 
   useEffect(() => {
@@ -121,16 +124,18 @@ export default function TeamsMetricsContent() {
     (async () => {
       setLoading(true);
       try {
+        // 1) Métricas
         const res = await dataService.getMetrics({
           fechaDesde: desde || undefined,
           fechaHasta: hasta || undefined,
         });
 
+        // El backend envía { code, status, data: { teams: {...} } }
+        // Por eso tomamos res?.data
         const root = (res?.data as any) ?? {};
         const teams = root?.teams ?? {};
         const total = root?.teams?.totals ?? root?.teams?.total ?? {};
 
-        // Totales
         const totals = {
           teams: Number(total?.teams ?? 0) || 0,
           studentsTotal: Number(total?.studentsTotal ?? 0) || 0,
@@ -139,7 +144,6 @@ export default function TeamsMetricsContent() {
           avgResolutionMin: Number(total?.avgResolutionMin ?? 0) || 0,
         };
 
-        // Top equipos por alumnos
         const alumnosPorEquipo: { name: string; alumnos: number }[] =
           Array.isArray(teams.alumnosPorEquipo)
             ? teams.alumnosPorEquipo.map((r: any) => ({
@@ -148,7 +152,6 @@ export default function TeamsMetricsContent() {
               }))
             : [];
 
-        // Equipos por área
         const areasCount: { area: string; count: number }[] = Array.isArray(
           teams.areasCount
         )
@@ -158,7 +161,6 @@ export default function TeamsMetricsContent() {
             }))
           : [];
 
-        // Tickets per
         const ticketsPer = {
           day: Number(teams.ticketsPer?.day ?? teams.ticketsPer?.dia ?? 0) || 0,
           week:
@@ -168,7 +170,6 @@ export default function TeamsMetricsContent() {
             Number(teams.ticketsPer?.month ?? teams.ticketsPer?.mes ?? 0) || 0,
         };
 
-        // Series
         const ticketsSeries: TicketsSeriesVM = {
           daily: Array.isArray(teams.ticketsSeries?.daily)
             ? teams.ticketsSeries.daily.map((d: any) => ({
@@ -190,7 +191,6 @@ export default function TeamsMetricsContent() {
             : [],
         };
 
-        // Respuesta por coach
         const respByCoach =
           Array.isArray(teams.respByCoach) && teams.respByCoach.length
             ? teams.respByCoach.map((r: any) => ({
@@ -201,7 +201,6 @@ export default function TeamsMetricsContent() {
               }))
             : [];
 
-        // Respuesta por equipo
         const respByTeam =
           Array.isArray(teams.respByTeam) && teams.respByTeam.length
             ? teams.respByTeam.map((r: any) => ({
@@ -212,7 +211,6 @@ export default function TeamsMetricsContent() {
               }))
             : [];
 
-        // Productividad por coach
         const prodByCoach =
           Array.isArray(teams.prodByCoach) && teams.prodByCoach.length
             ? teams.prodByCoach.map((r: any) => ({
@@ -223,7 +221,14 @@ export default function TeamsMetricsContent() {
               }))
             : [];
 
-        // Bloque "created"
+        const prodByCoachV2 =
+          Array.isArray(teams.prodByCoachV2) && teams.prodByCoachV2.length
+            ? teams.prodByCoachV2.map((r: any) => ({
+                coach: String(r.coach ?? r.nombre ?? r.name ?? ""),
+                tickets: Number(r.tickets ?? 0) || 0,
+              }))
+            : [];
+
         const createdBlock = root?.teams?.total?.created?.rows?.length
           ? {
               rows: (root.teams.total.created.rows as any[]).map((r) => ({
@@ -258,35 +263,34 @@ export default function TeamsMetricsContent() {
             }
           : null;
 
-        // Filter client-side por search
-        const matchesSearch = (s: string) =>
-          (search || "").trim()
-            ? s.toLowerCase().includes(search.trim().toLowerCase())
-            : true;
+        // 2) Tickets por equipo — Tomar DIRECTO del API
+        let ticketsByTeamApi: TicketsByTeamApiRow[] = Array.isArray(
+          teams.ticketsByTeam
+        )
+          ? teams.ticketsByTeam.map((r: any) => ({
+              etiqueta: String(r.etiqueta ?? r.team ?? "—"),
+              team_signature: String(r.team_signature ?? ""),
+              miembros: String(r.miembros ?? ""),
+              clientes: String(r.clientes ?? ""),
+              tickets_creados: Number(r.tickets_creados ?? 0) || 0,
+              tickets_resueltos: Number(r.tickets_resueltos ?? 0) || 0,
+              horas_promedio_resolucion:
+                Number(r.horas_promedio_resolucion ?? 0) || 0,
+              tasa_resolucion: Number(r.tasa_resolucion ?? 0) || 0, // 0..1
+            }))
+          : [];
 
-        const alumnosPorEquipoFiltered = alumnosPorEquipo.filter((r) =>
-          matchesSearch(r.name)
-        );
-        const respByCoachFiltered = respByCoach.filter((r) =>
-          matchesSearch(r.coach)
-        );
-        const respByTeamFiltered = respByTeam.filter((r) =>
-          matchesSearch(r.team)
-        );
-        const prodByCoachFiltered = prodByCoach.filter((r) =>
-          matchesSearch(r.coach)
-        );
-        const createdBlockFiltered = createdBlock
-          ? {
-              ...createdBlock,
-              rows: createdBlock.rows.filter(
-                (r) =>
-                  matchesSearch(r.nombre_coach) ||
-                  matchesSearch(r.codigo_equipo) ||
-                  matchesSearch(r.area ?? "")
-              ),
-            }
-          : null;
+        // Filtrado por búsqueda (etiqueta, firma, miembros, clientes)
+        const q = search.trim().toLowerCase();
+        if (q) {
+          ticketsByTeamApi = ticketsByTeamApi.filter(
+            (r) =>
+              r.etiqueta.toLowerCase().includes(q) ||
+              r.team_signature.toLowerCase().includes(q) ||
+              r.miembros.toLowerCase().includes(q) ||
+              r.clientes.toLowerCase().includes(q)
+          );
+        }
 
         if (!alive) return;
         setVm({
@@ -295,14 +299,16 @@ export default function TeamsMetricsContent() {
             fetchedAt: root?.meta?.fetchedAt,
           },
           totals,
-          alumnosPorEquipo: alumnosPorEquipoFiltered,
-          areasCount, // no filtra por search
+          alumnosPorEquipo,
+          areasCount,
           ticketsPer,
           ticketsSeries,
-          respByCoach: respByCoachFiltered,
-          respByTeam: respByTeamFiltered,
-          prodByCoach: prodByCoachFiltered,
-          createdBlock: createdBlockFiltered,
+          respByCoach,
+          respByTeam,
+          prodByCoach,
+          prodByCoachV2,
+          createdBlock,
+          ticketsByTeam: ticketsByTeamApi,
         });
       } catch (e) {
         console.error(e);
@@ -323,7 +329,9 @@ export default function TeamsMetricsContent() {
           respByCoach: [],
           respByTeam: [],
           prodByCoach: [],
+          prodByCoachV2: [],
           createdBlock: null,
+          ticketsByTeam: [],
         });
       } finally {
         alive && setLoading(false);
@@ -334,6 +342,20 @@ export default function TeamsMetricsContent() {
       alive = false;
     };
   }, [desde, hasta, search]);
+
+  // 👉 priorizamos prodByCoachV2 para el gráfico “Tickets por coach”.
+  const rowsForProductivity = useMemo(
+    () =>
+      vm.prodByCoachV2.length
+        ? vm.prodByCoachV2.map((r) => ({
+            coach: r.coach,
+            tickets: r.tickets,
+            sessions: 0,
+            hours: 0,
+          }))
+        : vm.prodByCoach,
+    [vm.prodByCoachV2, vm.prodByCoach]
+  );
 
   return (
     <div className="space-y-6">
@@ -359,7 +381,6 @@ export default function TeamsMetricsContent() {
         )}
       </div>
 
-      {/* Aviso si no hay datos en el rango */}
       {!loading && vm.ticketsSeries.daily.length === 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           No hay datos para el rango seleccionado ({vm.meta?.range?.from ?? "—"}{" "}
@@ -368,7 +389,6 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* KPIs principales */}
       <KPIs
         totalEquipos={vm.totals.teams}
         totalAlumnos={vm.totals.studentsTotal}
@@ -385,18 +405,24 @@ export default function TeamsMetricsContent() {
       />
 
       <TicketsSeriesChart series={vm.ticketsSeries} />
-
       <ResponseCharts byCoach={vm.respByCoach} byTeam={vm.respByTeam} />
 
-      <ProductivityCharts rows={vm.prodByCoach} />
+      <ProductivityCharts rows={rowsForProductivity} />
 
       <Charts
         alumnosPorEquipo={vm.alumnosPorEquipo}
         areasCount={vm.areasCount}
       />
 
+      {vm.ticketsByTeam.length > 0 && (
+        <TicketsByTeamTable rows={vm.ticketsByTeam} loading={loading} />
+      )}
+
       {vm.createdBlock && (
-        <CreatedMetricsContent initialRows={vm.createdBlock.rows} />
+        <CreatedMetricsContent
+          initialRows={vm.createdBlock.rows}
+          prodByCoachV2={vm.prodByCoachV2}
+        />
       )}
     </div>
   );

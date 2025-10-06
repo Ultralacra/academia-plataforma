@@ -3,26 +3,63 @@
 import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import type { CreatedTeamMetric } from "./metrics-created";
-import { formatDuration } from "./format";
 
-export default function CreatedTable({
+/** Forma exacta de cada item proveniente del API (teams.ticketsByTeam) */
+export type TicketsByTeamApiRow = {
+  etiqueta: string; // "Equipo 5"
+  team_signature: string; // ID(s) del equipo
+  miembros: string; // "Diego, Johan, ..."
+  clientes: string; // "CXA-118,CXA-131,..."
+  tickets_creados: number;
+  tickets_resueltos: number;
+  horas_promedio_resolucion: number; // horas (número)
+  tasa_resolucion: number; // 0..1
+};
+
+type SortKey =
+  | "equipo"
+  | "integrantes"
+  | "tickets_creados"
+  | "tickets_resueltos"
+  | "tasa_resolucion"
+  | "horas_promedio_resolucion";
+
+export default function TicketsByTeamTable({
   rows,
   loading,
 }: {
-  rows: CreatedTeamMetric[];
+  rows: TicketsByTeamApiRow[];
   loading?: boolean;
 }) {
-  const [sort, setSort] = useState<{
-    key: keyof CreatedTeamMetric;
-    dir: "asc" | "desc";
-  }>({
-    key: "tickets",
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
+    key: "tickets_creados",
     dir: "desc",
   });
 
   const data = useMemo(() => {
-    const arr = [...rows];
+    // Normalizamos los datos para la tabla
+    const normalized = (rows ?? []).map((r) => {
+      const miembrosList =
+        r.miembros
+          ?.split(",")
+          .map((s) => s.trim())
+          .filter(Boolean) ?? [];
+      const integrantes = miembrosList.length;
+
+      return {
+        equipo: r.etiqueta,
+        integrantes, // cantidad (número)
+        miembrosStr: miembrosList.join(", "), // string para mostrar en tabla
+        tickets_creados: r.tickets_creados ?? 0,
+        tickets_resueltos: r.tickets_resueltos ?? 0,
+        tasa_resolucion: r.tasa_resolucion ?? 0,
+        horas_promedio_resolucion: r.horas_promedio_resolucion ?? 0,
+        team_signature: r.team_signature,
+      };
+    });
+
+    // Ordenamiento
+    const arr = [...normalized];
     arr.sort((a, b) => {
       const va = a[sort.key] as any;
       const vb = b[sort.key] as any;
@@ -36,7 +73,7 @@ export default function CreatedTable({
     return arr;
   }, [rows, sort]);
 
-  const headerBtn = (label: string, key: keyof CreatedTeamMetric) => {
+  const headerBtn = (label: string, key: SortKey) => {
     const active = sort.key === key;
     return (
       <button
@@ -52,6 +89,7 @@ export default function CreatedTable({
               : { key, dir: "asc" }
           )
         }
+        title="Ordenar"
       >
         <span>{label}</span>
         {active ? (
@@ -67,8 +105,26 @@ export default function CreatedTable({
     );
   };
 
-  const nf = (n?: number) =>
-    typeof n === "number" && isFinite(n) ? n.toLocaleString("es-ES") : "—";
+  const nf = (n: number, digits = 0) =>
+    typeof n === "number" && isFinite(n)
+      ? n.toLocaleString("es-ES", { maximumFractionDigits: digits })
+      : "—";
+
+  const pf = (v: number, digits = 2) =>
+    typeof v === "number" && isFinite(v)
+      ? `${(v * 100).toLocaleString("es-ES", {
+          minimumFractionDigits: digits,
+          maximumFractionDigits: digits,
+        })}%`
+      : "—";
+
+  const hf = (n: number) =>
+    typeof n === "number" && isFinite(n)
+      ? n.toLocaleString("es-ES", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : "—";
 
   return (
     <motion.div
@@ -80,10 +136,10 @@ export default function CreatedTable({
       <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-5 bg-gradient-to-r from-gray-50/50 to-transparent dark:from-gray-800/30">
         <div>
           <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">
-            Equipos conformados
+            Tickets por equipo
           </h3>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Tickets y tiempos promedio por equipo
+            Equipo, integrantes, tickets y métricas de resolución
           </p>
         </div>
       </div>
@@ -92,89 +148,74 @@ export default function CreatedTable({
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 z-[1] bg-gray-50/80 dark:bg-gray-800/80 backdrop-blur-sm">
             <tr className="border-b border-gray-200 dark:border-gray-700 text-left text-xs uppercase tracking-wide">
+              <th className="px-4 py-3">{headerBtn("Equipo", "equipo")}</th>
               <th className="px-4 py-3">
-                {headerBtn("Código", "codigo_equipo")}
+                {headerBtn("Integrantes", "integrantes")}
+              </th>
+              <th className="px-4 py-3">Miembros</th>
+              <th className="px-4 py-3">
+                {headerBtn("Tickets creados", "tickets_creados")}
               </th>
               <th className="px-4 py-3">
-                {headerBtn("Coach", "nombre_coach")}
-              </th>
-              <th className="px-4 py-3">{headerBtn("Puesto", "puesto")}</th>
-              <th className="px-4 py-3">{headerBtn("Área", "area")}</th>
-              <th className="px-4 py-3">{headerBtn("Tickets", "tickets")}</th>
-              {/* NUEVA COLUMNA */}
-              <th className="px-4 py-3">
-                {headerBtn("Tickets V2", "ticketsV2")}
+                {headerBtn("Tickets resueltos", "tickets_resueltos")}
               </th>
               <th className="px-4 py-3">
-                {headerBtn("Resp. prom.", "avgResponse")}
+                {headerBtn("Tasa de resolución", "tasa_resolucion")}
               </th>
               <th className="px-4 py-3">
-                {headerBtn("Resol. prom.", "avgResolution")}
+                {headerBtn(
+                  "Horas prom. resolución",
+                  "horas_promedio_resolucion"
+                )}
               </th>
-              <th className="px-4 py-3">Estatus</th>
             </tr>
           </thead>
           <tbody>
             <AnimatePresence mode="popLayout">
-              {data.map((r, index) => (
+              {data.map((r, idx) => (
                 <motion.tr
-                  key={`${r.codigo_equipo}-${index}`}
+                  key={`${r.team_signature}-${idx}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 0.2, delay: index * 0.02 }}
+                  transition={{ duration: 0.2, delay: idx * 0.02 }}
                   className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors"
                 >
-                  <td className="px-4 py-3 font-mono text-xs text-blue-600 dark:text-blue-400 font-semibold">
-                    {r.codigo_equipo}
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
+                    {r.equipo || "—"}
                   </td>
                   <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
-                    {r.nombre_coach}
+                    {nf(r.integrantes)}
                   </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                    {r.puesto || "—"}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                    {r.area || "—"}
+                  <td className="px-4 py-3 text-gray-900 dark:text-gray-100">
+                    {/* Lista simple separada por comas; si prefieres chips, aquí puedes mapear a badges */}
+                    {r.miembrosStr || "—"}
                   </td>
                   <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">
-                    {nf(r.tickets)}
+                    {nf(r.tickets_creados)}
                   </td>
-                  {/* NUEVA CELDA: Tickets V2 */}
                   <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">
-                    {nf(r.ticketsV2)}
+                    {nf(r.tickets_resueltos)}
                   </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                    {formatDuration(r.avgResponse)}
+                  <td className="px-4 py-3 font-semibold text-gray-900 dark:text-gray-100">
+                    {pf(r.tasa_resolucion, 2)}
                   </td>
-                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                    {formatDuration(r.avgResolution)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5 text-[11px] font-medium">
-                      <span className="rounded-full bg-blue-50 dark:bg-blue-900/30 px-2.5 py-1 text-blue-700 dark:text-blue-300 border border-blue-200/50 dark:border-blue-800/50">
-                        Abiertos: {r.statusDist.Abiertos}
-                      </span>
-                      <span className="rounded-full bg-emerald-50 dark:bg-emerald-900/30 px-2.5 py-1 text-emerald-700 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/50">
-                        Cerrados: {r.statusDist.Cerrados}
-                      </span>
-                      <span className="rounded-full bg-purple-50 dark:bg-purple-900/30 px-2.5 py-1 text-purple-700 dark:text-purple-300 border border-purple-200/50 dark:border-purple-800/50">
-                        En Proceso: {r.statusDist["En Proceso"]}
-                      </span>
-                    </div>
+                  <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
+                    {hf(r.horas_promedio_resolucion)}
                   </td>
                 </motion.tr>
               ))}
             </AnimatePresence>
+
             {data.length === 0 && !loading && (
               <tr>
                 <td
                   className="px-4 py-12 text-center text-gray-500 dark:text-gray-400"
-                  colSpan={9}
+                  colSpan={7}
                 >
                   <div className="flex flex-col items-center gap-2">
                     <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
-                      <span className="text-2xl">📊</span>
+                      <span className="text-2xl">📭</span>
                     </div>
                     <p className="font-medium">No hay datos para mostrar</p>
                   </div>

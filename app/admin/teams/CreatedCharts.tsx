@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
   BarChart,
@@ -13,27 +14,54 @@ import type { CreatedTeamMetric } from "./metrics-created";
 
 function Card({ children }: any) {
   return (
-    <div className="rounded-2xl border bg-white shadow-sm">{children}</div>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="rounded-2xl border border-gray-200/80 dark:border-gray-800/80 bg-white dark:bg-gray-900 shadow-xl hover:shadow-2xl transition-shadow duration-300"
+    >
+      {children}
+    </motion.div>
   );
 }
+
 function Header({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="border-b px-5 py-4">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+    <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-5 bg-gradient-to-r from-gray-50/50 to-transparent dark:from-gray-800/30">
+      <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+        {title}
+      </h3>
+      {subtitle && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          {subtitle}
+        </p>
+      )}
     </div>
   );
 }
+
 function TooltipContent({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const p = payload[0];
+
   return (
-    <div className="rounded-xl border bg-white px-3 py-2 text-xs shadow-md">
-      <p className="font-medium">{label}</p>
-      <p className="text-muted-foreground">
-        {p.name}: <span className="font-semibold">{p.value}</span>
-      </p>
-    </div>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm px-4 py-3 text-sm shadow-2xl"
+    >
+      <p className="font-bold text-gray-900 dark:text-gray-100 mb-1">{label}</p>
+      <div className="flex items-center gap-2">
+        <div
+          className="w-3 h-3 rounded-full"
+          style={{ backgroundColor: p.fill }}
+        />
+        <span className="text-gray-600 dark:text-gray-400">{p.name}:</span>
+        <span className="font-bold text-gray-900 dark:text-gray-100">
+          {p.value}
+        </span>
+      </div>
+    </motion.div>
   );
 }
 
@@ -53,27 +81,44 @@ export default function CreatedCharts({ rows }: { rows: CreatedTeamMetric[] }) {
     .sort((a, b) => a.area.localeCompare(b.area));
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <Card>
-        <Header title="Tickets por equipo (Top 12)" subtitle="Ordenado desc." />
-        <div className="h-72 px-5 pb-5">
+        <Header
+          title="Tickets por equipo"
+          subtitle="Top 12 equipos con más tickets"
+        />
+        <div className="h-80 px-6 py-6">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={topTickets} margin={{ left: 8, right: 8 }}>
               <defs>
-                <linearGradient id="gSky" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0ea5e9" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.25} />
+                <linearGradient id="gSkyNew" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={1} />
+                  <stop offset="50%" stopColor="#60a5fa" stopOpacity={0.8} />
+                  <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.3} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#e5e7eb"
+                opacity={0.5}
+              />
               <XAxis dataKey="x" hide />
-              <YAxis allowDecimals={false} />
-              <RTooltip content={<TooltipContent />} />
+              <YAxis
+                allowDecimals={false}
+                stroke="#9ca3af"
+                style={{ fontSize: "12px" }}
+              />
+              <RTooltip
+                content={<TooltipContent />}
+                cursor={{ fill: "#f3f4f6", opacity: 0.3 }}
+              />
               <Bar
                 dataKey="tickets"
                 name="Tickets"
-                fill="url(#gSky)"
-                radius={[8, 8, 0, 0]}
+                fill="url(#gSkyNew)"
+                radius={[10, 10, 0, 0]}
+                animationBegin={0}
+                animationDuration={800}
               />
             </BarChart>
           </ResponsiveContainer>
@@ -81,31 +126,48 @@ export default function CreatedCharts({ rows }: { rows: CreatedTeamMetric[] }) {
       </Card>
 
       <Card>
-        <Header title="Equipos por área" subtitle="Conteo por área" />
-        <div className="h-72 px-5 pb-5">
+        <Header
+          title="Equipos por área"
+          subtitle="Distribución por área funcional"
+        />
+        <div className="h-80 px-6 py-6">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={areas}>
               <defs>
-                <linearGradient id="gViolet" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.95} />
-                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0.3} />
+                <linearGradient id="gVioletNew" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1} />
+                  <stop offset="50%" stopColor="#a78bfa" stopOpacity={0.8} />
+                  <stop offset="100%" stopColor="#c4b5fd" stopOpacity={0.3} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" />
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#e5e7eb"
+                opacity={0.5}
+              />
               <XAxis
                 dataKey="area"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: "#6b7280" }}
                 interval={0}
                 angle={-15}
                 dy={8}
               />
-              <YAxis allowDecimals={false} />
-              <RTooltip content={<TooltipContent />} />
+              <YAxis
+                allowDecimals={false}
+                stroke="#9ca3af"
+                style={{ fontSize: "12px" }}
+              />
+              <RTooltip
+                content={<TooltipContent />}
+                cursor={{ fill: "#f3f4f6", opacity: 0.3 }}
+              />
               <Bar
                 dataKey="count"
                 name="Equipos"
-                fill="url(#gViolet)"
-                radius={[8, 8, 0, 0]}
+                fill="url(#gVioletNew)"
+                radius={[10, 10, 0, 0]}
+                animationBegin={0}
+                animationDuration={800}
               />
             </BarChart>
           </ResponsiveContainer>

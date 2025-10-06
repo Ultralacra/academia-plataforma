@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import {
   ResponsiveContainer,
   PieChart,
@@ -12,34 +13,66 @@ import type { CreatedTeamMetric } from "./metrics-created";
 
 function Card({ children }: any) {
   return (
-    <div className="rounded-2xl border bg-white shadow-sm">{children}</div>
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-2xl border border-gray-200/80 dark:border-gray-800/80 bg-white dark:bg-gray-900 shadow-xl hover:shadow-2xl transition-shadow duration-300"
+    >
+      {children}
+    </motion.div>
   );
 }
+
 function Header({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="border-b px-5 py-4">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+    <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-5 bg-gradient-to-r from-gray-50/50 to-transparent dark:from-gray-800/30">
+      <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+        {title}
+      </h3>
+      {subtitle && (
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          {subtitle}
+        </p>
+      )}
     </div>
   );
 }
+
 function TooltipContent({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const p = payload[0];
   const total = payload.reduce((a: number, c: any) => a + (c.value ?? 0), 0);
   const value = p.value ?? 0;
-  const pct = total ? Math.round((value * 1000) / total) / 10 : 0; // 1 decimal
+  const pct = total ? Math.round((value * 1000) / total) / 10 : 0;
+
   return (
-    <div className="rounded-xl border bg-white px-3 py-2 text-xs shadow-md">
-      <p className="font-medium">{p.name}</p>
-      <p className="text-muted-foreground">
-        Tickets: <span className="font-semibold">{value}</span> ({pct}%)
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm px-4 py-3 text-sm shadow-2xl"
+    >
+      <p className="font-bold text-gray-900 dark:text-gray-100 mb-1">
+        {p.name}
       </p>
-    </div>
+      <div className="flex items-center gap-2 text-gray-600 dark:text-gray-400">
+        <span>Tickets:</span>
+        <span className="font-bold text-gray-900 dark:text-gray-100">
+          {value}
+        </span>
+        <span className="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+          {pct}%
+        </span>
+      </div>
+    </motion.div>
   );
 }
 
-const COLORS = ["#0ea5e9", "#22c55e", "#6366f1"]; // Abiertos, Cerrados, En Proceso
+const COLORS = [
+  { main: "#3b82f6", light: "#60a5fa" }, // Blue - Abiertos
+  { main: "#10b981", light: "#34d399" }, // Green - Cerrados
+  { main: "#8b5cf6", light: "#a78bfa" }, // Purple - En Proceso
+];
 
 export default function CreatedStatusChart({
   rows,
@@ -66,23 +99,59 @@ export default function CreatedStatusChart({
     <Card>
       <Header
         title="Distribución de estatus de tickets"
-        subtitle="Totalizados"
+        subtitle="Vista general del estado de todos los tickets"
       />
-      <div className="h-72 px-5 pb-5">
+      <div className="h-80 px-6 py-6">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
+            <defs>
+              {COLORS.map((color, i) => (
+                <linearGradient
+                  key={i}
+                  id={`gradient-${i}`}
+                  x1="0"
+                  y1="0"
+                  x2="1"
+                  y2="1"
+                >
+                  <stop offset="0%" stopColor={color.main} stopOpacity={1} />
+                  <stop
+                    offset="100%"
+                    stopColor={color.light}
+                    stopOpacity={0.8}
+                  />
+                </linearGradient>
+              ))}
+            </defs>
             <Pie
               data={data}
               dataKey="value"
               nameKey="name"
-              innerRadius={60}
-              outerRadius={90}
+              innerRadius={70}
+              outerRadius={110}
+              paddingAngle={3}
+              animationBegin={0}
+              animationDuration={800}
             >
               {data.map((_, i) => (
-                <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                <Cell
+                  key={i}
+                  fill={`url(#gradient-${i})`}
+                  stroke="white"
+                  strokeWidth={2}
+                />
               ))}
             </Pie>
-            <Legend />
+            <Legend
+              verticalAlign="bottom"
+              height={36}
+              iconType="circle"
+              wrapperStyle={{
+                paddingTop: "20px",
+                fontSize: "14px",
+                fontWeight: 500,
+              }}
+            />
             <RTooltip content={<TooltipContent />} />
           </PieChart>
         </ResponsiveContainer>

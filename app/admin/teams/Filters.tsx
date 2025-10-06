@@ -1,6 +1,7 @@
 "use client";
 
-import { Search, Calendar } from "lucide-react";
+import { Search, Calendar, Filter } from "lucide-react";
+import { motion } from "framer-motion";
 
 type Props = {
   search: string;
@@ -20,50 +21,76 @@ export default function Filters({
   onHasta,
 }: Props) {
   return (
-    <div className="rounded-2xl border bg-white shadow-sm">
-      <div className="flex items-center justify-between border-b px-5 py-4">
-        <h3 className="text-sm font-semibold">Filtros</h3>
-        <span className="text-xs text-muted-foreground">Auto-apply</span>
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4 }}
+      className="rounded-2xl border border-gray-200/80 dark:border-gray-800/80 bg-white dark:bg-gray-900 shadow-xl"
+    >
+      <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-5 bg-gradient-to-r from-gray-50/50 to-transparent dark:from-gray-800/30">
+        <div className="flex items-center gap-2">
+          <Filter className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+          <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+            Filtros
+          </h3>
+        </div>
+        <span className="text-xs font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full">
+          Auto-aplicar
+        </span>
       </div>
-      <div className="grid grid-cols-1 gap-3 px-5 py-4 md:grid-cols-12">
+
+      <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-12">
+        {/* Search input */}
         <div className="md:col-span-6">
-          <div className="relative">
+          <div className="relative group">
             <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2">
-              <Search className="h-4 w-4 text-gray-400" />
+              <Search className="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
             </div>
             <input
               value={search}
               onChange={(e) => onSearch(e.target.value)}
               placeholder="Buscar por nombre, código, área o puesto…"
-              className="w-full rounded-xl border bg-white/80 pl-9 pr-3 py-2 text-sm outline-none transition focus:ring-4 focus:ring-sky-100"
+              className="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 pl-10 pr-4 py-2.5 text-sm outline-none transition-all focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:focus:border-blue-400 placeholder:text-gray-400"
             />
           </div>
         </div>
+
+        {/* Date from */}
         <div className="md:col-span-3">
-          <div className="flex items-center gap-2 rounded-xl border px-3">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <input
-              type="date"
-              value={desde}
-              onChange={(e) => onDesde(e.target.value)}
-              className="w-full py-2 text-sm outline-none"
-            />
+          <div className="relative group">
+            <div className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 dark:focus-within:border-blue-400">
+              <Calendar className="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+              <input
+                type="date"
+                value={desde}
+                onChange={(e) => onDesde(e.target.value)}
+                className="w-full py-2.5 text-sm outline-none bg-transparent text-gray-900 dark:text-gray-100"
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 ml-1">
+              Desde
+            </p>
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">Desde</p>
         </div>
+
+        {/* Date to */}
         <div className="md:col-span-3">
-          <div className="flex items-center gap-2 rounded-xl border px-3">
-            <Calendar className="h-4 w-4 text-gray-400" />
-            <input
-              type="date"
-              value={hasta}
-              onChange={(e) => onHasta(e.target.value)}
-              className="w-full py-2 text-sm outline-none"
-            />
+          <div className="relative group">
+            <div className="flex items-center gap-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 dark:focus-within:border-blue-400">
+              <Calendar className="h-4 w-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
+              <input
+                type="date"
+                value={hasta}
+                onChange={(e) => onHasta(e.target.value)}
+                className="w-full py-2.5 text-sm outline-none bg-transparent text-gray-900 dark:text-gray-100"
+              />
+            </div>
+            <p className="mt-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 ml-1">
+              Hasta
+            </p>
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">Hasta</p>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
