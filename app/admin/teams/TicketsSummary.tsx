@@ -1,5 +1,10 @@
 "use client";
 
+import { formatDuration } from "./format";
+
+const nf = (n: number) =>
+  typeof n === "number" ? n.toLocaleString("es-ES") : String(n ?? "0");
+
 export default function TicketsSummary({
   totals,
   per,
@@ -9,7 +14,7 @@ export default function TicketsSummary({
     avgResponseMin: number;
     avgResolutionMin: number;
   };
-  per: { day: number; week: number; month: number };
+  per: { day: number; week?: number; month: number };
 }) {
   return (
     <div className="rounded-2xl border bg-white shadow-sm">
@@ -23,28 +28,28 @@ export default function TicketsSummary({
         <div className="rounded-xl border p-3">
           <div className="text-xs text-muted-foreground">Tickets totales</div>
           <div className="mt-1 text-xl font-semibold">
-            {totals.ticketsTotal}
+            {nf(totals.ticketsTotal)}
           </div>
         </div>
         <div className="rounded-xl border p-3">
           <div className="text-xs text-muted-foreground">Resp. promedio</div>
           <div className="mt-1 text-xl font-semibold">
-            {totals.avgResponseMin} min
+            {formatDuration(totals.avgResponseMin)}
           </div>
         </div>
         <div className="rounded-xl border p-3">
           <div className="text-xs text-muted-foreground">Resol. promedio</div>
           <div className="mt-1 text-xl font-semibold">
-            {totals.avgResolutionMin} min
+            {formatDuration(totals.avgResolutionMin)}
           </div>
         </div>
         <div className="rounded-xl border p-3">
           <div className="text-xs text-muted-foreground">Hoy</div>
-          <div className="mt-1 text-xl font-semibold">{per.day}</div>
+          <div className="mt-1 text-xl font-semibold">{nf(per.day)}</div>
         </div>
         <div className="rounded-xl border p-3">
           <div className="text-xs text-muted-foreground">Últ. 30 días</div>
-          <div className="mt-1 text-xl font-semibold">{per.month}</div>
+          <div className="mt-1 text-xl font-semibold">{nf(per.month)}</div>
         </div>
       </div>
     </div>

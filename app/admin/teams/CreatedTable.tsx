@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { CreatedTeamMetric } from "./metrics-created";
+import { formatDuration } from "./format";
 
 export default function CreatedTable({
   rows,
@@ -99,8 +100,8 @@ export default function CreatedTable({
                 <td className="px-4 py-2">{r.puesto || "—"}</td>
                 <td className="px-4 py-2">{r.area || "—"}</td>
                 <td className="px-4 py-2">{r.tickets}</td>
-                <td className="px-4 py-2">{r.avgResponse} min</td>
-                <td className="px-4 py-2">{r.avgResolution} min</td>
+                <td className="px-4 py-2">{formatDuration(r.avgResponse)}</td>
+                <td className="px-4 py-2">{formatDuration(r.avgResolution)}</td>
                 <td className="px-4 py-2">
                   <div className="flex flex-wrap gap-1 text-[11px]">
                     <span className="rounded bg-sky-50 px-2 py-0.5 text-sky-700">

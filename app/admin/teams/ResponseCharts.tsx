@@ -10,7 +10,20 @@ import {
   Tooltip as RTooltip,
   Legend,
 } from "recharts";
-import type { RespByCoach, RespByTeam } from "./metrics-faker";
+import { formatDuration, shortDuration, toNum } from "./format";
+
+type RespByCoach = {
+  coach: string;
+  response?: number | null;
+  resolution?: number | null;
+  tickets?: number;
+};
+type RespByTeam = {
+  team: string;
+  response?: number | null;
+  resolution?: number | null;
+  tickets?: number;
+};
 
 function Card({ children }: any) {
   return (
@@ -32,7 +45,8 @@ function TooltipContent({ active, payload, label }: any) {
       <p className="font-medium">{label}</p>
       {payload.map((p: any) => (
         <p key={p.dataKey} className="text-muted-foreground">
-          {p.name}: <span className="font-semibold">{p.value} min</span>
+          {p.name}:{" "}
+          <span className="font-semibold">{formatDuration(p.value)}</span>
         </p>
       ))}
     </div>
@@ -49,8 +63,8 @@ export default function ResponseCharts({
   const map = (arr: any[], xKey: string) =>
     arr.map((r) => ({
       x: r[xKey],
-      response: r.response,
-      resolution: r.resolution,
+      response: toNum(r.response),
+      resolution: toNum(r.resolution),
     }));
 
   return (
@@ -58,7 +72,7 @@ export default function ResponseCharts({
       <Card>
         <Header
           title="Tiempo de respuesta por coach"
-          subtitle="Top según tickets"
+          subtitle="Top según tickets • unidades automáticas"
         />
         <div className="h-72 px-5 pb-5">
           <ResponsiveContainer width="100%" height="100%">
@@ -75,7 +89,7 @@ export default function ResponseCharts({
               </defs>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="x" hide />
-              <YAxis allowDecimals={false} />
+              <YAxis allowDecimals={false} tickFormatter={shortDuration} />
               <Legend />
               <RTooltip content={<TooltipContent />} />
               <Bar
@@ -98,14 +112,14 @@ export default function ResponseCharts({
       <Card>
         <Header
           title="Tiempo de respuesta por equipo"
-          subtitle="Top según tickets"
+          subtitle="Top según tickets • unidades automáticas"
         />
         <div className="h-72 px-5 pb-5">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={map(byTeam, "team")}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="x" hide />
-              <YAxis allowDecimals={false} />
+              <YAxis allowDecimals={false} tickFormatter={shortDuration} />
               <Legend />
               <RTooltip content={<TooltipContent />} />
               <Bar

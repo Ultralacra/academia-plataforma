@@ -1,8 +1,30 @@
 "use client";
 
-import type { CoachAgg } from "./metrics-faker";
+import { formatDuration } from "./format";
 
-export default function CoachTable({ rows }: { rows: CoachAgg[] }) {
+type CoachAgg = {
+  name: string;
+  puesto?: string | null;
+  area?: string | null;
+  studentsTotal: number;
+  studentsActive: number;
+  studentsInactive: number;
+  studentsPaused: number;
+  tickets: number;
+  avgResponseMin: number;
+  avgResolutionMin: number;
+  sessions: number;
+  hours: number;
+  phaseCounts: Record<"F1" | "F2" | "F3" | "F4" | "F5", number>;
+  avgPhaseDays: Record<"F1" | "F2" | "F3" | "F4" | "F5", number>;
+};
+
+function formatNumber(n: number | null | undefined) {
+  if (n === null || n === undefined || !isFinite(n)) return "—";
+  return new Intl.NumberFormat("es-ES").format(n);
+}
+
+export default function CoachTable({ rows = [] }: { rows?: CoachAgg[] }) {
   return (
     <div className="rounded-2xl border bg-white shadow-sm">
       <div className="flex items-center justify-between border-b px-5 py-4">
@@ -33,18 +55,26 @@ export default function CoachTable({ rows }: { rows: CoachAgg[] }) {
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={r.name + i} className="border-b">
+              <tr key={`${r.name}-${i}`} className="border-b">
                 <td className="px-4 py-2 font-medium">{r.name}</td>
                 <td className="px-4 py-2">{r.puesto ?? "—"}</td>
                 <td className="px-4 py-2">{r.area ?? "—"}</td>
-                <td className="px-4 py-2">{r.studentsTotal}</td>
-                <td className="px-4 py-2">{r.studentsActive}</td>
-                <td className="px-4 py-2">{r.studentsPaused}</td>
-                <td className="px-4 py-2">{r.tickets}</td>
-                <td className="px-4 py-2">{r.avgResponseMin} min</td>
-                <td className="px-4 py-2">{r.avgResolutionMin} min</td>
-                <td className="px-4 py-2">{r.sessions}</td>
-                <td className="px-4 py-2">{r.hours}</td>
+                <td className="px-4 py-2">{formatNumber(r.studentsTotal)}</td>
+                <td className="px-4 py-2">{formatNumber(r.studentsActive)}</td>
+                <td className="px-4 py-2">{formatNumber(r.studentsPaused)}</td>
+                <td className="px-4 py-2">{formatNumber(r.tickets)}</td>
+                <td className="px-4 py-2">
+                  {isFinite(r.avgResponseMin)
+                    ? formatDuration(r.avgResponseMin)
+                    : "—"}
+                </td>
+                <td className="px-4 py-2">
+                  {isFinite(r.avgResolutionMin)
+                    ? formatDuration(r.avgResolutionMin)
+                    : "—"}
+                </td>
+                <td className="px-4 py-2">{formatNumber(r.sessions)}</td>
+                <td className="px-4 py-2">{formatNumber(r.hours)}</td>
               </tr>
             ))}
             {rows.length === 0 && (

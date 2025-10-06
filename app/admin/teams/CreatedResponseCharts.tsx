@@ -11,6 +11,7 @@ import {
   Legend,
 } from "recharts";
 import type { CreatedTeamMetric } from "./metrics-created";
+import { formatDuration, shortDuration } from "./format";
 
 function Card({ children }: any) {
   return (
@@ -32,7 +33,8 @@ function TooltipContent({ active, payload, label }: any) {
       <p className="font-medium">{label}</p>
       {payload.map((p: any) => (
         <p key={p.dataKey} className="text-muted-foreground">
-          {p.name}: <span className="font-semibold">{p.value} min</span>
+          {p.name}:{" "}
+          <span className="font-semibold">{formatDuration(p.value)}</span>
         </p>
       ))}
     </div>
@@ -57,7 +59,7 @@ export default function CreatedResponseCharts({
     <Card>
       <Header
         title="Tiempos promedio por equipo"
-        subtitle="Respuesta vs Resolución (min)"
+        subtitle="Respuesta vs Resolución • unidades automáticas"
       />
       <div className="h-72 px-5 pb-5">
         <ResponsiveContainer width="100%" height="100%">
@@ -74,7 +76,7 @@ export default function CreatedResponseCharts({
             </defs>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="x" hide />
-            <YAxis allowDecimals={false} />
+            <YAxis allowDecimals={false} tickFormatter={shortDuration} />
             <Legend />
             <RTooltip content={<TooltipContent />} />
             <Bar

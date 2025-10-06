@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, BarChart3, Blocks } from "lucide-react";
+import { Users, PanelsTopLeft, Grid2X2 } from "lucide-react";
 
 function KpiCard({
   icon,
@@ -44,19 +44,19 @@ export default function KPIs({
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
       <KpiCard
-        icon={<Users className="h-5 w-5 text-sky-600" />}
-        label="Equipos"
+        icon={<PanelsTopLeft className="h-5 w-5 text-sky-600" />}
+        label="Total de equipos"
         value={totalEquipos}
         accent="sky"
       />
       <KpiCard
-        icon={<BarChart3 className="h-5 w-5 text-violet-600" />}
+        icon={<Users className="h-5 w-5 text-violet-600" />}
         label="Total de alumnos"
         value={totalAlumnos}
         accent="violet"
       />
       <KpiCard
-        icon={<Blocks className="h-5 w-5 text-emerald-600" />}
+        icon={<Grid2X2 className="h-5 w-5 text-emerald-600" />}
         label="Áreas distintas"
         value={areas}
         accent="emerald"

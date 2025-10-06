@@ -10,7 +10,12 @@ import {
   Tooltip as RTooltip,
 } from "recharts";
 import { useState } from "react";
-import type { TicketsSeries } from "./metrics-faker";
+
+type TicketsSeries = {
+  daily: Array<{ date: string; count: number }>;
+  weekly: Array<{ week: string; count: number }>;
+  monthly: Array<{ month: string; count: number }>;
+};
 
 function Card({ children }: any) {
   return (

@@ -369,10 +369,7 @@ export async function getClients(opts: {
   };
 }
 
-/* ============
-   Alias para Students
-   (para que StudentsContent use dataService.getStudents y StudentItem)
-=========== */
+/* ============  Alias para Students  =========== */
 export async function getStudents(opts: {
   page?: number;
   pageSize?: number;
@@ -380,68 +377,119 @@ export async function getStudents(opts: {
   fechaDesde?: string;
   fechaHasta?: string;
 }) {
-  // Simplemente reutilizamos la normalización de getClients
   return getClients(opts);
 }
 
 /* =======================
-   TICKETS — consulta hasta 10 000, paginación local
+   TICKETS — consulta **todo el rango** con paginación
 ======================= */
+
+type RawTicketsResponse = {
+  code?: number;
+  status?: string;
+  data?: any[];         // NUEVO
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
+  tickets?: { data: any[]; total?: number };
+  getTickets?: { data: any[]; total?: number };
+};
+
+/** Descarga todas las páginas del rango dado, respetando un límite de seguridad. */
+async function fetchAllTicketsInRange(opts: {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  pageSize?: number;       // sugerencia al server
+  hardLimit?: number;      // límite de seguridad en el cliente
+}) {
+  const pageSize = Math.max(1, Math.min(1000, opts.pageSize ?? 500));
+  const hardLimit = Math.max(1, Math.min(20000, opts.hardLimit ?? 5000));
+
+  let page = 1;
+  let collected: any[] = [];
+  let total = 0;
+  let totalPages = 1;
+
+  while (collected.length < hardLimit && page <= totalPages) {
+    const q = toQuery({
+      page,
+      pageSize,
+      fechaDesde: opts.fechaDesde ?? "",
+      fechaHasta: opts.fechaHasta ?? "",
+    });
+
+    const json = await apiFetch<RawTicketsResponse>(
+      `${endpoints.ticket.list}${q}`
+    );
+
+    const rows =
+      (json as any)?.data ??
+      (json as any)?.getTickets?.data ??
+      (json as any)?.tickets?.data ??
+      [];
+
+    const thisTotal =
+      (json as any)?.total ??
+      (json as any)?.getTickets?.total ??
+      (json as any)?.tickets?.total ??
+      rows.length;
+
+    total = Number(thisTotal) || total;
+    totalPages = Number((json as any)?.totalPages) || totalPages || 1;
+
+    collected = collected.concat(rows);
+    page += 1;
+
+    // Si el endpoint “miente” con totalPages pero ya juntamos todo:
+    if (collected.length >= total && total > 0) break;
+
+    // Si el endpoint devuelve menos que pageSize y no informa totalPages bien:
+    if (rows.length < pageSize && totalPages === 1 && page > 1) break;
+  }
+
+  if (collected.length > hardLimit) {
+    collected = collected.slice(0, hardLimit);
+  }
+
+  return {
+    rawItems: collected,
+    total,
+    totalPages,
+    hardLimited: collected.length < total,
+  };
+}
+
 export async function getTickets(opts: {
-  // page y pageSize ya no afectan al servidor; se pagina en cliente
+  // estos params se respetan para compatibilidad
   page?: number;
   pageSize?: number;
   search?: string;
   fechaDesde?: string;
   fechaHasta?: string;
 }) {
-  const q = toQuery({
-    page: 1,
-    pageSize: 10000, // seguimos pidiendo mucho y paginamos localmente
-    search: opts.search ?? "",
+  const { rawItems, total } = await fetchAllTicketsInRange({
     fechaDesde: opts.fechaDesde ?? "",
     fechaHasta: opts.fechaHasta ?? "",
+    pageSize: 500,
+    hardLimit: 10000, // seguridad
   });
 
-  // Soportar NUEVA respuesta plana { code, status, data: [...] }
-  // y también las envolturas antiguas { getTickets: { data, total, ... } } o { tickets: { ... } }
-  const json = await apiFetch<{
-    code?: number;
-    status?: string;
-    // nueva
-    data?: any[];
-    // antiguas
-    tickets?: { data: any[]; total?: number };
-    getTickets?: { data: any[]; total?: number };
-  }>(`${endpoints.ticket.list}${q}`);
-
-  const rows: any[] =
-    (json as any)?.data ??
-    (json as any)?.getTickets?.data ??
-    (json as any)?.tickets?.data ??
-    [];
-
-  const items: Ticket[] = rows.map((r: any) => ({
+  const items: Ticket[] = rawItems.map((r: any) => ({
     id: r.id,
-    // en la nueva viene "codigo" (uuid). Lo mapeamos a id_externo para mantener compat.
     id_externo: r.id_externo ?? r.external_id ?? r.codigo ?? null,
     nombre: r.nombre ?? r.subject ?? null,
     alumno_nombre: r.alumno_nombre ?? r.client_name ?? null,
     estado: r.estado ?? r.status ?? null,
     tipo: r.tipo ?? r.type ?? null,
-    // la nueva usa "created_at"
     creacion: r.creacion ?? r.created_at ?? r.createdAt,
     deadline: r.deadline ?? null,
-    // ahora no llega el equipo; dejamos array vacío si no existe
     equipo_urls: parseEquipoUrls(r.equipo_urls ?? r.equipo ?? r.team_urls),
   }));
 
-  const totalAntiguo =
-    (json as any)?.getTickets?.total ?? (json as any)?.tickets?.total;
-
   return {
     items,
-    total: typeof totalAntiguo === "number" ? totalAntiguo : items.length,
+    total: typeof total === "number" ? total : items.length,
     page: 1,
     pageSize: items.length,
     totalPages: 1,
@@ -508,8 +556,9 @@ export function ticketsByDay(tickets: Ticket[]) {
   );
 }
 
-
-// lib/data-service.ts
+/* =======================
+   CLIENT ↔ COACH
+======================= */
 export async function getClientCoaches(alumnoCode: string): Promise<{
   alumno: string;
   alumno_nombre: string;
@@ -517,7 +566,6 @@ export async function getClientCoaches(alumnoCode: string): Promise<{
 }> {
   const q = toQuery({ alumno: alumnoCode });
 
-  // 👈 usar el endpoint correcto
   const json = await apiFetch<{
     code: number;
     status: "success" | string;
@@ -547,7 +595,6 @@ export async function getClientCoaches(alumnoCode: string): Promise<{
   return { alumno: alumnoCode, alumno_nombre, coaches };
 }
 
-
 /* =======================
    TEAMS CREATED (nueva API)
 ======================= */
@@ -575,6 +622,202 @@ export type TeamCreatedDetail = {
   data: TeamCreatedDetailItem[];
 };
 
+/* =======================
+   METRICS (endpoint único) — con unidad y meta de rango
+======================= */
+
+export type RawMetricsResponse = {
+  code: number;
+  status: string;
+  data: any;
+};
+
+export async function getMetrics(opts: {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  // unidad a convertir: 'hours' | 'days' (si se omite se devuelve en horas)
+  unit?: "hours" | "days";
+}) {
+  const q = toQuery({
+    fechaDesde: opts.fechaDesde ?? "",
+    fechaHasta: opts.fechaHasta ?? "",
+  });
+
+  const json = await apiFetch<RawMetricsResponse>(`${endpoints.metrics.get}${q}`);
+
+  const unit = opts.unit ?? "hours";
+
+  // Helper: convierte minutes -> hours or days
+  const convert = (v: any) => {
+    const n = Number(v);
+    if (isNaN(n)) return null;
+    if (unit === "hours") return Math.round((n / 60) * 100) / 100; // 2 decimales
+    return Math.round((n / 60 / 24) * 100000) / 100000; // días, 5 decimales
+  };
+
+  const raw = (json as any)?.data ?? {};
+
+  // ============== Tickets del rango (paginando) ==============
+  let ticketsPayload: {
+    items: {
+      id: number;
+      codigo?: string | null;
+      nombre?: string | null;
+      id_alumno?: string | null;
+      alumno_nombre?: string | null;
+      created_at?: string | null;
+      deadline?: string | null;
+      estado?: string | null;
+    }[];
+    total: number;
+  } | null = null;
+
+  try {
+    const { rawItems, total } = await fetchAllTicketsInRange({
+      fechaDesde: opts.fechaDesde ?? "",
+      fechaHasta: opts.fechaHasta ?? "",
+      pageSize: 500,
+      hardLimit: 10000,
+    });
+
+    const items = rawItems.map((r: any) => ({
+      id: r.id,
+      codigo: r.codigo ?? r.id_externo ?? r.external_id ?? null,
+      nombre: r.nombre ?? r.subject ?? null,
+      id_alumno: r.id_alumno ?? r.alumno_id ?? r.client_id ?? null,
+      alumno_nombre: r.alumno_nombre ?? r.client_name ?? r.client ?? null,
+      created_at: r.created_at ?? r.creacion ?? r.createdAt ?? null,
+      deadline: r.deadline ?? null,
+      estado: r.estado ?? r.status ?? null,
+    }));
+
+    ticketsPayload = { items, total: Number(total) || items.length };
+  } catch (e) {
+    ticketsPayload = null;
+  }
+
+  // ============== Normalización de métricas ==============
+  const norm: any = { ...raw };
+  norm.teams = norm.teams ?? {};
+
+  // Totales: puede venir en teams.total
+  const totalsSrc = norm.teams.total ?? norm.teams.totals ?? norm.total ?? {};
+  const nestedTotals = totalsSrc.totals ?? totalsSrc.total ?? {};
+  const ticketsFromNested = nestedTotals.tickets ?? nestedTotals.ticketsTotal;
+  const ticketsFromTop = totalsSrc.tickets ?? totalsSrc.ticketsTotal;
+
+  const toNumSafe = (v: any, d = 0) => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : d;
+  };
+
+  const totals: any = {
+    teams: toNumSafe(totalsSrc.teams ?? nestedTotals.teams),
+    studentsTotal: toNumSafe(totalsSrc.studentsTotal ?? nestedTotals.studentsTotal),
+    ticketsTotal: toNumSafe(ticketsFromTop ?? ticketsFromNested),
+    avgResponseMin: toNumSafe(totalsSrc.avgResponseMin ?? nestedTotals.avgResponseMin),
+    avgResolutionMin: toNumSafe(totalsSrc.avgResolutionMin ?? nestedTotals.avgResolutionMin),
+    ...totalsSrc,
+  };
+
+  // Si "created.totals.tickets" existe, úsalo como tickets del periodo:
+  try {
+    const createdTotals =
+      (totalsSrc?.created?.totals) ??
+      (norm?.teams?.total?.created?.totals) ??
+      (norm?.total?.created?.totals) ??
+      null;
+    const createdTickets = createdTotals?.tickets ?? createdTotals?.ticketsTotal ?? null;
+    if (createdTickets !== null && createdTickets !== undefined) {
+      totals.ticketsTotal = toNumSafe(createdTickets, totals.ticketsTotal);
+    }
+  } catch {}
+
+  norm.teams.totals = totals;
+
+  // Tickets series: asegurar shape
+  const tsSrc =
+    norm.teams.ticketsSeries ??
+    norm.teams.total?.ticketsSeries ??
+    norm.ticketsSeries ??
+    {};
+
+  const dailyArr = Array.isArray(tsSrc.daily) ? tsSrc.daily : Array.isArray(tsSrc) ? tsSrc : [];
+  const weeklyArr = Array.isArray(tsSrc.weekly) ? tsSrc.weekly : [];
+  const monthlyArr = Array.isArray(tsSrc.monthly) ? tsSrc.monthly : [];
+
+  norm.teams.ticketsSeries = {
+    daily: dailyArr.map((d: any) => ({
+      date: d.date ?? d.day ?? d.label ?? "",
+      count: toNumSafe(d.count ?? d.value, 0),
+    })),
+    weekly: weeklyArr.map((d: any) => ({
+      week_start: d.week_start ?? d.week ?? d.start ?? "",
+      count: toNumSafe(d.count ?? d.value, 0),
+    })),
+    monthly: monthlyArr.map((d: any) => ({
+      month: d.month ?? d.mes ?? d.label ?? "",
+      count: toNumSafe(d.count ?? d.value, 0),
+    })),
+  };
+
+  // Tickets per (por día/semana/mes) — normalizar desde varias keys posibles
+  const ticketsPerSrc =
+    norm.teams.ticketsPer ?? norm.teams.per ?? norm.ticketsPer ?? {};
+  norm.teams.ticketsPer = {
+    day: toNumSafe(ticketsPerSrc.day ?? ticketsPerSrc.dia ?? ticketsPerSrc.today ?? ticketsPerSrc.todayCount, 0),
+    week: toNumSafe(ticketsPerSrc.week ?? ticketsPerSrc.semana ?? ticketsPerSrc.weekly, 0),
+    month: toNumSafe(ticketsPerSrc.month ?? ticketsPerSrc.mes ?? ticketsPerSrc.monthly ?? ticketsPerSrc.last30, 0),
+  };
+
+  // Asegurar respByCoach / respByTeam
+  const mapResp = (arr: any[], xKey: string) =>
+    (Array.isArray(arr) ? arr : []).map((r: any) => ({
+      [xKey]: r[xKey] ?? r.nombre ?? r.name,
+      tickets: toNumSafe(r.tickets, 0),
+      responseMin: toNumSafe(r.response ?? r.responseMin, 0),
+      resolutionMin: toNumSafe(r.resolution ?? r.resolutionMin, 0),
+      response: convert(r.response ?? r.responseMin ?? null),
+      resolution: convert(r.resolution ?? r.resolutionMin ?? null),
+    }));
+
+  norm.teams.respByCoach = mapResp(norm.teams.respByCoach, "coach");
+  norm.teams.respByTeam = mapResp(norm.teams.respByTeam, "team");
+
+  // Adjuntar tickets del rango a la respuesta normalizada
+  if (ticketsPayload) {
+    norm.tickets = ticketsPayload.items;
+    norm.tickets_meta = {
+      total: ticketsPayload.total,
+      page: 1,
+      pageSize: ticketsPayload.items.length,
+      totalPages: 1,
+    };
+    // Si los totales no tienen tickets, usa el total del rango
+    if (!norm.teams.totals?.ticketsTotal) {
+      norm.teams.totals = norm.teams.totals ?? {};
+      norm.teams.totals.ticketsTotal = toNumSafe(ticketsPayload.total, norm.tickets?.length ?? 0);
+    }
+  }
+
+  // Meta de rango + timestamp para la UI
+  const fromStr = opts.fechaDesde ?? null;
+  const toStr = opts.fechaHasta ?? null;
+  norm.meta = {
+    ...(norm.meta ?? {}),
+    range: {
+      from: typeof fromStr === "string" ? fromStr : (fromStr ? new Date(fromStr).toISOString().slice(0, 10) : null),
+      to: typeof toStr === "string" ? toStr : (toStr ? new Date(toStr).toISOString().slice(0, 10) : null),
+    },
+    fetchedAt: new Date().toISOString(),
+  };
+
+  return {
+    raw: json,
+    data: norm,
+    unit,
+  } as const;
+}
 
 /* =======================
    TEAMS CREATED ENDPOINTS
@@ -589,32 +832,30 @@ export async function getTeamsCreatedDetail() {
   return json; // { code, status, data: [...] }
 }
 
-
-
 /* =======================
    Export
 ======================= */
 export const dataService = {
   // Teams
-  getTeams,     // versión original (soporta {data} y {getTeam})
-  getTeamsV2,   // versión nueva (lee { data: [...] })
+  getTeams,
+  getTeamsV2,
 
   // Clients / Students
-  getClients,   // consulta 1000 por defecto (paginación local)
-  getStudents,  // ⟵ alias usado por StudentsContent
-                //     (devuelve el mismo shape que getClients)
+  getClients,
+  getStudents,
 
   // Tickets
-  getTickets,   // consulta 10 000 por defecto (paginación local)
-  getClientCoaches, // ⟵ añade esta línea
+  getTickets,
+  getClientCoaches,
 
   // Utils
   groupTicketsByTeam,
   ticketsByDay,
 
-
-  // Teams created  ← añade estas dos
+  // Teams created
   getTeamsCreated,
   getTeamsCreatedDetail,
 
+  // Metrics
+  getMetrics,
 };

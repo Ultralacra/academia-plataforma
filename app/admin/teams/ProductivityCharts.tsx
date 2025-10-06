@@ -9,7 +9,13 @@ import {
   YAxis,
   Tooltip as RTooltip,
 } from "recharts";
-import type { ProdByCoach } from "./metrics-faker";
+// ProdByCoach shape provided by metrics API; keep a local type here to avoid dependency on faker
+type ProdByCoach = {
+  coach: string;
+  tickets: number;
+  sessions: number;
+  hours: number;
+};
 
 function Card({ children }: any) {
   return (

@@ -1,67 +1,153 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { dataService } from "@/lib/data-service";
-import {
-  buildCreatedMetrics,
-  buildCreatedMetricsSample,
-  type CreatedTeamMetric,
-} from "./metrics-created";
+import { dataService, type TeamCreatedDetail } from "@/lib/data-service";
 import CreatedKPIs from "./CreatedKPIs";
 import CreatedCharts from "./CreatedCharts";
 import CreatedResponseCharts from "./CreatedResponseCharts";
 import CreatedStatusChart from "./CreatedStatusChart";
 import CreatedTable from "./CreatedTable";
+import type { CreatedTeamMetric } from "./metrics-created";
 
-export default function CreatedMetricsContent() {
+type Props = {
+  /** Si viene precargado desde getMetrics() lo usamos tal cual */
+  initialRows?: Array<{
+    area: string | null;
+    codigo_equipo: string;
+    nombre_coach: string;
+    puesto: string | null;
+    tickets?: number;
+    avgResponse?: number;
+    avgResolution?: number | string;
+    statusDist?: Record<string, number>;
+  }>;
+};
+
+export default function CreatedMetricsContent({ initialRows }: Props) {
   const [loading, setLoading] = useState(true);
-  const [totalTeams, setTotalTeams] = useState(0);
-  const [metrics, setMetrics] = useState<CreatedTeamMetric[]>([]);
+  const [rows, setRows] = useState<CreatedTeamMetric[]>([]);
+  const [totals, setTotals] = useState<{
+    teams: number;
+    coaches: number;
+    tickets: number;
+  }>({
+    teams: 0,
+    coaches: 0,
+    tickets: 0,
+  });
+
+  // Helper para normalizar el row a CreatedTeamMetric
+  const normalize = (r: any): CreatedTeamMetric => {
+    const status = r?.statusDist ?? {};
+    const enProceso = status["En Proceso"] ?? status.En_Proceso ?? 0;
+
+    // avgResolution en backend puede venir como string (horas) — lo convertimos a número
+    const avgResNum = Number(r.avgResolution ?? 0) || 0;
+    const avgRespNum = Number(r.avgResponse ?? 0) || 0;
+
+    return {
+      codigo_equipo: String(r.codigo_equipo ?? ""),
+      nombre_coach: String(r.nombre_coach ?? ""),
+      puesto: (r.puesto ?? "—") as string,
+      area: (r.area ?? "—") as string,
+      tickets: Number(r.tickets ?? 0) || 0,
+      // Tus componentes de “created” siempre han mostrado **minutos**;
+      // si tu backend envía horas, podrías multiplicar por 60 aquí:
+      avgResponse: Math.round(avgRespNum), // en min (si ya viene en min)
+      avgResolution: Math.round(avgResNum), // en min (si ya viene en min)
+      statusDist: {
+        Abiertos: Number(status.Abiertos ?? 0) || 0,
+        Cerrados: Number(status.Cerrados ?? 0) || 0,
+        "En Proceso": Number(enProceso ?? 0) || 0,
+      },
+    };
+  };
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       try {
-        const [total, detail] = await Promise.all([
-          dataService.getTeamsCreated(),
-          dataService.getTeamsCreatedDetail(),
-        ]);
-        if (!alive) return;
+        if (initialRows?.length) {
+          // 1) Si ya viene del endpoint de metrics, úsalo
+          const mapped = initialRows.map(normalize);
+          if (!alive) return;
+          setRows(mapped);
+          const coaches = new Set(mapped.map((m) => m.nombre_coach)).size;
+          const tickets = mapped.reduce((acc, m) => acc + (m.tickets ?? 0), 0);
+          setTotals({ teams: mapped.length, coaches, tickets });
+        } else {
+          // 2) Fallback: usar endpoints “created”
+          const [total, detail] = await Promise.all([
+            dataService.getTeamsCreated(),
+            dataService.getTeamsCreatedDetail(),
+          ]);
+          if (!alive) return;
 
-        const built = buildCreatedMetrics(detail);
-        setMetrics(built.length ? built : buildCreatedMetricsSample());
-        setTotalTeams(total?.data?.total_teams ?? (built.length || 5));
+          const rawRows = (detail?.data ?? []).flatMap((cli: any) =>
+            Array.isArray(cli?.equipos)
+              ? cli.equipos.map((e: any) => ({
+                  codigo_equipo: e.codigo_equipo,
+                  nombre_coach: e.nombre_coach,
+                  puesto: e.puesto,
+                  area: e.area,
+                  tickets: Number(cli?.cantidad_tickets ?? 0) || 0,
+                  avgResponse: 0,
+                  avgResolution: 0,
+                  statusDist: {
+                    Abiertos: 0,
+                    Cerrados: Number(cli?.cantidad_tickets ?? 0) || 0,
+                    "En Proceso": 0,
+                  },
+                }))
+              : []
+          );
+
+          const mapped = rawRows.map(normalize);
+          setRows(mapped);
+          setTotals({
+            teams:
+              Number(total?.data?.total_teams ?? mapped.length) ||
+              mapped.length,
+            coaches: new Set(mapped.map((m) => m.nombre_coach)).size,
+            tickets: mapped.reduce((acc, m) => acc + (m.tickets ?? 0), 0),
+          });
+        }
       } catch (e) {
         console.error(e);
         if (!alive) return;
-        setMetrics(buildCreatedMetricsSample());
-        setTotalTeams(5);
+        setRows([]);
+        setTotals({ teams: 0, coaches: 0, tickets: 0 });
       } finally {
         alive && setLoading(false);
       }
     })();
+
     return () => {
       alive = false;
     };
-  }, []);
+  }, [initialRows]);
 
-  const totals = useMemo(
+  const kpis = useMemo(
     () => ({
-      teams: totalTeams,
-      coaches: new Set(metrics.map((m) => m.nombre_coach)).size,
-      tickets: metrics.reduce((acc, m) => acc + m.tickets, 0),
+      teams: totals.teams,
+      coaches: totals.coaches,
+      tickets: totals.tickets,
     }),
-    [metrics, totalTeams]
+    [totals]
   );
 
   return (
     <div className="space-y-6">
-      <CreatedKPIs {...totals} />
-      <CreatedCharts rows={metrics} />
-      <CreatedResponseCharts rows={metrics} />
-      <CreatedStatusChart rows={metrics} />
-      <CreatedTable rows={metrics} loading={loading} />
+      <CreatedKPIs
+        teams={kpis.teams}
+        coaches={kpis.coaches}
+        tickets={kpis.tickets}
+      />
+      <CreatedCharts rows={rows} />
+      <CreatedResponseCharts rows={rows} />
+      <CreatedStatusChart rows={rows} />
+      <CreatedTable rows={rows} loading={loading} />
     </div>
   );
 }

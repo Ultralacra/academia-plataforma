@@ -26,11 +26,14 @@ function Header({ title, subtitle }: { title: string; subtitle?: string }) {
 function TooltipContent({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const p = payload[0];
+  const total = payload.reduce((a: number, c: any) => a + (c.value ?? 0), 0);
+  const value = p.value ?? 0;
+  const pct = total ? Math.round((value * 1000) / total) / 10 : 0; // 1 decimal
   return (
     <div className="rounded-xl border bg-white px-3 py-2 text-xs shadow-md">
       <p className="font-medium">{p.name}</p>
       <p className="text-muted-foreground">
-        Tickets: <span className="font-semibold">{p.value}</span>
+        Tickets: <span className="font-semibold">{value}</span> ({pct}%)
       </p>
     </div>
   );
