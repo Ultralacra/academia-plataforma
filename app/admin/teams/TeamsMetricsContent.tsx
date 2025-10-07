@@ -11,6 +11,7 @@ import ProductivityCharts from "./ProductivityCharts";
 import Charts from "./Charts";
 import CreatedMetricsContent from "./CreatedMetricsContent";
 import TicketsByTeamTable, { TicketsByTeamApiRow } from "./TicketsByTeamTable";
+import LoadingOverlay from "./LoadingOverlay";
 
 type TicketsSeriesVM = {
   daily: Array<{ date: string; count: number }>;
@@ -46,6 +47,11 @@ export default function TeamsMetricsContent() {
   const [search, setSearch] = useState("");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
+
+  // gating de consulta por fechas
+  const bothEmpty = !desde && !hasta;
+  const bothSet = Boolean(desde && hasta);
+  const shouldFetch = bothEmpty || bothSet;
 
   const [loading, setLoading] = useState(true);
 
@@ -121,17 +127,25 @@ export default function TeamsMetricsContent() {
 
   useEffect(() => {
     let alive = true;
+
+    // si solo hay una fecha, no consultamos
+    if (!shouldFetch) {
+      setLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+
     (async () => {
       setLoading(true);
       try {
         // 1) Métricas
         const res = await dataService.getMetrics({
-          fechaDesde: desde || undefined,
-          fechaHasta: hasta || undefined,
+          fechaDesde: bothEmpty ? undefined : desde,
+          fechaHasta: bothEmpty ? undefined : hasta,
         });
 
         // El backend envía { code, status, data: { teams: {...} } }
-        // Por eso tomamos res?.data
         const root = (res?.data as any) ?? {};
         const teams = root?.teams ?? {};
         const total = root?.teams?.totals ?? root?.teams?.total ?? {};
@@ -341,9 +355,9 @@ export default function TeamsMetricsContent() {
     return () => {
       alive = false;
     };
-  }, [desde, hasta, search]);
+  }, [desde, hasta, search, bothEmpty, bothSet, shouldFetch]);
 
-  // 👉 priorizamos prodByCoachV2 para el gráfico “Tickets por coach”.
+  // priorizamos prodByCoachV2 para el gráfico “Tickets por coach”.
   const rowsForProductivity = useMemo(
     () =>
       vm.prodByCoachV2.length
@@ -358,7 +372,18 @@ export default function TeamsMetricsContent() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* loading overlay a pantalla completa del bloque */}
+      <LoadingOverlay active={loading} label="Cargando métricas…" />
+
+      {/* aviso si sólo hay una fecha */}
+      {!bothEmpty && !bothSet && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 text-amber-900 px-3 py-2 text-sm">
+          Selecciona <b>desde</b> y <b>hasta</b> para aplicar el filtro por
+          fechas.
+        </div>
+      )}
+
       <Filters
         search={search}
         onSearch={setSearch}
@@ -422,6 +447,9 @@ export default function TeamsMetricsContent() {
         <CreatedMetricsContent
           initialRows={vm.createdBlock.rows}
           prodByCoachV2={vm.prodByCoachV2}
+          totalTicketsForStatus={
+            vm.createdBlock?.totals?.tickets ?? vm.totals.ticketsTotal
+          }
         />
       )}
     </div>
