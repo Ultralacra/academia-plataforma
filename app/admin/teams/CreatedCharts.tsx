@@ -18,7 +18,7 @@ function Card({ children }: any) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="rounded-2xl border border-gray-200/80 dark:border-gray-800/80 bg-white dark:bg-gray-900 shadow-xl hover:shadow-2xl transition-shadow duration-300"
+      className="rounded-2xl border border-gray-200 bg-white"
     >
       {children}
     </motion.div>
@@ -27,15 +27,11 @@ function Card({ children }: any) {
 
 function Header({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="border-b border-gray-100 dark:border-gray-800 px-6 py-5 bg-gradient-to-r from-gray-50/50 to-transparent dark:from-gray-800/30">
-      <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+    <div className="border-b border-gray-100 px-6 py-5 bg-white">
+      <h3 className="text-base font-bold text-gray-900 tracking-tight">
         {title}
       </h3>
-      {subtitle && (
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          {subtitle}
-        </p>
-      )}
+      {subtitle && <p className="text-sm text-gray-500 mt-1">{subtitle}</p>}
     </div>
   );
 }
@@ -48,7 +44,7 @@ function TooltipContent({ active, payload, label }: any) {
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white/95 dark:bg-gray-900/95 backdrop-blur-sm px-4 py-3 text-sm shadow-2xl"
+      className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
     >
       <p className="font-bold text-gray-900 dark:text-gray-100 mb-1">{label}</p>
       <div className="flex items-center gap-2">

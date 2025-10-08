@@ -12,31 +12,31 @@ import {
 
 function Card({ children, className = "" }: any) {
   return (
-    <div className={`rounded-2xl border bg-white shadow-sm ${className}`}>
+    <div className={`rounded-2xl border border-gray-200 bg-white ${className}`}>
       {children}
     </div>
   );
 }
 function CardHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="border-b px-5 py-4">
-      <h3 className="text-sm font-semibold">{title}</h3>
-      {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+    <div className="border-b border-gray-100 px-5 py-4 bg-white">
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
     </div>
   );
 }
 function CardBody({ children, className = "" }: any) {
-  return <div className={`px-5 py-4 ${className}`}>{children}</div>;
+  return <div className={`px-5 py-4 bg-white ${className}`}>{children}</div>;
 }
 
 function TooltipContent({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   const p = payload[0];
   return (
-    <div className="rounded-xl border bg-white px-3 py-2 text-xs shadow-md">
-      <p className="font-medium">{label}</p>
-      <p className="text-muted-foreground">
-        {p.name}: <span className="font-semibold">{p.value}</span>
+    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs">
+      <p className="font-medium text-gray-900">{label}</p>
+      <p className="text-gray-500">
+        {p.name}: <span className="font-semibold text-gray-900">{p.value}</span>
       </p>
     </div>
   );
@@ -59,12 +59,7 @@ export default function Charts({
         <CardBody className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={alumnosPorEquipo} margin={{ left: 8, right: 8 }}>
-              <defs>
-                <linearGradient id="gSky" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0ea5e9" stopOpacity={1} />
-                  <stop offset="100%" stopColor="#0ea5e9" stopOpacity={0.25} />
-                </linearGradient>
-              </defs>
+              {/* Color sólido para barras */}
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" hide />
               <YAxis allowDecimals={false} />
@@ -72,7 +67,7 @@ export default function Charts({
               <Bar
                 dataKey="alumnos"
                 name="Alumnos"
-                fill="url(#gSky)"
+                fill="#6366f1"
                 radius={[8, 8, 0, 0]}
               />
             </BarChart>
@@ -88,12 +83,7 @@ export default function Charts({
         <CardBody className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={areasCount}>
-              <defs>
-                <linearGradient id="gViolet" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.95} />
-                  <stop offset="100%" stopColor="#6366f1" stopOpacity={0.3} />
-                </linearGradient>
-              </defs>
+              {/* Color sólido para barras */}
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
                 dataKey="area"
@@ -107,7 +97,7 @@ export default function Charts({
               <Bar
                 dataKey="count"
                 name="Equipos"
-                fill="url(#gViolet)"
+                fill="#6366f1"
                 radius={[8, 8, 0, 0]}
               />
             </BarChart>

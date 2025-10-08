@@ -57,10 +57,10 @@ export default function TicketsSeriesChart({
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg"
+      className="overflow-hidden rounded-2xl border border-gray-200 bg-white"
     >
       {/* Header */}
-      <div className="border-b border-gray-200 bg-gradient-to-r from-blue-50 to-purple-50 px-6 py-5">
+      <div className="border-b border-gray-100 px-6 py-5 bg-white">
         <h3 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
           Tickets por periodo
         </h3>
@@ -70,7 +70,7 @@ export default function TicketsSeriesChart({
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 bg-gray-50 px-6 py-4">
+      <div className="border-b border-gray-50 px-6 py-4 bg-white">
         <div className="flex items-center gap-2">
           {[
             { k: "day", l: "Diario" },

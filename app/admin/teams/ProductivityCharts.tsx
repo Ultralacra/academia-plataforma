@@ -36,7 +36,17 @@ function TooltipContent({ active, payload, label, name }: any) {
   );
 }
 
-export default function ProductivityCharts({ rows }: { rows: ProdByCoach[] }) {
+export default function ProductivityCharts({
+  rows,
+  forceLockSessions = false,
+  forceLockHours = false,
+  hideTickets = false,
+}: {
+  rows: ProdByCoach[];
+  forceLockSessions?: boolean;
+  forceLockHours?: boolean;
+  hideTickets?: boolean;
+}) {
   const base = rows.map((r) => ({
     x: r.coach,
     tickets: r.tickets,
@@ -50,7 +60,7 @@ export default function ProductivityCharts({ rows }: { rows: ProdByCoach[] }) {
   const allHoursZero = !rows.length || rows.every((r) => (r.hours ?? 0) === 0);
 
   const charts = [
-    {
+    !hideTickets && {
       title: "Tickets por coach",
       dataKey: "tickets",
       name: "Tickets",
@@ -61,26 +71,26 @@ export default function ProductivityCharts({ rows }: { rows: ProdByCoach[] }) {
       locked: false, // Siempre visible
     },
     {
-      title: "Sesiones por coach",
+      title: "Sesiones del coach",
       dataKey: "sessions",
       name: "Sesiones",
       gradient: "gSessions",
       colors: ["#10b981", "#14b8a6"],
       icon: Users,
       bgGradient: "from-emerald-50 to-teal-50",
-      locked: allSessionsZero, // Bloqueado si no hay datos
+      locked: forceLockSessions || allSessionsZero,
     },
     {
-      title: "Horas invertidas por coach",
+      title: "Tiempo invertido del coach",
       dataKey: "hours",
       name: "Horas",
       gradient: "gHours",
       colors: ["#f59e0b", "#f97316"],
       icon: Clock,
       bgGradient: "from-amber-50 to-orange-50",
-      locked: allHoursZero, // Bloqueado si no hay datos
+      locked: forceLockHours || allHoursZero,
     },
-  ];
+  ].filter(Boolean) as any[];
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -90,19 +100,12 @@ export default function ProductivityCharts({ rows }: { rows: ProdByCoach[] }) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: idx * 0.1 }}
-          className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg"
+          className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white"
         >
-          <div
-            className={`border-b border-gray-200 bg-gradient-to-r ${chart.bgGradient} px-6 py-5`}
-          >
+          <div className="border-b border-gray-100 px-6 py-5 bg-white">
             <div className="flex items-center gap-3">
-              <div
-                className={`rounded-lg bg-gradient-to-br p-2.5 shadow-md`}
-                style={{
-                  backgroundImage: `linear-gradient(to bottom right, ${chart.colors[0]}, ${chart.colors[1]})`,
-                }}
-              >
-                <chart.icon className="h-5 w-5 text-white" />
+              <div className="rounded-lg bg-gray-100 p-2.5">
+                <chart.icon className="h-5 w-5 text-gray-400" />
               </div>
               <h3 className="text-lg font-bold text-gray-900">{chart.title}</h3>
             </div>
@@ -160,7 +163,7 @@ export default function ProductivityCharts({ rows }: { rows: ProdByCoach[] }) {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: idx * 0.1 + 0.2 }}
-                className="flex flex-col items-center gap-3 rounded-xl bg-white/90 px-8 py-6 shadow-xl"
+                className="flex flex-col items-center gap-3 rounded-xl bg-white px-8 py-6 border"
               >
                 <div className="rounded-full bg-gray-100 p-3">
                   <Lock className="h-6 w-6 text-gray-500" />

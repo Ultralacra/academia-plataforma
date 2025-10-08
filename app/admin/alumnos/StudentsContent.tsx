@@ -13,6 +13,36 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select";
+// Extrae coachs únicos de los alumnos
+function getUniqueCoaches(students: StudentItem[]) {
+  const allCoaches = students.flatMap(
+    (s) => s.teamMembers?.map((tm) => tm.name) ?? []
+  );
+  return Array.from(new Set(allCoaches)).filter(Boolean).sort();
+}
+
+// Métricas por coach
+function getCoachMetrics(students: StudentItem[]) {
+  // Total alumnos
+  const total = students.length;
+  // Alumnos por fase
+  const fases = ["F1", "F2", "F3", "F4", "F5"];
+  const porFase = Object.fromEntries(
+    fases.map((f) => [f, students.filter((s) => s.stage === f).length])
+  );
+  // Tickets totales
+  const tickets = students.reduce((acc, s) => acc + (s.ticketsCount ?? 0), 0);
+  // Promedios de respuesta/resolución (si existieran en el modelo)
+  // Aquí solo se muestra la estructura, puedes expandir según tus datos
+  return { total, porFase, tickets };
+}
 import Link from "next/link";
 
 /* ===== helpers ===== */
@@ -52,12 +82,13 @@ function uniq(xs: (string | null | undefined)[]) {
 
 /* ===== view ===== */
 export default function StudentsContent() {
+  // Coach seleccionado
+  const [coach, setCoach] = useState<string>("todos");
   const [loading, setLoading] = useState(true);
   const [all, setAll] = useState<StudentItem[]>([]);
 
   const [search, setSearch] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  // Eliminados filtros de fecha
 
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
@@ -67,11 +98,7 @@ export default function StudentsContent() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await dataService.getStudents({
-          search,
-          fechaDesde: desde || undefined,
-          fechaHasta: hasta || undefined,
-        });
+        const res = await dataService.getStudents({ search });
         setAll(res.items ?? []);
         setPage(1);
       } catch (e) {
@@ -82,23 +109,33 @@ export default function StudentsContent() {
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [search, desde, hasta]);
+  }, [search]);
 
-  const total = all.length;
+  // Lista de coachs únicos
+  const coachs = useMemo(() => getUniqueCoaches(all), [all]);
+
+  // Alumnos filtrados por coach
+  const filtered =
+    coach === "todos"
+      ? all
+      : all.filter((s) => s.teamMembers?.some((tm) => tm.name === coach));
+
+  const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return all.slice(start, start + PAGE_SIZE);
-  }, [all, page]);
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
+
+  // Métricas del coach seleccionado
+  const coachMetrics = useMemo(() => getCoachMetrics(filtered), [filtered]);
 
   const reset = () => {
     setSearch("");
-    setDesde("");
-    setHasta("");
     setPage(1);
   };
 
-  const hasFilters = search || desde || hasta;
+  const hasFilters = search;
 
   return (
     <div className="space-y-6 p-6">
@@ -124,6 +161,65 @@ export default function StudentsContent() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
+        <div className="min-w-[200px]">
+          <Select value={coach} onValueChange={setCoach}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Filtrar por coach" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos los coachs</SelectItem>
+              {coachs.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {/* Métricas individuales del coach */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mt-4">
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl p-3 bg-gray-100">
+                <span className="text-gray-400 font-bold">👥</span>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Alumnos asignados</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {coachMetrics.total}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl p-3 bg-gray-100">
+                <span className="text-gray-400 font-bold">🎟️</span>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Tickets totales</p>
+                <p className="text-xl font-semibold text-gray-900">
+                  {coachMetrics.tickets}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl p-3 bg-gray-100">
+                <span className="text-gray-400 font-bold">📊</span>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Alumnos por fase</p>
+                <p className="text-sm text-gray-900">
+                  {Object.entries(coachMetrics.porFase)
+                    .map(([f, n]) => `${f}: ${n}`)
+                    .join("  |  ")}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -132,30 +228,6 @@ export default function StudentsContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type="date"
-              value={desde}
-              onChange={(e) => setDesde(e.target.value)}
-              className="pl-9 h-9 w-[160px] bg-background border-border/50 focus-visible:ring-1 focus-visible:ring-ring/20 transition-all"
-            />
-          </div>
-
-          <span className="text-muted-foreground text-sm">→</span>
-
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type="date"
-              value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
-              className="pl-9 h-9 w-[160px] bg-background border-border/50 focus-visible:ring-1 focus-visible:ring-ring/20 transition-all"
-            />
-          </div>
         </div>
       </div>
 

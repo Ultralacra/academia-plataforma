@@ -2,16 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService } from "@/lib/data-service";
+import {
+  fetchCoachs,
+  fetchStudentsByCoach,
+  fetchAllStudents,
+  fetchMetrics,
+  type Coach,
+  type RawClient,
+} from "./teamsApi";
 import Filters from "./Filters";
 import KPIs from "./KPIs";
 import TicketsSummary from "./TicketsSummary";
 import TicketsSeriesChart from "./TicketsSeries";
 import ResponseCharts from "./ResponseCharts";
 import ProductivityCharts from "./ProductivityCharts";
-import Charts from "./Charts";
+// import Charts from "./Charts"; // oculto para vista individual
 import CreatedMetricsContent from "./CreatedMetricsContent";
 import TicketsByTeamTable, { TicketsByTeamApiRow } from "./TicketsByTeamTable";
 import LoadingOverlay from "./LoadingOverlay";
+import StudentsByCoachTable from "./StudentsByCoachTable";
+// import AllStudentsTable from "./AllStudentsTable"; // ocultado según petición
+import CoachStudentsDistributionChart from "./CoachStudentsDistributionChart";
 
 type TicketsSeriesVM = {
   daily: Array<{ date: string; count: number }>;
@@ -45,13 +56,53 @@ function RangeBadge({
 export default function TeamsMetricsContent() {
   // filtros
   const [search, setSearch] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
+  // Inicializamos rango en el mes actual (primer día -> hoy) o desde localStorage
+  function currentMonthRange() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const first = `${y}-${String(m + 1).padStart(2, "0")}-01`;
+    const today = `${y}-${String(m + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}`;
+    return { first, today };
+  }
+  const persistedDesde =
+    typeof window !== "undefined" ? localStorage.getItem("teams_desde") : null;
+  const persistedHasta =
+    typeof window !== "undefined" ? localStorage.getItem("teams_hasta") : null;
+  const initialRange = currentMonthRange();
+  const [desde, setDesde] = useState(persistedDesde || initialRange.first);
+  const [hasta, setHasta] = useState(persistedHasta || initialRange.today);
+
+  // Persistencia de fechas cuando cambian
+  useEffect(() => {
+    try {
+      localStorage.setItem("teams_desde", desde || "");
+      localStorage.setItem("teams_hasta", hasta || "");
+    } catch {}
+  }, [desde, hasta]);
+
+  // coachs
+  const [coachs, setCoachs] = useState<Coach[]>([]);
+  const [coach, setCoach] = useState<string>(""); // codigo del coach seleccionado
+  const [coachName, setCoachName] = useState<string>(""); // nombre (para UI y filtrados)
+  const [loadingCoachs, setLoadingCoachs] = useState(false);
+  const [loadingCoachData, setLoadingCoachData] = useState(false);
+  const [students, setStudents] = useState<any[]>([]); // alumnos (legacy derivado de dataService si existiera)
+  const [tickets, setTickets] = useState<any[]>([]); // tickets completos del rango
+  const [coachStudents, setCoachStudents] = useState<RawClient[]>([]); // alumnos del coach via endpoint directo
+  const [allStudents, setAllStudents] = useState<RawClient[]>([]); // todos los alumnos (endpoint directo)
+  const [loadingCoachStudents, setLoadingCoachStudents] = useState(false);
+  const [loadingAllStudents, setLoadingAllStudents] = useState(false);
+  const [studentsChartMode, setStudentsChartMode] = useState<"estado" | "fase">(
+    "estado"
+  );
 
   // gating de consulta por fechas
-  const bothEmpty = !desde && !hasta;
-  const bothSet = Boolean(desde && hasta);
-  const shouldFetch = bothEmpty || bothSet;
+  const bothEmpty = !desde && !hasta; // ahora normalmente será false
+  const bothSet = Boolean(desde && hasta); // normalmente true
+  const shouldFetch = bothEmpty || bothSet; // mantiene lógica existente
 
   const [loading, setLoading] = useState(true);
 
@@ -125,6 +176,22 @@ export default function TeamsMetricsContent() {
     ticketsByTeam: [],
   });
 
+  // Cargar coachs una sola vez
+  useEffect(() => {
+    let alive = true;
+    setLoadingCoachs(true);
+    fetchCoachs()
+      .then((rows) => {
+        if (!alive) return;
+        setCoachs(rows);
+      })
+      .catch((e) => console.error("Error cargando coachs", e))
+      .finally(() => alive && setLoadingCoachs(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   useEffect(() => {
     let alive = true;
 
@@ -139,13 +206,12 @@ export default function TeamsMetricsContent() {
     (async () => {
       setLoading(true);
       try {
-        // 1) Métricas
-        const res = await dataService.getMetrics({
-          fechaDesde: bothEmpty ? undefined : desde,
-          fechaHasta: bothEmpty ? undefined : hasta,
-        });
-
-        // El backend envía { code, status, data: { teams: {...} } }
+        // 1) Métricas (endpoint directo)
+        const res = await fetchMetrics(
+          bothEmpty ? undefined : desde,
+          bothEmpty ? undefined : hasta
+        );
+        // Estructura esperada: { code, status, data: { teams: { ... } } }
         const root = (res?.data as any) ?? {};
         const teams = root?.teams ?? {};
         const total = root?.teams?.totals ?? root?.teams?.total ?? {};
@@ -357,6 +423,254 @@ export default function TeamsMetricsContent() {
     };
   }, [desde, hasta, search, bothEmpty, bothSet, shouldFetch]);
 
+  // Cuando se selecciona un coach, descargar (en paralelo) alumnos y tickets del rango (si no los tenemos para este rango)
+  // Consultar datos de alumnos/tickets genéricos (para fallback de métricas derivadas)
+  useEffect(() => {
+    let alive = true;
+    setLoadingCoachData(true);
+    Promise.all([
+      dataService.getStudents({
+        fechaDesde: bothEmpty ? undefined : desde,
+        fechaHasta: bothEmpty ? undefined : hasta,
+      }),
+      dataService.getTickets({
+        fechaDesde: bothEmpty ? undefined : desde,
+        fechaHasta: bothEmpty ? undefined : hasta,
+      }),
+    ])
+      .then(([studentsRes, ticketsRes]) => {
+        if (!alive) return;
+        setStudents(studentsRes.items);
+        setTickets((ticketsRes as any).items ?? []);
+      })
+      .catch((e) => console.error("Error datos base alumnos/tickets", e))
+      .finally(() => alive && setLoadingCoachData(false));
+    return () => {
+      alive = false;
+    };
+  }, [desde, hasta, bothEmpty]);
+
+  // Cargar alumnos del coach y todos los alumnos cuando cambia coach (y aún no cargados globales)
+  useEffect(() => {
+    let alive = true;
+    if (!coach) return; // sólo cuando se elige un coach (codigo)
+    setLoadingCoachStudents(true);
+    fetchStudentsByCoach(coach)
+      .then((rows) => {
+        if (!alive) return;
+        setCoachStudents(rows);
+      })
+      .catch((e) => console.error("Error alumnos del coach", e))
+      .finally(() => alive && setLoadingCoachStudents(false));
+    return () => {
+      alive = false;
+    };
+  }, [coach]);
+
+  // Sincronizar coachName cuando cambia el código seleccionado
+  useEffect(() => {
+    if (!coach) {
+      setCoachName("");
+      return;
+    }
+    const c = coachs.find((c) => c.codigo === coach);
+    setCoachName(c?.nombre ?? "");
+  }, [coach, coachs]);
+
+  // Cargar todos los alumnos (una vez, o si quieres podrías ligarlo al rango)
+  useEffect(() => {
+    if (allStudents.length > 0) return;
+    let alive = true;
+    setLoadingAllStudents(true);
+    fetchAllStudents()
+      .then((rows) => {
+        if (!alive) return;
+        setAllStudents(rows);
+      })
+      .catch((e) => console.error("Error todos los alumnos", e))
+      .finally(() => alive && setLoadingAllStudents(false));
+    return () => {
+      alive = false;
+    };
+  }, [allStudents.length]);
+
+  // Derivar métricas filtradas por coach si hay selección
+  const filteredVm = useMemo(() => {
+    if (!coach) return vm;
+
+    // Filtrar arrays por coach
+    // Filtramos por nombre si podemos resolverlo
+    const targetName = coachName || coach;
+    const baseRespByCoach = vm.respByCoach.filter(
+      (r) => r.coach === targetName
+    );
+    const prodByCoach = vm.prodByCoach.filter((r) => r.coach === targetName);
+    const prodByCoachV2 = vm.prodByCoachV2.filter(
+      (r) => r.coach === targetName
+    );
+    const createdBlock = vm.createdBlock
+      ? {
+          ...vm.createdBlock,
+          rows: vm.createdBlock.rows.filter(
+            (r) => r.nombre_coach === targetName
+          ),
+        }
+      : null;
+
+    // Alumnos del coach (por name match en teamMembers)
+    // Intentar usar endpoint directo; si está vacío, fallback al heurístico
+    const studentsOfCoach = coachStudents.length
+      ? coachStudents.map((r) => ({
+          id: r.id,
+          name: r.nombre,
+          code: r.codigo ?? null,
+          state: r.estado ?? r.estado ?? null,
+          stage: r.etapa ?? null,
+        }))
+      : students.filter((al) =>
+          Array.isArray(al.teamMembers)
+            ? al.teamMembers.some(
+                (m: any) => m.name?.toLowerCase() === coach.toLowerCase()
+              )
+            : false
+        );
+
+    // Tickets del coach: aquellos cuyo alumno pertenece a studentsOfCoach
+    const studentNames = new Set(
+      studentsOfCoach.map((s: any) => s.name?.toLowerCase())
+    );
+    const ticketsOfCoach = tickets.filter((t: any) =>
+      t.alumno_nombre
+        ? studentNames.has(String(t.alumno_nombre).toLowerCase())
+        : false
+    );
+
+    // Agrupar tickets para series (daily/weekly/monthly) sólo del coach
+    const dailyMap = new Map<string, number>();
+    const weeklyMap = new Map<string, number>();
+    const monthlyMap = new Map<string, number>();
+    ticketsOfCoach.forEach((tk: any) => {
+      const d = new Date(tk.creacion ?? tk.created_at ?? tk.createdAt);
+      if (isNaN(d.getTime())) return;
+      const dayKey = d.toISOString().slice(0, 10); // YYYY-MM-DD
+      dailyMap.set(dayKey, (dailyMap.get(dayKey) ?? 0) + 1);
+      // weekKey: ISO week Monday-based (simplificado: year-weekNumber)
+      const tmp = new Date(
+        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+      );
+      const dayNum = (tmp.getUTCDay() + 6) % 7; // 0=lunes
+      tmp.setUTCDate(tmp.getUTCDate() - dayNum);
+      const weekKey = `${tmp.getUTCFullYear()}-W${String(
+        Math.ceil((tmp.getUTCMonth() * 32 + tmp.getUTCDate()) / 7)
+      )}`;
+      weeklyMap.set(weekKey, (weeklyMap.get(weekKey) ?? 0) + 1);
+      const monthKey = `${d.getUTCFullYear()}-${String(
+        d.getUTCMonth() + 1
+      ).padStart(2, "0")}`;
+      monthlyMap.set(monthKey, (monthlyMap.get(monthKey) ?? 0) + 1);
+    });
+
+    const ticketsSeries: TicketsSeriesVM = {
+      daily: Array.from(dailyMap, ([date, count]) => ({ date, count })).sort(
+        (a, b) => a.date.localeCompare(b.date)
+      ),
+      weekly: Array.from(weeklyMap, ([week, count]) => ({ week, count })).sort(
+        (a, b) => a.week.localeCompare(b.week)
+      ),
+      monthly: Array.from(monthlyMap, ([month, count]) => ({
+        month,
+        count,
+      })).sort((a, b) => a.month.localeCompare(b.month)),
+    };
+
+    // ticketsPer derivado (último día, últimos 7 y 30 días)
+    const now = new Date();
+    const dayCut = new Date(now);
+    dayCut.setUTCDate(now.getUTCDate() - 0);
+    const weekCut = new Date(now);
+    weekCut.setUTCDate(now.getUTCDate() - 6);
+    const monthCut = new Date(now);
+    monthCut.setUTCDate(now.getUTCDate() - 29);
+    let dayCount = 0,
+      weekCount = 0,
+      monthCount = 0;
+    ticketsOfCoach.forEach((tk: any) => {
+      const d = new Date(tk.creacion ?? tk.created_at ?? tk.createdAt);
+      if (isNaN(d.getTime())) return;
+      if (d.toISOString().slice(0, 10) === now.toISOString().slice(0, 10))
+        dayCount++;
+      if (d >= weekCut) weekCount++;
+      if (d >= monthCut) monthCount++;
+    });
+    const ticketsPer = { day: dayCount, week: weekCount, month: monthCount };
+
+    // alumnosPorEquipo: un solo coach
+    const alumnosPorEquipo = [
+      { name: targetName, alumnos: studentsOfCoach.length },
+    ];
+    // areasCount agrupando área de alumnos del coach (si la tuviera)
+    const areaMap = new Map<string, number>();
+    coachStudents.forEach((s) => {
+      const area = (s as any).area ? String((s as any).area) : "Sin área";
+      areaMap.set(area, (areaMap.get(area) ?? 0) + 1);
+    });
+    const areasCount = Array.from(areaMap, ([area, count]) => ({
+      area,
+      count,
+    }));
+
+    // Totales derivados
+    const respEntry = baseRespByCoach[0];
+    const createdRow = createdBlock?.rows?.[0];
+    const totals = {
+      ...vm.totals,
+      teams: createdBlock
+        ? new Set(createdBlock.rows.map((r) => r.codigo_equipo)).size || 1
+        : 1,
+      studentsTotal: studentsOfCoach.length,
+      ticketsTotal:
+        createdRow?.tickets != null
+          ? Number(createdRow.tickets) || ticketsOfCoach.length
+          : ticketsOfCoach.length,
+      avgResponseMin:
+        createdRow?.avgResponse != null
+          ? Number(createdRow.avgResponse) || 0
+          : respEntry
+          ? respEntry.response ?? vm.totals.avgResponseMin
+          : vm.totals.avgResponseMin,
+      avgResolutionMin:
+        createdRow?.avgResolution != null
+          ? Number(createdRow.avgResolution) || 0
+          : respEntry
+          ? respEntry.resolution ?? vm.totals.avgResolutionMin
+          : vm.totals.avgResolutionMin,
+    } as typeof vm.totals;
+
+    return {
+      ...vm,
+      totals,
+      respByCoach: baseRespByCoach.length
+        ? baseRespByCoach
+        : createdRow
+        ? [
+            {
+              coach: targetName,
+              tickets: Number(createdRow.tickets ?? ticketsOfCoach.length) || 0,
+              response: Number(createdRow.avgResponse ?? 0) || 0,
+              resolution: Number(createdRow.avgResolution ?? 0) || 0,
+            },
+          ]
+        : baseRespByCoach,
+      prodByCoach,
+      prodByCoachV2,
+      createdBlock,
+      ticketsSeries,
+      ticketsPer,
+      alumnosPorEquipo,
+      areasCount,
+    };
+  }, [coach, vm, students, tickets]);
+
   // priorizamos prodByCoachV2 para el gráfico “Tickets por coach”.
   const rowsForProductivity = useMemo(
     () =>
@@ -371,10 +685,70 @@ export default function TeamsMetricsContent() {
     [vm.prodByCoachV2, vm.prodByCoach]
   );
 
+  const displayVm = filteredVm; // alias para claridad
+
+  // Enriquecer alumnos del coach con estado y etapa provenientes del dataset global (allStudents)
+  const coachStudentsEnriched = useMemo(() => {
+    if (!coachStudents.length) return [] as typeof coachStudents;
+    if (!allStudents.length) return coachStudents; // aún no cargado global
+
+    // Crear índice por código y por nombre (fallback) para búsquedas rápidas
+    const byCode = new Map<string, RawClient>();
+    const byName = new Map<string, RawClient>();
+    for (const s of allStudents) {
+      if (s.codigo) byCode.set(String(s.codigo).toLowerCase(), s);
+      byName.set(s.nombre.toLowerCase(), s);
+    }
+
+    return coachStudents.map((c) => {
+      const codeKey = c.codigo ? String(c.codigo).toLowerCase() : null;
+      const match =
+        (codeKey && byCode.get(codeKey)) || byName.get(c.nombre.toLowerCase());
+      if (!match) return c;
+      return {
+        ...c,
+        estado: match.estado ?? c.estado ?? null,
+        etapa: match.etapa ?? c.etapa ?? null,
+      } as RawClient;
+    });
+  }, [coachStudents, allStudents]);
+
+  // StatusDist para KPIs extendidos
+  const coachStatusDist = useMemo(() => {
+    if (!coach) return null;
+    const row = displayVm.createdBlock?.rows?.find(
+      (r) => r.nombre_coach === (coachName || coach)
+    );
+    if (!row?.statusDist) return null;
+    const abiertos = row.statusDist.Abiertos ?? 0;
+    const enProceso =
+      row.statusDist["En Proceso"] ?? row.statusDist["En_Proceso"] ?? 0;
+    const cerrados = row.statusDist.Cerrados ?? 0;
+    const total = abiertos + enProceso + cerrados;
+    const tasa = total > 0 ? cerrados / total : null;
+    return { abiertos, enProceso, cerrados, tasa };
+  }, [coach, coachName, displayVm.createdBlock]);
+
+  const SkeletonBlock = ({ h }: { h: number }) => (
+    <div
+      className="w-full rounded-2xl border border-gray-200 bg-gray-50 animate-pulse"
+      style={{ height: h }}
+    />
+  );
+
   return (
     <div className="space-y-6 relative">
-      {/* loading overlay a pantalla completa del bloque */}
-      <LoadingOverlay active={loading} label="Cargando métricas…" />
+      {/* Overlay deshabilitado en favor de skeletons */}
+      {false && (
+        <LoadingOverlay
+          active={loading || loadingCoachData}
+          label={
+            loadingCoachData
+              ? "Cargando datos del coach…"
+              : "Cargando métricas…"
+          }
+        />
+      )}
 
       {/* aviso si sólo hay una fecha */}
       {!bothEmpty && !bothSet && (
@@ -383,21 +757,63 @@ export default function TeamsMetricsContent() {
           fechas.
         </div>
       )}
+      {bothSet && (
+        <div className="text-[11px] text-gray-500">
+          Rango activo: {desde} → {hasta}
+        </div>
+      )}
 
-      <Filters
-        search={search}
-        onSearch={setSearch}
-        desde={desde}
-        hasta={hasta}
-        onDesde={setDesde}
-        onHasta={setHasta}
-      />
+      {/* Select de coachs */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="text-xs font-medium text-muted-foreground">
+            Coach:
+          </label>
+          <select
+            className="h-8 rounded-md border px-2 text-sm bg-white focus:outline-none"
+            value={coach}
+            onChange={(e) => setCoach(e.target.value)}
+            disabled={loadingCoachs}
+          >
+            <option value="">Todos</option>
+            {coachs.map((c) => (
+              <option
+                key={c.id}
+                value={c.codigo}
+                onClick={() => {
+                  /* fallback */
+                }}
+              >
+                {c.nombre}
+              </option>
+            ))}
+          </select>
+          {loadingCoachs && (
+            <span className="text-xs text-muted-foreground">
+              Cargando coachs…
+            </span>
+          )}
+          {coach && !loadingCoachData && (
+            <span className="text-xs text-muted-foreground">
+              Filtrando métricas para <b>{coachName || coach}</b>
+            </span>
+          )}
+        </div>
+        <Filters
+          search={search}
+          onSearch={setSearch}
+          desde={desde}
+          hasta={hasta}
+          onDesde={setDesde}
+          onHasta={setHasta}
+        />
+      </div>
 
       <div className="flex items-center justify-between">
         <RangeBadge
-          from={vm.meta?.range?.from ?? (desde || null)}
-          to={vm.meta?.range?.to ?? (hasta || null)}
-          fetchedAt={vm.meta?.fetchedAt}
+          from={displayVm.meta?.range?.from ?? (desde || null)}
+          to={displayVm.meta?.range?.to ?? (hasta || null)}
+          fetchedAt={displayVm.meta?.fetchedAt}
         />
         {loading && (
           <span className="text-xs text-muted-foreground">
@@ -406,50 +822,107 @@ export default function TeamsMetricsContent() {
         )}
       </div>
 
-      {!loading && vm.ticketsSeries.daily.length === 0 && (
+      {!loading && displayVm.ticketsSeries.daily.length === 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          No hay datos para el rango seleccionado ({vm.meta?.range?.from ?? "—"}{" "}
-          → {vm.meta?.range?.to ?? "—"}). Ajusta las fechas o intenta otro
+          No hay datos para el rango seleccionado (
+          {displayVm.meta?.range?.from ?? "—"} →{" "}
+          {displayVm.meta?.range?.to ?? "—"}). Ajusta las fechas o intenta otro
           filtro.
         </div>
       )}
 
       <KPIs
-        totalEquipos={vm.totals.teams}
-        totalAlumnos={vm.totals.studentsTotal}
-        areas={new Set(vm.areasCount.map((a) => a.area)).size}
+        totalAlumnos={displayVm.totals.studentsTotal}
+        areaCoach={
+          coach ? (coachStudentsEnriched[0] as any)?.area ?? null : null
+        }
+        abiertos={coachStatusDist?.abiertos ?? null}
+        enProceso={coachStatusDist?.enProceso ?? null}
+        cerrados={coachStatusDist?.cerrados ?? null}
+        tasaResolucion={coachStatusDist?.tasa ?? null}
+        loading={loading}
       />
 
-      <TicketsSummary
-        totals={{
-          ticketsTotal: vm.totals.ticketsTotal,
-          avgResponseMin: vm.totals.avgResponseMin,
-          avgResolutionMin: vm.totals.avgResolutionMin,
-        }}
-        per={vm.ticketsPer}
-      />
-
-      <TicketsSeriesChart series={vm.ticketsSeries} />
-      <ResponseCharts byCoach={vm.respByCoach} byTeam={vm.respByTeam} />
-
-      <ProductivityCharts rows={rowsForProductivity} />
-
-      <Charts
-        alumnosPorEquipo={vm.alumnosPorEquipo}
-        areasCount={vm.areasCount}
-      />
-
-      {vm.ticketsByTeam.length > 0 && (
-        <TicketsByTeamTable rows={vm.ticketsByTeam} loading={loading} />
+      {loading ? (
+        <SkeletonBlock h={180} />
+      ) : (
+        <TicketsSummary
+          totals={{
+            ticketsTotal: displayVm.totals.ticketsTotal,
+            avgResponseMin: displayVm.totals.avgResponseMin,
+            avgResolutionMin: displayVm.totals.avgResolutionMin,
+          }}
+          per={displayVm.ticketsPer}
+        />
       )}
 
-      {vm.createdBlock && (
-        <CreatedMetricsContent
-          initialRows={vm.createdBlock.rows}
-          prodByCoachV2={vm.prodByCoachV2}
-          totalTicketsForStatus={
-            vm.createdBlock?.totals?.tickets ?? vm.totals.ticketsTotal
-          }
+      {loading ? (
+        <SkeletonBlock h={320} />
+      ) : (
+        <TicketsSeriesChart series={displayVm.ticketsSeries} />
+      )}
+      {loading ? (
+        <SkeletonBlock h={320} />
+      ) : (
+        <ResponseCharts
+          byCoach={displayVm.respByCoach}
+          byTeam={displayVm.respByTeam}
+          showTeamChart={false}
+        />
+      )}
+
+      {loading ? (
+        <SkeletonBlock h={340} />
+      ) : (
+        <ProductivityCharts
+          rows={rowsForProductivity.filter(
+            (r) => r.coach === (coachName || coach)
+          )}
+          forceLockSessions={true}
+          forceLockHours={true}
+          hideTickets={true}
+        />
+      )}
+
+      {/* Tabla de tickets por equipo ocultada a petición */}
+      {false && displayVm.ticketsByTeam.length > 0 && (
+        <TicketsByTeamTable rows={displayVm.ticketsByTeam} loading={loading} />
+      )}
+
+      {/* Gráfico "Distribución de estatus de tickets" eliminado temporalmente a petición */}
+
+      {coach && !loading && (
+        <StudentsByCoachTable
+          coach={coachName || coach}
+          students={coachStudentsEnriched.map((r) => ({
+            id: r.id,
+            name: r.nombre, // ya normalizado del endpoint alumno_nombre
+            code: r.codigo ?? null, // id_alumno
+            state: (r as any).estado ?? null,
+            stage: r.etapa ?? null,
+            lastActivity: (r as any).ultima_actividad ?? null,
+            inactivityDays: (r as any).inactividad ?? null,
+            ticketsCount: (r as any).tickets ?? null,
+          }))}
+          loading={loadingCoachStudents}
+        />
+      )}
+
+      {coach && !loading && (
+        <CoachStudentsDistributionChart
+          students={coachStudentsEnriched.map((r) => ({
+            id: r.id,
+            name: r.nombre,
+            code: r.codigo ?? null,
+            state: (r as any).estado ?? null,
+            stage: r.etapa ?? null,
+            lastActivity: (r as any).ultima_actividad ?? null,
+            inactivityDays: (r as any).inactividad ?? null,
+            ticketsCount: (r as any).tickets ?? null,
+          }))}
+          mode={studentsChartMode}
+          onModeChange={setStudentsChartMode}
+          coachName={coachName || coach}
         />
       )}
     </div>

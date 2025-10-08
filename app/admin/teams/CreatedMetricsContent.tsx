@@ -61,9 +61,9 @@ export default function CreatedMetricsContent({
   const COLORS = ["#f59e0b", "#3b82f6", "#22c55e"];
 
   return (
-    <div className="rounded-2xl border bg-white dark:bg-gray-900">
-      <div className="px-6 py-5 border-b dark:border-gray-800">
-        <h3 className="text-base font-bold">
+    <div className="rounded-2xl border border-gray-200 bg-white">
+      <div className="px-6 py-5 border-b border-gray-100 bg-white">
+        <h3 className="text-base font-bold text-gray-900">
           Distribución de estatus de tickets
         </h3>
         <p className="text-sm text-gray-500">

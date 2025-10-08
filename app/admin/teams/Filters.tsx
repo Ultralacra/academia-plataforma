@@ -25,7 +25,7 @@ export default function Filters({
       initial={{ opacity: 0, y: -20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
-      className="rounded-2xl border border-gray-200/80 dark:border-gray-800/80 bg-white dark:bg-gray-900 shadow-xl"
+      className="rounded-2xl border border-gray-200 bg-white"
     >
       <div className="flex items-center justify-between border-b border-gray-100 dark:border-gray-800 px-6 py-5 bg-gradient-to-r from-gray-50/50 to-transparent dark:from-gray-800/30">
         <div className="flex items-center gap-2">
@@ -54,6 +54,8 @@ export default function Filters({
             />
           </div>
         </div>
+
+        {/* Month picker eliminado a solicitud */}
 
         {/* Date from */}
         <div className="md:col-span-3">

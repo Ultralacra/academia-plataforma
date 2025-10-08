@@ -59,15 +59,30 @@ export default function StudentManagement() {
     [allItems]
   );
 
+  // debug: print sample data when items or filters change
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    console.debug("[students] items", allItems?.slice(0, 5));
+    console.debug("[students] stateOptions", stateOptions);
+    console.debug("[students] stageOptions", stageOptions);
+    console.debug("[students] statesFilter", statesFilter);
+    console.debug("[students] stagesFilter", stagesFilter);
+  }, [allItems, stateOptions, stageOptions, statesFilter, stagesFilter]);
+
   const filtered = useMemo(() => {
+    // normalize filters and item fields to avoid mismatches due to case/whitespace
+    const normStates = statesFilter.map((s) => s?.trim().toLowerCase());
+    const normStages = stagesFilter.map((s) => s?.trim().toLowerCase());
+
     return (allItems ?? []).filter((i) => {
+      const istate = (i.state ?? "").toString().trim().toLowerCase();
+      const istage = (i.stage ?? "").toString().trim().toLowerCase();
+
       const okState =
-        statesFilter.length === 0 ||
-        (i.state ? statesFilter.includes(i.state) : false);
+        normStates.length === 0 || (istate && normStates.includes(istate));
 
       const okStage =
-        stagesFilter.length === 0 ||
-        (i.stage ? stagesFilter.includes(i.stage) : false);
+        normStages.length === 0 || (istage && normStages.includes(istage));
 
       const okLastFrom = !lastFrom || (i.lastActivity ?? "") >= lastFrom;
       const okLastTo = !lastTo || (i.lastActivity ?? "") <= lastTo;
