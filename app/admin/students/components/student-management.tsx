@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService, type ClientItem } from "@/lib/data-service";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import ApiFilters from "./ApiFilters";
 import ClientFilters from "./ClientFilters";
@@ -22,8 +21,7 @@ export default function StudentManagement() {
   const [loading, setLoading] = useState(true);
   const [allItems, setAllItems] = useState<ClientItem[]>([]);
   const [search, setSearch] = useState("");
-  const [fechaDesde, setFechaDesde] = useState<string>("");
-  const [fechaHasta, setFechaHasta] = useState<string>("");
+  // notas: filtros por mes/fechas eliminados de la UI; solo busqueda por texto
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -31,8 +29,6 @@ export default function StudentManagement() {
       try {
         const res = await dataService.getClients({
           search,
-          fechaDesde: fechaDesde || undefined,
-          fechaHasta: fechaHasta || undefined,
         });
         setAllItems(res.items ?? []);
         setPage(1);
@@ -44,7 +40,7 @@ export default function StudentManagement() {
       }
     }, 400);
     return () => clearTimeout(t);
-  }, [search, fechaDesde, fechaHasta]);
+  }, [search]);
 
   // ============================ Client filters
   const [statesFilter, setStatesFilter] = useState<string[]>([]);
@@ -208,10 +204,9 @@ export default function StudentManagement() {
   };
 
   // ============================ Reset
+  // note: reset button removed per UX request; keep resetAll in case needed later
   const resetAll = () => {
     setSearch("");
-    setFechaDesde("");
-    setFechaHasta("");
     setStatesFilter([]);
     setStagesFilter([]);
     setLastFrom("");
@@ -227,58 +222,22 @@ export default function StudentManagement() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Estudiantes</h2>
-          <p className="text-muted-foreground">
-            Se consultan hasta 1000 resultados y se pagina localmente (25 por
-            página).
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={resetAll}>
-            Reiniciar
-          </Button>
         </div>
       </div>
 
-      <ApiFilters
-        search={search}
-        setSearch={setSearch}
-        fechaDesde={fechaDesde}
-        setFechaDesde={setFechaDesde}
-        fechaHasta={fechaHasta}
-        setFechaHasta={setFechaHasta}
-      />
+      <ApiFilters search={search} setSearch={setSearch} />
 
       <ClientFilters
         stateOptions={stateOptions}
         stageOptions={stageOptions}
         statesFilter={statesFilter}
-        setStatesFilter={(v) => {
+        setStatesFilter={(v: string[]) => {
           setStatesFilter(v);
           setPage(1);
         }}
         stagesFilter={stagesFilter}
-        setStagesFilter={(v) => {
+        setStagesFilter={(v: string[]) => {
           setStagesFilter(v);
-          setPage(1);
-        }}
-        lastFrom={lastFrom}
-        setLastFrom={(v) => {
-          setLastFrom(v);
-          setPage(1);
-        }}
-        lastTo={lastTo}
-        setLastTo={(v) => {
-          setLastTo(v);
-          setPage(1);
-        }}
-        inactFrom={inactFrom}
-        setInactFrom={(v) => {
-          setInactFrom(v);
-          setPage(1);
-        }}
-        inactTo={inactTo}
-        setInactTo={(v) => {
-          setInactTo(v);
           setPage(1);
         }}
       />

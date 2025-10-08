@@ -19,14 +19,6 @@ export default function ClientFilters(props: {
   setStatesFilter: (v: string[]) => void;
   stagesFilter: string[];
   setStagesFilter: (v: string[]) => void;
-  lastFrom: string;
-  setLastFrom: (v: string) => void;
-  lastTo: string;
-  setLastTo: (v: string) => void;
-  inactFrom: string;
-  setInactFrom: (v: string) => void;
-  inactTo: string;
-  setInactTo: (v: string) => void;
   onAnyChange?: () => void;
 }) {
   const {
@@ -36,28 +28,14 @@ export default function ClientFilters(props: {
     setStatesFilter,
     stagesFilter,
     setStagesFilter,
-    lastFrom,
-    setLastFrom,
-    lastTo,
-    setLastTo,
-    inactFrom,
-    setInactFrom,
-    inactTo,
-    setInactTo,
     onAnyChange,
   } = props;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Refinar resultados</CardTitle>
-        <CardDescription>
-          Aplicados sobre los resultados cargados
-        </CardDescription>
-      </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-          <div className="md:col-span-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="md:col-span-1">
             <label className="text-xs text-muted-foreground">Estados</label>
             <MultiSelect
               options={stateOptions}
@@ -68,6 +46,7 @@ export default function ClientFilters(props: {
               }}
               placeholder="Seleccionar estados"
             />
+            {/* badges directly under select */}
             {!!statesFilter.length && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {statesFilter.map((s) => (
@@ -92,7 +71,7 @@ export default function ClientFilters(props: {
             )}
           </div>
 
-          <div className="md:col-span-2">
+          <div className="md:col-span-1">
             <label className="text-xs text-muted-foreground">Etapas</label>
             <MultiSelect
               options={stageOptions}
@@ -103,6 +82,7 @@ export default function ClientFilters(props: {
               }}
               placeholder="Seleccionar etapas"
             />
+            {/* badges directly under select */}
             {!!stagesFilter.length && (
               <div className="mt-2 flex flex-wrap gap-1">
                 {stagesFilter.map((s) => (
@@ -125,62 +105,6 @@ export default function ClientFilters(props: {
                 ))}
               </div>
             )}
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground">
-              Últ. actividad (desde)
-            </label>
-            <Input
-              type="date"
-              value={lastFrom}
-              onChange={(e) => {
-                setLastFrom(e.target.value);
-                onAnyChange?.();
-              }}
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">
-              Últ. actividad (hasta)
-            </label>
-            <Input
-              type="date"
-              value={lastTo}
-              onChange={(e) => {
-                setLastTo(e.target.value);
-                onAnyChange?.();
-              }}
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-muted-foreground">
-              Inactividad mín. (d)
-            </label>
-            <Input
-              type="number"
-              placeholder="0"
-              value={inactFrom}
-              onChange={(e) => {
-                setInactFrom(e.target.value);
-                onAnyChange?.();
-              }}
-            />
-          </div>
-          <div>
-            <label className="text-xs text-muted-foreground">
-              Inactividad máx. (d)
-            </label>
-            <Input
-              type="number"
-              placeholder="100"
-              value={inactTo}
-              onChange={(e) => {
-                setInactTo(e.target.value);
-                onAnyChange?.();
-              }}
-            />
           </div>
         </div>
       </CardContent>

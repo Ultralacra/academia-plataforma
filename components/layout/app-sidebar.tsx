@@ -55,7 +55,7 @@ const adminItems: MenuItem[] = [
     icon: BarChart3,
     children: [
       { title: "Alumnos", url: "/admin/students", icon: GraduationCap },
-      { title: "Equipos", url: "/admin/teams", icon: Users },
+      { title: "Coachs", url: "/admin/teams", icon: Users },
       { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
     ],
   },
