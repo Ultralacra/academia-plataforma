@@ -28,22 +28,107 @@ export default function StudentsByCoachTable({
       ? "—"
       : Number(n).toLocaleString("es-ES");
 
+  // Componente de chips de filtro reutilizable
+  function FilterGroup({
+    label,
+    items,
+    value,
+    onChange,
+  }: {
+    label: string;
+    items: string[];
+    value: string | null;
+    onChange: (val: string) => void;
+  }) {
+    if (!items.length) return null;
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          {label}
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((it) => {
+            const active = value === it;
+            return (
+              <button
+                key={it}
+                onClick={() => onChange(it)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition border backdrop-blur-sm ${
+                  active
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                    : "bg-white/70 text-gray-700 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {it}
+              </button>
+            );
+          })}
+          {value && (
+            <button
+              onClick={() => onChange("")}
+              className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-600 hover:bg-gray-200"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Derivar valores únicos de estado y fase
+  const uniqueStates = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          students
+            .map((s) => (s.state && s.state.trim() ? s.state.trim() : ""))
+            .filter(Boolean)
+        )
+      ).sort(),
+    [students]
+  );
+  const uniqueStages = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          students
+            .map((s) => (s.stage && s.stage.trim() ? s.stage.trim() : ""))
+            .filter(Boolean)
+        )
+      ).sort(),
+    [students]
+  );
+
+  const [filterState, setFilterState] = useState<string | null>(null);
+  const [filterStage, setFilterStage] = useState<string | null>(null);
+
+  const filtered = useMemo(
+    () =>
+      students.filter((s) => {
+        if (filterState && s.state !== filterState) return false;
+        if (filterStage && s.stage !== filterStage) return false;
+        return true;
+      }),
+    [students, filterState, filterStage]
+  );
+
   // Paginación
   const PAGE_SIZE = 20;
   const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(students.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = useMemo(
-    () => students.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
-    [students, page]
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page]
   );
   // Reset page on students change
   React.useEffect(() => {
     setPage(1);
-  }, [students]);
+  }, [students, filterState, filterStage]);
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white">
-      <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+      <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h3 className="text-base font-bold text-gray-900">
             Alumnos de {coach}
@@ -52,10 +137,30 @@ export default function StudentsByCoachTable({
             Listado de alumnos asociados al coach y su estado actual
           </p>
         </div>
-        <div className="text-xs text-muted-foreground">
-          {loading
-            ? "Cargando…"
-            : `${students.length} alumnos • página ${page} / ${totalPages}`}
+        <div className="flex flex-col gap-2 w-full md:w-auto">
+          <div className="flex flex-wrap gap-2">
+            <FilterGroup
+              label="Estado"
+              items={uniqueStates}
+              value={filterState}
+              onChange={(v: string) =>
+                setFilterState(v ? (v === filterState ? null : v) : null)
+              }
+            />
+            <FilterGroup
+              label="Fase"
+              items={uniqueStages}
+              value={filterStage}
+              onChange={(v: string) =>
+                setFilterStage(v ? (v === filterStage ? null : v) : null)
+              }
+            />
+          </div>
+          <div className="text-xs text-gray-500">
+            {loading
+              ? "Cargando…"
+              : `${filtered.length} alumnos filtrados • página ${page} / ${totalPages}`}
+          </div>
         </div>
       </div>
       <div className="overflow-x-auto">
@@ -83,7 +188,7 @@ export default function StudentsByCoachTable({
                 </td>
               </tr>
             )}
-            {!loading && students.length === 0 && (
+            {!loading && filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-3 py-4 text-center text-gray-500">
                   No se encontraron alumnos asociados a este coach.

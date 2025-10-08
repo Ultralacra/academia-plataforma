@@ -55,7 +55,7 @@ function RangeBadge({
 
 export default function TeamsMetricsContent() {
   // filtros
-  const [search, setSearch] = useState("");
+  // Eliminado search (filtro de texto) para simplificar UI
   // Inicializamos rango en el mes actual (primer día -> hoy) o desde localStorage
   function currentMonthRange() {
     const now = new Date();
@@ -361,16 +361,7 @@ export default function TeamsMetricsContent() {
           : [];
 
         // Filtrado por búsqueda (etiqueta, firma, miembros, clientes)
-        const q = search.trim().toLowerCase();
-        if (q) {
-          ticketsByTeamApi = ticketsByTeamApi.filter(
-            (r) =>
-              r.etiqueta.toLowerCase().includes(q) ||
-              r.team_signature.toLowerCase().includes(q) ||
-              r.miembros.toLowerCase().includes(q) ||
-              r.clientes.toLowerCase().includes(q)
-          );
-        }
+        // Filtro de búsqueda eliminado
 
         if (!alive) return;
         setVm({
@@ -421,7 +412,7 @@ export default function TeamsMetricsContent() {
     return () => {
       alive = false;
     };
-  }, [desde, hasta, search, bothEmpty, bothSet, shouldFetch]);
+  }, [desde, hasta, bothEmpty, bothSet, shouldFetch]);
 
   // Cuando se selecciona un coach, descargar (en paralelo) alumnos y tickets del rango (si no los tenemos para este rango)
   // Consultar datos de alumnos/tickets genéricos (para fallback de métricas derivadas)
@@ -476,6 +467,17 @@ export default function TeamsMetricsContent() {
     const c = coachs.find((c) => c.codigo === coach);
     setCoachName(c?.nombre ?? "");
   }, [coach, coachs]);
+
+  // Si al seleccionar un coach falta alguna fecha, auto-restablecer al mes actual
+  useEffect(() => {
+    if (!coach) return; // sólo aplica cuando hay selección
+    if (desde && hasta) return; // ya están ambas
+    const { first, today } = currentMonthRange();
+    // Sólo setea las que falten o ambas si están vacías
+    if (!desde) setDesde(first);
+    if (!hasta) setHasta(today);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coach]);
 
   // Cargar todos los alumnos (una vez, o si quieres podrías ligarlo al rango)
   useEffect(() => {
@@ -731,9 +733,14 @@ export default function TeamsMetricsContent() {
 
   const SkeletonBlock = ({ h }: { h: number }) => (
     <div
-      className="w-full rounded-2xl border border-gray-200 bg-gray-50 animate-pulse"
+      className="w-full rounded-2xl border border-gray-200 bg-gray-50 relative overflow-hidden"
       style={{ height: h }}
-    />
+    >
+      <div className="absolute inset-0 animate-pulse" />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="h-8 w-8 rounded-full border-2 border-blue-400 border-t-transparent animate-spin" />
+      </div>
+    </div>
   );
 
   return (
@@ -763,51 +770,20 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* Select de coachs */}
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <label className="text-xs font-medium text-muted-foreground">
-            Coach:
-          </label>
-          <select
-            className="h-8 rounded-md border px-2 text-sm bg-white focus:outline-none"
-            value={coach}
-            onChange={(e) => setCoach(e.target.value)}
-            disabled={loadingCoachs}
-          >
-            <option value="">Todos</option>
-            {coachs.map((c) => (
-              <option
-                key={c.id}
-                value={c.codigo}
-                onClick={() => {
-                  /* fallback */
-                }}
-              >
-                {c.nombre}
-              </option>
-            ))}
-          </select>
-          {loadingCoachs && (
-            <span className="text-xs text-muted-foreground">
-              Cargando coachs…
-            </span>
-          )}
-          {coach && !loadingCoachData && (
-            <span className="text-xs text-muted-foreground">
-              Filtrando métricas para <b>{coachName || coach}</b>
-            </span>
-          )}
-        </div>
-        <Filters
-          search={search}
-          onSearch={setSearch}
-          desde={desde}
-          hasta={hasta}
-          onDesde={setDesde}
-          onHasta={setHasta}
-        />
-      </div>
+      <Filters
+        coaches={coachs.map((c) => ({
+          id: c.id,
+          codigo: c.codigo,
+          nombre: c.nombre,
+        }))}
+        coach={coach}
+        loadingCoaches={loadingCoachs}
+        onCoach={setCoach}
+        desde={desde}
+        hasta={hasta}
+        onDesde={setDesde}
+        onHasta={setHasta}
+      />
 
       <div className="flex items-center justify-between">
         <RangeBadge
@@ -871,18 +847,8 @@ export default function TeamsMetricsContent() {
         />
       )}
 
-      {loading ? (
-        <SkeletonBlock h={340} />
-      ) : (
-        <ProductivityCharts
-          rows={rowsForProductivity.filter(
-            (r) => r.coach === (coachName || coach)
-          )}
-          forceLockSessions={true}
-          forceLockHours={true}
-          hideTickets={true}
-        />
-      )}
+      {/* Bloque de productividad (sesiones / tiempo invertido) ocultado temporalmente a petición */}
+      {/* Para reactivar, restaurar el render de <ProductivityCharts /> */}
 
       {/* Tabla de tickets por equipo ocultada a petición */}
       {false && displayVm.ticketsByTeam.length > 0 && (
