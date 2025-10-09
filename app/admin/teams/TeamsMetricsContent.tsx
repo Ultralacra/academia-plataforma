@@ -1036,6 +1036,7 @@ export default function TeamsMetricsContent() {
             mode={studentsChartMode}
             onModeChange={setStudentsChartMode}
             coachName={coachName || coach}
+            showToggle={false}
           />
         </div>
       )}

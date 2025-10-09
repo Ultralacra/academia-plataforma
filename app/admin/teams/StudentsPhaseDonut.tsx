@@ -1,15 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   PieChart,
   Pie,
   Cell,
   ResponsiveContainer,
-  Tooltip as RTooltip,
   Label,
+  Tooltip as RTooltip,
 } from "recharts";
-import { motion } from "framer-motion";
 
 type StudentRow = {
   id: number | string;
@@ -29,7 +28,7 @@ export default function StudentsPhaseDonut({
   coachName: string;
   title?: string;
 }) {
-  const data = useMemo(() => {
+  const agg = useMemo(() => {
     const map = new Map<string, number>();
     for (const s of students) {
       const raw = (s as any).stage ?? (s as any).etapa;
@@ -41,53 +40,55 @@ export default function StudentsPhaseDonut({
       .sort((a, b) => b.value - a.value);
   }, [students]);
 
+  // Paleta limpia y consistente
   const COLORS = [
-    "#ef4444",
-    "#3b82f6",
-    "#06b6d4",
-    "#10b981",
-    "#f59e0b",
-    "#8b5cf6",
-    "#14b8a6",
-    "#f43f5e",
-    "#84cc16",
+    "#6366F1", // indigo-500
+    "#22C55E", // green-500
+    "#F59E0B", // amber-500
+    "#06B6D4", // cyan-500
+    "#EF4444", // red-500
+    "#A78BFA", // violet-400
+    "#10B981", // emerald-500
+    "#84CC16", // lime-500
+    "#F43F5E", // rose-500
   ];
+  const total = useMemo(() => agg.reduce((a, c) => a + c.value, 0), [agg]);
+  const fmt = useMemo(() => new Intl.NumberFormat("es-ES"), []);
+  // Anillo más delgado y elegante
+  const INNER = 76;
+  const OUTER = 96;
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [pinnedIndex, setPinnedIndex] = useState<number | null>(null);
+  const activeIndex = pinnedIndex ?? hoverIndex;
 
-  const total = data.reduce((a, c) => a + c.value, 0);
+  useEffect(() => {
+    setHoverIndex(null);
+    setPinnedIndex(null);
+  }, [students]);
 
-  function TooltipContent({ active, payload }: any) {
-    if (!active || !payload?.length) return null;
-    const p = payload[0];
-    const value = p?.value ?? 0;
-    const pct = total ? Math.round((value * 1000) / total) / 10 : 0;
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="rounded-xl border border-gray-200 bg-white/95 px-3 py-2 text-sm shadow-xl"
-      >
-        <div className="font-semibold text-gray-900">{p?.name}</div>
-        <div className="text-gray-600">
-          {value} alumnos • {pct}%
-        </div>
-      </motion.div>
-    );
-  }
+  // Sin etiquetas externas para look limpio
+  const RAD = Math.PI / 180;
+  const renderLabel = () => null;
 
-  const renderLabel = (props: any) => {
-    const { x, y, name, value, percent } = props;
-    const pct = Math.round(percent * 1000) / 10;
-    return (
-      <text x={x} y={y} fill="#6b7280" fontSize={11} textAnchor="middle">
-        {`${value} (${pct}%)`}
-      </text>
-    );
-  };
+  // Agrupación como en el otro gráfico: mínimo 3% y máximo 8 etiquetas, resto en "Otros"
+  const displayAgg = useMemo(() => {
+    if (!agg.length) return [] as { name: string; value: number }[];
+    const withPct = agg.map((d) => ({
+      ...d,
+      pct: total ? (d.value * 100) / total : 0,
+    }));
+    const MIN_PCT = 3;
+    const MAX_LABELS = 8;
+    const big = withPct.filter((d) => d.pct >= MIN_PCT).slice(0, MAX_LABELS);
+    const rest = withPct.filter((d) => !big.includes(d));
+    const othersTotal = rest.reduce((a, c) => a + c.value, 0);
+    const result = big.map(({ name, value }) => ({ name, value }));
+    if (othersTotal > 0) result.push({ name: "Otros", value: othersTotal });
+    return result;
+  }, [agg, total]);
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white relative overflow-hidden">
-      <div className="absolute inset-0 pointer-events-none opacity-40 bg-[radial-gradient(circle_at_30%_20%,#bfdbfe,transparent_60%),radial-gradient(circle_at_80%_70%,#ddd6fe,transparent_55%)]" />
-
+    <div className="rounded-2xl border border-gray-200 bg-white relative">
       <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
         <div>
           <h3 className="text-base font-bold text-gray-900">{title}</h3>
@@ -95,92 +96,91 @@ export default function StudentsPhaseDonut({
         </div>
       </div>
 
-      <div className="h-80 px-2 py-4">
+      <div className="relative z-10 h-80 px-2 py-4">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
-            <defs>
-              {COLORS.map((c, i) => (
-                <linearGradient
-                  key={i}
-                  id={`ph-${i}`}
-                  x1="0"
-                  y1="0"
-                  x2="0"
-                  y2="1"
-                >
-                  <stop offset="0%" stopColor={c} stopOpacity={0.95} />
-                  <stop offset="100%" stopColor={c} stopOpacity={0.55} />
-                </linearGradient>
-              ))}
-            </defs>
+            <defs />
             <Pie
-              data={data}
+              data={displayAgg}
               dataKey="value"
               nameKey="name"
-              innerRadius={70}
-              outerRadius={120}
+              innerRadius={INNER}
+              outerRadius={OUTER}
               startAngle={90}
               endAngle={-270}
               paddingAngle={2}
-              cornerRadius={6}
+              minAngle={2}
+              cornerRadius={4}
               isAnimationActive
-              labelLine
+              labelLine={false}
               label={renderLabel}
             >
-              {data.map((_, i) => (
+              {displayAgg.map((seg, i) => (
                 <Cell
-                  key={i}
-                  fill={`url(#ph-${i})`}
+                  key={`${seg.name}-${i}`}
+                  fill={
+                    seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length]
+                  }
                   stroke="rgba(255,255,255,0.9)"
-                  strokeWidth={2}
+                  strokeWidth={activeIndex === i ? 3 : 2}
+                  onMouseEnter={() => setHoverIndex(i)}
+                  onMouseLeave={() =>
+                    setHoverIndex((prev) =>
+                      pinnedIndex === null ? null : prev
+                    )
+                  }
+                  onClick={() =>
+                    setPinnedIndex((prev) => (prev === i ? null : i))
+                  }
+                  cursor="pointer"
                 />
               ))}
-              <Label
-                position="center"
-                content={() => (
-                  <g>
-                    <text
-                      x={0}
-                      y={0}
-                      textAnchor="middle"
-                      dominantBaseline="central"
-                    >
-                      <tspan fontSize="28" fontWeight="700" fill="#111827">
-                        {total}
-                      </tspan>
-                      <tspan
-                        x={0}
-                        dy="18"
-                        fontSize="10"
-                        fill="#6b7280"
-                        letterSpacing=".08em"
-                      >
-                        TOTAL
-                      </tspan>
-                    </text>
-                  </g>
-                )}
-              />
+              {/* sin Label centrado: lo renderizamos con overlay HTML para máxima compatibilidad */}
             </Pie>
-            <RTooltip content={<TooltipContent />} />
+            <RTooltip
+              formatter={(value: any, name: any) => [value as any, name as any]}
+            />
           </PieChart>
         </ResponsiveContainer>
-      </div>
-
-      <div className="flex flex-wrap gap-2 px-5 pb-5">
-        {data.map((seg, i) => (
-          <div
-            key={seg.name}
-            className="flex items-center gap-2 rounded-full border border-gray-200 bg-white/70 px-3 py-1 text-xs shadow-sm"
-          >
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ background: COLORS[i % COLORS.length] }}
-            />
-            <span className="font-medium text-gray-700">{seg.name}</span>
-            <span className="text-gray-400">{seg.value}</span>
+        {/* Overlay de Total centrado (no bloquea interacciones) */}
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-2xl font-extrabold text-gray-900">{fmt.format(total)}</div>
+            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total</div>
           </div>
-        ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-5 pb-5">
+        {displayAgg.map((seg, i) => {
+          const pct = total ? Math.round((seg.value * 1000) / total) / 10 : 0;
+          const color =
+            seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length];
+          return (
+            <div
+              key={`${seg.name}-${i}`}
+              className="flex items-center justify-between rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-xs shadow-sm"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: color }}
+                />
+                <span
+                  className="font-medium text-gray-700 truncate"
+                  title={seg.name}
+                >
+                  {seg.name}
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-gray-500">
+                <span className="font-semibold text-gray-900">
+                  {fmt.format(seg.value)}
+                </span>
+                <span>({pct}%)</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

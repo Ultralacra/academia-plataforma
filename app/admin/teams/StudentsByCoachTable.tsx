@@ -34,20 +34,25 @@ export default function StudentsByCoachTable({
     items,
     value,
     onChange,
+    maxVisible = 8,
   }: {
     label: string;
     items: string[];
     value: string | null;
     onChange: (val: string) => void;
+    maxVisible?: number;
   }) {
     if (!items.length) return null;
+    const [showAll, setShowAll] = useState(false);
+    const visible = showAll ? items : items.slice(0, maxVisible);
+    const hiddenCount = Math.max(0, items.length - visible.length);
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 w-full">
         <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
           {label}
         </span>
-        <div className="flex flex-wrap gap-1.5">
-          {items.map((it) => {
+        <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+          {visible.map((it) => {
             const active = value === it;
             return (
               <button
@@ -63,6 +68,14 @@ export default function StudentsByCoachTable({
               </button>
             );
           })}
+          {hiddenCount > 0 && (
+            <button
+              onClick={() => setShowAll((v) => !v)}
+              className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-white/80 text-gray-700 hover:bg-gray-50 shrink-0"
+            >
+              {showAll ? "Ver menos" : `+${hiddenCount} más`}
+            </button>
+          )}
           {value && (
             <button
               onClick={() => onChange("")}
@@ -128,7 +141,7 @@ export default function StudentsByCoachTable({
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white">
-      <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-3 md:flex-row md:items-start md:gap-6">
         <div>
           <h3 className="text-base font-bold text-gray-900">
             Alumnos de {coach}
@@ -137,8 +150,8 @@ export default function StudentsByCoachTable({
             Listado de alumnos asociados al coach y su estado actual
           </p>
         </div>
-        <div className="flex flex-col gap-2 w-full md:w-auto">
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-2 w-full md:flex-1">
+          <div className="flex flex-col gap-2 w-full">
             <FilterGroup
               label="Estado"
               items={uniqueStates}
@@ -146,6 +159,7 @@ export default function StudentsByCoachTable({
               onChange={(v: string) =>
                 setFilterState(v ? (v === filterState ? null : v) : null)
               }
+              maxVisible={8}
             />
             <FilterGroup
               label="Fase"
@@ -154,6 +168,7 @@ export default function StudentsByCoachTable({
               onChange={(v: string) =>
                 setFilterStage(v ? (v === filterStage ? null : v) : null)
               }
+              maxVisible={10}
             />
           </div>
           <div className="text-xs text-gray-500">
