@@ -23,6 +23,7 @@ import LoadingOverlay from "./LoadingOverlay";
 import StudentsByCoachTable from "./StudentsByCoachTable";
 // import AllStudentsTable from "./AllStudentsTable"; // ocultado según petición
 import CoachStudentsDistributionChart from "./CoachStudentsDistributionChart";
+import StudentsPhaseDonut from "./StudentsPhaseDonut";
 
 type TicketsSeriesVM = {
   daily: Array<{ date: string; count: number }>;
@@ -731,6 +732,116 @@ export default function TeamsMetricsContent() {
     return { abiertos, enProceso, cerrados, tasa };
   }, [coach, coachName, displayVm.createdBlock]);
 
+  // Construir JSON exportable con toda la data visible bajo los filtros actuales
+  function buildMetricsExport() {
+    const filters = {
+      desde,
+      hasta,
+      coachCode: coach || null,
+      coachName: coach ? coachName || coach : null,
+    };
+
+    // Distribución de alumnos del coach (si aplica)
+    const stateDist: Record<string, number> = {};
+    const stageDist: Record<string, number> = {};
+    if (coach && coachStudentsEnriched.length) {
+      for (const s of coachStudentsEnriched as any[]) {
+        const st = String(s.estado ?? "Sin estado");
+        const ph = String(s.etapa ?? "Sin fase");
+        stateDist[st] = (stateDist[st] ?? 0) + 1;
+        stageDist[ph] = (stageDist[ph] ?? 0) + 1;
+      }
+    }
+
+    const payload = {
+      meta: {
+        filters,
+        generatedAt: new Date().toISOString(),
+      },
+      kpis: {
+        studentsTotal: displayVm.totals.studentsTotal,
+        ticketsTotal: displayVm.totals.ticketsTotal,
+        avgResponseMin: displayVm.totals.avgResponseMin,
+        avgResolutionMin: displayVm.totals.avgResolutionMin,
+        coachStatus: coach
+          ? {
+              abiertos: coachStatusDist?.abiertos ?? 0,
+              enProceso: coachStatusDist?.enProceso ?? 0,
+              cerrados: coachStatusDist?.cerrados ?? 0,
+              tasaResolucion: coachStatusDist?.tasa ?? 0,
+            }
+          : null,
+      },
+      charts: {
+        ticketsSummary: {
+          totals: {
+            ticketsTotal: displayVm.totals.ticketsTotal,
+            avgResponseMin: displayVm.totals.avgResponseMin,
+            avgResolutionMin: displayVm.totals.avgResolutionMin,
+          },
+          per: displayVm.ticketsPer,
+        },
+        ticketsSeries: displayVm.ticketsSeries,
+        responseByCoach: displayVm.respByCoach,
+        responseByTeam: displayVm.respByTeam,
+        productivity: rowsForProductivity,
+      },
+      createdBlock: displayVm.createdBlock,
+      ticketsByTeam: displayVm.ticketsByTeam,
+      students: coach
+        ? {
+            list: coachStudentsEnriched.map((r) => ({
+              id: r.id,
+              name: r.nombre,
+              code: r.codigo ?? null,
+              state: (r as any).estado ?? null,
+              stage: r.etapa ?? null,
+              area: (r as any).area ?? null,
+              lastActivity: (r as any).ultima_actividad ?? null,
+              inactivityDays: (r as any).inactividad ?? null,
+              ticketsCount: (r as any).tickets ?? null,
+            })),
+            distribution: { stateDist, stageDist },
+          }
+        : null,
+    };
+    return payload;
+  }
+
+  function handleCopyJSON() {
+    try {
+      const payload = buildMetricsExport();
+      const txt = JSON.stringify(payload, null, 2);
+      navigator.clipboard?.writeText(txt);
+      // opcional: toast si existiera hook
+      console.log("JSON copiado al portapapeles");
+    } catch (e) {
+      console.error("No se pudo copiar el JSON", e);
+    }
+  }
+
+  function handleDownloadJSON() {
+    try {
+      const payload = buildMetricsExport();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const coachSlug = coach
+        ? (coachName || coach).replace(/\s+/g, "_")
+        : "todos";
+      a.href = url;
+      a.download = `metrics_${desde || "x"}_${hasta || "y"}_${coachSlug}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("No se pudo descargar el JSON", e);
+    }
+  }
+
   const SkeletonBlock = ({ h }: { h: number }) => (
     <div
       className="w-full rounded-2xl border border-gray-200 bg-gray-50 relative overflow-hidden"
@@ -785,17 +896,39 @@ export default function TeamsMetricsContent() {
         onHasta={setHasta}
       />
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <RangeBadge
           from={displayVm.meta?.range?.from ?? (desde || null)}
           to={displayVm.meta?.range?.to ?? (hasta || null)}
           fetchedAt={displayVm.meta?.fetchedAt}
         />
-        {loading && (
-          <span className="text-xs text-muted-foreground">
-            Cargando métricas…
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {loading && (
+            <span className="text-xs text-muted-foreground">
+              Cargando métricas…
+            </span>
+          )}
+          {!loading && (
+            <>
+              <button
+                type="button"
+                onClick={handleCopyJSON}
+                className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                title="Copiar JSON"
+              >
+                Copiar JSON
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadJSON}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-blue-500"
+                title="Descargar JSON"
+              >
+                Descargar JSON
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {!loading && displayVm.ticketsSeries.daily.length === 0 && (
@@ -875,21 +1008,36 @@ export default function TeamsMetricsContent() {
       )}
 
       {coach && !loading && (
-        <CoachStudentsDistributionChart
-          students={coachStudentsEnriched.map((r) => ({
-            id: r.id,
-            name: r.nombre,
-            code: r.codigo ?? null,
-            state: (r as any).estado ?? null,
-            stage: r.etapa ?? null,
-            lastActivity: (r as any).ultima_actividad ?? null,
-            inactivityDays: (r as any).inactividad ?? null,
-            ticketsCount: (r as any).tickets ?? null,
-          }))}
-          mode={studentsChartMode}
-          onModeChange={setStudentsChartMode}
-          coachName={coachName || coach}
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Nueva dona por fase, visible siempre */}
+          <StudentsPhaseDonut
+            students={coachStudentsEnriched.map((r) => ({
+              id: r.id,
+              name: r.nombre,
+              code: r.codigo ?? null,
+              state: (r as any).estado ?? null,
+              stage: r.etapa ?? null,
+            }))}
+            coachName={coachName || coach}
+          />
+
+          {/* Distribución existente con selector (puede ocultarse si no quieres el switch) */}
+          <CoachStudentsDistributionChart
+            students={coachStudentsEnriched.map((r) => ({
+              id: r.id,
+              name: r.nombre,
+              code: r.codigo ?? null,
+              state: (r as any).estado ?? null,
+              stage: r.etapa ?? null,
+              lastActivity: (r as any).ultima_actividad ?? null,
+              inactivityDays: (r as any).inactividad ?? null,
+              ticketsCount: (r as any).tickets ?? null,
+            }))}
+            mode={studentsChartMode}
+            onModeChange={setStudentsChartMode}
+            coachName={coachName || coach}
+          />
+        </div>
       )}
     </div>
   );
