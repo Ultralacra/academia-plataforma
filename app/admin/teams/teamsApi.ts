@@ -150,6 +150,7 @@ export async function fetchMetrics(
       weekly,
       monthly,
     },
+    // Agregados por fase y por estado
     clientsByPhaseAgg: Array.isArray(d.clientsByPhase)
       ? d.clientsByPhase.reduce((acc: any[], it: any) => {
           const name = String(it.etapa ?? "Sin fase");
@@ -169,6 +170,54 @@ export async function fetchMetrics(
           else acc.push({ name, value });
           return acc;
         }, [])
+      : [],
+    // Detalle con nombres por fase y estado (para acordeón)
+    clientsByPhaseDetails: Array.isArray(d.clientsByPhase)
+      ? (() => {
+          const map = new Map<string, { name: string; value: number; students: string[] }>();
+          (d.clientsByPhase as any[]).forEach((it) => {
+            const name = String(it.etapa ?? "Sin fase");
+            const value = Number(it.cantidad ?? 0) || 0;
+            const namesStr = String(it.nombre ?? "");
+            const students = namesStr
+              .split(",")
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0);
+            const prev = map.get(name);
+            if (prev) {
+              prev.value += value;
+              // concatenar y de-duplicar
+              const set = new Set<string>([...prev.students, ...students]);
+              prev.students = Array.from(set);
+            } else {
+              map.set(name, { name, value, students });
+            }
+          });
+          return Array.from(map.values());
+        })()
+      : [],
+    clientsByStateDetails: Array.isArray(d.clientsByState)
+      ? (() => {
+          const map = new Map<string, { name: string; value: number; students: string[] }>();
+          (d.clientsByState as any[]).forEach((it) => {
+            const name = String(it.estado ?? "Sin estado");
+            const value = Number(it.cantidad ?? 0) || 0;
+            const namesStr = String(it.nombre ?? "");
+            const students = namesStr
+              .split(",")
+              .map((s) => s.trim())
+              .filter((s) => s.length > 0);
+            const prev = map.get(name);
+            if (prev) {
+              prev.value += value;
+              const set = new Set<string>([...prev.students, ...students]);
+              prev.students = Array.from(set);
+            } else {
+              map.set(name, { name, value, students });
+            }
+          });
+          return Array.from(map.values());
+        })()
       : [],
     ticketsByName: Array.isArray(d.ticketsByName) ? d.ticketsByName : [],
     // Campos no provistos por v2: dejamos vacíos para no romper UI

@@ -9,6 +9,12 @@ import {
   Label,
   Tooltip as RTooltip,
 } from "recharts";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import type { CoachStudent } from "./StudentsByCoachTable";
 
 type Mode = "estado" | "fase";
@@ -21,6 +27,8 @@ export default function CoachStudentsDistributionChart({
   showToggle = true,
   aggState,
   aggPhase,
+  detailsState,
+  detailsPhase,
 }: {
   students: CoachStudent[];
   mode?: Mode;
@@ -29,6 +37,8 @@ export default function CoachStudentsDistributionChart({
   showToggle?: boolean;
   aggState?: { name: string; value: number }[];
   aggPhase?: { name: string; value: number }[];
+  detailsState?: { name: string; value: number; students: string[] }[];
+  detailsPhase?: { name: string; value: number; students: string[] }[];
 }) {
   const agg = useMemo(() => {
     const source = mode === "estado" ? aggState : aggPhase;
@@ -193,38 +203,58 @@ export default function CoachStudentsDistributionChart({
           </div>
         </div>
       </div>
-      {/* Leyenda compacta */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 px-5 pb-5">
-        {displayAgg.map((seg, i) => {
-          const pct = total ? Math.round((seg.value * 1000) / total) / 10 : 0;
-          const color =
-            seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length];
-          return (
-            <div
-              key={`${seg.name}-${i}`}
-              className="flex items-center justify-between rounded-lg border border-gray-100 bg-white/70 px-3 py-2 text-xs shadow-sm"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <span
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ background: color }}
-                />
-                <span
-                  className="font-medium text-gray-700 truncate"
-                  title={seg.name}
-                >
-                  {seg.name}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-gray-500">
-                <span className="font-semibold text-gray-900">
-                  {fmt.format(seg.value)}
-                </span>
-                <span>({pct}%)</span>
-              </div>
-            </div>
-          );
-        })}
+      {/* Acordeón con nombres por categoría */}
+      <div className="px-5 pb-5">
+        <Accordion type="single" collapsible>
+          {displayAgg.map((seg, i) => {
+            const pct = total ? Math.round((seg.value * 1000) / total) / 10 : 0;
+            const color =
+              seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length];
+            const details =
+              (mode === "estado" ? detailsState : detailsPhase) ?? [];
+            const det = details.find((d) => d.name === seg.name);
+            const studentsList = det?.students ?? [];
+            return (
+              <AccordionItem key={`${seg.name}-${i}`} value={`item-${i}`}>
+                <AccordionTrigger className="px-3">
+                  <div className="flex w-full items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ background: color }}
+                      />
+                      <span
+                        className="font-medium text-gray-700 truncate"
+                        title={seg.name}
+                      >
+                        {seg.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <span className="font-semibold text-gray-900">
+                        {fmt.format(seg.value)}
+                      </span>
+                      <span>({pct}%)</span>
+                    </div>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent>
+                  {studentsList.length > 0 ? (
+                    <ul className="ml-6 list-disc space-y-1 text-sm text-gray-700">
+                      {studentsList.map((s, idx) => (
+                        <li key={idx}>{s}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-gray-500 px-3">
+                      Sin alumnos listados.
+                    </p>
+                  )}
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
+        </Accordion>
       </div>
     </div>
   );

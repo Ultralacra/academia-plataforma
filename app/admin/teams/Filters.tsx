@@ -92,9 +92,6 @@ export default function Filters({
       <div className="grid grid-cols-1 gap-4 px-6 py-5 md:grid-cols-12">
         {/* Coach select */}
         <div className="md:col-span-6">
-          <label className="text-[11px] font-semibold text-gray-500 tracking-wide uppercase mb-1 block">
-            Coach
-          </label>
           <Popover open={openCoach} onOpenChange={setOpenCoach}>
             <PopoverTrigger asChild>
               <button
@@ -210,6 +207,9 @@ export default function Filters({
               </Command>
             </PopoverContent>
           </Popover>
+          <p className="mt-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400 ml-1">
+            coach
+          </p>
         </div>
 
         {/* Month picker eliminado a solicitud */}

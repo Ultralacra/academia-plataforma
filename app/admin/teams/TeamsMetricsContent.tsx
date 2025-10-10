@@ -33,7 +33,6 @@ type TicketsSeriesVM = {
   weekly: Array<{ week: string; count: number }>;
   monthly: Array<{ month: string; count: number }>;
 };
-
 function RangeBadge({
   from,
   to,
@@ -149,6 +148,16 @@ export default function TeamsMetricsContent() {
     prodByCoachV2: { coach: string; tickets: number }[];
     clientsByPhaseAgg?: { name: string; value: number }[];
     clientsByStateAgg?: { name: string; value: number }[];
+    clientsByPhaseDetails?: {
+      name: string;
+      value: number;
+      students: string[];
+    }[];
+    clientsByStateDetails?: {
+      name: string;
+      value: number;
+      students: string[];
+    }[];
     ticketsByName?: { name: string; count: number }[];
     createdBlock: {
       rows: Array<{
@@ -183,6 +192,8 @@ export default function TeamsMetricsContent() {
     prodByCoachV2: [],
     clientsByPhaseAgg: [],
     clientsByStateAgg: [],
+    clientsByPhaseDetails: [],
+    clientsByStateDetails: [],
     ticketsByName: [],
     createdBlock: null,
     ticketsByTeam: [],
@@ -396,6 +407,36 @@ export default function TeamsMetricsContent() {
               }))
             : [];
 
+        const clientsByPhaseDetails = Array.isArray(
+          (teams as any).clientsByPhaseDetails
+        )
+          ? (teams as any).clientsByPhaseDetails.map((r: any) => ({
+              name: String(r.name ?? r.etapa ?? "Sin fase"),
+              value: Number(r.value ?? r.cantidad ?? 0) || 0,
+              students: Array.isArray(r.students)
+                ? r.students
+                : String(r.nombre ?? "")
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0),
+            }))
+          : [];
+
+        const clientsByStateDetails = Array.isArray(
+          (teams as any).clientsByStateDetails
+        )
+          ? (teams as any).clientsByStateDetails.map((r: any) => ({
+              name: String(r.name ?? r.estado ?? "Sin estado"),
+              value: Number(r.value ?? r.cantidad ?? 0) || 0,
+              students: Array.isArray(r.students)
+                ? r.students
+                : String(r.nombre ?? "")
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter((s) => s.length > 0),
+            }))
+          : [];
+
         // 2) Tickets por equipo — Tomar DIRECTO del API
         let ticketsByTeamApi: TicketsByTeamApiRow[] = Array.isArray(
           teams.ticketsByTeam
@@ -433,6 +474,8 @@ export default function TeamsMetricsContent() {
           prodByCoachV2,
           clientsByPhaseAgg,
           clientsByStateAgg,
+          clientsByPhaseDetails,
+          clientsByStateDetails,
           ticketsByName,
           createdBlock,
           ticketsByTeam: ticketsByTeamApi,
@@ -459,6 +502,8 @@ export default function TeamsMetricsContent() {
           prodByCoachV2: [],
           clientsByPhaseAgg: [],
           clientsByStateAgg: [],
+          clientsByPhaseDetails: [],
+          clientsByStateDetails: [],
           ticketsByName: [],
           createdBlock: null,
           ticketsByTeam: [],
@@ -929,14 +974,16 @@ export default function TeamsMetricsContent() {
               >
                 Buscar
               </button>
-              <button
-                type="button"
-                onClick={handleDownloadJSON}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 text-white px-3 py-1.5 text-xs font-semibold hover:bg-gray-800"
-                title="Descargar JSON"
-              >
-                Descargar JSON
-              </button>
+              {false && (
+                <button
+                  type="button"
+                  onClick={handleDownloadJSON}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 text-white px-3 py-1.5 text-xs font-semibold hover:bg-gray-800"
+                  title="Descargar JSON"
+                >
+                  Descargar JSON
+                </button>
+              )}
             </>
           )}
         </div>
@@ -964,6 +1011,7 @@ export default function TeamsMetricsContent() {
             }))}
             aggData={displayVm.clientsByPhaseAgg}
             coachName={coachName || coach}
+            details={displayVm.clientsByPhaseDetails}
           />
           <CoachStudentsDistributionChart
             students={coachStudentsEnriched.map((r) => ({
@@ -982,6 +1030,8 @@ export default function TeamsMetricsContent() {
             showToggle={false}
             aggState={displayVm.clientsByStateAgg}
             aggPhase={displayVm.clientsByPhaseAgg}
+            detailsState={displayVm.clientsByStateDetails}
+            detailsPhase={displayVm.clientsByPhaseDetails}
           />
         </div>
       )}
