@@ -7,17 +7,12 @@ import {
   fetchStudentsByCoach,
   fetchAllStudents,
   fetchMetrics,
-  type Coach,
-  type RawClient,
+  Coach,
+  RawClient,
 } from "./teamsApi";
 import Filters from "./Filters";
-import KPIs from "./KPIs";
-import TicketsSummary from "./TicketsSummary";
-import TicketsSeriesChart from "./TicketsSeries";
-import TicketsByPeriodBar from "./TicketsByPeriodBar";
 import TicketsByStudentBar from "./TicketsByStudentBar";
-import ResponseCharts from "./ResponseCharts";
-import ResponseByCoachList from "./ResponseByCoachList";
+import TicketsByPeriodBar from "./TicketsByPeriodBar";
 import ProductivityCharts from "./ProductivityCharts";
 // import Charts from "./Charts"; // oculto para vista individual
 import CreatedMetricsContent from "./CreatedMetricsContent";
@@ -77,8 +72,7 @@ export default function TeamsMetricsContent() {
   const initialRange = currentMonthRange();
   const [desde, setDesde] = useState(persistedDesde || initialRange.first);
   const [hasta, setHasta] = useState(persistedHasta || initialRange.today);
-  // Aplicación manual: incrementar para disparar consultas
-  const [applySeq, setApplySeq] = useState(0);
+  // Eliminado applySeq: las consultas se disparan automáticamente al cambiar fechas/coach
 
   // Persistencia de fechas cuando cambian
   useEffect(() => {
@@ -159,6 +153,24 @@ export default function TeamsMetricsContent() {
       students: string[];
     }[];
     ticketsByName?: { name: string; count: number }[];
+    avgResolutionByStudent?: Array<{
+      code: string;
+      name: string;
+      tickets_resueltos: number;
+      avg_seconds: number | null;
+      avg_minutes: number | null;
+      avg_hours: number | null;
+      avg_time_hms: string;
+    }>;
+    avgResolutionSummary?: {
+      tickets_resueltos: number;
+      avg_seconds: string;
+      avg_minutes: number | null;
+      avg_hours: number | null;
+      avg_time_hms: string;
+    } | null;
+    ticketsByEstado?: Array<{ estado: string; cantidad: number }>;
+    clientsByCoachDetail?: RawClient[];
     createdBlock: {
       rows: Array<{
         area: string | null;
@@ -195,8 +207,12 @@ export default function TeamsMetricsContent() {
     clientsByPhaseDetails: [],
     clientsByStateDetails: [],
     ticketsByName: [],
+    avgResolutionByStudent: [],
+    avgResolutionSummary: null,
+    ticketsByEstado: [],
     createdBlock: null,
     ticketsByTeam: [],
+    clientsByCoachDetail: [],
   });
 
   // Cargar coachs una sola vez
@@ -219,7 +235,7 @@ export default function TeamsMetricsContent() {
     let alive = true;
 
     // si solo hay una fecha, no consultamos
-    if (!shouldFetch) {
+    if (!bothSet) {
       setLoading(false);
       return () => {
         alive = false;
@@ -231,8 +247,8 @@ export default function TeamsMetricsContent() {
       try {
         // 1) Métricas (endpoint directo)
         const res = await fetchMetrics(
-          bothEmpty ? undefined : desde,
-          bothEmpty ? undefined : hasta,
+          desde,
+          hasta,
           coach || undefined
         );
         // Estructura esperada: { code, status, data: { teams: { ... } } }
@@ -477,6 +493,18 @@ export default function TeamsMetricsContent() {
           clientsByPhaseDetails,
           clientsByStateDetails,
           ticketsByName,
+          avgResolutionByStudent: Array.isArray(
+            (teams as any).avgResolutionByStudent
+          )
+            ? (teams as any).avgResolutionByStudent
+            : [],
+          avgResolutionSummary: (teams as any).avgResolutionSummary ?? null,
+          ticketsByEstado: Array.isArray((teams as any).ticketsByEstado)
+            ? (teams as any).ticketsByEstado
+            : [],
+          clientsByCoachDetail: Array.isArray((teams as any).clientsByCoachDetail)
+            ? (teams as any).clientsByCoachDetail
+            : [],
           createdBlock,
           ticketsByTeam: ticketsByTeamApi,
         });
@@ -505,6 +533,10 @@ export default function TeamsMetricsContent() {
           clientsByPhaseDetails: [],
           clientsByStateDetails: [],
           ticketsByName: [],
+          avgResolutionByStudent: [],
+          avgResolutionSummary: null,
+          ticketsByEstado: [],
+          clientsByCoachDetail: [],
           createdBlock: null,
           ticketsByTeam: [],
         });
@@ -516,17 +548,23 @@ export default function TeamsMetricsContent() {
     return () => {
       alive = false;
     };
-  }, [applySeq, bothEmpty, bothSet, shouldFetch]);
+  }, [desde, hasta, coach, bothSet]);
 
   // Cuando se selecciona un coach, descargar (en paralelo) alumnos y tickets del rango (si no los tenemos para este rango)
   // Consultar datos de alumnos/tickets genéricos (para fallback de métricas derivadas)
   useEffect(() => {
     let alive = true;
     setLoadingCoachData(true);
+    if (!bothSet) {
+      setLoadingCoachData(false);
+      return () => {
+        alive = false;
+      };
+    }
     dataService
       .getStudents({
-        fechaDesde: bothEmpty ? undefined : desde,
-        fechaHasta: bothEmpty ? undefined : hasta,
+        fechaDesde: desde,
+        fechaHasta: hasta,
       })
       .then((studentsRes) => {
         if (!alive) return;
@@ -537,7 +575,7 @@ export default function TeamsMetricsContent() {
     return () => {
       alive = false;
     };
-  }, [applySeq, bothEmpty]);
+  }, [desde, hasta, bothSet]);
 
   // Cargar alumnos del coach y todos los alumnos cuando cambia coach (y aún no cargados globales)
   useEffect(() => {
@@ -573,9 +611,9 @@ export default function TeamsMetricsContent() {
     if (!coach) return; // sólo aplica cuando hay selección
     if (desde && hasta) return; // ya están ambas
     const { first, today } = currentMonthRange();
-    // Sólo setea las que falten o ambas si están vacías
-    if (!desde) setDesde(first);
-    if (!hasta) setHasta(today);
+    // Setear siempre el rango del mes actual al seleccionar coach si faltan
+    setDesde(first);
+    setHasta(today);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coach]);
 
@@ -875,10 +913,7 @@ export default function TeamsMetricsContent() {
     }
   }
 
-  // Handler para aplicar filtros manualmente
-  function handleApplyFilters() {
-    setApplySeq((n) => n + 1);
-  }
+  // Búsqueda manual eliminada: ahora la consulta se actualiza automáticamente
 
   function handleDownloadJSON() {
     try {
@@ -963,30 +998,7 @@ export default function TeamsMetricsContent() {
           to={displayVm.meta?.range?.to ?? (hasta || null)}
           fetchedAt={displayVm.meta?.fetchedAt}
         />
-        <div className="flex items-center gap-2">
-          {coach && !loading && (
-            <>
-              <button
-                type="button"
-                onClick={handleApplyFilters}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 text-white px-3 py-1.5 text-xs font-semibold hover:bg-blue-500"
-                title="Aplicar filtros"
-              >
-                Buscar
-              </button>
-              {false && (
-                <button
-                  type="button"
-                  onClick={handleDownloadJSON}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-gray-900 text-white px-3 py-1.5 text-xs font-semibold hover:bg-gray-800"
-                  title="Descargar JSON"
-                >
-                  Descargar JSON
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        <div className="flex items-center gap-2" />
       </div>
 
       {!loading && displayVm.ticketsSeries.daily.length === 0 && (
@@ -1039,7 +1051,82 @@ export default function TeamsMetricsContent() {
       {/* Grid: izquierda Tickets por alumno, derecha Tickets por periodo (diario) */}
       {!loading ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <TicketsByStudentBar data={displayVm.ticketsByName || []} />
+          <div className="space-y-3">
+            <TicketsByStudentBar
+              data={displayVm.ticketsByName || []}
+              avgResolution={(() => {
+                const map = new Map<string, { minutes: number | null; hours: number | null; hms: string }>();
+                for (const r of displayVm.avgResolutionByStudent || []) {
+                  const key = String(r.name || "");
+                  map.set(key, {
+                    minutes: r.avg_minutes,
+                    hours: r.avg_hours,
+                    hms: r.avg_time_hms,
+                  });
+                }
+                return map;
+              })()}
+            />
+            {(displayVm.avgResolutionSummary ||
+              displayVm.ticketsByEstado?.length) && (
+              <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm">
+                <div className="flex flex-wrap items-center gap-4">
+                  {displayVm.avgResolutionSummary && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500">
+                        Promedio resolución:
+                      </span>
+                      <span className="font-semibold text-gray-900">
+                        {Number(
+                          displayVm.avgResolutionSummary.avg_minutes ?? 0
+                        ).toFixed(1)}{" "}
+                        min
+                        <span className="text-gray-400 ml-2">
+                          ({displayVm.avgResolutionSummary.avg_time_hms})
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                  {(() => {
+                    const resueltos =
+                      displayVm.avgResolutionSummary?.tickets_resueltos ?? null;
+                    const totalTickets =
+                      displayVm.ticketsByName?.reduce(
+                        (a, c) => a + (c.count || 0),
+                        0
+                      ) ?? null;
+                    if (resueltos != null && totalTickets && totalTickets > 0) {
+                      const tasa = resueltos / totalTickets;
+                      return (
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-500">
+                            Tasa de resolución:
+                          </span>
+                          <span className="font-semibold text-gray-900">
+                            {(tasa * 100).toFixed(1)}%
+                          </span>
+                          <span className="text-gray-400">
+                            ({resueltos}/{totalTickets})
+                          </span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  {Array.isArray(displayVm.ticketsByEstado) &&
+                    displayVm.ticketsByEstado.length > 0 && (
+                      <div className="flex items-center gap-3">
+                        {displayVm.ticketsByEstado.map((e, i) => (
+                          <span key={i} className="text-gray-700">
+                            {e.estado}: <b>{e.cantidad}</b>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                </div>
+              </div>
+            )}
+          </div>
           <TicketsByPeriodBar data={displayVm.ticketsSeries.daily} />
         </div>
       ) : (
@@ -1049,34 +1136,8 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* Tiempo de respuesta por coach NO gráfico */}
-      {loading ? (
-        <SkeletonBlock h={220} />
-      ) : (
-        <ResponseByCoachList byCoach={displayVm.respByCoach} />
-      )}
-
-      {/* Cards y resumen */}
-      <KPIs
-        abiertos={coachStatusDist?.abiertos ?? null}
-        enProceso={coachStatusDist?.enProceso ?? null}
-        cerrados={coachStatusDist?.cerrados ?? null}
-        tasaResolucion={coachStatusDist?.tasa ?? null}
-        loading={loading}
-      />
-
-      {loading ? (
-        <SkeletonBlock h={180} />
-      ) : (
-        <TicketsSummary
-          totals={{
-            ticketsTotal: displayVm.totals.ticketsTotal,
-            avgResponseMin: displayVm.totals.avgResponseMin,
-            avgResolutionMin: displayVm.totals.avgResolutionMin,
-          }}
-          per={displayVm.ticketsPer}
-        />
-      )}
+      {/* Sección "Tiempo de respuesta por coach" removida a petición */}
+      {/* Sección KPI cards y resumen de tickets removida a petición */}
 
       {/* Bloque de productividad (sesiones / tiempo invertido) ocultado temporalmente a petición */}
       {/* Para reactivar, restaurar el render de <ProductivityCharts /> */}
@@ -1102,7 +1163,26 @@ export default function TeamsMetricsContent() {
             inactivityDays: (r as any).inactividad ?? null,
             ticketsCount: (r as any).tickets ?? null,
           }))}
+          filtered={(vm.clientsByCoachDetail || []).map((r) => ({
+            id: r.id,
+            name: r.nombre,
+            code: r.codigo ?? null,
+            state: r.estado ?? null,
+            stage: r.etapa ?? null,
+            ingreso: r.ingreso ?? null,
+            lastActivity: r.ultima_actividad ?? null,
+            inactivityDays: r.inactividad ?? null,
+            ticketsCount: r.tickets ?? null,
+            contrato: r.contrato ?? null,
+            nicho: r.nicho ?? null,
+            paso_f1: r.paso_f1 ?? null,
+            paso_f2: r.paso_f2 ?? null,
+            paso_f3: r.paso_f3 ?? null,
+            paso_f4: r.paso_f4 ?? null,
+            paso_f5: r.paso_f5 ?? null,
+          }))}
           loading={loadingCoachStudents}
+          loadingFiltered={loading}
         />
       )}
     </div>

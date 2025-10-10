@@ -21,9 +21,15 @@ type Row = { name: string; count: number };
 export default function TicketsByStudentBar({
   data,
   title = "TICKETS POR ALUMNO",
+  avgResolution,
 }: {
   data: Row[];
   title?: string;
+  // Mapa opcional: nombre de alumno -> { minutos, horas, hms }
+  avgResolution?: Map<
+    string,
+    { minutes: number | null; hours: number | null; hms: string }
+  >;
 }) {
   const rows = [...(data || [])]
     .map((r) => ({
@@ -67,6 +73,12 @@ export default function TicketsByStudentBar({
       <div className="border-b border-gray-100 px-5 py-4">
         <h3 className="text-base font-bold text-gray-900">{title}</h3>
         <p className="text-sm text-gray-500">Ordenado de mayor a menor</p>
+        {avgResolution && avgResolution.size > 0 && (
+          <p className="mt-1 text-xs text-gray-500">
+            Incluye tiempo promedio de resolución por alumno (horas) en el
+            tooltip.
+          </p>
+        )}
       </div>
       <div className="p-5">
         <ChartContainer
@@ -96,7 +108,27 @@ export default function TicketsByStudentBar({
             <XAxis dataKey="count" type="number" hide />
             <ChartTooltip
               cursor={false}
-              content={<ChartTooltipContent indicator="line" />}
+              content={({ active, payload, label }) => {
+                if (!active || !payload || !payload.length) return null;
+                const metrics = avgResolution?.get(String(label)) ?? null;
+                return (
+                  <div className="border border-gray-200 bg-white rounded-md shadow-sm px-2.5 py-1.5 text-xs">
+                    <div className="font-semibold text-gray-900">
+                      {String(label)}
+                    </div>
+                    <div className="text-gray-700">
+                      Tickets: {Number(payload[0]?.value ?? 0)}
+                    </div>
+                    {metrics &&
+                      metrics.hours != null &&
+                      !isNaN(Number(metrics.hours)) && (
+                        <div className="text-gray-700">
+                          Horas: {Number(metrics.hours).toFixed(2)} h
+                        </div>
+                      )}
+                  </div>
+                );
+              }}
             />
             <Bar dataKey="count" radius={8}>
               {rows.map((_, i) => (

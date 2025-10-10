@@ -32,6 +32,15 @@ export type RawClient = {
   tickets?: number | null;
   area?: string | null;
   puesto?: string | null;
+  contrato?: string | null;
+  entregables?: any | null;
+  aprobaciones?: any | null;
+  nicho?: string | null;
+  paso_f1?: number | null;
+  paso_f2?: number | null;
+  paso_f3?: number | null;
+  paso_f4?: number | null;
+  paso_f5?: number | null;
 };
 
 export async function fetchStudentsByCoach(coachCode: string): Promise<RawClient[]> {
@@ -61,8 +70,19 @@ export async function fetchStudentsByCoach(coachCode: string): Promise<RawClient
     : [];
 }
 
-export async function fetchAllStudents(): Promise<RawClient[]> {
-  const res = await fetch("https://v001.vercel.app/v1/client/get/clients?page=1&pageSize=1000");
+export async function fetchAllStudents(
+  fechaDesde?: string,
+  fechaHasta?: string
+): Promise<RawClient[]> {
+  const params = new URLSearchParams();
+  params.set("page", "1");
+  params.set("pageSize", "1000");
+  if (fechaDesde) params.set("fechaDesde", fechaDesde);
+  if (fechaHasta) params.set("fechaHasta", fechaHasta);
+  const qs = `?${params.toString()}`;
+  const res = await fetch(
+    `https://v001.vercel.app/v1/client/get/clients${qs}`
+  );
   if (!res.ok) throw new Error("Error al consultar todos los alumnos");
   const json = await res.json();
   return Array.isArray(json.data) ? (json.data as RawClient[]) : [];
@@ -219,7 +239,81 @@ export async function fetchMetrics(
           return Array.from(map.values());
         })()
       : [],
+    // Detalle de alumnos del coach directamente desde metrics-v2
+    clientsByCoachDetail: Array.isArray(d.clientsByCoachDetail)
+      ? (d.clientsByCoachDetail as any[]).map((it) => ({
+          id: Number(it.id),
+          codigo: it.codigo ?? null,
+          nombre: String(it.nombre ?? ""),
+          estado: it.estado ?? null,
+          etapa: it.etapa ?? null,
+          ingreso: it.ingreso ?? null,
+          ultima_actividad: it.ultima_actividad ?? null,
+          inactividad: it.inactividad ?? null,
+          tickets: it.tickets ?? null,
+          area: it.area ?? null,
+          puesto: it.puesto ?? null,
+          contrato: it.contrato ?? null,
+          entregables: it.entregables ?? null,
+          aprobaciones: it.aprobaciones ?? null,
+          nicho: it.nicho ?? null,
+          paso_f1: it.paso_f1 ?? null,
+          paso_f2: it.paso_f2 ?? null,
+          paso_f3: it.paso_f3 ?? null,
+          paso_f4: it.paso_f4 ?? null,
+          paso_f5: it.paso_f5 ?? null,
+        }))
+      : [],
     ticketsByName: Array.isArray(d.ticketsByName) ? d.ticketsByName : [],
+    avgResolutionSummary: d?.avgResolutionByCoach?.resumen
+      ? {
+          tickets_resueltos:
+            Number(d.avgResolutionByCoach.resumen.tickets_resueltos ?? 0) || 0,
+          avg_seconds: String(d.avgResolutionByCoach.resumen.avg_seconds ?? ""),
+          avg_minutes:
+            d.avgResolutionByCoach.resumen.avg_minutes != null
+              ? Number(d.avgResolutionByCoach.resumen.avg_minutes)
+              : null,
+          avg_hours:
+            d.avgResolutionByCoach.resumen.avg_hours != null
+              ? Number(d.avgResolutionByCoach.resumen.avg_hours)
+              : null,
+          avg_time_hms: String(
+            d.avgResolutionByCoach.resumen.avg_time_hms ?? ""
+          ),
+        }
+      : null,
+    ticketsByEstado: Array.isArray(d.ticketsByEstado)
+      ? (d.ticketsByEstado as any[]).map((it) => ({
+          estado: String(it.estado ?? ""),
+          cantidad: Number(it.cantidad ?? 0) || 0,
+        }))
+      : [],
+    // Promedios de resolución por alumno (minutos)
+    avgResolutionByStudent: Array.isArray(d?.avgResolutionByCoach?.detalle)
+      ? (d.avgResolutionByCoach.detalle as any[]).map((it) => ({
+          code: String(it.codigo ?? it.codigo_alumno ?? ""),
+          name: String(it.nombre ?? it.alumno ?? ""),
+          tickets_resueltos: Number(it.tickets_resueltos ?? 0) || 0,
+          avg_seconds:
+            it.avg_seconds != null ? Number(it.avg_seconds) : it.avg_minutes != null ? Number(it.avg_minutes) * 60 : null,
+          avg_minutes:
+            it.avg_minutes != null
+              ? Number(it.avg_minutes)
+              : it.avg_seconds != null
+              ? Number(it.avg_seconds) / 60
+              : null,
+          avg_hours:
+            it.avg_hours != null
+              ? Number(it.avg_hours)
+              : it.avg_minutes != null
+              ? Number(it.avg_minutes) / 60
+              : it.avg_seconds != null
+              ? Number(it.avg_seconds) / 3600
+              : null,
+          avg_time_hms: String(it.avg_time_hms ?? ""),
+        }))
+      : [],
     // Campos no provistos por v2: dejamos vacíos para no romper UI
     respByCoach: [] as any[],
     respByTeam: [] as any[],
