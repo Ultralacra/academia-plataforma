@@ -27,7 +27,7 @@ type StudentRow = {
 export default function StudentsPhaseDonut({
   students,
   coachName,
-  title = "Distribución por fase",
+  title = "ALUMNOS POR FASE",
   aggData,
   details,
 }: {
