@@ -90,28 +90,34 @@ export default function StudentsByCoachTable({
   }
 
   // Derivar valores únicos de estado y fase
-  const uniqueStates = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          students
-            .map((s) => (s.state && s.state.trim() ? s.state.trim() : ""))
-            .filter(Boolean)
-        )
-      ).sort(),
-    [students]
-  );
-  const uniqueStages = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          students
-            .map((s) => (s.stage && s.stage.trim() ? s.stage.trim() : ""))
-            .filter(Boolean)
-        )
-      ).sort(),
-    [students]
-  );
+  const uniqueStates = useMemo(() => {
+    const NO_STATE = "Sin estado";
+    const base = Array.from(
+      new Set(
+        students
+          .map((s) => (s.state && s.state.trim() ? s.state.trim() : ""))
+          .filter(Boolean)
+      )
+    ).sort();
+    const hasNoState = students.some(
+      (s) => !s.state || !String(s.state).trim()
+    );
+    return hasNoState ? [NO_STATE, ...base] : base;
+  }, [students]);
+  const uniqueStages = useMemo(() => {
+    const NO_STAGE = "Sin fase";
+    const base = Array.from(
+      new Set(
+        students
+          .map((s) => (s.stage && s.stage.trim() ? s.stage.trim() : ""))
+          .filter(Boolean)
+      )
+    ).sort();
+    const hasNoStage = students.some(
+      (s) => !s.stage || !String(s.stage).trim()
+    );
+    return hasNoStage ? [NO_STAGE, ...base] : base;
+  }, [students]);
 
   const [filterState, setFilterState] = useState<string | null>(null);
   const [filterStage, setFilterStage] = useState<string | null>(null);
@@ -119,8 +125,18 @@ export default function StudentsByCoachTable({
   const filtered = useMemo(
     () =>
       students.filter((s) => {
-        if (filterState && s.state !== filterState) return false;
-        if (filterStage && s.stage !== filterStage) return false;
+        const NO_STATE = "Sin estado";
+        const NO_STAGE = "Sin fase";
+        if (filterState) {
+          if (filterState === NO_STATE) {
+            if (s.state && String(s.state).trim()) return false;
+          } else if (s.state !== filterState) return false;
+        }
+        if (filterStage) {
+          if (filterStage === NO_STAGE) {
+            if (s.stage && String(s.stage).trim()) return false;
+          } else if (s.stage !== filterStage) return false;
+        }
         return true;
       }),
     [students, filterState, filterStage]
@@ -221,11 +237,55 @@ export default function StudentsByCoachTable({
                   </td>
                   <td className="px-3 py-2 text-gray-700">{s.code || "—"}</td>
                   <td className="px-3 py-2">
-                    <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                      {s.state || "—"}
-                    </span>
+                    {(() => {
+                      const v = (s.state || "").toUpperCase();
+                      const classes = v.includes("INACTIVO")
+                        ? "bg-rose-100 text-rose-800"
+                        : v.includes("ACTIVO")
+                        ? "bg-sky-100 text-sky-800"
+                        : v.includes("PROCESO")
+                        ? "bg-violet-100 text-violet-800"
+                        : v
+                        ? "bg-gray-100 text-gray-700"
+                        : "bg-gray-100 text-gray-500";
+                      return (
+                        <span
+                          className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${classes}`}
+                        >
+                          {s.state || "—"}
+                        </span>
+                      );
+                    })()}
                   </td>
-                  <td className="px-3 py-2 text-gray-700">{s.stage || "—"}</td>
+                  <td className="px-3 py-2">
+                    {(() => {
+                      const v = (s.stage || "").toUpperCase();
+                      const classes = v.includes("COPY")
+                        ? "bg-amber-100 text-amber-800"
+                        : v.includes("F1")
+                        ? "bg-emerald-100 text-emerald-800"
+                        : v.includes("F2")
+                        ? "bg-lime-100 text-lime-800"
+                        : v.includes("F3")
+                        ? "bg-cyan-100 text-cyan-800"
+                        : v.includes("F4")
+                        ? "bg-sky-100 text-sky-800"
+                        : v.includes("F5")
+                        ? "bg-purple-100 text-purple-800"
+                        : v.includes("ONBOARD")
+                        ? "bg-indigo-100 text-indigo-800"
+                        : v
+                        ? "bg-gray-100 text-gray-700"
+                        : "bg-gray-100 text-gray-500";
+                      return (
+                        <span
+                          className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${classes}`}
+                        >
+                          {s.stage || "—"}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-3 py-2 text-gray-700">
                     {nf(s.inactivityDays)}
                   </td>

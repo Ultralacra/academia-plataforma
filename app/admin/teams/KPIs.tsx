@@ -1,6 +1,6 @@
 "use client";
 
-import { Users, MapPin, Clock, CheckCircle2, Activity } from "lucide-react";
+import { Clock, CheckCircle2, Activity } from "lucide-react";
 import React from "react";
 
 function KpiCard({
@@ -26,16 +26,12 @@ function KpiCard({
 }
 
 export default function KPIs({
-  totalAlumnos,
-  areaCoach,
   abiertos,
   enProceso,
   cerrados,
   tasaResolucion,
   loading,
 }: {
-  totalAlumnos: number;
-  areaCoach: string | null;
   abiertos: number | null;
   enProceso: number | null;
   cerrados: number | null;
@@ -48,17 +44,7 @@ export default function KPIs({
   const fmtRate = (v: number | null) =>
     v == null ? "—" : `${(v * 100).toFixed(1)}%`;
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-6">
-      <KpiCard
-        icon={<Users className="h-5 w-5 text-gray-400" />}
-        label="Alumnos"
-        value={loading ? "…" : totalAlumnos}
-      />
-      <KpiCard
-        icon={<MapPin className="h-5 w-5 text-gray-400" />}
-        label="Área"
-        value={loading ? "…" : areaCoach || "—"}
-      />
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
       <KpiCard
         icon={<Activity className="h-5 w-5 text-gray-400" />}
         label="Abiertos"

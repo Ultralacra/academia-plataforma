@@ -8,8 +8,12 @@ import {
   XAxis,
   YAxis,
   Tooltip as RTooltip,
+  BarChart,
+  Bar,
+  LabelList,
+  Cell,
 } from "recharts";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Calendar, TrendingUp } from "lucide-react";
 
@@ -19,23 +23,31 @@ type TicketsSeries = {
   monthly: Array<{ month: string; count: number }>;
 };
 
-function TooltipContent({ active, payload, label }: any) {
+function TooltipContent({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const p = payload[0];
+  const { x, month, color, y } = p?.payload || {};
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
+      initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="rounded-xl border border-gray-200 bg-white/95 px-4 py-3 shadow-xl backdrop-blur-sm"
+      className="rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-xl"
     >
-      <p className="flex items-center gap-2 font-semibold text-gray-900">
-        <Calendar className="h-4 w-4 text-blue-500" />
-        {label}
-      </p>
-      <p className="mt-1 flex items-center gap-2 text-sm text-gray-600">
-        <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
-        Tickets: <span className="font-bold text-gray-900">{p.value}</span>
-      </p>
+      {/* Fecha completa */}
+      <div className="font-semibold text-gray-900">{x}</div>
+      {/* Línea de mes + valor con punto de color */}
+      <div className="mt-1 flex items-center gap-2 text-sm text-gray-700">
+        <span
+          className="inline-block h-2.5 w-2.5 rounded-full"
+          style={{ background: color || "#3b82f6" }}
+        />
+        <span className="font-medium">{month}</span>
+        <span className="ml-auto font-bold text-gray-900">{y}</span>
+      </div>
+      {/* Texto auxiliar */}
+      <div className="mt-1 text-xs text-gray-500">
+        Haz clic para ver los datos
+      </div>
     </motion.div>
   );
 }
@@ -46,12 +58,81 @@ export default function TicketsSeriesChart({
   series: TicketsSeries;
 }) {
   const [tab, setTab] = useState<"day" | "week" | "month">("day");
-  const data =
-    tab === "day"
-      ? series.daily.map((d) => ({ x: d.date.slice(5), y: d.count }))
-      : tab === "week"
-      ? series.weekly.map((d) => ({ x: d.week.slice(5), y: d.count }))
-      : series.monthly.map((d) => ({ x: d.month, y: d.count }));
+  const palette = [
+    "#3b82f6",
+    "#f59e0b",
+    "#22c55e",
+    "#a78bfa",
+    "#ef4444",
+    "#06b6d4",
+  ]; // se cicla si hay más meses
+  const monthKeyFromISO = (iso: string) =>
+    iso.length >= 7 ? iso.slice(0, 7) : iso;
+  const monthLabelFromKey = (key: string) =>
+    new Date(`${key}-01T00:00:00Z`).toLocaleDateString("es-ES", {
+      month: "short",
+      year: "numeric",
+    });
+
+  const colorMap = useMemo(() => {
+    const keys = new Set<string>();
+    series.daily.forEach((d) => keys.add(monthKeyFromISO(d.date)));
+    series.weekly.forEach((d) => keys.add(monthKeyFromISO(d.week)));
+    series.monthly.forEach((d) => keys.add(d.month));
+    const ordered = Array.from(keys).sort();
+    const map = new Map<string, string>();
+    ordered.forEach((k, i) => map.set(k, palette[i % palette.length]));
+    return map;
+  }, [series.daily, series.weekly, series.monthly]);
+
+  const dayData = useMemo(() => {
+    return series.daily.map((d) => {
+      const mkey = monthKeyFromISO(d.date);
+      return {
+        x: new Date(d.date).toLocaleDateString("es-ES", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }),
+        y: d.count,
+        month: monthLabelFromKey(mkey),
+        color: colorMap.get(mkey) || palette[0],
+        mkey,
+      };
+    });
+  }, [series.daily, colorMap]);
+
+  const weekData = useMemo(() => {
+    return series.weekly.map((d) => {
+      const mkey = monthKeyFromISO(d.week);
+      return {
+        x: new Date(d.week).toLocaleDateString("es-ES", {
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        }),
+        y: d.count,
+        month: monthLabelFromKey(mkey),
+        color: colorMap.get(mkey) || palette[0],
+        mkey,
+      };
+    });
+  }, [series.weekly, colorMap]);
+
+  const monthData = useMemo(() => {
+    return series.monthly.map((d) => {
+      const mkey = d.month;
+      return {
+        x: monthLabelFromKey(mkey),
+        y: d.count,
+        month: monthLabelFromKey(mkey),
+        color: colorMap.get(mkey) || palette[0],
+        mkey,
+      };
+    });
+  }, [series.monthly, colorMap]);
+
+  const data = tab === "day" ? dayData : tab === "week" ? weekData : monthData;
 
   return (
     <motion.div
@@ -97,41 +178,106 @@ export default function TicketsSeriesChart({
       {/* Chart */}
       <div className="h-80 p-6">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data}>
-            <defs>
-              <linearGradient id="gAreaElegant" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.8} />
-                <stop offset="50%" stopColor="#8b5cf6" stopOpacity={0.4} />
-                <stop offset="100%" stopColor="#a78bfa" stopOpacity={0.1} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis
-              dataKey="x"
-              stroke="#6b7280"
-              style={{ fontSize: "12px", fontWeight: 500 }}
-            />
-            <YAxis
-              allowDecimals={false}
-              stroke="#6b7280"
-              style={{ fontSize: "12px", fontWeight: 500 }}
-            />
-            <RTooltip
-              content={<TooltipContent />}
-              cursor={{ stroke: "#8b5cf6", strokeWidth: 2 }}
-            />
-            <Area
-              dataKey="y"
-              name="Tickets"
-              type="monotone"
-              fill="url(#gAreaElegant)"
-              stroke="#8b5cf6"
-              strokeWidth={3}
-              animationDuration={1000}
-            />
-          </AreaChart>
+          {tab === "day" ? (
+            <BarChart data={data}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#e5e7eb"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="x"
+                angle={-45}
+                textAnchor="end"
+                height={60}
+                stroke="#6b7280"
+                style={{ fontSize: "12px", fontWeight: 500 }}
+                interval={0}
+              />
+              <YAxis
+                allowDecimals={false}
+                stroke="#6b7280"
+                style={{ fontSize: "12px", fontWeight: 500 }}
+              />
+              <RTooltip
+                content={<TooltipContent />}
+                cursor={{ fill: "rgba(59,130,246,0.08)" }}
+              />
+              <Bar dataKey="y" name="Tickets" radius={[4, 4, 0, 0]}>
+                <LabelList
+                  dataKey="y"
+                  position="top"
+                  style={{ fill: "#374151", fontSize: 12, fontWeight: 600 }}
+                />
+                {dayData.map((_, idx) => (
+                  <Cell key={`c-${idx}`} fill={(data[idx] as any).color} />
+                ))}
+              </Bar>
+            </BarChart>
+          ) : (
+            <BarChart data={data}>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#e5e7eb"
+                vertical={false}
+              />
+              <XAxis
+                dataKey="x"
+                angle={-45}
+                textAnchor="end"
+                height={60}
+                stroke="#6b7280"
+                style={{ fontSize: "12px", fontWeight: 500 }}
+                interval={0}
+              />
+              <YAxis
+                allowDecimals={false}
+                stroke="#6b7280"
+                style={{ fontSize: "12px", fontWeight: 500 }}
+              />
+              <RTooltip
+                content={<TooltipContent />}
+                cursor={{ fill: "rgba(59,130,246,0.08)" }}
+              />
+              <Bar dataKey="y" name="Tickets" radius={[4, 4, 0, 0]}>
+                <LabelList
+                  dataKey="y"
+                  position="top"
+                  style={{ fill: "#374151", fontSize: 12, fontWeight: 600 }}
+                />
+                {data.map((_, idx) => (
+                  <Cell key={`cw-${idx}`} fill={(data[idx] as any).color} />
+                ))}
+              </Bar>
+            </BarChart>
+          )}
         </ResponsiveContainer>
       </div>
+
+      {/* Leyenda de meses (según pestaña activa) */}
+      {(() => {
+        const current = data as any[];
+        const uniqueMKeys = Array.from(new Set(current.map((d) => d.mkey)));
+        if (!uniqueMKeys.length) return null;
+        return (
+          <div className="px-6 pb-6 flex flex-wrap items-center gap-3 text-xs">
+            {uniqueMKeys.map((mk) => (
+              <div
+                key={mk}
+                className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-2.5 py-1"
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full"
+                  style={{ background: colorMap.get(mk) || palette[0] }}
+                />
+                <span className="font-medium text-gray-700">
+                  {monthLabelFromKey(mk)}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </motion.div>
   );
 }

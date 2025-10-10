@@ -19,14 +19,22 @@ export default function CoachStudentsDistributionChart({
   onModeChange,
   coachName,
   showToggle = true,
+  aggState,
+  aggPhase,
 }: {
   students: CoachStudent[];
   mode?: Mode;
   onModeChange?: (m: Mode) => void;
   coachName: string;
   showToggle?: boolean;
+  aggState?: { name: string; value: number }[];
+  aggPhase?: { name: string; value: number }[];
 }) {
   const agg = useMemo(() => {
+    const source = mode === "estado" ? aggState : aggPhase;
+    if (Array.isArray(source) && source.length) {
+      return [...source].sort((a, b) => b.value - a.value);
+    }
     const map = new Map<string, number>();
     const keyField = mode === "estado" ? "state" : "stage";
     for (const s of students) {
@@ -38,7 +46,7 @@ export default function CoachStudentsDistributionChart({
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [students, mode]);
+  }, [students, mode, aggState, aggPhase]);
 
   const total = useMemo(() => agg.reduce((a, c) => a + c.value, 0), [agg]);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);

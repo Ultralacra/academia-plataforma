@@ -23,12 +23,18 @@ export default function StudentsPhaseDonut({
   students,
   coachName,
   title = "Distribución por fase",
+  aggData,
 }: {
   students: StudentRow[];
   coachName: string;
   title?: string;
+  aggData?: { name: string; value: number }[];
 }) {
   const agg = useMemo(() => {
+    if (Array.isArray(aggData) && aggData.length) {
+      // usar directamente los agregados del API v2
+      return [...aggData].sort((a, b) => b.value - a.value);
+    }
     const map = new Map<string, number>();
     for (const s of students) {
       const raw = (s as any).stage ?? (s as any).etapa;
@@ -38,7 +44,7 @@ export default function StudentsPhaseDonut({
     return Array.from(map.entries())
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-  }, [students]);
+  }, [students, aggData]);
 
   // Paleta limpia y consistente
   const COLORS = [
@@ -145,8 +151,12 @@ export default function StudentsPhaseDonut({
         {/* Overlay de Total centrado (no bloquea interacciones) */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <div className="text-2xl font-extrabold text-gray-900">{fmt.format(total)}</div>
-            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total</div>
+            <div className="text-2xl font-extrabold text-gray-900">
+              {fmt.format(total)}
+            </div>
+            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+              Total
+            </div>
           </div>
         </div>
       </div>

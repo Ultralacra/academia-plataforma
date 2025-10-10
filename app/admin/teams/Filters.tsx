@@ -26,7 +26,12 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 
-type CoachOpt = { id: number; codigo: string; nombre: string };
+type CoachOpt = {
+  id: number;
+  codigo: string;
+  nombre: string;
+  area?: string | null;
+};
 type Props = {
   coaches: CoachOpt[];
   coach: string; // codigo
@@ -52,6 +57,19 @@ export default function Filters({
 
   const selectedCoach = coaches.find((c) => c.codigo === coach);
 
+  const areaBadgeClasses = (area?: string | null) => {
+    const a = (area || "").toLowerCase();
+    if (!a) return "hidden";
+    if (a.includes("copy")) return "bg-amber-100 text-amber-800";
+    if (a.includes("téc") || a.includes("tec"))
+      return "bg-teal-100 text-teal-800";
+    if (a.includes("menta")) return "bg-pink-100 text-pink-800";
+    if (a.includes("ops") || a.includes("oper"))
+      return "bg-blue-100 text-blue-800";
+    if (a.includes("ventas") || a.includes("comer"))
+      return "bg-emerald-100 text-emerald-800";
+    return "bg-gray-100 text-gray-700";
+  };
   return (
     <motion.div
       initial={{ opacity: 0, y: -20 }}
@@ -110,8 +128,18 @@ export default function Filters({
                         : "text-gray-500"
                     )}
                   >
-                    {selectedCoach ? selectedCoach.nombre : "Todos los coachs"}
+                    {selectedCoach ? selectedCoach.nombre : "Seleccionar coach"}
                   </span>
+                  {selectedCoach?.area ? (
+                    <span
+                      className={cn(
+                        "ml-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                        areaBadgeClasses(selectedCoach.area)
+                      )}
+                    >
+                      {selectedCoach.area}
+                    </span>
+                  ) : null}
                   {coach && (
                     <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400 px-2 py-0.5 text-[10px] font-semibold">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-500 dark:bg-blue-400 animate-pulse" />
@@ -148,22 +176,6 @@ export default function Filters({
                 <CommandList className="max-h-64">
                   <CommandEmpty>No hay resultados.</CommandEmpty>
                   <CommandGroup heading="Coachs">
-                    <CommandItem
-                      key="all"
-                      onSelect={() => {
-                        onCoach("");
-                        setOpenCoach(false);
-                      }}
-                      className="cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2">
-                        <UserCircle2 className="h-4 w-4 text-gray-400" />
-                        Todos los coachs
-                      </span>
-                      {!coach && (
-                        <Check className="ml-auto h-4 w-4 text-blue-600" />
-                      )}
-                    </CommandItem>
                     {coaches.map((c) => (
                       <CommandItem
                         key={c.codigo}
@@ -174,9 +186,19 @@ export default function Filters({
                         }}
                         className="cursor-pointer"
                       >
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center gap-2 min-w-0">
                           <UserCircle2 className="h-4 w-4 text-gray-400" />
-                          {c.nombre}
+                          <span className="truncate">{c.nombre}</span>
+                          {c.area ? (
+                            <span
+                              className={cn(
+                                "ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                                areaBadgeClasses(c.area)
+                              )}
+                            >
+                              {c.area}
+                            </span>
+                          ) : null}
                         </span>
                         {coach === c.codigo && (
                           <Check className="ml-auto h-4 w-4 text-blue-600" />

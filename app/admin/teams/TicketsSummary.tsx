@@ -52,20 +52,7 @@ export default function TicketsSummary({
         </h3>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-3">
-        <div className="rounded-2xl border border-gray-200 bg-white p-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-xl p-3 bg-gray-100">
-              <Ticket className="h-5 w-5 text-gray-400" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">Tickets totales</p>
-              <p className="text-xl font-semibold text-gray-900">
-                {nf(totals.ticketsTotal)}
-              </p>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
         <div className="rounded-2xl border border-gray-200 bg-white p-4">
           <div className="flex items-center gap-3">
             <div className="rounded-xl p-3 bg-gray-100">
