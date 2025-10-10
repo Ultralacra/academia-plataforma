@@ -2,14 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService } from "@/lib/data-service";
-import {
-  fetchCoachs,
-  fetchStudentsByCoach,
-  fetchAllStudents,
-  fetchMetrics,
-  Coach,
-  RawClient,
-} from "./teamsApi";
+import { fetchCoachs, fetchMetrics, Coach, RawClient } from "./teamsApi";
 import Filters from "./Filters";
 import TicketsByStudentBar from "./TicketsByStudentBar";
 import TicketsByPeriodBar from "./TicketsByPeriodBar";
@@ -89,11 +82,9 @@ export default function TeamsMetricsContent() {
   const [loadingCoachs, setLoadingCoachs] = useState(false);
   const [loadingCoachData, setLoadingCoachData] = useState(false);
   const [students, setStudents] = useState<any[]>([]); // alumnos (legacy derivado de dataService si existiera)
-  // Eliminado: ya no consultamos tickets base; usamos metrics v2
-  const [coachStudents, setCoachStudents] = useState<RawClient[]>([]); // alumnos del coach via endpoint directo
-  const [allStudents, setAllStudents] = useState<RawClient[]>([]); // todos los alumnos (endpoint directo)
-  const [loadingCoachStudents, setLoadingCoachStudents] = useState(false);
-  const [loadingAllStudents, setLoadingAllStudents] = useState(false);
+  // Eliminado: no usaremos clients-coaches ni clients
+  const [loadingCoachStudents] = useState(false);
+  const [loadingAllStudents] = useState(false);
   const [studentsChartMode, setStudentsChartMode] = useState<"estado" | "fase">(
     "estado"
   );
@@ -246,11 +237,7 @@ export default function TeamsMetricsContent() {
       setLoading(true);
       try {
         // 1) Métricas (endpoint directo)
-        const res = await fetchMetrics(
-          desde,
-          hasta,
-          coach || undefined
-        );
+        const res = await fetchMetrics(desde, hasta, coach || undefined);
         // Estructura esperada: { code, status, data: { teams: { ... } } }
         const root = (res?.data as any) ?? {};
         const teams = root?.teams ?? {};
@@ -502,7 +489,9 @@ export default function TeamsMetricsContent() {
           ticketsByEstado: Array.isArray((teams as any).ticketsByEstado)
             ? (teams as any).ticketsByEstado
             : [],
-          clientsByCoachDetail: Array.isArray((teams as any).clientsByCoachDetail)
+          clientsByCoachDetail: Array.isArray(
+            (teams as any).clientsByCoachDetail
+          )
             ? (teams as any).clientsByCoachDetail
             : [],
           createdBlock,
@@ -550,8 +539,7 @@ export default function TeamsMetricsContent() {
     };
   }, [desde, hasta, coach, bothSet]);
 
-  // Cuando se selecciona un coach, descargar (en paralelo) alumnos y tickets del rango (si no los tenemos para este rango)
-  // Consultar datos de alumnos/tickets genéricos (para fallback de métricas derivadas)
+  // Consultar datos base de alumnos/tickets genéricos (para fallback de métricas derivadas)
   useEffect(() => {
     let alive = true;
     setLoadingCoachData(true);
@@ -577,25 +565,6 @@ export default function TeamsMetricsContent() {
     };
   }, [desde, hasta, bothSet]);
 
-  // Cargar alumnos del coach y todos los alumnos cuando cambia coach (y aún no cargados globales)
-  useEffect(() => {
-    let alive = true;
-    if (!coach) return; // sólo cuando se elige un coach (codigo)
-    // Limpiar alumnos del coach para evitar mostrar datos del coach anterior mientras carga
-    setCoachStudents([]);
-    setLoadingCoachStudents(true);
-    fetchStudentsByCoach(coach)
-      .then((rows) => {
-        if (!alive) return;
-        setCoachStudents(rows);
-      })
-      .catch((e) => console.error("Error alumnos del coach", e))
-      .finally(() => alive && setLoadingCoachStudents(false));
-    return () => {
-      alive = false;
-    };
-  }, [coach]);
-
   // Sincronizar coachName cuando cambia el código seleccionado
   useEffect(() => {
     if (!coach) {
@@ -617,22 +586,7 @@ export default function TeamsMetricsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coach]);
 
-  // Cargar todos los alumnos (una vez, o si quieres podrías ligarlo al rango)
-  useEffect(() => {
-    if (allStudents.length > 0) return;
-    let alive = true;
-    setLoadingAllStudents(true);
-    fetchAllStudents()
-      .then((rows) => {
-        if (!alive) return;
-        setAllStudents(rows);
-      })
-      .catch((e) => console.error("Error todos los alumnos", e))
-      .finally(() => alive && setLoadingAllStudents(false));
-    return () => {
-      alive = false;
-    };
-  }, [allStudents.length]);
+  // Eliminado: no usamos fetchAllStudents ni fetchStudentsByCoach
 
   // Derivar métricas filtradas por coach si hay selección
   const filteredVm = useMemo(() => {
@@ -657,23 +611,14 @@ export default function TeamsMetricsContent() {
         }
       : null;
 
-    // Alumnos del coach (por name match en teamMembers)
-    // Intentar usar endpoint directo; si está vacío, fallback al heurístico
-    const studentsOfCoach = coachStudents.length
-      ? coachStudents.map((r) => ({
-          id: r.id,
-          name: r.nombre,
-          code: r.codigo ?? null,
-          state: r.estado ?? r.estado ?? null,
-          stage: r.etapa ?? null,
-        }))
-      : students.filter((al) =>
-          Array.isArray(al.teamMembers)
-            ? al.teamMembers.some(
-                (m: any) => m.name?.toLowerCase() === coach.toLowerCase()
-              )
-            : false
-        );
+    // Alumnos del coach desde metrics-v2 detalle
+    const studentsOfCoach = (vm.clientsByCoachDetail || []).map((r) => ({
+      id: r.id,
+      name: r.nombre,
+      code: r.codigo ?? null,
+      state: r.estado ?? null,
+      stage: r.etapa ?? null,
+    }));
 
     // Tickets del coach: aquellos cuyo alumno pertenece a studentsOfCoach
     const studentNames = new Set(
@@ -708,7 +653,7 @@ export default function TeamsMetricsContent() {
     ];
     // areasCount agrupando área de alumnos del coach (si la tuviera)
     const areaMap = new Map<string, number>();
-    coachStudents.forEach((s) => {
+    (vm.clientsByCoachDetail || []).forEach((s) => {
       const area = (s as any).area ? String((s as any).area) : "Sin área";
       areaMap.set(area, (areaMap.get(area) ?? 0) + 1);
     });
@@ -783,31 +728,10 @@ export default function TeamsMetricsContent() {
 
   const displayVm = filteredVm; // alias para claridad
 
-  // Enriquecer alumnos del coach con estado y etapa provenientes del dataset global (allStudents)
+  // Alumnos del coach (únicamente desde metrics-v2 detalle)
   const coachStudentsEnriched = useMemo(() => {
-    if (!coachStudents.length) return [] as typeof coachStudents;
-    if (!allStudents.length) return coachStudents; // aún no cargado global
-
-    // Crear índice por código y por nombre (fallback) para búsquedas rápidas
-    const byCode = new Map<string, RawClient>();
-    const byName = new Map<string, RawClient>();
-    for (const s of allStudents) {
-      if (s.codigo) byCode.set(String(s.codigo).toLowerCase(), s);
-      byName.set(s.nombre.toLowerCase(), s);
-    }
-
-    return coachStudents.map((c) => {
-      const codeKey = c.codigo ? String(c.codigo).toLowerCase() : null;
-      const match =
-        (codeKey && byCode.get(codeKey)) || byName.get(c.nombre.toLowerCase());
-      if (!match) return c;
-      return {
-        ...c,
-        estado: match.estado ?? c.estado ?? null,
-        etapa: match.etapa ?? c.etapa ?? null,
-      } as RawClient;
-    });
-  }, [coachStudents, allStudents]);
+    return (vm.clientsByCoachDetail || []) as RawClient[];
+  }, [vm.clientsByCoachDetail]);
 
   // StatusDist para KPIs extendidos
   const coachStatusDist = useMemo(() => {
@@ -1055,7 +979,10 @@ export default function TeamsMetricsContent() {
             <TicketsByStudentBar
               data={displayVm.ticketsByName || []}
               avgResolution={(() => {
-                const map = new Map<string, { minutes: number | null; hours: number | null; hms: string }>();
+                const map = new Map<
+                  string,
+                  { minutes: number | null; hours: number | null; hms: string }
+                >();
                 for (const r of displayVm.avgResolutionByStudent || []) {
                   const key = String(r.name || "");
                   map.set(key, {
@@ -1153,16 +1080,6 @@ export default function TeamsMetricsContent() {
       {coach && !loading && (
         <StudentsByCoachTable
           coach={coachName || coach}
-          students={coachStudentsEnriched.map((r) => ({
-            id: r.id,
-            name: r.nombre, // ya normalizado del endpoint alumno_nombre
-            code: r.codigo ?? null, // id_alumno
-            state: (r as any).estado ?? null,
-            stage: r.etapa ?? null,
-            lastActivity: (r as any).ultima_actividad ?? null,
-            inactivityDays: (r as any).inactividad ?? null,
-            ticketsCount: (r as any).tickets ?? null,
-          }))}
           filtered={(vm.clientsByCoachDetail || []).map((r) => ({
             id: r.id,
             name: r.nombre,
@@ -1181,7 +1098,6 @@ export default function TeamsMetricsContent() {
             paso_f4: r.paso_f4 ?? null,
             paso_f5: r.paso_f5 ?? null,
           }))}
-          loading={loadingCoachStudents}
           loadingFiltered={loading}
         />
       )}

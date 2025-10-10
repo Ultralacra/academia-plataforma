@@ -289,30 +289,35 @@ export async function fetchMetrics(
           cantidad: Number(it.cantidad ?? 0) || 0,
         }))
       : [],
-    // Promedios de resolución por alumno (minutos)
+    // Promedios de resolución por alumno (incluye segundos, minutos y horas)
     avgResolutionByStudent: Array.isArray(d?.avgResolutionByCoach?.detalle)
-      ? (d.avgResolutionByCoach.detalle as any[]).map((it) => ({
-          code: String(it.codigo ?? it.codigo_alumno ?? ""),
-          name: String(it.nombre ?? it.alumno ?? ""),
-          tickets_resueltos: Number(it.tickets_resueltos ?? 0) || 0,
-          avg_seconds:
-            it.avg_seconds != null ? Number(it.avg_seconds) : it.avg_minutes != null ? Number(it.avg_minutes) * 60 : null,
-          avg_minutes:
+      ? (d.avgResolutionByCoach.detalle as any[]).map((it) => {
+          const avg_seconds =
+            it.avg_seconds != null ? Number(it.avg_seconds) : null;
+          const avg_minutes =
             it.avg_minutes != null
               ? Number(it.avg_minutes)
-              : it.avg_seconds != null
-              ? Number(it.avg_seconds) / 60
-              : null,
-          avg_hours:
+              : avg_seconds != null
+              ? avg_seconds / 60
+              : null;
+          const avg_hours =
             it.avg_hours != null
               ? Number(it.avg_hours)
-              : it.avg_minutes != null
-              ? Number(it.avg_minutes) / 60
-              : it.avg_seconds != null
-              ? Number(it.avg_seconds) / 3600
-              : null,
-          avg_time_hms: String(it.avg_time_hms ?? ""),
-        }))
+              : avg_minutes != null
+              ? avg_minutes / 60
+              : avg_seconds != null
+              ? avg_seconds / 3600
+              : null;
+          return {
+            code: String(it.codigo ?? it.codigo_alumno ?? ""),
+            name: String(it.nombre ?? it.alumno ?? ""),
+            tickets_resueltos: Number(it.tickets_resueltos ?? 0) || 0,
+            avg_seconds,
+            avg_minutes,
+            avg_hours,
+            avg_time_hms: String(it.avg_time_hms ?? ""),
+          };
+        })
       : [],
     // Campos no provistos por v2: dejamos vacíos para no romper UI
     respByCoach: [] as any[],

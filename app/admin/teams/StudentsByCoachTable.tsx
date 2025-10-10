@@ -27,15 +27,11 @@ export type FilteredStudent = CoachStudent & {
 
 export default function StudentsByCoachTable({
   coach,
-  students,
   filtered,
-  loading,
   loadingFiltered,
 }: {
   coach: string;
-  students: CoachStudent[];
   filtered?: FilteredStudent[];
-  loading?: boolean;
   loadingFiltered?: boolean;
 }) {
   const nf = (n: any) =>
@@ -104,14 +100,10 @@ export default function StudentsByCoachTable({
     );
   }
 
-  const [activeTab, setActiveTab] = useState<"general" | "filtrados">(
-    "general"
-  );
-
-  // Dataset según pestaña activa
+  // Dataset único: solo "filtrados" desde metrics-v2
   const baseData: Array<CoachStudent | FilteredStudent> = useMemo(
-    () => (activeTab === "general" ? students : filtered || []),
-    [activeTab, students, filtered]
+    () => filtered || [],
+    [filtered]
   );
 
   // Derivar valores únicos de estado y fase del dataset activo
@@ -192,29 +184,6 @@ export default function StudentsByCoachTable({
           </p>
         </div>
         <div className="flex flex-col gap-2 w-full md:flex-1">
-          {/* Tabs General / Filtrados */}
-          <div className="flex items-center gap-2">
-            <button
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
-                activeTab === "general"
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-              }`}
-              onClick={() => setActiveTab("general")}
-            >
-              Alumnos general
-            </button>
-            <button
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${
-                activeTab === "filtrados"
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-              }`}
-              onClick={() => setActiveTab("filtrados")}
-            >
-              Filtrados por rango
-            </button>
-          </div>
           <div className="flex flex-col gap-2 w-full">
             <FilterGroup
               label="Estado"
@@ -236,65 +205,76 @@ export default function StudentsByCoachTable({
             />
           </div>
           <div className="text-xs text-gray-500">
-            {(activeTab === "general" ? loading : loadingFiltered)
+            {loadingFiltered
               ? "Cargando…"
               : `${filteredData.length} alumnos filtrados • página ${page} / ${totalPages}`}
           </div>
         </div>
       </div>
-      {/* Tabla según pestaña */}
-      {activeTab === "general" ? (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
-                <th className="px-3 py-2 text-left font-medium">Alumno</th>
-                <th className="px-3 py-2 text-left font-medium">Código</th>
-                <th className="px-3 py-2 text-left font-medium">Estado</th>
-                <th className="px-3 py-2 text-left font-medium">Fase</th>
-                <th className="px-3 py-2 text-left font-medium">
-                  Inactividad (días)
-                </th>
-                <th className="px-3 py-2 text-left font-medium">
-                  Última actividad
-                </th>
-                <th className="px-3 py-2 text-left font-medium">Tickets</th>
+      {/* Tabla única: Filtrados por rango (metrics-v2) */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
+              <th className="px-3 py-2 text-left font-medium">Alumno</th>
+              <th className="px-3 py-2 text-left font-medium">Código</th>
+              <th className="px-3 py-2 text-left font-medium">Estado</th>
+              <th className="px-3 py-2 text-left font-medium">Fase</th>
+              <th className="px-3 py-2 text-left font-medium">Ingreso</th>
+              <th className="px-3 py-2 text-left font-medium">
+                Última actividad
+              </th>
+              <th className="px-3 py-2 text-left font-medium">
+                Inactividad (días)
+              </th>
+              <th className="px-3 py-2 text-left font-medium">Tickets</th>
+              <th className="px-3 py-2 text-left font-medium">Contrato</th>
+              <th className="px-3 py-2 text-left font-medium">Nicho</th>
+              <th className="px-3 py-2 text-left font-medium">F1</th>
+              <th className="px-3 py-2 text-left font-medium">F2</th>
+              <th className="px-3 py-2 text-left font-medium">F3</th>
+              <th className="px-3 py-2 text-left font-medium">F4</th>
+              <th className="px-3 py-2 text-left font-medium">F5</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loadingFiltered && (
+              <tr>
+                <td
+                  colSpan={15}
+                  className="px-3 py-4 text-center text-gray-500"
+                >
+                  Cargando alumnos…
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {loading && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-3 py-4 text-center text-gray-500"
-                  >
-                    Cargando alumnos…
-                  </td>
-                </tr>
-              )}
-              {!loading && filteredData.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-3 py-4 text-center text-gray-500"
-                  >
-                    No se encontraron alumnos asociados a este coach.
-                  </td>
-                </tr>
-              )}
-              {!loading &&
-                pageItems.map((s) => (
+            )}
+            {!loadingFiltered && filteredData.length === 0 && (
+              <tr>
+                <td
+                  colSpan={15}
+                  className="px-3 py-4 text-center text-gray-500"
+                >
+                  Sin data conseguida.
+                </td>
+              </tr>
+            )}
+            {!loadingFiltered &&
+              pageItems.map((s) => {
+                const fs = s as FilteredStudent;
+                return (
                   <tr
-                    key={s.id}
+                    key={fs.id}
                     className="border-t border-gray-100 hover:bg-gray-50"
                   >
                     <td className="px-3 py-2 font-medium text-gray-900">
-                      {s.name}
+                      {fs.name}
                     </td>
-                    <td className="px-3 py-2 text-gray-700">{s.code || "—"}</td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {fs.code || "—"}
+                    </td>
                     <td className="px-3 py-2">
                       {(() => {
-                        const v = (s.state || "").toUpperCase();
+                        const v = (fs.state || "").toUpperCase();
                         const classes = v.includes("INACTIVO")
                           ? "bg-rose-100 text-rose-800"
                           : v.includes("ACTIVO")
@@ -308,14 +288,14 @@ export default function StudentsByCoachTable({
                           <span
                             className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${classes}`}
                           >
-                            {s.state || "—"}
+                            {fs.state || "—"}
                           </span>
                         );
                       })()}
                     </td>
                     <td className="px-3 py-2">
                       {(() => {
-                        const v = (s.stage || "").toUpperCase();
+                        const v = (fs.stage || "").toUpperCase();
                         const classes = v.includes("COPY")
                           ? "bg-amber-100 text-amber-800"
                           : v.includes("F1")
@@ -337,209 +317,79 @@ export default function StudentsByCoachTable({
                           <span
                             className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${classes}`}
                           >
-                            {s.stage || "—"}
+                            {fs.stage || "—"}
                           </span>
                         );
                       })()}
                     </td>
                     <td className="px-3 py-2 text-gray-700">
-                      {nf(s.inactivityDays)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {s.lastActivity
-                        ? new Date(s.lastActivity).toLocaleDateString("es-ES")
+                      {fs.ingreso
+                        ? new Date(fs.ingreso).toLocaleDateString("es-ES")
                         : "—"}
                     </td>
                     <td className="px-3 py-2 text-gray-700">
-                      {nf(s.ticketsCount)}
+                      {fs.lastActivity
+                        ? new Date(fs.lastActivity).toLocaleDateString("es-ES")
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {nf(fs.inactivityDays)}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {nf(fs.ticketsCount)}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {fs.contrato || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {fs.nicho || "—"}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {nf(fs.paso_f1)}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {nf(fs.paso_f2)}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {nf(fs.paso_f3)}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {nf(fs.paso_f4)}
+                    </td>
+                    <td className="px-3 py-2 text-gray-700">
+                      {nf(fs.paso_f5)}
                     </td>
                   </tr>
-                ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
-                <th className="px-3 py-2 text-left font-medium">Alumno</th>
-                <th className="px-3 py-2 text-left font-medium">Código</th>
-                <th className="px-3 py-2 text-left font-medium">Estado</th>
-                <th className="px-3 py-2 text-left font-medium">Fase</th>
-                <th className="px-3 py-2 text-left font-medium">Ingreso</th>
-                <th className="px-3 py-2 text-left font-medium">
-                  Última actividad
-                </th>
-                <th className="px-3 py-2 text-left font-medium">
-                  Inactividad (días)
-                </th>
-                <th className="px-3 py-2 text-left font-medium">Tickets</th>
-                <th className="px-3 py-2 text-left font-medium">Contrato</th>
-                <th className="px-3 py-2 text-left font-medium">Nicho</th>
-                <th className="px-3 py-2 text-left font-medium">F1</th>
-                <th className="px-3 py-2 text-left font-medium">F2</th>
-                <th className="px-3 py-2 text-left font-medium">F3</th>
-                <th className="px-3 py-2 text-left font-medium">F4</th>
-                <th className="px-3 py-2 text-left font-medium">F5</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loadingFiltered && (
-                <tr>
-                  <td
-                    colSpan={15}
-                    className="px-3 py-4 text-center text-gray-500"
-                  >
-                    Cargando alumnos…
-                  </td>
-                </tr>
-              )}
-              {!loadingFiltered && filteredData.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={15}
-                    className="px-3 py-4 text-center text-gray-500"
-                  >
-                    No se encontraron alumnos filtrados para el rango.
-                  </td>
-                </tr>
-              )}
-              {!loadingFiltered &&
-                pageItems.map((s) => {
-                  const fs = s as FilteredStudent;
-                  return (
-                    <tr
-                      key={fs.id}
-                      className="border-t border-gray-100 hover:bg-gray-50"
-                    >
-                      <td className="px-3 py-2 font-medium text-gray-900">
-                        {fs.name}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {fs.code || "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        {(() => {
-                          const v = (fs.state || "").toUpperCase();
-                          const classes = v.includes("INACTIVO")
-                            ? "bg-rose-100 text-rose-800"
-                            : v.includes("ACTIVO")
-                            ? "bg-sky-100 text-sky-800"
-                            : v.includes("PROCESO")
-                            ? "bg-violet-100 text-violet-800"
-                            : v
-                            ? "bg-gray-100 text-gray-700"
-                            : "bg-gray-100 text-gray-500";
-                          return (
-                            <span
-                              className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${classes}`}
-                            >
-                              {fs.state || "—"}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 py-2">
-                        {(() => {
-                          const v = (fs.stage || "").toUpperCase();
-                          const classes = v.includes("COPY")
-                            ? "bg-amber-100 text-amber-800"
-                            : v.includes("F1")
-                            ? "bg-emerald-100 text-emerald-800"
-                            : v.includes("F2")
-                            ? "bg-lime-100 text-lime-800"
-                            : v.includes("F3")
-                            ? "bg-cyan-100 text-cyan-800"
-                            : v.includes("F4")
-                            ? "bg-sky-100 text-sky-800"
-                            : v.includes("F5")
-                            ? "bg-purple-100 text-purple-800"
-                            : v.includes("ONBOARD")
-                            ? "bg-indigo-100 text-indigo-800"
-                            : v
-                            ? "bg-gray-100 text-gray-700"
-                            : "bg-gray-100 text-gray-500";
-                          return (
-                            <span
-                              className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${classes}`}
-                            >
-                              {fs.stage || "—"}
-                            </span>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {fs.ingreso
-                          ? new Date(fs.ingreso).toLocaleDateString("es-ES")
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {fs.lastActivity
-                          ? new Date(fs.lastActivity).toLocaleDateString(
-                              "es-ES"
-                            )
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {nf(fs.inactivityDays)}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {nf(fs.ticketsCount)}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {fs.contrato || "—"}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {fs.nicho || "—"}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {nf(fs.paso_f1)}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {nf(fs.paso_f2)}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {nf(fs.paso_f3)}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {nf(fs.paso_f4)}
-                      </td>
-                      <td className="px-3 py-2 text-gray-700">
-                        {nf(fs.paso_f5)}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Controles de paginación */}
+      {!loadingFiltered && totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs">
+          <button
+            className="px-2 py-1 rounded-md border bg-white disabled:opacity-40"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            Anterior
+          </button>
+          <div className="flex items-center gap-2">
+            <span>
+              Página {page} de {totalPages}
+            </span>
+          </div>
+          <button
+            className="px-2 py-1 rounded-md border bg-white disabled:opacity-40"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+          >
+            Siguiente
+          </button>
         </div>
       )}
-      {/* Controles de paginación */}
-      {!(activeTab === "general" ? loading : loadingFiltered) &&
-        totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs">
-            <button
-              className="px-2 py-1 rounded-md border bg-white disabled:opacity-40"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
-              Anterior
-            </button>
-            <div className="flex items-center gap-2">
-              <span>
-                Página {page} de {totalPages}
-              </span>
-            </div>
-            <button
-              className="px-2 py-1 rounded-md border bg-white disabled:opacity-40"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-            >
-              Siguiente
-            </button>
-          </div>
-        )}
     </div>
   );
 }
