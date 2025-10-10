@@ -1,8 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RTooltip } from "recharts";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+} from "recharts";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 type StudentRow = {
   id: number | string;
@@ -66,7 +77,10 @@ export default function StudentsPhaseDonut({
   const renderLabel = () => null;
   const displayAgg = useMemo(() => {
     if (!agg.length) return [] as { name: string; value: number }[];
-    const withPct = agg.map((d) => ({ ...d, pct: total ? (d.value * 100) / total : 0 }));
+    const withPct = agg.map((d) => ({
+      ...d,
+      pct: total ? (d.value * 100) / total : 0,
+    }));
     const MIN_PCT = 3;
     const MAX_LABELS = 8;
     const big = withPct.filter((d) => d.pct >= MIN_PCT).slice(0, MAX_LABELS);
@@ -110,23 +124,35 @@ export default function StudentsPhaseDonut({
               {displayAgg.map((seg, i) => (
                 <Cell
                   key={`${seg.name}-${i}`}
-                  fill={seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length]}
+                  fill={
+                    seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length]
+                  }
                   stroke="rgba(255,255,255,0.9)"
                   strokeWidth={activeIndex === i ? 3 : 2}
                   onMouseEnter={() => setHoverIndex(i)}
-                  onMouseLeave={() => setHoverIndex(pinnedIndex === null ? null : hoverIndex)}
-                  onClick={() => setPinnedIndex((prev) => (prev === i ? null : i))}
+                  onMouseLeave={() =>
+                    setHoverIndex(pinnedIndex === null ? null : hoverIndex)
+                  }
+                  onClick={() =>
+                    setPinnedIndex((prev) => (prev === i ? null : i))
+                  }
                   cursor="pointer"
                 />
               ))}
             </Pie>
-            <RTooltip formatter={(value: any, name: any) => [value as any, name as any]} />
+            <RTooltip
+              formatter={(value: any, name: any) => [value as any, name as any]}
+            />
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <div className="text-2xl font-extrabold text-gray-900">{fmt.format(total)}</div>
-            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Total</div>
+            <div className="text-2xl font-extrabold text-gray-900">
+              {fmt.format(total)}
+            </div>
+            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+              Total
+            </div>
           </div>
         </div>
       </div>
@@ -135,21 +161,31 @@ export default function StudentsPhaseDonut({
         <Accordion type="single" collapsible>
           {displayAgg.map((seg, i) => {
             const pct = total ? Math.round((seg.value * 1000) / total) / 10 : 0;
-            const color = seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length];
+            const color =
+              seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length];
             const det = details?.find((d) => norm(d.name) === norm(seg.name));
-            const studentsList = seg.name === "Otros" ? [] : det?.students ?? [];
+            const studentsList =
+              seg.name === "Otros" ? [] : det?.students ?? [];
             return (
               <AccordionItem key={`${seg.name}-${i}`} value={`item-${i}`}>
                 <AccordionTrigger className="px-3">
                   <div className="flex w-full items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-                      <span className="font-medium text-gray-700 truncate" title={seg.name}>
+                      <span
+                        className="h-2.5 w-2.5 rounded-full"
+                        style={{ background: color }}
+                      />
+                      <span
+                        className="font-medium text-gray-700 truncate"
+                        title={seg.name}
+                      >
                         {seg.name}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-gray-500">
-                      <span className="font-semibold text-gray-900">{fmt.format(seg.value)}</span>
+                      <span className="font-semibold text-gray-900">
+                        {fmt.format(seg.value)}
+                      </span>
                       <span>({pct}%)</span>
                     </div>
                   </div>
@@ -162,7 +198,9 @@ export default function StudentsPhaseDonut({
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-500 px-3">Sin alumnos listados.</p>
+                    <p className="text-sm text-gray-500 px-3">
+                      Sin alumnos listados.
+                    </p>
                   )}
                 </AccordionContent>
               </AccordionItem>
