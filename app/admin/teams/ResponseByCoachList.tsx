@@ -27,7 +27,7 @@ export default function ResponseByCoachList({
   return (
     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
       <div className="border-b border-gray-100 px-5 py-4">
-        <h3 className="text-sm font-semibold text-gray-900">
+        <h3 className="text-sm font-semibold text-gray-900 uppercase">
           Tiempo de respuesta por coach
         </h3>
         <p className="text-xs text-gray-500 mt-1">

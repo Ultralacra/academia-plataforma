@@ -143,7 +143,7 @@ export default function TicketsSeriesChart({
       {/* Header */}
       <div className="border-b border-gray-100 px-6 py-5 bg-white">
         <h3 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          Tickets por periodo
+          TICKETS POR PERIODO
         </h3>
         <p className="mt-1 text-sm text-gray-600">
           Evolución temporal de tickets creados

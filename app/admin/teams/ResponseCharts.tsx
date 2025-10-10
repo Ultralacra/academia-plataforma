@@ -112,7 +112,7 @@ export default function ResponseCharts({
       {/* ================== Izquierda ================== */}
       <Card>
         <Header
-          title="Tiempo de respuesta por coach"
+          title="TIEMPO DE RESPUESTA POR COACH"
           subtitle="Top según tickets • unidades automáticas"
         />
         <div className="relative h-72 px-5 pb-5">

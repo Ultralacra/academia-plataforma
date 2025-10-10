@@ -12,7 +12,7 @@ type Row = { date: string; count: number };
 
 export default function TicketsByPeriodBar({
   data,
-  title = "Tickets por periodo",
+  title = "TICKETS POR PERIODO",
 }: {
   data: Row[];
   title?: string;

@@ -47,7 +47,7 @@ export default function TicketsSummary({
       className="overflow-hidden rounded-2xl bg-white border border-gray-100"
     >
       <div className="border-b border-gray-100 px-6 py-5">
-        <h3 className="text-lg font-semibold text-neutral-900">
+        <h3 className="text-lg font-semibold text-neutral-900 uppercase">
           Resumen de tickets
         </h3>
       </div>

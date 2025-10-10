@@ -159,7 +159,7 @@ export default function StudentsByCoachTable({
     <div className="rounded-2xl border border-gray-200 bg-white">
       <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-3 md:flex-row md:items-start md:gap-6">
         <div>
-          <h3 className="text-base font-bold text-gray-900">
+          <h3 className="text-base font-bold text-gray-900 uppercase">
             Alumnos de {coach}
           </h3>
           <p className="text-sm text-gray-500">

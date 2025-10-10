@@ -20,7 +20,7 @@ type Row = { name: string; count: number };
 
 export default function TicketsByStudentBar({
   data,
-  title = "Tickets por alumno",
+  title = "TICKETS POR ALUMNO",
 }: {
   data: Row[];
   title?: string;
