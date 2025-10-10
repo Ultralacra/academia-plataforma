@@ -119,7 +119,7 @@ export async function fetchMetrics(
     (a, b) => a.month.localeCompare(b.month)
   );
   const ticketsTotal = daily.reduce((a, c) => a + (c.count || 0), 0);
-  // Derivar per a partir de los últimos 1/7/30 días
+  // Derivar per a partir de los últimos 1/7/30 día
   const now = new Date();
   const dayKey = now.toISOString().slice(0, 10);
   const weekCut = new Date(now);
