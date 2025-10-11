@@ -10,6 +10,18 @@ export const metadata: Metadata = {
   title: "Academia Platform",
   description: "Plataforma de gestión para academia",
   generator: "",
+  // Favicon e iconos. Coloca tu archivo en public/ (p. ej. /favicon.png o /favicon.ico)
+  // o agrega app/icon.png para que Next lo detecte automáticamente.
+  icons: {
+    icon: [
+      { url: "/favicon.ico", type: "image/x-icon" },
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+    shortcut: ["/favicon.ico"],
+  },
 };
 
 export default function RootLayout({
