@@ -1026,16 +1026,12 @@ export default function TeamsMetricsContent() {
             aggData={displayVm.clientsByPhaseAgg}
             details={displayVm.clientsByPhaseDetails}
           />
-          <CoachStudentsDistributionChart
-            students={[] as any}
-            mode={studentsChartMode}
-            onModeChange={setStudentsChartMode}
+          <StudentsPhaseDonut
+            students={[]}
             coachName="Todos"
-            showToggle={true}
-            aggState={displayVm.clientsByStateAgg}
-            aggPhase={displayVm.clientsByPhaseAgg}
-            detailsState={displayVm.clientsByStateDetails}
-            detailsPhase={displayVm.clientsByPhaseDetails}
+            title="ALUMNOS POR ESTADO (GLOBAL)"
+            aggData={displayVm.clientsByStateAgg}
+            details={displayVm.clientsByStateDetails}
           />
           {/* Donut por tipo de ticket */}
           <TicketsByStudentDonut
