@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Users } from "lucide-react";
 import CoachPickerModal from "./CoachPickerModal";
+import type { Person } from "./PhasesTimeline";
+import type { CoachCandidate } from "./CoachPickerModal";
 
 type Coach = Person;
 
@@ -26,8 +28,8 @@ export default function CoachesCard({
       ];
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
-      <div className="flex items-center gap-2 border-b bg-muted/30 px-4 py-3">
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3">
         <Users className="h-4 w-4 text-muted-foreground" />
         <h3 className="text-sm font-semibold">Equipo asignado</h3>
       </div>
@@ -36,7 +38,7 @@ export default function CoachesCard({
         {list.map((c, idx) => (
           <div
             key={`${c.name}-${idx}`}
-            className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 transition-colors hover:bg-muted/50"
+            className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
               {/* Avatar */}
@@ -69,10 +71,14 @@ export default function CoachesCard({
       <CoachPickerModal
         open={open}
         onOpenChange={setOpen}
-        people={peopleIndex}
-        note="Cambio local (demo). No se guarda en el servidor."
-        onPick={(p) => {
-          if (currentIndex != null) onChangeMember(currentIndex, p);
+        onPick={(p: CoachCandidate) => {
+          if (currentIndex != null)
+            onChangeMember(currentIndex, {
+              name: p.name,
+              puesto: p.puesto ?? null,
+              area: p.area ?? null,
+              url: p.url ?? null,
+            });
         }}
       />
     </div>

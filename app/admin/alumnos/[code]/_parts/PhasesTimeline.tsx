@@ -51,8 +51,8 @@ export default function TeamPickerModal({
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => onOpenChange(false)}
       />
-      <div className="relative z-10 w-full max-w-2xl overflow-hidden rounded-lg border bg-card shadow-2xl">
-        <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+      <div className="relative z-10 w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
           <h3 className="text-sm font-semibold">{title}</h3>
           <button
             className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -69,7 +69,7 @@ export default function TeamPickerModal({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar por nombre, área o puesto…"
-              className="w-full rounded-md border bg-background py-2 pl-9 pr-3 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
+              className="w-full rounded-md border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
 
@@ -79,7 +79,7 @@ export default function TeamPickerModal({
             {filtered.map((m, i) => (
               <li
                 key={`${m.name}-${m.url ?? i}`}
-                className="flex items-center justify-between gap-3 rounded-md border bg-background p-3 transition-colors hover:bg-muted/50"
+                className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 text-sm font-medium text-blue-700 ring-1 ring-black/5 dark:from-blue-950/30 dark:to-indigo-950/30 dark:text-blue-400 dark:ring-white/10">

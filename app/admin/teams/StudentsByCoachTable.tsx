@@ -76,7 +76,7 @@ export default function StudentsByCoachTable({
                 onClick={() => onChange(it)}
                 className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition border backdrop-blur-sm ${
                   active
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                    ? "bg-blue-600 text-white border-blue-600"
                     : "bg-white/70 text-gray-700 border-gray-200 hover:bg-gray-50"
                 }`}
               >
@@ -192,7 +192,7 @@ export default function StudentsByCoachTable({
   }, [baseData, filterState, filterStage]);
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white">
+    <div className="rounded-xl border border-gray-200 bg-white">
       <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-3 md:flex-row md:items-start md:gap-6">
         <div>
           <h3 className="text-base font-bold text-gray-900 uppercase">
@@ -215,7 +215,11 @@ export default function StudentsByCoachTable({
               >
                 <TabsList className="mb-1 overflow-x-auto">
                   {datasets.map((d) => (
-                    <TabsTrigger key={d.key} value={d.key}>
+                    <TabsTrigger
+                      key={d.key}
+                      value={d.key}
+                      className="shadow-none data-[state=active]:shadow-none"
+                    >
                       {d.label}
                     </TabsTrigger>
                   ))}
@@ -325,7 +329,7 @@ export default function StudentsByCoachTable({
                           : "bg-gray-100 text-gray-500";
                         return (
                           <span
-                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${classes}`}
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
                           >
                             {fs.state || "—"}
                           </span>
@@ -354,7 +358,7 @@ export default function StudentsByCoachTable({
                           : "bg-gray-100 text-gray-500";
                         return (
                           <span
-                            className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${classes}`}
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
                           >
                             {fs.stage || "—"}
                           </span>
@@ -384,7 +388,7 @@ export default function StudentsByCoachTable({
                             href={fs.contrato}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:border-blue-300"
+                            className="inline-flex items-center rounded border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:border-blue-300 shadow-none"
                             title="Abrir contrato"
                           >
                             Ver

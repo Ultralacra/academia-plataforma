@@ -100,8 +100,8 @@ export default function EditForm({
   ];
 
   return (
-    <section className="overflow-hidden rounded-lg border bg-card shadow-sm">
-      <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+    <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
         <div className="flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Propiedades del alumno</h3>

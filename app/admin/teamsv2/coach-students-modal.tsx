@@ -141,8 +141,8 @@ export function CoachStudentsModal({
       {/* Notion-like: ancho cómodo, alto limitado, contenido con bordes suaves y header sticky */}
       <DialogContent
         className="
-          w-[95vw] sm:max-w-4xl p-0 gap-0 rounded-2xl border shadow-xl
-          max-h-[85vh] overflow-hidden
+          w-[95vw] sm:max-w-4xl p-0 gap-0 rounded-2xl border border-gray-200
+          max-h-[85vh] overflow-y-auto
         "
       >
         {/* HEADER (sticky) */}
@@ -211,7 +211,7 @@ export function CoachStudentsModal({
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Buscar por ID de alumno o nombre…"
-                className="pl-8"
+                className="pl-8 rounded-xl bg-white border border-gray-200 shadow-none"
               />
             </div>
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
@@ -219,54 +219,61 @@ export function CoachStudentsModal({
         </DialogHeader>
 
         {/* BODY scrollable */}
-        <div
-          className="px-5 pb-4 overflow-auto"
-          style={{ maxHeight: "calc(85vh - 140px)" }}
-        >
-          <div className="overflow-hidden rounded-xl border bg-white">
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-transparent sticky top-0 bg-white z-10">
-                  <TableHead className="w-[40%]">ID Alumno</TableHead>
-                  <TableHead>Nombre del alumno</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  Array.from({ length: 12 }).map((_, i) => (
-                    <TableRow key={`sk-${i}`}>
-                      <TableCell colSpan={2}>
-                        <div className="h-6 animate-pulse rounded bg-neutral-100" />
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : filtered.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={2} className="text-sm text-neutral-500">
-                      {q
-                        ? "Sin resultados para tu búsqueda."
-                        : "No hay alumnos asociados."}
-                    </TableCell>
+        <div className="px-5 pb-4">
+          <div className="rounded-xl border border-gray-200 bg-white">
+            <div className="overflow-x-auto">
+              <Table className="min-w-full text-sm">
+                <TableHeader>
+                  <TableRow className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide sticky top-0 z-10">
+                    <TableHead className="px-3 py-2 text-left font-medium w-[40%]">
+                      ID Alumno
+                    </TableHead>
+                    <TableHead className="px-3 py-2 text-left font-medium">
+                      Nombre del alumno
+                    </TableHead>
                   </TableRow>
-                ) : (
-                  filtered.map((r, idx) => (
-                    <TableRow
-                      key={`${r.id}_${r.id_alumno}`}
-                      className={
-                        idx % 2
-                          ? "bg-neutral-50/40 hover:bg-neutral-100/50"
-                          : "hover:bg-neutral-50/60"
-                      }
-                    >
-                      <TableCell className="font-mono">{r.id_alumno}</TableCell>
-                      <TableCell className="truncate">
-                        {r.alumno_nombre}
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 12 }).map((_, i) => (
+                      <TableRow
+                        key={`sk-${i}`}
+                        className="border-t border-gray-100"
+                      >
+                        <TableCell colSpan={2} className="px-3 py-2">
+                          <div className="h-5 animate-pulse rounded bg-neutral-100" />
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : filtered.length === 0 ? (
+                    <TableRow className="border-t border-gray-100">
+                      <TableCell
+                        colSpan={2}
+                        className="px-3 py-2 text-sm text-neutral-500"
+                      >
+                        {q
+                          ? "Sin resultados para tu búsqueda."
+                          : "No hay alumnos asociados."}
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    filtered.map((r, idx) => (
+                      <TableRow
+                        key={`${r.id}_${r.id_alumno}`}
+                        className="border-t border-gray-100 hover:bg-gray-50"
+                      >
+                        <TableCell className="px-3 py-2 font-mono text-gray-700">
+                          {r.id_alumno}
+                        </TableCell>
+                        <TableCell className="px-3 py-2 truncate text-gray-900">
+                          {r.alumno_nombre}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
 
           {/* FOOTER (ligero) */}

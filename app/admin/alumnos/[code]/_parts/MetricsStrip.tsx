@@ -50,7 +50,7 @@ export default function MetricsStrip({
       {items.map((it) => (
         <div
           key={it.label}
-          className="group relative overflow-hidden rounded-lg border bg-card p-4 shadow-sm transition-all hover:shadow-md"
+          className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-4"
         >
           <div className="flex items-start justify-between">
             <div className="flex-1">

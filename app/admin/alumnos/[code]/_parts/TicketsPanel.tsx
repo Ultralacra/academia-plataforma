@@ -460,8 +460,8 @@ export default function TicketsPanel({
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
-        <div className="border-b bg-muted/30 px-4 py-3">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <TicketIcon className="h-4 w-4 text-muted-foreground" />
@@ -604,7 +604,7 @@ export default function TicketsPanel({
               onClick={() => setStatus("ALL")}
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
                 status === "ALL"
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
               }`}
             >
@@ -621,7 +621,7 @@ export default function TicketsPanel({
                   onClick={() => setStatus(k)}
                   className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
                     status === k
-                      ? "bg-primary text-primary-foreground shadow-sm"
+                      ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:bg-muted/80"
                   }`}
                 >
@@ -636,7 +636,7 @@ export default function TicketsPanel({
           <div className="relative mt-3">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="h-9 pl-9"
+              className="h-9 pl-9 border-gray-200 bg-white"
               placeholder="Buscar por asunto o tipo…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -661,7 +661,7 @@ export default function TicketsPanel({
                 return (
                   <li
                     key={`${t.id}-${t.creacion}`}
-                    className="rounded-md border bg-background p-3 transition-colors hover:bg-muted/50"
+                    className="rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50"
                   >
                     <div className="flex items-start gap-3">
                       <div className="flex flex-col items-start gap-1">

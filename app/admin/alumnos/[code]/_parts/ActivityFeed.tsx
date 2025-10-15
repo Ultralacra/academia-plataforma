@@ -37,15 +37,15 @@ export default function ActivityFeed({
   ];
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
-      <div className="border-b bg-muted/30 px-4 py-3">
+    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
         <h3 className="text-sm font-semibold">Actividad reciente</h3>
       </div>
       <ul className="divide-y p-3">
         {items.map((it, i) => (
           <li
             key={i}
-            className="flex items-center justify-between gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-muted/50"
+            className="flex items-center justify-between gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-gray-50"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
               <span className="flex-none text-muted-foreground">

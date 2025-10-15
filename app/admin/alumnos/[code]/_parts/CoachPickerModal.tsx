@@ -103,7 +103,7 @@ export default function CoachPickerModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[92vw] sm:max-w-3xl max-h-[85vh] overflow-hidden">
+      <DialogContent className="w-[92vw] sm:max-w-3xl max-h-[85vh] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-none">
         <DialogHeader>
           <DialogTitle>Seleccionar integrante</DialogTitle>
           <DialogDescription>
@@ -114,7 +114,7 @@ export default function CoachPickerModal({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            className="pl-9"
+            className="pl-9 border-gray-200 bg-white"
             placeholder="Buscar por nombre, área, puesto o equipo…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -142,11 +142,11 @@ export default function CoachPickerModal({
             {filtered.map((c, idx) => (
               <li
                 key={`${c.name}-${c.url ?? ""}-${idx}`}
-                className="rounded-lg border bg-card p-3 hover:bg-muted transition cursor-pointer"
+                className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50 cursor-pointer"
                 onClick={() => onPick(c)}
                 title="Seleccionar este integrante"
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center justify-between gap-3 w-full">
                   <div className="min-w-0">
                     <div className="font-medium truncate">{c.name}</div>
                     <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-2">

@@ -9,24 +9,32 @@ import {
 } from "./api";
 import {
   Search,
-  ChevronLeft,
-  ChevronRight,
-  FileText,
   Activity,
   Users,
   TrendingUp,
   BarChart3,
+  UserCircle2,
+  ChevronsUpDown,
+  Check,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 
 function getUniqueCoaches(students: StudentRow[]) {
@@ -92,6 +100,9 @@ export default function StudentsContent() {
   const [coachCodesLoading, setCoachCodesLoading] = useState(false);
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
+  const [filterStage, setFilterStage] = useState<string | null>(null);
+  const [filterState, setFilterState] = useState<string | null>(null);
+  const [openCoach, setOpenCoach] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -221,62 +232,178 @@ export default function StudentsContent() {
     );
   }, [all, coach, selectedCoachId, selectedCoachName, coachCodes]);
 
-  const total = filtered.length;
+  // valores únicos de fases del listado filtrado por coach/buscador
+  const uniqueStages = useMemo(() => {
+    const NO_STAGE = "Sin fase";
+    const base = Array.from(
+      new Set(
+        (filtered || [])
+          .map((s) => (s.stage && s.stage.trim() ? s.stage.trim() : ""))
+          .filter(Boolean)
+      )
+    ).sort();
+    const hasNoStage = (filtered || []).some(
+      (s) => !s.stage || !String(s.stage).trim()
+    );
+    return hasNoStage ? [NO_STAGE, ...base] : base;
+  }, [filtered]);
+
+  // valores únicos de estado del listado filtrado por coach/buscador
+  const uniqueStates = useMemo(() => {
+    const NO_STATE = "Sin estado";
+    const base = Array.from(
+      new Set(
+        (filtered || [])
+          .map((s) =>
+            s.state && String(s.state).trim() ? String(s.state).trim() : ""
+          )
+          .filter(Boolean)
+      )
+    ).sort();
+    const hasNoState = (filtered || []).some(
+      (s) => !s.state || !String(s.state).trim()
+    );
+    return hasNoState ? [NO_STATE, ...base] : base;
+  }, [filtered]);
+
+  // aplicar filtro por fase adicional
+  const finalRows = useMemo(() => {
+    const NO_STAGE = "Sin fase";
+    const NO_STATE = "Sin estado";
+    return filtered.filter((s) => {
+      // estado
+      if (filterState) {
+        if (filterState === NO_STATE) {
+          if (s.state && String(s.state).trim()) return false;
+        } else if (s.state !== filterState) return false;
+      }
+      // fase
+      if (filterStage) {
+        if (filterStage === NO_STAGE) {
+          if (s.stage && String(s.stage).trim()) return false;
+        } else if (s.stage !== filterStage) return false;
+      }
+      return true;
+    });
+  }, [filtered, filterStage, filterState]);
+
+  const total = finalRows.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageItems = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
+    return finalRows.slice(start, start + PAGE_SIZE);
+  }, [finalRows, page]);
 
   const coachMetrics = useMemo(() => getCoachMetrics(filtered), [filtered]);
 
   const reset = () => {
     setSearch("");
     setCoach("todos");
+    setFilterState(null);
     setPage(1);
   };
 
-  const hasFilters = Boolean(search || coach !== "todos");
+  const hasFilters = Boolean(
+    search || coach !== "todos" || filterStage || filterState
+  );
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
-            <Users className="h-6 w-6 text-white" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Gestión de Alumnos
-            </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {loading ? "Cargando..." : `${total} estudiantes registrados`}
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className="mb-6 space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="w-full sm:w-64">
-            <Select value={coach} onValueChange={setCoach}>
-              <SelectTrigger className="h-10 bg-card border-border/50 shadow-sm">
-                <SelectValue placeholder="Filtrar por coach" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos los coachs</SelectItem>
-                {coaches.map((c) => {
-                  const value = c.codigo
-                    ? `id:${c.codigo}|name:${c.name}`
-                    : `name:${c.name}`;
-                  return (
-                    <SelectItem key={c.id} value={value}>
-                      {c.name}
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+          <div className="w-full sm:w-80">
+            <Popover open={openCoach} onOpenChange={setOpenCoach}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Seleccionar coach"
+                  className={cn(
+                    "group flex w-full items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium outline-none transition-all",
+                    "bg-gradient-to-r from-white to-white/90",
+                    coach !== "todos"
+                      ? "border-blue-500/60 ring-1 ring-blue-500/10"
+                      : "border-gray-200 hover:border-gray-300",
+                    "focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-500"
+                  )}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <UserCircle2
+                      className={cn(
+                        "h-4 w-4 flex-shrink-0",
+                        coach !== "todos" ? "text-blue-600" : "text-gray-400"
+                      )}
+                    />
+                    <span
+                      className={cn(
+                        "truncate",
+                        coach !== "todos" ? "text-gray-900" : "text-gray-500"
+                      )}
+                    >
+                      {selectedCoachName || "Seleccionar coach"}
+                    </span>
+                    {coach !== "todos" && (
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-600 px-2 py-0.5 text-[10px] font-semibold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                        Filtrando
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    {coach !== "todos" && (
+                      <X
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCoach("todos");
+                        }}
+                        className="h-4 w-4 text-gray-400 hover:text-red-500 transition-colors"
+                        aria-label="Limpiar coach"
+                      />
+                    )}
+                    <ChevronsUpDown className="h-4 w-4 text-gray-400 group-hover:text-gray-500" />
+                  </span>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="p-0 w-[360px] shadow-none"
+                align="start"
+                sideOffset={8}
+              >
+                <Command>
+                  <CommandInput
+                    placeholder="Buscar coach..."
+                    autoFocus
+                    className="text-sm"
+                  />
+                  <CommandList className="max-h-64">
+                    <CommandEmpty>No hay resultados.</CommandEmpty>
+                    <CommandGroup heading="Coachs">
+                      {coaches.map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={c.name}
+                          onSelect={() => {
+                            const value = c.codigo
+                              ? `id:${c.codigo}|name:${c.name}`
+                              : `name:${c.name}`;
+                            setCoach(value);
+                            setOpenCoach(false);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <UserCircle2 className="h-4 w-4 text-gray-400" />
+                            <span className="truncate">{c.name}</span>
+                          </span>
+                          {selectedCoachId && c.codigo === selectedCoachId && (
+                            <Check className="ml-auto h-4 w-4 text-blue-600" />
+                          )}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {coachCodesLoading && (
@@ -287,9 +414,9 @@ export default function StudentsContent() {
           )}
 
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             <Input
-              className="pl-10 h-10 bg-card border-border/50 shadow-sm"
+              className="pl-10 h-10 rounded-xl bg-white border border-gray-200"
               placeholder="Buscar por nombre, código o estado..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -301,7 +428,7 @@ export default function StudentsContent() {
               variant="outline"
               size="default"
               onClick={reset}
-              className="h-10 shadow-sm bg-transparent"
+              className="h-10 bg-transparent"
             >
               Limpiar filtros
             </Button>
@@ -309,7 +436,7 @@ export default function StudentsContent() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="group relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-card to-card/50 p-5 shadow-sm transition-all hover:shadow-md">
+          <div className="group relative overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-card to-card/50 p-5 transition-all">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
@@ -327,25 +454,7 @@ export default function StudentsContent() {
             <div className="absolute inset-0 -z-10 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
 
-          <div className="group relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-card to-card/50 p-5 shadow-sm transition-all hover:shadow-md">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
-                  <FileText className="h-4 w-4" />
-                  Tickets totales
-                </div>
-                <p className="text-3xl font-bold text-foreground">
-                  {coachMetrics.tickets}
-                </p>
-              </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400">
-                <FileText className="h-6 w-6" />
-              </div>
-            </div>
-            <div className="absolute inset-0 -z-10 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
-
-          <div className="group relative overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-card to-card/50 p-5 shadow-sm transition-all hover:shadow-md sm:col-span-2 lg:col-span-1">
+          <div className="group relative overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-card to-card/50 p-5 transition-all sm:col-span-2 lg:col-span-1">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
@@ -373,152 +482,219 @@ export default function StudentsContent() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/50 bg-card shadow-lg overflow-hidden">
+      {/* Filtro por Estado (chips) */}
+      {uniqueStates.length > 0 && (
+        <div className="mb-2">
+          <div className="flex items-center gap-2 w-full">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              Estado
+            </span>
+            <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+              {uniqueStates.map((it) => {
+                const active = filterState === it;
+                return (
+                  <button
+                    key={it}
+                    onClick={() => setFilterState(active ? null : it)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                      active
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                    )}
+                  >
+                    {it}
+                  </button>
+                );
+              })}
+              {filterState && (
+                <button
+                  onClick={() => setFilterState(null)}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-600 hover:bg-gray-200"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtro por Fase (chips) */}
+      {uniqueStages.length > 0 && (
+        <div className="mb-3">
+          <div className="flex items-center gap-2 w-full">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+              Fase
+            </span>
+            <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+              {uniqueStages.map((it) => {
+                const active = filterStage === it;
+                return (
+                  <button
+                    key={it}
+                    onClick={() => setFilterStage(active ? null : it)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                      active
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                    )}
+                  >
+                    {it}
+                  </button>
+                );
+              })}
+              {filterStage && (
+                <button
+                  onClick={() => setFilterStage(null)}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-600 hover:bg-gray-200"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border/50 bg-muted/50">
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Código
-                </th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Nombre
-                </th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Estado
-                </th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Etapa
-                </th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Ingreso
-                </th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  <div className="flex items-center gap-1.5">
-                    <FileText className="h-3.5 w-3.5" />
-                    Tickets
-                  </div>
-                </th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          <table className="min-w-full text-sm">
+            <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium">Código</th>
+                <th className="px-3 py-2 text-left font-medium">Nombre</th>
+                <th className="px-3 py-2 text-left font-medium">Estado</th>
+                <th className="px-3 py-2 text-left font-medium">Etapa</th>
+                <th className="px-3 py-2 text-left font-medium">Ingreso</th>
+                <th className="px-3 py-2 text-left font-medium">
                   <div className="flex items-center gap-1.5">
                     <Activity className="h-3.5 w-3.5" />
                     Última actividad
                   </div>
                 </th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Inactividad
-                </th>
-                <th className="px-4 py-3.5 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Contrato
-                </th>
+                <th className="px-3 py-2 text-left font-medium">Inactividad</th>
+                <th className="px-3 py-2 text-left font-medium">Contrato</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/30">
+            <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
-                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary/30 border-t-primary" />
-                      <span className="text-sm font-medium">
-                        Cargando estudiantes...
-                      </span>
-                    </div>
+                  <td
+                    colSpan={8}
+                    className="px-3 py-4 text-center text-gray-500"
+                  >
+                    Cargando alumnos…
                   </td>
                 </tr>
               ) : pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-16 text-center">
-                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                      <Users className="h-12 w-12 opacity-20" />
-                      <p className="text-sm font-medium">
-                        No se encontraron estudiantes
-                      </p>
-                      <p className="text-xs">
-                        Intenta ajustar los filtros de búsqueda
-                      </p>
-                    </div>
+                  <td
+                    colSpan={8}
+                    className="px-3 py-4 text-center text-gray-500"
+                  >
+                    No se encontraron estudiantes
                   </td>
                 </tr>
               ) : (
                 pageItems.map((student) => (
                   <tr
                     key={student.id}
-                    className="group hover:bg-muted/30 transition-colors"
+                    className="border-t border-gray-100 hover:bg-gray-50"
                   >
-                    <td className="px-4 py-4">
-                      <code className="text-xs font-mono text-muted-foreground bg-muted/70 px-2.5 py-1 rounded-md font-medium">
-                        {student.code ?? "—"}
-                      </code>
+                    <td className="px-3 py-2 text-gray-700">
+                      {student.code ?? "—"}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-2 font-medium text-gray-900">
                       {student.code ? (
                         <Link
                           href={`/admin/alumnos/${encodeURIComponent(
                             student.code
                           )}`}
-                          className="font-semibold text-foreground hover:text-primary transition-colors inline-flex items-center gap-2 group/link"
+                          className="hover:text-blue-600"
                         >
                           {student.name}
-                          <span className="opacity-0 group-hover/link:opacity-100 transition-opacity text-primary">
-                            →
-                          </span>
                         </Link>
                       ) : (
-                        <span className="font-semibold text-foreground">
-                          {student.name}
-                        </span>
+                        <span>{student.name}</span>
                       )}
                     </td>
-                    <td className="px-4 py-4">
-                      {student.state ? (
-                        <Badge
-                          variant="secondary"
-                          className="font-medium shadow-sm"
-                        >
-                          {student.state}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
+                    <td className="px-3 py-2">
+                      {(() => {
+                        const v = (student.state || "").toUpperCase();
+                        const classes = v.includes("INACTIVO")
+                          ? "bg-rose-100 text-rose-800"
+                          : v.includes("ACTIVO")
+                          ? "bg-sky-100 text-sky-800"
+                          : v.includes("PROCESO")
+                          ? "bg-violet-100 text-violet-800"
+                          : v
+                          ? "bg-gray-100 text-gray-700"
+                          : "bg-gray-100 text-gray-500";
+                        return (
+                          <span
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
+                          >
+                            {student.state || "—"}
+                          </span>
+                        );
+                      })()}
                     </td>
-                    <td className="px-4 py-4">
-                      <span className="text-sm font-medium text-foreground">
-                        {student.stage ?? "—"}
-                      </span>
+                    <td className="px-3 py-2">
+                      {(() => {
+                        const v = (student.stage || "").toUpperCase();
+                        const classes = v.includes("COPY")
+                          ? "bg-amber-100 text-amber-800"
+                          : v.includes("F1")
+                          ? "bg-emerald-100 text-emerald-800"
+                          : v.includes("F2")
+                          ? "bg-lime-100 text-lime-800"
+                          : v.includes("F3")
+                          ? "bg-cyan-100 text-cyan-800"
+                          : v.includes("F4")
+                          ? "bg-sky-100 text-sky-800"
+                          : v.includes("F5")
+                          ? "bg-purple-100 text-purple-800"
+                          : v.includes("ONBOARD")
+                          ? "bg-indigo-100 text-indigo-800"
+                          : v
+                          ? "bg-gray-100 text-gray-700"
+                          : "bg-gray-100 text-gray-500";
+                        return (
+                          <span
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
+                          >
+                            {student.stage || "—"}
+                          </span>
+                        );
+                      })()}
                     </td>
-                    <td className="px-4 py-4 text-sm text-muted-foreground">
+                    <td className="px-3 py-2 text-gray-700">
                       {fmtDateSmart(student.joinDate)}
                     </td>
-                    <td className="px-4 py-4">
-                      <span className="inline-flex items-center justify-center min-w-[32px] h-7 px-2.5 rounded-lg bg-muted/70 text-xs font-semibold text-foreground shadow-sm">
-                        {student.ticketsCount ?? 0}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-sm text-muted-foreground">
+                    <td className="px-3 py-2 text-gray-700">
                       {fmtDateSmart(student.lastActivity)}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-2 text-gray-700">
                       {student.inactivityDays ? (
-                        <span className="text-sm font-medium text-muted-foreground">
-                          {student.inactivityDays}d
-                        </span>
+                        <span>{student.inactivityDays}d</span>
                       ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
+                        "—"
                       )}
                     </td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 py-2 text-gray-700">
                       {student.contractUrl ? (
                         <a
                           href={student.contractUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm text-primary hover:underline inline-flex items-center gap-1.5 font-medium"
+                          className="text-blue-700 hover:underline text-sm"
                         >
-                          Ver contrato
-                          <FileText className="h-3.5 w-3.5" />
+                          Ver
                         </a>
                       ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
+                        "—"
                       )}
                     </td>
                   </tr>
@@ -529,49 +705,29 @@ export default function StudentsContent() {
         </div>
 
         {!loading && pageItems.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-border/50 bg-muted/20">
-            <div className="text-sm text-muted-foreground">
-              Mostrando{" "}
-              <span className="font-semibold text-foreground">
-                {(page - 1) * PAGE_SIZE + 1}
-              </span>{" "}
-              a{" "}
-              <span className="font-semibold text-foreground">
-                {Math.min(page * PAGE_SIZE, total)}
-              </span>{" "}
-              de <span className="font-semibold text-foreground">{total}</span>{" "}
-              estudiantes
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs">
+            <div>
+              Mostrando {(page - 1) * PAGE_SIZE + 1} a{" "}
+              {Math.min(page * PAGE_SIZE, total)} de {total} estudiantes
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
+              <button
+                className="px-2 py-1 rounded-md border bg-white disabled:opacity-40"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="h-9 gap-1.5 shadow-sm"
               >
-                <ChevronLeft className="h-4 w-4" />
                 Anterior
-              </Button>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 border border-border/50">
-                <span className="text-sm font-semibold text-foreground">
-                  {page}
-                </span>
-                <span className="text-sm text-muted-foreground">/</span>
-                <span className="text-sm font-semibold text-foreground">
-                  {totalPages}
-                </span>
+              </button>
+              <div className="text-xs">
+                Página {page} de {totalPages}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
+              <button
+                className="px-2 py-1 rounded-md border bg-white disabled:opacity-40"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="h-9 gap-1.5 shadow-sm"
               >
                 Siguiente
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              </button>
             </div>
           </div>
         )}
