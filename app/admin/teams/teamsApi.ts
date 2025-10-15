@@ -249,7 +249,8 @@ export async function fetchMetrics(
           etapa: it.etapa ?? null,
           ingreso: it.ingreso ?? null,
           ultima_actividad: it.ultima_actividad ?? null,
-          inactividad: it.inactividad ?? null,
+          // El backend puede enviar dias_inactividad o inactividad
+          inactividad: (it.dias_inactividad ?? it.inactividad) ?? null,
           tickets: it.tickets ?? null,
           area: it.area ?? null,
           puesto: it.puesto ?? null,
@@ -289,6 +290,32 @@ export async function fetchMetrics(
           cantidad: Number(it.cantidad ?? 0) || 0,
         }))
       : [],
+    // Distribución por tipo de ticket
+    ticketsByType: Array.isArray(d.ticketsByType)
+      ? (d.ticketsByType as any[]).map((it) => ({
+          tipo: String(it.tipo ?? "SIN_TIPO"),
+          cantidad: Number(it.cantidad ?? 0) || 0,
+        }))
+      : [],
+    // Ticket con respuesta más lenta
+    slowestResponseTicket: d?.slowestResponseTickets
+      ? {
+          ticket_id: Number(d.slowestResponseTickets.ticket_id ?? 0) || 0,
+          codigo_alumno: String(d.slowestResponseTickets.codigo_alumno ?? ""),
+          nombre_alumno: String(d.slowestResponseTickets.nombre_alumno ?? ""),
+          asunto_ticket: String(d.slowestResponseTickets.asunto_ticket ?? ""),
+          tipo_ticket: String(d.slowestResponseTickets.tipo_ticket ?? ""),
+          estado_ticket: String(d.slowestResponseTickets.estado_ticket ?? ""),
+          fecha_creacion: String(d.slowestResponseTickets.fecha_creacion ?? ""),
+          fecha_respuesta: String(d.slowestResponseTickets.fecha_respuesta ?? ""),
+          minutos_respuesta:
+            Number(d.slowestResponseTickets.minutos_respuesta ?? 0) || 0,
+          horas_respuesta:
+            Number(d.slowestResponseTickets.horas_respuesta ?? 0) || 0,
+          dias_respuesta:
+            Number(d.slowestResponseTickets.dias_respuesta ?? 0) || 0,
+        }
+      : null,
     // Promedios de resolución por alumno (incluye segundos, minutos y horas)
     avgResolutionByStudent: Array.isArray(d?.avgResolutionByCoach?.detalle)
       ? (d.avgResolutionByCoach.detalle as any[]).map((it) => {
@@ -318,6 +345,61 @@ export async function fetchMetrics(
             avg_time_hms: String(it.avg_time_hms ?? ""),
           };
         })
+      : [],
+    // allClientsByCoach: puede venir como grupos por coach o como lista plana (para coach seleccionado)
+    allClientsByCoach: Array.isArray(d.allClientsByCoach) && (d.allClientsByCoach as any[])[0]?.students
+      ? (d.allClientsByCoach as any[]).map((group) => ({
+          coach: String(group.coach ?? group.nombre_coach ?? group.name ?? "Sin coach"),
+          coach_code: group.coach_code ?? group.codigo_coach ?? group.code ?? null,
+          students: Array.isArray(group.students)
+            ? (group.students as any[]).map((it) => ({
+                id: Number(it.id),
+                codigo: it.codigo ?? null,
+                nombre: String(it.nombre ?? ""),
+                estado: it.estado ?? null,
+                etapa: it.etapa ?? null,
+                ingreso: it.ingreso ?? null,
+                ultima_actividad: it.ultima_actividad ?? null,
+                inactividad: (it.dias_inactividad ?? it.inactividad) ?? null,
+                tickets: it.tickets ?? null,
+                area: it.area ?? null,
+                puesto: it.puesto ?? null,
+                contrato: it.contrato ?? null,
+                entregables: it.entregables ?? null,
+                aprobaciones: it.aprobaciones ?? null,
+                nicho: it.nicho ?? null,
+                paso_f1: it.paso_f1 ?? null,
+                paso_f2: it.paso_f2 ?? null,
+                paso_f3: it.paso_f3 ?? null,
+                paso_f4: it.paso_f4 ?? null,
+                paso_f5: it.paso_f5 ?? null,
+              }))
+            : [],
+        }))
+      : [],
+    allClientsByCoachFlat: Array.isArray(d.allClientsByCoach) && !(d.allClientsByCoach as any[])[0]?.students
+      ? (d.allClientsByCoach as any[]).map((it) => ({
+          id: Number(it.id),
+          codigo: it.codigo ?? null,
+          nombre: String(it.nombre ?? ""),
+          estado: it.estado ?? null,
+          etapa: it.etapa ?? null,
+          ingreso: it.ingreso ?? null,
+          ultima_actividad: it.ultima_actividad ?? null,
+          inactividad: (it.dias_inactividad ?? it.inactividad) ?? null,
+          tickets: it.tickets ?? null,
+          area: it.area ?? null,
+          puesto: it.puesto ?? null,
+          contrato: it.contrato ?? null,
+          entregables: it.entregables ?? null,
+          aprobaciones: it.aprobaciones ?? null,
+          nicho: it.nicho ?? null,
+          paso_f1: it.paso_f1 ?? null,
+          paso_f2: it.paso_f2 ?? null,
+          paso_f3: it.paso_f3 ?? null,
+          paso_f4: it.paso_f4 ?? null,
+          paso_f5: it.paso_f5 ?? null,
+        }))
       : [],
     // Campos no provistos por v2: dejamos vacíos para no romper UI
     respByCoach: [] as any[],

@@ -28,6 +28,13 @@ export type CoachMember = TeamMember & {
   area?: string | null;
 };
 
+export type CoachInfo = {
+  id?: string | number | null;
+  name: string;
+  puesto?: string | null;
+  area?: string | null;
+};
+
 export type ClientItem = {
   id: number;
   code?: string | null;
@@ -275,7 +282,7 @@ export async function getClients(opts: {
   // Pedimos un máximo de 1000 al servidor (paginación local en el front)
   const q = toQuery({
     page: 1,
-    pageSize: 1000,
+    pageSize: opts.pageSize ?? 1000,
     search: opts.search ?? "",
     fechaDesde: opts.fechaDesde ?? "",
     fechaHasta: opts.fechaHasta ?? "",
@@ -595,6 +602,73 @@ export async function getClientCoaches(alumnoCode: string): Promise<{
   return { alumno: alumnoCode, alumno_nombre, coaches };
 }
 
+/**
+ * Lista "maestra" de coaches disponibles basada en el endpoint de relaciones
+ * /client/get/clients-coaches. Si el backend devuelve relaciones, tomamos los
+ * nombres únicos. Sirve para poblar filtros globales.
+ */
+export async function getCoaches(): Promise<CoachInfo[]> {
+  const json = await apiFetch<{
+    code: number;
+    status: string;
+    data: Array<{
+      id?: number;
+      id_relacion?: string;
+      id_coach?: string | number;
+      coach_nombre?: string;
+      puesto?: string | null;
+      area?: string | null;
+    }>;
+  }>(`${endpoints.coachClient.list}`);
+
+  const rows = Array.isArray((json as any)?.data) ? (json as any).data : [];
+  const map = new Map<string, CoachInfo>();
+  rows.forEach((r: any) => {
+    const name = (r.coach_nombre ?? "").trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, {
+        id: r.id_coach ?? r.id ?? null,
+        name,
+        puesto: r.puesto ?? null,
+        area: r.area ?? null,
+      });
+    }
+  });
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** Devuelve los alumnos asociados a un coach (por id) usando el endpoint de relaciones */
+export async function getCoachStudents(coachId: string | number): Promise<{
+  alumno: string; // código del alumno
+  nombre: string; // nombre del alumno
+}[]> {
+  const q = toQuery({ coach: String(coachId) });
+  const json = await apiFetch<{
+    code: number;
+    status: string;
+    data: Array<{
+      id?: number;
+      id_relacion?: string;
+      id_coach?: string | number;
+      id_alumno?: string;
+      alumno_nombre?: string;
+    }>;
+  }>(`${endpoints.coachClient.list}${q}`);
+
+  const rows = Array.isArray((json as any)?.data) ? (json as any).data : [];
+  const map = new Map<string, { alumno: string; nombre: string }>();
+  rows.forEach((r: any) => {
+    const code = (r.id_alumno ?? "").trim();
+    if (!code) return;
+    if (!map.has(code)) {
+      map.set(code, { alumno: code, nombre: (r.alumno_nombre ?? code).trim() });
+    }
+  });
+  return Array.from(map.values());
+}
+
 /* =======================
    TEAMS CREATED (nueva API)
 ======================= */
@@ -847,6 +921,8 @@ export const dataService = {
   // Tickets
   getTickets,
   getClientCoaches,
+  getCoaches,
+  getCoachStudents,
 
   // Utils
   groupTicketsByTeam,

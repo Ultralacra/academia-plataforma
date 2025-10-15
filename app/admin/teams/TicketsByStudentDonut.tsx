@@ -12,9 +12,11 @@ import {
 export default function TicketsByStudentDonut({
   data,
   title = "TICKETS POR ALUMNO",
+  subtitle = "Top alumnos por volumen de tickets",
 }: {
   data: { name: string; count: number }[];
   title?: string;
+  subtitle?: string;
 }) {
   const COLORS = [
     "#6366F1",
@@ -73,9 +75,7 @@ export default function TicketsByStudentDonut({
     <div className="rounded-2xl border border-gray-200 bg-white relative">
       <div className="px-5 py-4 border-b border-gray-100">
         <h3 className="text-base font-bold text-gray-900">{title}</h3>
-        <p className="text-sm text-gray-500">
-          Top alumnos por volumen de tickets
-        </p>
+        {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
       </div>
       <div className="relative z-10 h-80 px-2 py-4">
         <ResponsiveContainer width="100%" height="100%">

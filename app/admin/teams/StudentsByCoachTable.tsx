@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export type CoachStudent = {
   id: number;
@@ -29,10 +30,14 @@ export default function StudentsByCoachTable({
   coach,
   filtered,
   loadingFiltered,
+  datasets,
+  defaultDatasetKey,
 }: {
   coach: string;
   filtered?: FilteredStudent[];
   loadingFiltered?: boolean;
+  datasets?: Array<{ key: string; label: string; rows: FilteredStudent[] }>;
+  defaultDatasetKey?: string;
 }) {
   const nf = (n: any) =>
     n === null || n === undefined || isNaN(Number(n))
@@ -100,10 +105,24 @@ export default function StudentsByCoachTable({
     );
   }
 
-  // Dataset único: solo "filtrados" desde metrics-v2
+  // Tabs de datasets: si se proveen, usamos el dataset seleccionado; si no, usamos "filtered"
+  const [activeKey, setActiveKey] = useState<string | undefined>(
+    datasets?.[0]?.key || defaultDatasetKey
+  );
+
+  const currentRows: FilteredStudent[] = useMemo(() => {
+    if (datasets && datasets.length) {
+      const key = activeKey ?? datasets[0].key;
+      const found = datasets.find((d) => d.key === key);
+      return found?.rows || [];
+    }
+    return filtered || [];
+  }, [datasets, activeKey, filtered]);
+
+  // Dataset efectivo (para filtros/paginación)
   const baseData: Array<CoachStudent | FilteredStudent> = useMemo(
-    () => filtered || [],
-    [filtered]
+    () => currentRows,
+    [currentRows]
   );
 
   // Derivar valores únicos de estado y fase del dataset activo
@@ -177,13 +196,33 @@ export default function StudentsByCoachTable({
       <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-3 md:flex-row md:items-start md:gap-6">
         <div>
           <h3 className="text-base font-bold text-gray-900 uppercase">
-            Alumnos de {coach}
+            {coach?.toLowerCase() === "todos"
+              ? "Todos los alumnos"
+              : `Alumnos de ${coach}`}
           </h3>
           <p className="text-sm text-gray-500">
             Listado de alumnos asociados al coach y su estado actual
           </p>
         </div>
         <div className="flex flex-col gap-2 w-full md:flex-1">
+          {/* Pestañas de dataset al lado de los filtros */}
+          {datasets && datasets.length > 0 && (
+            <div className="flex items-center justify-between">
+              <Tabs
+                value={activeKey || datasets[0].key}
+                onValueChange={(v) => setActiveKey(v)}
+                className="w-full"
+              >
+                <TabsList className="mb-1 overflow-x-auto">
+                  {datasets.map((d) => (
+                    <TabsTrigger key={d.key} value={d.key}>
+                      {d.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          )}
           <div className="flex flex-col gap-2 w-full">
             <FilterGroup
               label="Estado"
@@ -339,7 +378,21 @@ export default function StudentsByCoachTable({
                       {nf(fs.ticketsCount)}
                     </td>
                     <td className="px-3 py-2 text-gray-700">
-                      {fs.contrato || "—"}
+                      {fs.contrato ? (
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={fs.contrato}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center rounded-md border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:border-blue-300"
+                            title="Abrir contrato"
+                          >
+                            Ver
+                          </a>
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-3 py-2 text-gray-700">
                       {fs.nicho || "—"}

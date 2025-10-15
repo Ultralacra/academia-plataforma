@@ -5,6 +5,7 @@ import { dataService } from "@/lib/data-service";
 import { fetchCoachs, fetchMetrics, Coach, RawClient } from "./teamsApi";
 import Filters from "./Filters";
 import TicketsByStudentBar from "./TicketsByStudentBar";
+import TicketsByStudentDonut from "./TicketsByStudentDonut";
 import TicketsByPeriodBar from "./TicketsByPeriodBar";
 import ProductivityCharts from "./ProductivityCharts";
 // import Charts from "./Charts"; // oculto para vista individual
@@ -12,9 +13,12 @@ import CreatedMetricsContent from "./CreatedMetricsContent";
 import TicketsByTeamTable, { TicketsByTeamApiRow } from "./TicketsByTeamTable";
 import LoadingOverlay from "./LoadingOverlay";
 import StudentsByCoachTable from "./StudentsByCoachTable";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 // import AllStudentsTable from "./AllStudentsTable"; // ocultado según petición
 import CoachStudentsDistributionChart from "./CoachStudentsDistributionChart";
 import StudentsPhaseDonut from "./StudentsPhaseDonut";
+import SlowestResponseCard from "./SlowestResponseCard";
+import ResolutionAndRateCard from "./ResolutionAndRateCard";
 
 type TicketsSeriesVM = {
   daily: Array<{ date: string; count: number }>;
@@ -161,7 +165,27 @@ export default function TeamsMetricsContent() {
       avg_time_hms: string;
     } | null;
     ticketsByEstado?: Array<{ estado: string; cantidad: number }>;
+    ticketsByType?: Array<{ tipo: string; cantidad: number }>;
+    slowestResponseTicket?: {
+      ticket_id: number;
+      codigo_alumno: string;
+      nombre_alumno: string;
+      asunto_ticket: string;
+      tipo_ticket: string;
+      estado_ticket: string;
+      fecha_creacion: string;
+      fecha_respuesta: string;
+      minutos_respuesta: number;
+      horas_respuesta: number;
+      dias_respuesta: number;
+    } | null;
     clientsByCoachDetail?: RawClient[];
+    allClientsByCoach?: Array<{
+      coach: string;
+      coach_code?: string | null;
+      students: RawClient[];
+    }>;
+    allClientsByCoachFlat?: RawClient[];
     createdBlock: {
       rows: Array<{
         area: string | null;
@@ -201,9 +225,13 @@ export default function TeamsMetricsContent() {
     avgResolutionByStudent: [],
     avgResolutionSummary: null,
     ticketsByEstado: [],
+    ticketsByType: [],
+    slowestResponseTicket: null,
     createdBlock: null,
     ticketsByTeam: [],
     clientsByCoachDetail: [],
+    allClientsByCoach: [],
+    allClientsByCoachFlat: [],
   });
 
   // Cargar coachs una sola vez
@@ -489,11 +517,23 @@ export default function TeamsMetricsContent() {
           ticketsByEstado: Array.isArray((teams as any).ticketsByEstado)
             ? (teams as any).ticketsByEstado
             : [],
+          ticketsByType: Array.isArray((teams as any).ticketsByType)
+            ? (teams as any).ticketsByType
+            : [],
           clientsByCoachDetail: Array.isArray(
             (teams as any).clientsByCoachDetail
           )
             ? (teams as any).clientsByCoachDetail
             : [],
+          allClientsByCoach: Array.isArray((teams as any).allClientsByCoach)
+            ? (teams as any).allClientsByCoach
+            : [],
+          allClientsByCoachFlat: Array.isArray(
+            (teams as any).allClientsByCoachFlat
+          )
+            ? (teams as any).allClientsByCoachFlat
+            : [],
+          slowestResponseTicket: (teams as any).slowestResponseTicket ?? null,
           createdBlock,
           ticketsByTeam: ticketsByTeamApi,
         });
@@ -525,7 +565,11 @@ export default function TeamsMetricsContent() {
           avgResolutionByStudent: [],
           avgResolutionSummary: null,
           ticketsByEstado: [],
+          ticketsByType: [],
+          slowestResponseTicket: null,
           clientsByCoachDetail: [],
+          allClientsByCoach: [],
+          allClientsByCoachFlat: [],
           createdBlock: null,
           ticketsByTeam: [],
         });
@@ -972,6 +1016,66 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
+      {/* Vista agregada cuando NO hay coach: donuts por estado/fase y tipos de ticket */}
+      {!coach && !loading && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <StudentsPhaseDonut
+            students={[]}
+            coachName="Todos"
+            title="ALUMNOS POR FASE (GLOBAL)"
+            aggData={displayVm.clientsByPhaseAgg}
+            details={displayVm.clientsByPhaseDetails}
+          />
+          <CoachStudentsDistributionChart
+            students={[] as any}
+            mode={studentsChartMode}
+            onModeChange={setStudentsChartMode}
+            coachName="Todos"
+            showToggle={true}
+            aggState={displayVm.clientsByStateAgg}
+            aggPhase={displayVm.clientsByPhaseAgg}
+            detailsState={displayVm.clientsByStateDetails}
+            detailsPhase={displayVm.clientsByPhaseDetails}
+          />
+          {/* Donut por tipo de ticket */}
+          <TicketsByStudentDonut
+            data={(displayVm.ticketsByType || []).map((t) => ({
+              name: t.tipo,
+              count: t.cantidad,
+            }))}
+            title="TICKETS POR TIPO"
+          />
+          {/* Donut por estado de ticket */}
+          <TicketsByStudentDonut
+            data={(displayVm.ticketsByEstado || []).map((t) => ({
+              name: t.estado,
+              count: t.cantidad,
+            }))}
+            title="TICKETS POR ESTADO"
+          />
+        </div>
+      )}
+
+      {/* Fila de KPIs: a la izquierda Promedio+Tasa, a la derecha Ticket más lento */}
+      {!loading && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <ResolutionAndRateCard
+            avgMinutes={displayVm.avgResolutionSummary?.avg_minutes}
+            avgHms={displayVm.avgResolutionSummary?.avg_time_hms}
+            resolved={displayVm.avgResolutionSummary?.tickets_resueltos}
+            total={
+              displayVm.ticketsByName?.reduce(
+                (a, c) => a + (c.count || 0),
+                0
+              ) ?? 0
+            }
+          />
+          {vm.slowestResponseTicket && (
+            <SlowestResponseCard ticket={vm.slowestResponseTicket as any} />
+          )}
+        </div>
+      )}
+
       {/* Grid: izquierda Tickets por alumno, derecha Tickets por periodo (diario) */}
       {!loading ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -993,66 +1097,10 @@ export default function TeamsMetricsContent() {
                 }
                 return map;
               })()}
+              initialLimit={!coach ? 25 : undefined}
+              showLimiter={!coach}
             />
-            {(displayVm.avgResolutionSummary ||
-              displayVm.ticketsByEstado?.length) && (
-              <div className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm">
-                <div className="flex flex-wrap items-center gap-4">
-                  {displayVm.avgResolutionSummary && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-gray-500">
-                        Promedio resolución:
-                      </span>
-                      <span className="font-semibold text-gray-900">
-                        {Number(
-                          displayVm.avgResolutionSummary.avg_minutes ?? 0
-                        ).toFixed(1)}{" "}
-                        min
-                        <span className="text-gray-400 ml-2">
-                          ({displayVm.avgResolutionSummary.avg_time_hms})
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                  {(() => {
-                    const resueltos =
-                      displayVm.avgResolutionSummary?.tickets_resueltos ?? null;
-                    const totalTickets =
-                      displayVm.ticketsByName?.reduce(
-                        (a, c) => a + (c.count || 0),
-                        0
-                      ) ?? null;
-                    if (resueltos != null && totalTickets && totalTickets > 0) {
-                      const tasa = resueltos / totalTickets;
-                      return (
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-500">
-                            Tasa de resolución:
-                          </span>
-                          <span className="font-semibold text-gray-900">
-                            {(tasa * 100).toFixed(1)}%
-                          </span>
-                          <span className="text-gray-400">
-                            ({resueltos}/{totalTickets})
-                          </span>
-                        </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                  {Array.isArray(displayVm.ticketsByEstado) &&
-                    displayVm.ticketsByEstado.length > 0 && (
-                      <div className="flex items-center gap-3">
-                        {displayVm.ticketsByEstado.map((e, i) => (
-                          <span key={i} className="text-gray-700">
-                            {e.estado}: <b>{e.cantidad}</b>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                </div>
-              </div>
-            )}
+            {/* Bloque de estados removido a petición */}
           </div>
           <TicketsByPeriodBar data={displayVm.ticketsSeries.daily} />
         </div>
@@ -1080,7 +1128,63 @@ export default function TeamsMetricsContent() {
       {coach && !loading && (
         <StudentsByCoachTable
           coach={coachName || coach}
-          filtered={(vm.clientsByCoachDetail || []).map((r) => ({
+          loadingFiltered={loading}
+          datasets={[
+            {
+              key: "range",
+              label: "En rango",
+              rows: (vm.clientsByCoachDetail || []).map((r) => ({
+                id: r.id,
+                name: r.nombre,
+                code: r.codigo ?? null,
+                state: r.estado ?? null,
+                stage: r.etapa ?? null,
+                ingreso: r.ingreso ?? null,
+                lastActivity: r.ultima_actividad ?? null,
+                inactivityDays: r.inactividad ?? null,
+                ticketsCount: r.tickets ?? null,
+                contrato: r.contrato ?? null,
+                nicho: r.nicho ?? null,
+                paso_f1: r.paso_f1 ?? null,
+                paso_f2: r.paso_f2 ?? null,
+                paso_f3: r.paso_f3 ?? null,
+                paso_f4: r.paso_f4 ?? null,
+                paso_f5: r.paso_f5 ?? null,
+              })),
+            },
+            {
+              key: "all",
+              label: "Todos",
+              rows: (vm.allClientsByCoachFlat || []).map((r) => ({
+                id: r.id,
+                name: r.nombre,
+                code: r.codigo ?? null,
+                state: r.estado ?? null,
+                stage: r.etapa ?? null,
+                ingreso: r.ingreso ?? null,
+                lastActivity: r.ultima_actividad ?? null,
+                inactivityDays: r.inactividad ?? null,
+                ticketsCount: r.tickets ?? null,
+                contrato: r.contrato ?? null,
+                nicho: r.nicho ?? null,
+                paso_f1: r.paso_f1 ?? null,
+                paso_f2: r.paso_f2 ?? null,
+                paso_f3: r.paso_f3 ?? null,
+                paso_f4: r.paso_f4 ?? null,
+                paso_f5: r.paso_f5 ?? null,
+              })),
+            },
+          ]}
+          defaultDatasetKey="range"
+        />
+      )}
+
+      {/* Tabla global al final cuando NO hay coach */}
+      {!coach && (
+        <StudentsByCoachTable
+          coach="Todos"
+          loadingFiltered={loading}
+          filtered={(vm.allClientsByCoachFlat || []).map((r) => ({
             id: r.id,
             name: r.nombre,
             code: r.codigo ?? null,
@@ -1098,9 +1202,10 @@ export default function TeamsMetricsContent() {
             paso_f4: r.paso_f4 ?? null,
             paso_f5: r.paso_f5 ?? null,
           }))}
-          loadingFiltered={loading}
         />
       )}
+
+      {/* (bloque legacy de alerta roja removido; usamos SlowestResponseCard arriba) */}
     </div>
   );
 }

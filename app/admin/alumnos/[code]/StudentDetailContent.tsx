@@ -22,6 +22,8 @@ import {
   type StatusSint,
 } from "./_parts/detail-utils";
 import TicketsPanel from "./_parts/TicketsPanel";
+import { getStudentTickets } from "../api";
+import Link from "next/link";
 
 export default function StudentDetailContent({ code }: { code: string }) {
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [pF3, setPF3] = useState<string>("");
   const [pF4, setPF4] = useState<string>("");
   const [pF5, setPF5] = useState<string>("");
+  const [ticketsCount, setTicketsCount] = useState<number | undefined>(
+    undefined
+  );
 
   useEffect(() => {
     let alive = true;
@@ -62,6 +67,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
             setCoaches(cs.coaches ?? []);
           } catch {
             setCoaches([]);
+          }
+          try {
+            const tickets = await getStudentTickets(s.code);
+            setTicketsCount(tickets.length);
+          } catch {
+            setTicketsCount(undefined);
           }
         }
 
@@ -117,6 +128,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
     { label: "F5", date: pF5 },
   ];
 
+  // Compatibilidad: el componente importado no coincide con props esperadas.
+  // Lo forzamos a any para evitar errores de tipado mientras se estabiliza la vista.
+  const PhasesTimelineAny = PhasesTimeline as any;
+
   if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -147,9 +162,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
     <div className="space-y-6">
       <Header
         name={student.name}
-        code={student.code}
-        apiStage={student.stage}
+        code={student.code || ""}
+        apiStage={student.stage || undefined}
         status={statusSint}
+        ticketsCount={ticketsCount}
       />
 
       <MetricsStrip
@@ -208,7 +224,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
-          <PhasesTimeline steps={steps} />
+          <PhasesTimelineAny steps={steps} />
         </div>
         <div className="space-y-4">
           <CoachesCard coaches={coaches} />
@@ -216,7 +232,19 @@ export default function StudentDetailContent({ code }: { code: string }) {
         </div>
       </div>
 
-      <TicketsPanel student={student} />
+      <TicketsPanel
+        student={student}
+        onChangedTickets={(n) => setTicketsCount(n)}
+      />
+
+      <div className="flex justify-end">
+        <Link
+          href={`/chat/${encodeURIComponent(student.code || code)}`}
+          className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow hover:opacity-90"
+        >
+          Abrir chat
+        </Link>
+      </div>
 
       <p className="text-center text-xs text-muted-foreground">
         * Vista de demostración: los cambios no se envían al servidor

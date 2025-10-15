@@ -3,6 +3,16 @@
 import type React from "react";
 
 import { Calendar, GitBranch, Tag, RotateCcw, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Stage, StatusSint } from "./detail-utils";
 
 function PropertyRow({
@@ -97,95 +107,121 @@ export default function EditForm({
           <h3 className="text-sm font-semibold">Propiedades del alumno</h3>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={onReset}
-            className="inline-flex items-center gap-1.5 rounded-md border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted active:scale-[0.98]"
-          >
-            <RotateCcw className="h-3 w-3" />
-            Restaurar
-          </button>
-          <button
-            onClick={onSave}
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90 active:scale-[0.98]"
-          >
-            <Save className="h-3 w-3" />
-            Guardar
-          </button>
+          <Button variant="outline" size="sm" onClick={onReset}>
+            <RotateCcw className="mr-1 h-3 w-3" /> Restaurar
+          </Button>
+          <Button size="sm" onClick={onSave}>
+            <Save className="mr-1 h-3 w-3" /> Guardar
+          </Button>
         </div>
       </div>
 
       <div className="divide-y">
-        <PropertyRow icon={<Tag className="h-4 w-4" />} label="Estado">
-          <select
-            value={statusSint}
-            onChange={(e) => setStatusSint(e.target.value as StatusSint)}
-            className="w-full max-w-xs rounded-md border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {statuses.map((s) => (
-              <option key={s} value={s}>
-                {s.replace("_", " ")}
-              </option>
-            ))}
-          </select>
-        </PropertyRow>
+        {/* Estado y Etapa */}
+        <div className="grid grid-cols-1 gap-4 px-4 py-4 md:grid-cols-2">
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Tag className="h-3.5 w-3.5" /> Estado
+              </span>
+            </Label>
+            <Select
+              value={statusSint}
+              onValueChange={(v) => setStatusSint(v as StatusSint)}
+            >
+              <SelectTrigger className="w-full max-w-xs">
+                <SelectValue placeholder="Selecciona estado" />
+              </SelectTrigger>
+              <SelectContent>
+                {statuses.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s.replace("_", " ")}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <GitBranch className="h-3.5 w-3.5" /> Etapa
+              </span>
+            </Label>
+            <Select value={stage} onValueChange={(v) => setStage(v as Stage)}>
+              <SelectTrigger className="w-full max-w-xs">
+                <SelectValue placeholder="Selecciona etapa" />
+              </SelectTrigger>
+              <SelectContent>
+                {stages.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
 
-        <PropertyRow icon={<GitBranch className="h-4 w-4" />} label="Etapa">
-          <select
-            value={stage}
-            onChange={(e) => setStage(e.target.value as Stage)}
-            className="w-full max-w-xs rounded-md border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            {stages.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </PropertyRow>
+        {/* Fechas principales */}
+        <div className="grid grid-cols-1 gap-4 px-4 py-4 md:grid-cols-2">
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" /> Ingreso
+              </span>
+            </Label>
+            <Input
+              type="date"
+              value={pIngreso}
+              onChange={(e) => setPIngreso(e.target.value)}
+              className="w-full max-w-xs"
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" /> Salida
+              </span>
+            </Label>
+            <Input
+              type="date"
+              value={salida}
+              onChange={(e) => setSalida(e.target.value)}
+              className="w-full max-w-xs"
+            />
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" /> Última actividad
+              </span>
+            </Label>
+            <Input
+              type="date"
+              value={lastActivity?.slice(0, 10) ?? ""}
+              onChange={(e) => setLastActivity(e.target.value)}
+              className="w-full max-w-xs"
+            />
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Campo informativo de la API
+            </p>
+          </div>
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5" /> Última tarea
+              </span>
+            </Label>
+            <Input
+              type="date"
+              value={lastTaskAt}
+              onChange={(e) => setLastTaskAt(e.target.value)}
+              className="w-full max-w-xs"
+            />
+          </div>
+        </div>
 
-        <PropertyRow icon={<Calendar className="h-4 w-4" />} label="Ingreso">
-          <input
-            type="date"
-            value={pIngreso}
-            onChange={(e) => setPIngreso(e.target.value)}
-            className="w-full max-w-xs rounded-md border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </PropertyRow>
-
-        <PropertyRow icon={<Calendar className="h-4 w-4" />} label="Salida">
-          <input
-            type="date"
-            value={salida}
-            onChange={(e) => setSalida(e.target.value)}
-            className="w-full max-w-xs rounded-md border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </PropertyRow>
-
-        <PropertyRow
-          icon={<Calendar className="h-4 w-4" />}
-          label="Última actividad"
-          hint="Campo informativo de la API"
-        >
-          <input
-            type="date"
-            value={lastActivity?.slice(0, 10) ?? ""}
-            onChange={(e) => setLastActivity(e.target.value)}
-            className="w-full max-w-xs rounded-md border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </PropertyRow>
-
-        <PropertyRow
-          icon={<Calendar className="h-4 w-4" />}
-          label="Última tarea"
-        >
-          <input
-            type="date"
-            value={lastTaskAt}
-            onChange={(e) => setLastTaskAt(e.target.value)}
-            className="w-full max-w-xs rounded-md border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </PropertyRow>
-
+        {/* Transiciones de fase */}
         <div className="px-4 py-4">
           <div className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Transiciones de fase
@@ -199,14 +235,13 @@ export default function EditForm({
               { label: "F5", v: pF5, on: setPF5 },
             ].map((n) => (
               <div key={n.label} className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">
+                <Label className="text-xs font-medium text-muted-foreground">
                   {n.label}
-                </label>
-                <input
+                </Label>
+                <Input
                   type="date"
                   value={n.v}
                   onChange={(e) => n.on(e.target.value)}
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
             ))}

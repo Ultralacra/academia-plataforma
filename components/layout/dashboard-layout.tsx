@@ -37,7 +37,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </Button>
             </div>
           </header>
-          <div className="flex-1 p-6 overflow-auto">{children}</div>
+          <div className="flex-1 p-6 overflow-y-auto min-h-0 flex flex-col">
+            {children}
+          </div>
         </main>
       </div>
     </SidebarProvider>

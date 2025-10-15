@@ -47,6 +47,7 @@ const adminItems: MenuItem[] = [
   // NUEVOS top-level (mismo nivel que “Métricas”)
   { title: "Coachs", url: "/admin/teamsv2", icon: Users },
   { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
+  { title: "Chat", url: "/chat", icon: MessageSquare },
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
   // Grupo colapsable renombrado a “Métricas”
@@ -72,7 +73,7 @@ const coachItems: MenuItem[] = [
 const studentItems: MenuItem[] = [
   { title: "Dashboard", url: "/student", icon: Home },
   { title: "Mi Curso", url: "/student/course", icon: GraduationCap },
-  { title: "Soporte", url: "/student/support", icon: MessageSquare },
+  { title: "Chat", url: "/chat/student", icon: MessageSquare },
 ];
 
 /* ====================== Sidebar ====================== */

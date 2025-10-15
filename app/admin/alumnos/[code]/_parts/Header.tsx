@@ -1,6 +1,12 @@
 "use client";
 
-import { User } from "lucide-react";
+import { TicketIcon, User } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { STATUS_CLASSES, type StatusSint } from "./detail-utils";
 
 export default function Header({
@@ -9,13 +15,16 @@ export default function Header({
   apiState,
   apiStage,
   status,
+  ticketsCount,
 }: {
   name: string;
   code: string;
   apiState?: string;
   apiStage?: string;
   status: StatusSint;
+  ticketsCount?: number;
 }) {
+  // Nota: el conteo real de tickets se muestra desde el padre para evitar fetch doble.
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex items-start gap-4">
@@ -28,9 +37,29 @@ export default function Header({
           </h1>
           {code && (
             <div className="mt-1.5 flex items-center gap-2">
-              <code className="rounded bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
-                {code}
-              </code>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <code className="rounded bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
+                      {code}
+                    </code>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    Código del alumno
+                  </TooltipContent>
+                </Tooltip>
+                {typeof ticketsCount === "number" && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                        <TicketIcon className="h-3.5 w-3.5" />
+                        {ticketsCount}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>Tickets totales</TooltipContent>
+                  </Tooltip>
+                )}
+              </TooltipProvider>
               {apiStage && (
                 <span className="text-xs text-muted-foreground">
                   Etapa API: {apiStage}
@@ -45,6 +74,7 @@ export default function Header({
       </div>
 
       <div className="flex items-center gap-2">
+        {/* El padre puede inyectar un badge con el total de tickets aquí */}
         <span
           className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
         >
