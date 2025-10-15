@@ -2,7 +2,21 @@
 
 import React from "react";
 import { toast } from "@/components/ui/use-toast";
-import { Smile, Paperclip, Send, MoreVertical, ArrowLeft } from "lucide-react";
+import {
+  Smile,
+  Paperclip,
+  Send,
+  MoreVertical,
+  ArrowLeft,
+  Filter,
+  Zap,
+} from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
 
 type Sender = "admin" | "alumno" | "coach";
 
@@ -21,6 +35,8 @@ type Message = {
   text: string;
   at: string;
   attachments?: Attachment[];
+  status?: string;
+  phase?: string;
 };
 
 type Transport = "ws" | "local";
@@ -46,32 +62,48 @@ export default function ChatRealtime({
   transport?: Transport;
   onBack?: () => void;
 }) {
-  const [items, setItems] = React.useState<Message[]>([]);
-  const [text, setText] = React.useState("");
-  const [connected, setConnected] = React.useState(false);
-  const [currentRole, setCurrentRole] = React.useState<Sender>(role);
-  const bottomRef = React.useRef<HTMLDivElement | null>(null);
-  const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
-  const fileRef = React.useRef<HTMLInputElement | null>(null);
-  const wsRef = React.useRef<WebSocket | null>(null);
-  const pendingRef = React.useRef<
-    Array<{
-      type: "message";
-      id?: string;
-      room: string;
-      sender: Sender;
-      text: string;
-      attachments?: Attachment[];
-    }>
-  >([]);
-  const bcRef = React.useRef<BroadcastChannel | null>(null);
-  const seenRef = React.useRef<Set<string>>(new Set());
-
-  const WS_OPEN = 1;
+  // ...existing code...
+  // Normalizar el nombre de la sala (room)
   const normRoom = React.useMemo(
-    () => (room || "").toLowerCase().trim(),
+    () => (room || "").trim().toLowerCase(),
     [room]
   );
+  // Rol actual y setter
+  const [currentRole, setCurrentRole] = React.useState<Sender>(role);
+  const [items, setItems] = React.useState<Message[]>([]);
+  const [text, setText] = React.useState("");
+  // Filtros de estatus y fase
+  const [filterOpen, setFilterOpen] = React.useState(false);
+  const [statusFilter, setStatusFilter] = React.useState<string | null>(null);
+  const [phaseFilter, setPhaseFilter] = React.useState<string | null>(null);
+  // Opciones de ejemplo (ajusta según tus datos reales)
+  const statusOptions = ["EN_CURSO", "COMPLETADO", "ABANDONO", "PAUSA"];
+  const phaseOptions = ["ONBOARDING", "F1", "F2", "F3", "F4", "F5"];
+  // Filtrar mensajes según estatus y fase (si existen en el mensaje)
+  const filteredItems = React.useMemo(() => {
+    return items.filter((m) => {
+      let ok = true;
+      if (statusFilter && m.status) {
+        ok = ok && m.status === statusFilter;
+      }
+      if (phaseFilter && m.phase) {
+        ok = ok && m.phase === phaseFilter;
+      }
+      return ok;
+    });
+  }, [items, statusFilter, phaseFilter]);
+  // Refs y estados necesarios para la lógica de transporte y UI
+  const wsRef = React.useRef<WebSocket | null>(null);
+  const bcRef = React.useRef<BroadcastChannel | null>(null);
+  const pendingRef = React.useRef<any[]>([]);
+  const seenRef = React.useRef<Set<string>>(new Set());
+  const bottomRef = React.useRef<HTMLDivElement | null>(null);
+  const fileRef = React.useRef<HTMLInputElement | null>(null);
+  const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const [connected, setConnected] = React.useState(false);
+  // Constante para comparar readyState
+  const WS_OPEN = typeof WebSocket !== "undefined" ? WebSocket.OPEN : 1;
+  // ...existing code...
   const storageKey = React.useMemo(() => `localChat:${normRoom}`, [normRoom]);
   const lastReadKey = React.useMemo(
     () => `chatLastRead:${normRoom}:${currentRole}`,
@@ -249,10 +281,10 @@ export default function ChatRealtime({
   }
 
   async function readFilesAsBase64(
-    files: FileList | null
+    files: FileList | File[] | null
   ): Promise<Attachment[]> {
-    if (!files || files.length === 0) return [];
-    const arr = Array.from(files);
+    if (!files || ("length" in files && files.length === 0)) return [];
+    const arr = Array.isArray(files) ? files : Array.from(files);
     const enc = async (file: File): Promise<Attachment> => {
       const buf = await file.arrayBuffer();
       const bytes = new Uint8Array(buf);
@@ -273,13 +305,108 @@ export default function ChatRealtime({
     return out;
   }
 
+  // Archivos pendientes de enviar (antes de enviar el mensaje)
+  const [pendingFiles, setPendingFiles] = React.useState<File[]>([]);
+  const [pendingPreviews, setPendingPreviews] = React.useState<
+    { url: string; name: string; type: string; size: number }[]
+  >([]);
+
+  React.useEffect(() => {
+    const urls = pendingFiles.map((f) => ({
+      url: URL.createObjectURL(f),
+      name: f.name,
+      type: f.type,
+      size: f.size,
+    }));
+    setPendingPreviews(urls);
+    return () => {
+      urls.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, [pendingFiles]);
+
+  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const list = Array.from(e.target.files ?? []);
+    if (!list.length) return;
+    setPendingFiles((prev) => prev.concat(list).slice(0, 10));
+    // permitir volver a elegir los mismos archivos luego
+    e.currentTarget.value = "";
+  }
+
+  // Generar ticket automático: leer últimos 30 minutos, crear sugerencia y despachar para revisión
+  async function generateTicketFromRecent() {
+    try {
+      const now = Date.now();
+      const cutoff = now - 30 * 60 * 1000; // 30 minutos
+      const recent = items.filter((m) => {
+        const t = Date.parse(m.at || "");
+        return !isNaN(t) && t >= cutoff;
+      });
+      if (!recent || recent.length === 0) {
+        toast({ title: "No hay mensajes en los últimos 30 minutos" });
+        return;
+      }
+
+      // generar título sugerido: tomar el último mensaje de alumno con texto o concatenar varios
+      let suggested = "Ticket desde chat";
+      const fromAlumno = [...recent]
+        .reverse()
+        .find((m) => m.sender === "alumno" && (m.text || "").trim());
+      if (fromAlumno && fromAlumno.text) {
+        suggested = String(fromAlumno.text).trim().slice(0, 120);
+      } else {
+        const joined = recent
+          .map((m) => (m.text || "").trim())
+          .filter(Boolean)
+          .slice(-3)
+          .join(" — ");
+        if (joined) suggested = joined.slice(0, 120);
+      }
+
+      // recopilar adjuntos
+      const atts: Attachment[] = [];
+      for (const m of recent) {
+        const aList = Array.isArray(m.attachments) ? m.attachments : [];
+        for (const a of aList) {
+          if (!a) continue;
+          atts.push(a);
+        }
+      }
+
+      const files: File[] = [];
+      for (const a of atts.slice(0, 10)) {
+        const f = fileFromAttachment(a);
+        if (f) files.push(f);
+      }
+
+      const detail = {
+        room: normRoom,
+        selected: recent,
+        files,
+        attachments: atts,
+        attachmentIds: atts.map((a) => a.id),
+        final: false,
+        overrideNombre: suggested,
+        autoGenerated: true,
+      } as any;
+
+      window.dispatchEvent(new CustomEvent("chat:create-ticket", { detail }));
+      toast({ title: "Generando propuesta de ticket para revisión" });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Error al generar propuesta" });
+    }
+  }
+
+  function removePendingAt(i: number) {
+    setPendingFiles((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
   async function send() {
     const val = text.trim();
-    const files = fileRef.current?.files || null;
-    if (!val && (!files || files.length === 0)) return;
+    if (!val && pendingFiles.length === 0) return;
 
     try {
-      const attachments = await readFilesAsBase64(files);
+      const attachments = await readFilesAsBase64(pendingFiles);
 
       // Crear mensaje optimista
       const clientId = `${Date.now()}-${Math.random()
@@ -301,6 +428,7 @@ export default function ChatRealtime({
         autoSize();
       }
       if (fileRef.current) fileRef.current.value = "";
+      setPendingFiles([]);
 
       if (transport === "local") {
         setItems((prev) => {
@@ -350,6 +478,22 @@ export default function ChatRealtime({
     fileRef.current?.click();
   }
 
+  function fileFromAttachment(a: Attachment): File | null {
+    try {
+      const binary = atob(a.data_base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], {
+        type: a.mime || "application/octet-stream",
+      });
+      return new File([blob], a.name || "archivo", {
+        type: a.mime || "application/octet-stream",
+      });
+    } catch {
+      return null;
+    }
+  }
+
   const sameDay = (a: Date, b: Date) =>
     a.getFullYear() === b.getFullYear() &&
     a.getMonth() === b.getMonth() &&
@@ -363,7 +507,7 @@ export default function ChatRealtime({
       msg?: Message;
     }> = [];
     let lastDate: Date | null = null;
-    for (const m of items) {
+    for (const m of filteredItems) {
       const d = new Date(m.at);
       if (!lastDate || !sameDay(lastDate, d)) {
         out.push({
@@ -376,12 +520,25 @@ export default function ChatRealtime({
       out.push({ key: m.id, type: "msg", msg: m });
     }
     return out;
-  }, [items]);
+  }, [filteredItems]);
 
   const [selectMode, setSelectMode] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  // selección granular de adjuntos
+  const [selectedAttachmentIds, setSelectedAttachmentIds] = React.useState<
+    Set<string>
+  >(new Set());
+  // preview removed: we delegate creation to the page modal
+  function toggleSelectAttachment(id: string) {
+    setSelectedAttachmentIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
@@ -441,6 +598,81 @@ export default function ChatRealtime({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Botón IA: Generar ticket */}
+          <button
+            title="Generar ticket (IA)"
+            onClick={generateTicketFromRecent}
+            className="p-2 rounded-full hover:bg-white/10 transition-colors flex items-center gap-2"
+          >
+            <Zap className="w-5 h-5" />
+            <span className="hidden sm:inline text-sm font-medium">
+              Generar ticket
+            </span>
+          </button>
+          <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                title="Filtrar"
+              >
+                <Filter className="w-5 h-5" />
+                {(statusFilter || phaseFilter) && (
+                  <span className="absolute -top-1 -right-1 bg-sky-500 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center">
+                    !
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-56 p-4">
+              <div className="mb-2 text-sm font-semibold">Filtrar mensajes</div>
+              <div className="mb-2">
+                <div className="text-xs mb-1">Estatus</div>
+                <div className="flex flex-wrap gap-1">
+                  {statusOptions.map((s) => (
+                    <Badge
+                      key={s}
+                      variant={statusFilter === s ? "default" : "secondary"}
+                      onClick={() =>
+                        setStatusFilter(statusFilter === s ? null : s)
+                      }
+                      className="cursor-pointer"
+                    >
+                      {s.replace("_", " ")}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs mb-1">Fase</div>
+                <div className="flex flex-wrap gap-1">
+                  {phaseOptions.map((f) => (
+                    <Badge
+                      key={f}
+                      variant={phaseFilter === f ? "default" : "secondary"}
+                      onClick={() =>
+                        setPhaseFilter(phaseFilter === f ? null : f)
+                      }
+                      className="cursor-pointer"
+                    >
+                      {f}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              {(statusFilter || phaseFilter) && (
+                <button
+                  className="mt-4 w-full text-xs text-sky-600 underline"
+                  onClick={() => {
+                    setStatusFilter(null);
+                    setPhaseFilter(null);
+                    setFilterOpen(false);
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+              )}
+            </PopoverContent>
+          </Popover>
           {selectMode ? (
             <button
               onClick={() => {
@@ -504,7 +736,9 @@ export default function ChatRealtime({
                 Sin mensajes aún
               </p>
               <p className="text-xs text-gray-400 mt-1">
-                Envía un mensaje para comenzar
+                {statusFilter || phaseFilter
+                  ? "No hay mensajes que coincidan con el filtro."
+                  : "Envía un mensaje para comenzar"}
               </p>
             </div>
           </div>
@@ -568,51 +802,103 @@ export default function ChatRealtime({
                   <div className="mt-1 grid grid-cols-2 gap-2">
                     {m.attachments.map((a) => {
                       const url = `data:${a.mime};base64,${a.data_base64}`;
+                      const selected = selectedAttachmentIds.has(a.id);
+                      const commonWrapCls = `relative group rounded-md overflow-hidden ${
+                        selectMode && selected ? "ring-2 ring-sky-500" : ""
+                      }`;
+                      const overlay = selectMode ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleSelectAttachment(a.id);
+                          }}
+                          className={`absolute top-1 right-1 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full text-white text-xs ${
+                            selected ? "bg-sky-600" : "bg-black/50"
+                          }`}
+                          title={selected ? "Quitar" : "Seleccionar"}
+                        >
+                          {selected ? "✓" : "+"}
+                        </button>
+                      ) : null;
+
                       if ((a.mime || "").startsWith("image/")) {
                         return (
-                          <a
-                            key={a.id}
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <img
-                              src={url}
-                              alt={a.name}
-                              className="rounded-md max-h-40 object-cover"
-                            />
-                          </a>
+                          <div key={a.id} className={commonWrapCls}>
+                            {overlay}
+                            {selectMode ? (
+                              <img
+                                src={url}
+                                alt={a.name}
+                                className="max-h-40 w-full object-cover"
+                                onClick={() => toggleSelectAttachment(a.id)}
+                              />
+                            ) : (
+                              <a href={url} target="_blank" rel="noreferrer">
+                                <img
+                                  src={url}
+                                  alt={a.name}
+                                  className="max-h-40 w-full object-cover"
+                                />
+                              </a>
+                            )}
+                          </div>
                         );
                       }
                       if ((a.mime || "").startsWith("video/")) {
                         return (
-                          <video
-                            key={a.id}
-                            src={url}
-                            controls
-                            className="rounded-md max-h-40"
-                          />
+                          <div key={a.id} className={commonWrapCls}>
+                            {overlay}
+                            {selectMode ? (
+                              <video
+                                src={url}
+                                className="max-h-40 w-full"
+                                onClick={() => toggleSelectAttachment(a.id)}
+                              />
+                            ) : (
+                              <video
+                                src={url}
+                                controls
+                                className="max-h-40 w-full"
+                              />
+                            )}
+                          </div>
                         );
                       }
                       if ((a.mime || "").startsWith("audio/")) {
                         return (
-                          <audio
-                            key={a.id}
-                            src={url}
-                            controls
-                            className="w-full"
-                          />
+                          <div key={a.id} className={commonWrapCls}>
+                            {overlay}
+                            <audio src={url} controls className="w-full" />
+                          </div>
                         );
                       }
                       return (
-                        <a
+                        <div
                           key={a.id}
-                          href={url}
-                          download={a.name}
-                          className="text-xs underline break-all"
+                          className={`${commonWrapCls} p-2 bg-white`}
                         >
-                          {a.name}
-                        </a>
+                          {overlay}
+                          {selectMode ? (
+                            <div
+                              className="text-xs underline break-all cursor-pointer"
+                              onClick={() => toggleSelectAttachment(a.id)}
+                              title={a.name}
+                            >
+                              {a.name}
+                            </div>
+                          ) : (
+                            <a
+                              href={url}
+                              download={a.name}
+                              className="text-xs underline break-all block"
+                              title={a.name}
+                            >
+                              {a.name}
+                            </a>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
@@ -662,7 +948,13 @@ export default function ChatRealtime({
           >
             <Paperclip className="w-6 h-6 text-gray-600" />
           </button>
-          <input ref={fileRef} type="file" multiple className="hidden" />
+          <input
+            ref={fileRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={onFileInputChange}
+          />
           <div className="flex-1">
             <textarea
               ref={inputRef}
@@ -683,25 +975,93 @@ export default function ChatRealtime({
           </div>
           <button
             onClick={send}
-            disabled={
-              !text.trim() && !((fileRef.current?.files?.length ?? 0) > 0)
-            }
+            disabled={!text.trim() && pendingFiles.length === 0}
             className="p-2.5 rounded-full bg-[#25d366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 shadow-md"
             title="Enviar"
           >
             <Send className="w-5 h-5" />
           </button>
         </div>
+        {pendingPreviews.length > 0 && (
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {pendingPreviews.map((p, i) => (
+              <div key={`${p.url}-${i}`} className="relative group">
+                {p.type.startsWith("image/") ? (
+                  <img
+                    src={p.url}
+                    alt={p.name}
+                    className="rounded-md max-h-32 object-cover w-full"
+                  />
+                ) : p.type.startsWith("video/") ? (
+                  <video
+                    src={p.url}
+                    className="rounded-md max-h-32 w-full"
+                    controls
+                  />
+                ) : p.type.startsWith("audio/") ? (
+                  <audio src={p.url} className="w-full" controls />
+                ) : (
+                  <a
+                    href={p.url}
+                    download={p.name}
+                    className="text-xs underline break-all block p-2 bg-white rounded"
+                  >
+                    {p.name}
+                  </a>
+                )}
+                <button
+                  onClick={() => removePendingAt(i)}
+                  className="absolute -top-2 -right-2 bg-gray-800 text-white rounded-full w-6 h-6 text-xs opacity-80 group-hover:opacity-100"
+                  title="Quitar"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* preview removed: creation handled by page modal */}
         {selectMode && selectedIds.size > 0 && (
           <div className="mt-2 flex justify-end">
             <button
               className="px-3 py-1.5 rounded bg-[#0ea5e9] text-white text-xs shadow hover:bg-[#0284c7] active:scale-95"
               onClick={() => {
                 const selected = items.filter((m) => selectedIds.has(m.id));
-                const detail = { room: normRoom, selected };
+                const pickAttachments = () => {
+                  const list: Attachment[] = [];
+                  const hasGranular = selectedAttachmentIds.size > 0;
+                  selected.forEach((m) => {
+                    (m.attachments ?? []).forEach((a) => {
+                      if (!hasGranular || selectedAttachmentIds.has(a.id)) {
+                        list.push(a);
+                      }
+                    });
+                  });
+                  return list;
+                };
+                const atts = pickAttachments();
+                const files: File[] = [];
+                atts.forEach((a) => {
+                  const f = fileFromAttachment(a);
+                  if (f) files.push(f);
+                });
+                const detail = {
+                  room: normRoom,
+                  selected,
+                  files,
+                  attachments: atts,
+                  attachmentIds: Array.from(selectedAttachmentIds),
+                } as any;
+
+                // Dispatch non-final event so the page opens the modal for review
                 window.dispatchEvent(
                   new CustomEvent("chat:create-ticket", { detail })
                 );
+
+                // reset selection mode
+                setSelectMode(false);
+                setSelectedIds(new Set());
+                setSelectedAttachmentIds(new Set());
               }}
             >
               Crear ticket con selección

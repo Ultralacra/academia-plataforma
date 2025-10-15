@@ -177,6 +177,7 @@ export type CreateTicketForm = {
   nombre: string;
   id_alumno: string; // código del alumno
   tipo: string; // debe venir de opciones "tipo_ticket"
+  descripcion?: string;
   archivos?: File[];
 };
 
@@ -186,6 +187,7 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   fd.set('nombre', form.nombre);
   fd.set('id_alumno', form.id_alumno);
   fd.set('tipo', form.tipo);
+  if (form.descripcion) fd.set('descripcion', form.descripcion);
   (form.archivos ?? []).forEach((file) => fd.append('archivos', file));
 
   const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store' });
