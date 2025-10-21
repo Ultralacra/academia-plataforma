@@ -110,12 +110,11 @@ export function AppSidebar() {
 
   const [metricsOpen, setMetricsOpen] = useState(false);
   const { unreadTotal, lastEvent } = useChatNotifications({
-    role:
-      (user?.role === "student"
-        ? "alumno"
-        : user?.role === "coach"
-        ? "coach"
-        : "admin") as any,
+    role: (user?.role === "student"
+      ? "alumno"
+      : user?.role === "coach"
+      ? "coach"
+      : "admin") as any,
     enableToast: true,
   });
 
@@ -129,7 +128,9 @@ export function AppSidebar() {
       try {
         toast({
           title: "Nuevo mensaje en chat",
-          description: `${lastEvent.sender}: ${lastEvent.text?.slice(0, 80) || "(adjunto)"}`,
+          description: `${lastEvent.sender}: ${
+            lastEvent.text?.slice(0, 80) || "(adjunto)"
+          }`,
         });
       } catch {}
     }
@@ -223,11 +224,14 @@ export function AppSidebar() {
                                   />
                                   <span className="truncate flex items-center gap-2">
                                     {item.title}
-                                    {item.title === "Chat" && unreadTotal > 0 && (
-                                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold">
-                                        {unreadTotal > 99 ? "99+" : unreadTotal}
-                                      </span>
-                                    )}
+                                    {item.title === "Chat" &&
+                                      unreadTotal > 0 && (
+                                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold">
+                                          {unreadTotal > 99
+                                            ? "99+"
+                                            : unreadTotal}
+                                        </span>
+                                      )}
                                   </span>
                                 </Link>
                               </SidebarMenuButton>

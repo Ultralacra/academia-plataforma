@@ -165,7 +165,10 @@ export default function ChatRealtime({
 
   React.useEffect(() => {
     // Al montar, si la vista está visible, marcar como leído
-    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+    if (
+      typeof document !== "undefined" &&
+      document.visibilityState === "visible"
+    ) {
       markRead();
     }
     function onVis() {
@@ -233,7 +236,10 @@ export default function ChatRealtime({
               console.debug(`Nuevo mensaje de ${msg.sender}:`, msg.text);
             }
             // si estamos viendo este chat y la ventana está enfocada, marcar como leído
-            if (typeof document !== "undefined" && document.visibilityState === "visible") {
+            if (
+              typeof document !== "undefined" &&
+              document.visibilityState === "visible"
+            ) {
               markRead();
             }
           }

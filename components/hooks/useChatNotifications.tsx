@@ -53,9 +53,9 @@ export function useChatNotifications(opts?: {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const url = `${proto}://${window.location.host}/api/socket?room=${encodeURIComponent(
-      "chat:all"
-    )}`;
+    const url = `${proto}://${
+      window.location.host
+    }/api/socket?room=${encodeURIComponent("chat:all")}`;
     const ws = new WebSocket(url);
     wsRef.current = ws;
 
@@ -79,7 +79,9 @@ export function useChatNotifications(opts?: {
               try {
                 toast({
                   title: "Nuevo mensaje en chat",
-                  description: `${d.sender}: ${d.text?.slice(0, 80) || "(adjunto)"}`,
+                  description: `${d.sender}: ${
+                    d.text?.slice(0, 80) || "(adjunto)"
+                  }`,
                 });
               } catch {}
             }
