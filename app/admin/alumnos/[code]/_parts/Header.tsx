@@ -7,20 +7,24 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { STATUS_CLASSES, type StatusSint } from "./detail-utils";
+import {
+  STATUS_CLASSES,
+  type StatusSint,
+  getOptionBadgeClass,
+} from "./detail-utils";
 
 export default function Header({
   name,
   code,
-  apiState,
   apiStage,
+  apiState,
   status,
   ticketsCount,
 }: {
   name: string;
   code: string;
-  apiState?: string;
   apiStage?: string;
+  apiState?: string;
   status: StatusSint;
   ticketsCount?: number;
 }) {
@@ -60,11 +64,7 @@ export default function Header({
                   </Tooltip>
                 )}
               </TooltipProvider>
-              {apiStage && (
-                <span className="text-xs text-muted-foreground">
-                  Etapa API: {apiStage}
-                </span>
-              )}
+              {/* Etapa API ocultada */}
             </div>
           )}
           <p className="mt-1 text-sm text-muted-foreground">
@@ -75,11 +75,24 @@ export default function Header({
 
       <div className="flex items-center gap-2">
         {/* El padre puede inyectar un badge con el total de tickets aquí */}
-        <span
-          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${STATUS_CLASSES[status]}`}
-        >
-          {status.replace("_", " ")}
-        </span>
+        {/* Mostrar el estado crudo si se pasó como prop; si no, mostrar el status sintético.
+            Si ninguno existe, dejar vacío (no mostrar badge). */}
+        {((apiState && String(apiState)) ||
+          (typeof apiStage === "string" && apiStage) ||
+          status) && (
+          <span
+            className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getOptionBadgeClass(
+              apiState ? "estado" : apiStage ? "etapa" : "status_sint",
+              (apiState && String(apiState)) ||
+                (apiStage && String(apiStage)) ||
+                status
+            )}`}
+          >
+            {(apiState && String(apiState)) ||
+              (apiStage && String(apiStage)) ||
+              status.replace("_", " ")}
+          </span>
+        )}
       </div>
     </div>
   );

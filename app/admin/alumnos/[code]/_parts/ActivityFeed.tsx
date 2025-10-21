@@ -33,7 +33,6 @@ export default function ActivityFeed({
         date: s.date,
         text: `Completó ${s.label}`,
       })),
-    { kind: "nota", date: null, text: "Sincronizado con API" },
   ];
 
   return (

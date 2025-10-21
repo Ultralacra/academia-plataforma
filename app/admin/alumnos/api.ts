@@ -118,6 +118,32 @@ export async function getAllCoachesFromTeams(): Promise<CoachTeam[]> {
   });
 }
 
+// Crear alumno (multipart/form-data). Campos: nombre (obligatorio), contrato (opcional)
+export async function createStudent(payload: {
+  nombre: string;
+  contrato?: File | null;
+}): Promise<{ id: number; codigo: string; nombre: string }> {
+  // Endpoint actualizado por requerimiento del usuario
+  const url = 'https://v001.vercel.app/v1/client/create/client';
+  const fd = new FormData();
+  fd.set('nombre', payload.nombre);
+  if (payload.contrato) {
+    fd.set('contrato', payload.contrato);
+  }
+  const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  const json = await res.json().catch(() => ({}));
+  const d = (json?.data ?? {}) as any;
+  return {
+    id: Number(d.id),
+    codigo: String(d.codigo ?? ''),
+    nombre: String(d.nombre ?? payload.nombre),
+  };
+}
+
 // 3) (Siguiente paso) alumnos de un coach por ID de coach
 export async function getCoachStudentsByCoachId(coachId: string): Promise<{ alumno: string; nombre: string }[]> {
   const url = `https://v001.vercel.app/v1/client/get/clients-coaches?coach=${encodeURIComponent(coachId)}`;
@@ -214,6 +240,7 @@ export type TicketUpdatePayload = Partial<{
 }>;
 
 export async function updateTicket(ticketId: string, payload: TicketUpdatePayload): Promise<any> {
+  // El endpoint documentado usa PUT para actualizar un ticket
   const url = `https://v001.vercel.app/v1/ticket/update/ticket/${encodeURIComponent(ticketId)}`;
   // Filtrar campos prohibidos y construir body limpio
   const rest: Record<string, any> = { ...(payload as any) };
@@ -221,7 +248,8 @@ export async function updateTicket(ticketId: string, payload: TicketUpdatePayloa
   delete rest.equipo;
 
   return await fetchJson<any>(url, {
-    method: 'POST',
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rest),
   });
 }
@@ -298,4 +326,53 @@ export async function getTicketFile(fileId: string): Promise<{
     contenido_base64: d.contenido_base64 ?? '',
     created_at: d.created_at ?? null,
   };
+}
+
+// 9) Actualizar cliente (etapa / estado / nicho)
+export async function updateClient(clientCode: string, payload: Record<string, any>): Promise<any> {
+  const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
+  return await fetchJson<any>(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// Subir contrato (multipart/form-data) para un cliente
+export async function uploadClientContract(
+  clientCode: string,
+  contrato: File
+): Promise<any> {
+  const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
+  const fd = new FormData();
+  fd.set('contrato', contrato);
+  const res = await fetch(url, { method: 'PUT', body: fd, cache: 'no-store' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  return await res.json().catch(() => ({}));
+}
+
+// Descargar contrato (blob) por código de cliente
+export async function downloadClientContractBlob(clientCode: string): Promise<{
+  blob: Blob;
+  filename?: string;
+  contentType?: string | null;
+}> {
+  const url = `https://v001.vercel.app/v1/client/download/contrato/${encodeURIComponent(clientCode)}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  const contentType = res.headers.get('Content-Type');
+  const cd = res.headers.get('Content-Disposition') || '';
+  let filename: string | undefined = undefined;
+  try {
+    const m = cd.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    filename = decodeURIComponent((m?.[1] || m?.[2] || '').trim());
+  } catch {}
+  const blob = await res.blob();
+  return { blob, filename, contentType };
 }

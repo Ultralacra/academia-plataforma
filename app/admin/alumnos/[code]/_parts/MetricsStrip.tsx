@@ -10,6 +10,7 @@ export default function MetricsStrip({
   faseActual,
   ingreso,
   salida,
+  onEdit,
 }: {
   statusLabel: string;
   permanencia: number;
@@ -17,31 +18,43 @@ export default function MetricsStrip({
   faseActual: string;
   ingreso?: string | null;
   salida?: string | null;
+  onEdit?: (mode?: "estado" | "etapa" | "nicho" | "all") => void;
 }) {
-  const items = [
+  const items: Array<{
+    icon: React.ReactNode;
+    label: string;
+    value: string;
+    sub: string;
+    editable?: boolean;
+    mode?: "estado" | "etapa" | "nicho" | "all";
+  }> = [
     {
       icon: <TrendingUp className="h-4 w-4" />,
       label: "Estado",
-      value: statusLabel,
-      sub: "Estado sintético",
+      value: statusLabel || "",
+      sub: "",
+      editable: true,
+      mode: "estado",
     },
     {
       icon: <Calendar className="h-4 w-4" />,
       label: "Permanencia",
-      value: `${permanencia} días`,
-      sub: `${fmtES(ingreso)} → ${fmtES(salida)}`,
+      value: ingreso ? `${permanencia} días` : "",
+      sub: ingreso ? `${fmtES(ingreso)} → ${fmtES(salida)}` : "",
     },
     {
       icon: <Clock className="h-4 w-4" />,
       label: "Última tarea",
-      value: fmtES(lastTaskAt),
-      sub: lastTaskAt ? "Fecha de entrega" : "Sin entregas",
+      value: lastTaskAt ? fmtES(lastTaskAt) : "",
+      sub: lastTaskAt ? "Fecha de entrega" : "",
     },
     {
       icon: <Target className="h-4 w-4" />,
       label: "Fase actual",
-      value: faseActual,
-      sub: "Según pasos locales",
+      value: faseActual || "",
+      sub: "",
+      editable: true,
+      mode: "etapa",
     },
   ];
 
@@ -58,6 +71,34 @@ export default function MetricsStrip({
                 <span className="text-muted-foreground/60">{it.icon}</span>
                 {it.label}
               </div>
+              {it.editable && onEdit && (
+                <button
+                  className="absolute right-3 top-3 inline-flex items-center justify-center rounded-full p-1 text-muted-foreground hover:bg-muted/10"
+                  onClick={() => onEdit(it.mode)}
+                  aria-label={
+                    it.mode === "estado"
+                      ? "Editar estado"
+                      : it.mode === "etapa"
+                      ? "Editar fase"
+                      : "Editar"
+                  }
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                    />
+                  </svg>
+                </button>
+              )}
               <div className="mt-2 text-2xl font-semibold tracking-tight">
                 {it.value || "—"}
               </div>

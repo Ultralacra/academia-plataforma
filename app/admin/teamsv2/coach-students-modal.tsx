@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 import {
   Table,
   TableBody,
@@ -113,7 +114,7 @@ export function CoachStudentsModal({
   }, [items, q]);
 
   function exportCsv() {
-    const header = ["id_alumno", "alumno_nombre"];
+    const header = ["id", "nombre"];
     const body = filtered.map((r) => [
       r.id_alumno,
       `"${(r.alumno_nombre ?? "").replace(/"/g, '""')}"`,
@@ -123,7 +124,7 @@ export function CoachStudentsModal({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `alumnos-${coachCode ?? "coach"}.csv`;
+    a.download = `lista-${coachCode ?? "coach"}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -141,7 +142,7 @@ export function CoachStudentsModal({
       {/* Notion-like: ancho cómodo, alto limitado, contenido con bordes suaves y header sticky */}
       <DialogContent
         className="
-          w-[95vw] sm:max-w-4xl p-0 gap-0 rounded-2xl border border-gray-200
+          w-[95vw] sm:max-w-4xl p-0 gap-0 rounded-sm border-2 border-gray-200
           max-h-[85vh] overflow-y-auto
         "
       >
@@ -153,7 +154,7 @@ export function CoachStudentsModal({
             </div>
             <div className="min-w-0">
               <DialogTitle className="truncate">
-                Alumnos de {coachName ?? "Coach"}
+                {coachName ?? "Coach"}
               </DialogTitle>
               <DialogDescription className="truncate">
                 Código: <span className="font-mono">{coachCode}</span>
@@ -210,7 +211,7 @@ export function CoachStudentsModal({
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar por ID de alumno o nombre…"
+                placeholder="Buscar por ID o nombre…"
                 className="pl-8 rounded-xl bg-white border border-gray-200 shadow-none"
               />
             </div>
@@ -226,10 +227,10 @@ export function CoachStudentsModal({
                 <TableHeader>
                   <TableRow className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide sticky top-0 z-10">
                     <TableHead className="px-3 py-2 text-left font-medium w-[40%]">
-                      ID Alumno
+                      ID
                     </TableHead>
                     <TableHead className="px-3 py-2 text-left font-medium">
-                      Nombre del alumno
+                      Nombre
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -253,7 +254,7 @@ export function CoachStudentsModal({
                       >
                         {q
                           ? "Sin resultados para tu búsqueda."
-                          : "No hay alumnos asociados."}
+                          : "No hay registros asociados."}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -263,10 +264,32 @@ export function CoachStudentsModal({
                         className="border-t border-gray-100 hover:bg-gray-50"
                       >
                         <TableCell className="px-3 py-2 font-mono text-gray-700">
-                          {r.id_alumno}
+                          {r.id_alumno ? (
+                            <Link
+                              href={`/admin/alumnos/${encodeURIComponent(
+                                String(r.id_alumno)
+                              )}`}
+                              className="text-blue-600 hover:underline"
+                            >
+                              {r.id_alumno}
+                            </Link>
+                          ) : (
+                            r.id_alumno
+                          )}
                         </TableCell>
                         <TableCell className="px-3 py-2 truncate text-gray-900">
-                          {r.alumno_nombre}
+                          {r.id_alumno ? (
+                            <Link
+                              href={`/admin/alumnos/${encodeURIComponent(
+                                String(r.id_alumno)
+                              )}`}
+                              className="text-gray-900 hover:underline"
+                            >
+                              {r.alumno_nombre}
+                            </Link>
+                          ) : (
+                            r.alumno_nombre
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -279,7 +302,7 @@ export function CoachStudentsModal({
           {/* FOOTER (ligero) */}
           <div className="mt-3 flex items-center justify-between text-xs text-neutral-500">
             <span>
-              Mostrando <b>{count}</b> de <b>{total}</b> alumnos
+              Mostrando <b>{count}</b> de <b>{total}</b>
             </span>
             <Button
               variant="ghost"

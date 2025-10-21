@@ -141,3 +141,31 @@ export const STATUS_CLASSES: Record<StatusSint, string> = {
   PAUSA:
     "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900",
 }
+
+/* ===== Badge classes para opciones de API (estado/etapa/nicho) ===== */
+export const OPTION_STATE_CLASSES: Record<string, string> = {
+  ACTIVO: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+  INACTIVO: "bg-slate-50 text-slate-700 ring-1 ring-slate-200",
+  INACTIVO_POR_PAGO: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  MEMBRESIA: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+  PAUSADO: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+};
+
+export const STAGE_CLASSES: Record<string, string> = {
+  ONBOARDING: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200",
+  F1: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
+  F2: "bg-teal-50 text-teal-700 ring-1 ring-teal-200",
+  F3: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
+  F4: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
+  F5: "bg-emerald-600 text-white",
+};
+
+export function getOptionBadgeClass(group: "estado" | "etapa" | "nicho" | "status_sint", key?: string) {
+  if (!key) return "bg-muted text-muted-foreground";
+  const k = String(key).toUpperCase();
+  if (group === "estado") return OPTION_STATE_CLASSES[k] ?? "bg-muted text-muted-foreground";
+  if (group === "etapa") return STAGE_CLASSES[k] ?? "bg-muted text-muted-foreground";
+  if (group === "status_sint") return STATUS_CLASSES[(k as unknown) as StatusSint] ?? "bg-muted text-muted-foreground";
+  // nicho: no mapping by default
+  return "bg-muted text-muted-foreground";
+}

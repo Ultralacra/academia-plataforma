@@ -58,16 +58,21 @@ export function GET(req: Request) {
   server.addEventListener("message", (event: MessageEvent) => {
     try {
       const payload = JSON.parse(String(event.data || "{}"));
+      // Allow clients to send either chat messages (type === 'message') which
+      // follow the old Message shape, or arbitrary event payloads such as
+      // { type: 'ticket:status_changed', room: 'tickets', data: {...} }.
+      const roomIn = normalizeRoom(String(payload.room || room));
+      if (!roomIn) return;
+
       if (payload && payload.type === "message") {
         const text = String(payload.text || "").trim();
         const sender = (String(payload.sender || "admin").toLowerCase() as Sender) || "admin";
-        const roomIn = normalizeRoom(String(payload.room || room));
         const attachments = Array.isArray(payload.attachments)
           ? ((payload.attachments as NonNullable<Message["attachments"]>) || []).filter(
               (a) => a && a.name && a.data_base64
             )
           : undefined;
-        if (!text && !(attachments && attachments.length) || !roomIn) return;
+        if (!text && !(attachments && attachments.length)) return;
         // Límite sencillo: max 10MB por mensaje
         const totalSize = (attachments || []).reduce((acc, a) => acc + (a.size || 0), 0);
         if (totalSize > 10 * 1024 * 1024) return;
@@ -84,6 +89,39 @@ export function GET(req: Request) {
         if (arr.length > 200) arr.splice(0, arr.length - 200);
         history.set(roomIn, arr);
         broadcast(roomIn, JSON.stringify({ type: "message", data: msg }));
+        // Además, emitir un evento compacto global para notificaciones
+        try {
+          const compact = {
+            type: "chat:new",
+            data: {
+              id: msg.id,
+              room: msg.room,
+              sender: msg.sender,
+              text: msg.text?.slice(0, 280) || "",
+              at: msg.at,
+              // no adjuntamos blobs para notificaciones
+            },
+          };
+          broadcast("chat:all", JSON.stringify(compact));
+        } catch {}
+        return;
+      }
+
+      // For any other payload type, broadcast it as-is to the room. Ensure
+      // we attach an id and timestamp so clients can store history consistently.
+      if (payload && payload.type) {
+        const ev = {
+          ...(payload as any),
+          id: String(payload.id || Math.random().toString(36).slice(2)),
+          at: payload.at || new Date().toISOString(),
+          room: roomIn,
+        };
+        const arr = history.get(roomIn) || [];
+        arr.push(ev as any);
+        if (arr.length > 200) arr.splice(0, arr.length - 200);
+        history.set(roomIn, arr);
+        broadcast(roomIn, JSON.stringify(ev));
+        return;
       }
     } catch {}
   });

@@ -6,6 +6,15 @@ import { AppSidebar } from "./app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { LogOut, User, Menu } from "lucide-react";
+import { Bell } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge";
+import { useTicketNotifications } from "@/components/hooks/useTicketNotifications";
+import { useMemo } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +29,55 @@ import {
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
+}
+
+function NotificationsBadge() {
+  const { items, unread, markAllRead } = useTicketNotifications();
+  const list = useMemo(() => items.slice(0, 10), [items]);
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button className="relative p-2 rounded-full hover:bg-muted/10">
+          <Bell className="h-4 w-4" />
+          {unread > 0 && (
+            <span className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">
+              {unread}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-2">
+        <div className="text-sm font-semibold px-2 py-1">Notificaciones</div>
+        <div className="max-h-56 overflow-y-auto">
+          {list.length === 0 ? (
+            <div className="p-3 text-xs text-muted-foreground">
+              No hay notificaciones
+            </div>
+          ) : (
+            list.map((n) => (
+              <div key={n.id} className="p-2 border-b last:border-b-0">
+                <div className="text-sm font-medium">{n.title}</div>
+                <div className="text-xs text-muted-foreground">
+                  {n.at ? new Date(n.at).toLocaleString() : ""}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="flex items-center justify-between mt-2">
+          <button
+            className="text-xs text-muted-foreground"
+            onClick={() => markAllRead()}
+          >
+            Marcar leídas
+          </button>
+          <div className="text-xs text-muted-foreground">
+            {items.length} total
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
@@ -51,6 +109,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <MenuToggleButton />
             </div>
             <div className="flex items-center gap-2 sm:gap-4 ml-auto">
+              {/* Notifications */}
+              <NotificationsBadge />
               <div className="flex items-center gap-2 text-sm min-w-0">
                 <User className="h-4 w-4" />
                 <span className="truncate max-w-[40vw] sm:max-w-[200px]">

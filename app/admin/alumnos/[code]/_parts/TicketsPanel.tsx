@@ -47,6 +47,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { toast } from "@/components/ui/use-toast";
 
 /* ========= helpers ========= */
 
@@ -83,33 +84,45 @@ function shortenFileName(name: string, max = 42) {
 
 // Eliminado: RNG y helpers usados para datos de demostración.
 
-type StatusKey = "ABIERTO" | "EN_CURSO" | "RESUELTO" | "CERRADO";
+type StatusKey =
+  | "EN_PROGRESO"
+  | "PENDIENTE"
+  | "PENDIENTE_DE_ENVIO"
+  | "RESUELTO";
 const STATUS_LABEL: Record<StatusKey, string> = {
-  ABIERTO: "Abierto",
-  EN_CURSO: "En curso",
+  EN_PROGRESO: "En progreso",
+  PENDIENTE: "Pendiente",
+  PENDIENTE_DE_ENVIO: "Pendiente de envío",
   RESUELTO: "Resuelto",
-  CERRADO: "Cerrado",
 };
 
 const STATUS_STYLE: Record<StatusKey, string> = {
-  ABIERTO:
+  PENDIENTE:
     "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-500/20",
-  EN_CURSO:
+  EN_PROGRESO:
     "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20",
+  PENDIENTE_DE_ENVIO:
+    "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200/50 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20",
   RESUELTO:
     "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20",
-  CERRADO:
-    "bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200/50 dark:bg-slate-500/10 dark:text-slate-400 dark:ring-slate-500/20",
 };
 
 function coerceStatus(raw?: string | null): StatusKey {
   const s = (raw ?? "").toUpperCase();
   if (s.includes("RESUELTO") || s.includes("COMPLETO")) return "RESUELTO";
-  if (s.includes("CERR")) return "CERRADO";
-  if (s.includes("EN_PROCESO") || s.includes("PROCES") || s.includes("CURSO"))
-    return "EN_CURSO";
-  // PENDIENTE y otros sin mapear cuentan como ABIERTO
-  return "ABIERTO";
+  if (s.includes("ENVIO") || s.includes("ENVÍO") || s.includes("ENVIO"))
+    return "PENDIENTE_DE_ENVIO";
+  if (
+    s.includes("EN_PROGRES") ||
+    s.includes("EN_PROCESO") ||
+    s.includes("PROCES") ||
+    s.includes("CURSO") ||
+    s.includes("EN_CURSO")
+  )
+    return "EN_PROGRESO";
+  if (s.includes("PENDIENTE")) return "PENDIENTE";
+  // Por defecto tratar como PENDIENTE
+  return "PENDIENTE";
 }
 
 // Eliminado: datos de demostración. El panel ahora refleja exclusivamente lo que devuelve la API.
@@ -127,6 +140,9 @@ export default function TicketsPanel({
   const [all, setAll] = useState<StudentTicket[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string>("ALL");
+  // Filtro por fecha de creación
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
   // Crear ticket
   const [openCreate, setOpenCreate] = useState(false);
   const [tipos, setTipos] = useState<
@@ -282,8 +298,23 @@ export default function TicketsPanel({
           normalize(t.tipo ?? "").includes(q)
       );
     }
+    // Filtro por fecha de creación (rango)
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      rows = rows.filter((t) => {
+        const created = t.creacion ? new Date(t.creacion) : null;
+        return created && created >= from;
+      });
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      rows = rows.filter((t) => {
+        const created = t.creacion ? new Date(t.creacion) : null;
+        return created && created <= to;
+      });
+    }
     return rows;
-  }, [all, status, query]);
+  }, [all, status, query, dateFrom, dateTo]);
 
   async function handleCreateSubmit() {
     if (!student.code) return;
@@ -301,7 +332,7 @@ export default function TicketsPanel({
       const fetched = await getStudentTickets(student.code);
       setAll(
         fetched
-          .map((t) => ({ ...t, estado: coerceStatus(t.estado) }))
+          .map((t) => ({ ...t }))
           .sort((a, b) => (a.creacion > b.creacion ? -1 : 1))
       );
       setOpenCreate(false);
@@ -333,14 +364,63 @@ export default function TicketsPanel({
 
   async function handleChangeEstado(ticketId: string, newEstado: string) {
     try {
-      await updateTicket(ticketId, { estado: newEstado });
+      // Buscar el ticket por id y obtener su codigo (UUID)
+      const ticket = all.find((t) => t.id === ticketId);
+      const codigo = ticket?.codigo;
+      if (!codigo) throw new Error("No se encontró el código UUID del ticket");
+      await updateTicket(codigo, { estado: newEstado });
+      // Emitir un evento websocket para notificar a otros clientes (si existe)
+      try {
+        if (typeof window !== "undefined") {
+          const proto = window.location.protocol === "https:" ? "wss" : "ws";
+          const wsUrl = `${proto}://${window.location.host}/api/socket?room=tickets`;
+          const ws = new WebSocket(wsUrl);
+          ws.addEventListener("open", () => {
+            try {
+              const payload = {
+                type: "ticket:status_changed",
+                room: "tickets",
+                data: {
+                  ticketId: ticketId,
+                  previous: ticket?.estado ?? null,
+                  current: newEstado,
+                  title: ticket?.nombre ?? null,
+                },
+              };
+              ws.send(JSON.stringify(payload));
+            } catch {}
+            try {
+              ws.close();
+            } catch {}
+          });
+          // cleanup: if ws doesn't open after 2s, close
+          setTimeout(() => {
+            try {
+              ws.close();
+            } catch {}
+          }, 2000);
+        }
+      } catch {}
+      // Guardar la clave real del backend en `estado` para que el Select muestre el valor correcto
       setAll((prev) =>
-        prev.map((t) =>
-          t.id === ticketId ? { ...t, estado: coerceStatus(newEstado) } : t
-        )
+        prev.map((t) => (t.id === ticketId ? { ...t, estado: newEstado } : t))
       );
+      // Mostrar toast usando la API compatible con el componente
+      toast({
+        title: "Ticket actualizado",
+        description: "El ticket cambió de estado exitosamente.",
+        variant: "default",
+      });
     } catch (e) {
       console.error(e);
+      toast({
+        title: "Error al actualizar ticket",
+        description:
+          typeof e === "object" && e && "message" in e
+            ? String((e as any).message)
+            : String(e ?? ""),
+        variant: "destructive",
+      });
     }
   }
 
@@ -462,6 +542,25 @@ export default function TicketsPanel({
     <>
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
+          {/* Filtro por fecha de creación */}
+          <div className="flex flex-wrap gap-2 mb-2 items-center">
+            <label className="text-xs text-muted-foreground">Desde:</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="border rounded px-2 py-1 text-xs"
+              style={{ minWidth: 120 }}
+            />
+            <label className="text-xs text-muted-foreground ml-2">Hasta:</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="border rounded px-2 py-1 text-xs"
+              style={{ minWidth: 120 }}
+            />
+          </div>
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <TicketIcon className="h-4 w-4 text-muted-foreground" />
@@ -655,68 +754,130 @@ export default function TicketsPanel({
               No hay tickets en este filtro
             </div>
           ) : (
-            <ul className="space-y-2">
-              {filtered.map((t) => {
-                const tone = coerceStatus(t.estado);
+            // Kanban grid: columnas por estado (orden solicitado)
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {(
+                [
+                  "EN_PROGRESO",
+                  "PENDIENTE",
+                  "PENDIENTE_DE_ENVIO",
+                  "RESUELTO",
+                ] as StatusKey[]
+              ).map((col) => {
+                const itemsForCol = filtered.filter(
+                  (t) => coerceStatus(t.estado) === col
+                );
                 return (
-                  <li
-                    key={`${t.id}-${t.creacion}`}
-                    className="rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50"
+                  <div
+                    key={col}
+                    className="min-h-[120px] rounded-md border border-gray-200 bg-white p-3"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      const ticketId = e.dataTransfer.getData("text/plain");
+                      if (!ticketId) return;
+                      // Optimistic UI: move locally first
+                      setAll((prev) =>
+                        prev.map((t) =>
+                          String(t.id) === String(ticketId)
+                            ? { ...t, estado: col }
+                            : t
+                        )
+                      );
+                      try {
+                        await handleChangeEstado(ticketId, col);
+                      } catch (err) {
+                        // Revert by refetching tickets for the student
+                        const refreshed = await getStudentTickets(
+                          student.code || ""
+                        );
+                        setAll(
+                          refreshed
+                            .slice()
+                            .sort((a, b) => (a.creacion > b.creacion ? -1 : 1))
+                        );
+                      }
+                    }}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="flex flex-col items-start gap-1">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[tone]}`}
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[col]}`}
                         >
-                          {STATUS_LABEL[tone]}
+                          {STATUS_LABEL[col]}
                         </span>
-                        <Select
-                          value={t.estado || tone}
-                          onValueChange={(v) => handleChangeEstado(t.id, v)}
-                        >
-                          <SelectTrigger className="h-7 w-[160px] text-xs">
-                            <SelectValue placeholder="Estado" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {estadoOpts.map((opt) => (
-                              <SelectItem key={opt.key} value={opt.key}>
-                                {opt.value || opt.key}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <span className="text-xs text-muted-foreground">
+                          {itemsForCol.length}
+                        </span>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium leading-tight">
-                          {t.nombre ?? "Ticket"}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          <span>Creado: {fmtDate(t.creacion)}</span>
-                          {t.tipo && <span>· {t.tipo}</span>}
-                          {t.deadline && (
-                            <span>· Vence: {fmtDate(t.deadline)}</span>
-                          )}
-                          {t.id_externo && <span>· Ref: {t.id_externo}</span>}
-                          <button
-                            className="underline hover:no-underline"
-                            onClick={() =>
-                              openFilesFor(
-                                (t as any).codigo ||
-                                  (t as any).id_externo ||
-                                  t.id
-                              )
-                            }
-                            type="button"
-                          >
-                            · Archivos
-                          </button>
-                        </div>
+                      <div className="text-xs text-muted-foreground">
+                        &nbsp;
                       </div>
                     </div>
-                  </li>
+
+                    <div className="space-y-2">
+                      {itemsForCol.map((t) => (
+                        <div
+                          key={t.id}
+                          draggable
+                          onDragStart={(e) => {
+                            try {
+                              e.dataTransfer.setData(
+                                "text/plain",
+                                String(t.id)
+                              );
+                            } catch {}
+                            e.dataTransfer.effectAllowed = "move";
+                          }}
+                          className="rounded-md border border-gray-200 bg-white p-3 shadow-sm hover:bg-gray-50 cursor-grab active:cursor-grabbing"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium leading-tight">
+                                {t.nombre ?? "Ticket"}
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                <span>Creado: {fmtDate(t.creacion)}</span>
+                                {t.tipo && <span>· {t.tipo}</span>}
+                                {t.deadline && (
+                                  <span>· Vence: {fmtDate(t.deadline)}</span>
+                                )}
+                                {t.id_externo && (
+                                  <span>· Ref: {t.id_externo}</span>
+                                )}
+                                <button
+                                  className="underline hover:no-underline"
+                                  onClick={() =>
+                                    openFilesFor(
+                                      (t as any).codigo ||
+                                        (t as any).id_externo ||
+                                        t.id
+                                    )
+                                  }
+                                  type="button"
+                                >
+                                  · Archivos
+                                </button>
+                              </div>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                              {/* Mostrar solo la etiqueta de estado; el cambio se hace arrastrando */}
+                              <span
+                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                  STATUS_STYLE[coerceStatus(t.estado)]
+                                }`}
+                              >
+                                {STATUS_LABEL[coerceStatus(t.estado)]}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           )}
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
   getAllStudents,
   getAllCoachesFromTeams,
   getCoachStudentsByCoachId,
+  createStudent,
 } from "./api";
 import {
   Search,
@@ -21,6 +22,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { toast } from "@/components/ui/use-toast";
 import {
   Popover,
   PopoverContent,
@@ -103,6 +113,11 @@ export default function StudentsContent() {
   const [filterStage, setFilterStage] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<string | null>(null);
   const [openCoach, setOpenCoach] = useState(false);
+  // Crear alumno
+  const [openCreate, setOpenCreate] = useState(false);
+  const [createNombre, setCreateNombre] = useState("");
+  const [createContrato, setCreateContrato] = useState<File | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -307,6 +322,46 @@ export default function StudentsContent() {
     search || coach !== "todos" || filterStage || filterState
   );
 
+  async function handleCreateStudent() {
+    if (!createNombre.trim()) return;
+    try {
+      setCreating(true);
+      const created = await createStudent({
+        nombre: createNombre.trim(),
+        contrato: createContrato ?? undefined,
+      });
+      // Insertar al inicio de la lista
+      const newRow: StudentRow = {
+        id: created.id,
+        code: created.codigo,
+        name: created.nombre,
+        teamMembers: [],
+        state: null,
+        stage: null,
+        joinDate: null,
+        lastActivity: null,
+        inactivityDays: null,
+        contractUrl: null,
+        ticketsCount: 0,
+      };
+      setAll((prev) => [newRow, ...prev]);
+      setPage(1);
+      toast({
+        title: "Alumno creado",
+        description: `${created.codigo} — ${created.nombre}`,
+      });
+      setOpenCreate(false);
+      setCreateNombre("");
+      setCreateContrato(null);
+      // Mantener filtros actuales; la paginación se recalcula por useMemo
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al crear alumno" });
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
       <div className="mb-6 space-y-4">
@@ -433,6 +488,54 @@ export default function StudentsContent() {
               Limpiar filtros
             </Button>
           )}
+
+          {/* Crear alumno */}
+          <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+            <DialogTrigger asChild>
+              <Button className="h-10" variant="default">
+                Nuevo alumno
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Crear nuevo alumno</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3 py-1">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    Nombre
+                  </label>
+                  <Input
+                    value={createNombre}
+                    onChange={(e) => setCreateNombre(e.target.value)}
+                    placeholder="Nombre del alumno"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    Contrato (opcional)
+                  </label>
+                  <input
+                    type="file"
+                    onChange={(e) =>
+                      setCreateContrato(e.target.files?.[0] ?? null)
+                    }
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpenCreate(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleCreateStudent}
+                  disabled={creating || !createNombre.trim()}
+                >
+                  {creating ? "Creando…" : "Crear"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

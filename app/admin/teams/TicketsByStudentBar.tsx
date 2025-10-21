@@ -84,7 +84,7 @@ export default function TicketsByStudentBar({
   ];
 
   return (
-    <div className="w-full max-w-5xl mx-auto rounded-2xl border border-gray-200 bg-white">
+    <div className="w-full rounded-2xl border border-gray-200 bg-white">
       <div className="border-b border-gray-100 px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>

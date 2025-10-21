@@ -1,4 +1,3 @@
-// app/admin/teams/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -25,8 +24,27 @@ import {
   SelectItem,
   SelectValue,
 } from "@/components/ui/select";
-import { Users, Search, RefreshCw, ArrowUpDown, Download } from "lucide-react";
+import {
+  Users,
+  Search,
+  RefreshCw,
+  ArrowUpDown,
+  Download,
+  Clipboard,
+} from "lucide-react";
+import Link from "next/link";
 import { CoachStudentsModal } from "./coach-students-modal";
+import { toast } from "@/components/ui/use-toast";
+import * as teamsApi from "@/app/admin/teamsv2/api";
+import { getOptions, type OpcionItem } from "@/app/admin/opciones/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 /* =======================
    Helpers
@@ -53,6 +71,30 @@ function formatDate(d?: string) {
     month: "short",
     day: "2-digit",
   });
+}
+
+function getPuestoColorClass(puesto?: string | null) {
+  if (!puesto) return "bg-gray-400";
+  const key = String(puesto).toLowerCase();
+  if (key.includes("coach") || key.includes("trainer"))
+    return "bg-sky-100 text-sky-800";
+  if (key.includes("soporte") || key.includes("support"))
+    return "bg-emerald-100 text-emerald-800";
+  if (key.includes("admin")) return "bg-violet-100 text-violet-800";
+  if (key.includes("ventas") || key.includes("sales"))
+    return "bg-rose-100 text-rose-800";
+  // fallback: light palette
+  const colors = [
+    "bg-indigo-100 text-indigo-800",
+    "bg-amber-100 text-amber-800",
+    "bg-sky-100 text-sky-800",
+    "bg-emerald-100 text-emerald-800",
+    "bg-rose-100 text-rose-800",
+  ];
+  let h = 0;
+  for (let i = 0; i < puesto.length; i++)
+    h = (h * 31 + puesto.charCodeAt(i)) >>> 0;
+  return colors[h % colors.length];
 }
 
 function toCsv(rows: TeamWithCounts[]) {
@@ -122,6 +164,19 @@ export default function TeamsPage() {
     name?: string | null;
   }>({ code: null, name: null });
 
+  // Create coach dialog
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createNombre, setCreateNombre] = useState("");
+  // use sentinel value for "none" to avoid empty-string Select.Item error
+  const NONE = "__NONE__";
+  const [createPuesto, setCreatePuesto] = useState(NONE);
+  const [createArea, setCreateArea] = useState(NONE);
+  // Opciones desde API de opciones (devuelven opcion_key/opcion_value)
+  const [puestoApiOptions, setPuestoApiOptions] = useState<OpcionItem[]>([]);
+  const [areaApiOptions, setAreaApiOptions] = useState<OpcionItem[]>([]);
+  const [optsLoading, setOptsLoading] = useState(false);
+
   // Sync URL
   useEffect(() => {
     const sp = new URLSearchParams(searchParams);
@@ -171,6 +226,34 @@ export default function TeamsPage() {
   useEffect(() => {
     fetchOptionsData();
   }, []);
+
+  // Cargar opciones 'puesto' y 'area' cuando se abre el modal de creación
+  useEffect(() => {
+    let mounted = true;
+    if (!createOpen)
+      return () => {
+        mounted = false;
+      };
+    (async () => {
+      try {
+        setOptsLoading(true);
+        const [puestosRes, areasRes] = await Promise.all([
+          getOptions("puesto"),
+          getOptions("area"),
+        ]);
+        if (!mounted) return;
+        setPuestoApiOptions(Array.isArray(puestosRes) ? puestosRes : []);
+        setAreaApiOptions(Array.isArray(areasRes) ? areasRes : []);
+      } catch (e) {
+        // ignore, fallback will be used
+      } finally {
+        if (mounted) setOptsLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [createOpen]);
 
   // Opciones desde todo el dataset
   const puestoOptions = useMemo(() => {
@@ -251,10 +334,7 @@ export default function TeamsPage() {
   }
 
   return (
-    <DashboardLayout
-      title="Equipo"
-      subtitle="Listado del equipo con estilo Notion"
-    >
+    <DashboardLayout>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="h-9 w-9 grid place-items-center rounded-lg bg-neutral-100">
@@ -267,6 +347,13 @@ export default function TeamsPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setCreateOpen(true)}
+          >
+            Nuevo coach
+          </Button>
           <Button variant="outline" size="sm" onClick={fetchData}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refrescar
@@ -369,154 +456,162 @@ export default function TeamsPage() {
       </Card>
 
       {/* Tabla */}
-      <div className="mt-4 overflow-hidden rounded-lg border bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[40%]">
-                <button
-                  className="inline-flex items-center gap-1 text-left font-medium"
-                  onClick={() => toggleSort("nombre")}
-                >
-                  Nombre / Código <ArrowUpDown className="h-4 w-4 opacity-60" />
-                </button>
-              </TableHead>
-              <TableHead className="w-[18%]">
-                <button
-                  className="inline-flex items-center gap-1 font-medium"
-                  onClick={() => toggleSort("puesto")}
-                >
-                  Puesto <ArrowUpDown className="h-4 w-4 opacity-60" />
-                </button>
-              </TableHead>
-              <TableHead className="w-[18%]">
-                <button
-                  className="inline-flex items-center gap-1 font-medium"
-                  onClick={() => toggleSort("area")}
-                >
-                  Área <ArrowUpDown className="h-4 w-4 opacity-60" />
-                </button>
-              </TableHead>
-              <TableHead className="w-[12%]">
-                <button
-                  className="inline-flex items-center gap-1 font-medium"
-                  onClick={() => toggleSort("ticketsCount")}
-                >
-                  Tickets <ArrowUpDown className="h-4 w-4 opacity-60" />
-                </button>
-              </TableHead>
-              <TableHead className="w-[12%]">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setCurrentCoach({ code: t.codigo, name: t.nombre });
-                    setStudentsOpen(true);
-                  }}
-                >
-                  Ver
-                </Button>
-              </TableHead>
-              <TableHead className="min-w-[120px]">
-                <button
-                  className="inline-flex items-center gap-1 font-medium"
-                  onClick={() => toggleSort("created_at")}
-                >
-                  Creado <ArrowUpDown className="h-4 w-4 opacity-60" />
-                </button>
-              </TableHead>
-            </TableRow>
-          </TableHeader>
+      <div className="mt-4 rounded-sm border-2 bg-white">
+        <div className="max-h-[60vh] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-[40%]">
+                  <button
+                    className="inline-flex items-center gap-1 text-left font-medium"
+                    onClick={() => toggleSort("nombre")}
+                  >
+                    Nombre / Código{" "}
+                    <ArrowUpDown className="h-4 w-4 opacity-60" />
+                  </button>
+                </TableHead>
+                <TableHead className="w-[18%]">
+                  <button
+                    className="inline-flex items-center gap-1 font-medium"
+                    onClick={() => toggleSort("puesto")}
+                  >
+                    Puesto <ArrowUpDown className="h-4 w-4 opacity-60" />
+                  </button>
+                </TableHead>
+                <TableHead className="w-[18%]">
+                  <button
+                    className="inline-flex items-center gap-1 font-medium"
+                    onClick={() => toggleSort("area")}
+                  >
+                    Área <ArrowUpDown className="h-4 w-4 opacity-60" />
+                  </button>
+                </TableHead>
+                <TableHead className="w-[12%]">
+                  <button
+                    className="inline-flex items-center gap-1 font-medium"
+                    onClick={() => toggleSort("nAlumnos")}
+                  >
+                    Alumnos <ArrowUpDown className="h-4 w-4 opacity-60" />
+                  </button>
+                </TableHead>
+                <TableHead className="min-w-[120px]">
+                  <button
+                    className="inline-flex items-center gap-1 font-medium"
+                    onClick={() => toggleSort("created_at")}
+                  >
+                    Creado <ArrowUpDown className="h-4 w-4 opacity-60" />
+                  </button>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
 
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <TableRow key={`sk-${i}`}>
-                  <TableCell colSpan={6}>
-                    <div className="h-6 animate-pulse rounded bg-neutral-100" />
+            <TableBody>
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <TableRow key={`sk-${i}`}>
+                    <TableCell colSpan={5}>
+                      <div className="h-6 animate-pulse rounded bg-neutral-100" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : error ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-sm text-red-600">
+                    {error}
                   </TableCell>
                 </TableRow>
-              ))
-            ) : error ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-sm text-red-600">
-                  {error}
-                </TableCell>
-              </TableRow>
-            ) : filteredSorted.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-sm text-neutral-500">
-                  Sin resultados.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredSorted.map((t) => (
-                <TableRow key={t.id} className="hover:bg-neutral-50/60">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 grid place-items-center rounded-md bg-neutral-100">
-                        <Users className="h-4 w-4 text-neutral-700" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="truncate font-medium text-neutral-900">
-                          {t.nombre || "—"}
-                        </div>
-                        <div className="truncate text-xs text-neutral-500">
-                          <span className="font-mono">{t.codigo}</span>
-                        </div>
-                      </div>
-                    </div>
+              ) : filteredSorted.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-sm text-neutral-500">
+                    Sin resultados.
                   </TableCell>
-                  <TableCell className="align-middle">
-                    {t.puesto ? (
+                </TableRow>
+              ) : (
+                filteredSorted.map((t) => (
+                  <TableRow key={t.id} className="hover:bg-neutral-50/60">
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 grid place-items-center rounded-md bg-neutral-100">
+                          <Users className="h-4 w-4 text-neutral-700" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-neutral-900">
+                            <Link
+                              href={`/admin/teamsv2/${encodeURIComponent(
+                                String(t.codigo ?? "")
+                              )}`}
+                              className="hover:underline"
+                            >
+                              {t.nombre || "—"}
+                            </Link>
+                          </div>
+                          <div className="truncate text-xs text-neutral-500 flex items-center gap-2">
+                            <Link
+                              href={`/admin/teamsv2/${encodeURIComponent(
+                                String(t.codigo ?? "")
+                              )}`}
+                              className="font-mono hover:underline"
+                            >
+                              {t.codigo}
+                            </Link>
+                            <button
+                              type="button"
+                              title="Copiar código"
+                              onClick={async () => {
+                                try {
+                                  await navigator.clipboard.writeText(
+                                    String(t.codigo ?? "")
+                                  );
+                                  toast({ title: "Código copiado" });
+                                } catch {
+                                  toast({ title: "No se pudo copiar" });
+                                }
+                              }}
+                              className="ml-2 inline-flex items-center justify-center p-1 rounded text-neutral-500 hover:text-neutral-700"
+                            >
+                              <Clipboard className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-middle">
+                      {t.puesto ? (
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full ${getPuestoColorClass(
+                            t.puesto
+                          )}`}
+                        >
+                          {t.puesto}
+                        </span>
+                      ) : (
+                        <span className="text-neutral-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="align-middle">
+                      {t.area ? (
+                        <span className="text-sm">{t.area}</span>
+                      ) : (
+                        <span className="text-neutral-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="align-middle">
                       <Badge
-                        variant="outline"
-                        className="border-neutral-300 text-neutral-700"
+                        variant="secondary"
+                        className="bg-neutral-100 text-neutral-800"
                       >
-                        {t.puesto}
+                        {t.nAlumnos ?? 0}
                       </Badge>
-                    ) : (
-                      <span className="text-neutral-400">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="align-middle">
-                    {t.area ? (
-                      <span className="text-sm">{t.area}</span>
-                    ) : (
-                      <span className="text-neutral-400">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="align-middle">
-                    <Badge className="bg-amber-500/10 text-amber-700 hover:bg-amber-500/20">
-                      {t.ticketsCount ?? 0}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="align-middle">
-                    <Badge
-                      variant="secondary"
-                      className="bg-neutral-100 text-neutral-800"
-                    >
-                      {t.nAlumnos ?? 0}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setCurrentCoach({ code: t.codigo, name: t.nombre });
-                          setStudentsOpen(true);
-                        }}
-                      >
-                        Ver
-                      </Button>
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="align-middle text-sm text-neutral-600">
-                    {formatDate(t.created_at)}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                    </TableCell>
+                    <TableCell className="align-middle text-sm text-neutral-600">
+                      {formatDate(t.created_at)}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* Paginación */}
@@ -549,6 +644,109 @@ export default function TeamsPage() {
         coachCode={currentCoach.code}
         coachName={currentCoach.name}
       />
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Crear nuevo coach</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-2 py-2">
+            <div>
+              <Label className="text-xs">Nombre</Label>
+              <Input
+                value={createNombre}
+                onChange={(e) => setCreateNombre(e.target.value)}
+                placeholder="Nombre"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs">Puesto</Label>
+              <select
+                className="w-full h-9 rounded-md border px-3 text-sm"
+                value={createPuesto}
+                onChange={(e) => setCreatePuesto(e.target.value)}
+                disabled={optsLoading}
+              >
+                <option value={NONE}>-- Ninguno --</option>
+                {puestoApiOptions.length > 0
+                  ? puestoApiOptions.map((o) => (
+                      <option key={o.opcion_key} value={o.opcion_key}>
+                        {o.opcion_value}
+                      </option>
+                    ))
+                  : puestoOptions.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+              </select>
+            </div>
+
+            <div>
+              <Label className="text-xs">Área</Label>
+              <select
+                className="w-full h-9 rounded-md border px-3 text-sm"
+                value={createArea}
+                onChange={(e) => setCreateArea(e.target.value)}
+                disabled={optsLoading}
+              >
+                <option value={NONE}>-- Ninguno --</option>
+                {areaApiOptions.length > 0
+                  ? areaApiOptions.map((o) => (
+                      <option key={o.opcion_key} value={o.opcion_key}>
+                        {o.opcion_value}
+                      </option>
+                    ))
+                  : areaOptions.map((a) => (
+                      <option key={a} value={a}>
+                        {a}
+                      </option>
+                    ))}
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                disabled={creating}
+                onClick={async () => {
+                  if (!createNombre.trim()) {
+                    toast({ title: "El nombre es requerido" });
+                    return;
+                  }
+                  try {
+                    setCreating(true);
+                    const payload = {
+                      nombre: createNombre.trim(),
+                      puesto: createPuesto === NONE ? undefined : createPuesto,
+                      area: createArea === NONE ? undefined : createArea,
+                    } as teamsApi.CreateCoachPayload;
+                    const resp = await teamsApi.createCoach(payload);
+                    toast({ title: "Coach creado correctamente" });
+                    setCreateOpen(false);
+                    setCreateNombre("");
+                    setCreatePuesto(NONE);
+                    setCreateArea(NONE);
+                    await fetchData();
+                  } catch (err: any) {
+                    toast({ title: err?.message ?? "Error al crear coach" });
+                  } finally {
+                    setCreating(false);
+                  }
+                }}
+              >
+                Crear
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 }

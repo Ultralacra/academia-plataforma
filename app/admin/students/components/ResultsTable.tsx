@@ -9,6 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -132,9 +133,33 @@ export default function ResultsTable({
                         className={idx % 2 ? "bg-muted/30" : ""}
                       >
                         <TableCell className="font-medium">
-                          {c.code ?? "—"}
+                          {c.code ? (
+                            <Link
+                              href={`/admin/alumnos/${encodeURIComponent(
+                                String(c.code)
+                              )}`}
+                              className="text-blue-600 hover:underline"
+                            >
+                              {c.code}
+                            </Link>
+                          ) : (
+                            "—"
+                          )}
                         </TableCell>
-                        <TableCell>{c.name}</TableCell>
+                        <TableCell>
+                          {c.code ? (
+                            <Link
+                              href={`/admin/alumnos/${encodeURIComponent(
+                                String(c.code)
+                              )}`}
+                              className="text-gray-900 hover:underline"
+                            >
+                              {c.name}
+                            </Link>
+                          ) : (
+                            c.name
+                          )}
+                        </TableCell>
 
                         <TableCell>
                           <Button

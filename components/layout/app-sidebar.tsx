@@ -9,6 +9,7 @@ import {
   MessageSquare,
   BarChart3,
   ChevronDown,
+  Settings,
 } from "lucide-react";
 import {
   Sidebar,
@@ -31,6 +32,8 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
+import { useChatNotifications } from "@/components/hooks/useChatNotifications";
+import { toast } from "@/components/ui/use-toast";
 
 /* ====================== Tipos ====================== */
 type MenuItem = {
@@ -47,6 +50,7 @@ const adminItems: MenuItem[] = [
   // NUEVOS top-level (mismo nivel que “Métricas”)
   { title: "Coachs", url: "/admin/teamsv2", icon: Users },
   { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
+  { title: "Tickets", url: "/admin/tickets-board", icon: MessageSquare },
   { title: "Chat", url: "/chat", icon: MessageSquare },
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
@@ -60,6 +64,7 @@ const adminItems: MenuItem[] = [
       { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
     ],
   },
+  { title: "Opciones", url: "/admin/opciones", icon: Settings },
 ];
 
 /* Coach */
@@ -104,6 +109,31 @@ export function AppSidebar() {
       : "Invitado";
 
   const [metricsOpen, setMetricsOpen] = useState(false);
+  const { unreadTotal, lastEvent } = useChatNotifications({
+    role:
+      (user?.role === "student"
+        ? "alumno"
+        : user?.role === "coach"
+        ? "coach"
+        : "admin") as any,
+    enableToast: true,
+  });
+
+  // Toast cuando hay mensaje nuevo y estamos visibles pero fuera de /chat
+  useEffect(() => {
+    if (!lastEvent) return;
+    if (typeof document === "undefined") return;
+    const visible = document.visibilityState === "visible";
+    const onChatPage = pathname?.startsWith("/chat");
+    if (visible && !onChatPage) {
+      try {
+        toast({
+          title: "Nuevo mensaje en chat",
+          description: `${lastEvent.sender}: ${lastEvent.text?.slice(0, 80) || "(adjunto)"}`,
+        });
+      } catch {}
+    }
+  }, [lastEvent, pathname]);
 
   useEffect(() => {
     if (!pathname) return;
@@ -191,7 +221,14 @@ export function AppSidebar() {
                                         : "text-neutral-600"
                                     )}
                                   />
-                                  <span className="truncate">{item.title}</span>
+                                  <span className="truncate flex items-center gap-2">
+                                    {item.title}
+                                    {item.title === "Chat" && unreadTotal > 0 && (
+                                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold">
+                                        {unreadTotal > 99 ? "99+" : unreadTotal}
+                                      </span>
+                                    )}
+                                  </span>
                                 </Link>
                               </SidebarMenuButton>
                             </TooltipTrigger>

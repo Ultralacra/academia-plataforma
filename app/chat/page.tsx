@@ -29,6 +29,7 @@ import { toast } from "@/components/ui/use-toast";
 import {
   createTicket,
   getOpciones,
+  updateTicket,
   getStudentTickets,
   type OpcionItem,
 } from "../admin/alumnos/api";
@@ -322,6 +323,21 @@ export default function ChatHubPage() {
         });
         // Mostrar toast simple y abrir modal con payload para ver detalles
         const payload = created?.data ?? created;
+        // Intentar asignar estado por defecto usando opciones
+        try {
+          const estados = await getOpciones("estado_tickets");
+          // Preferir PENDIENTE -> EN_PROGRESO -> primera
+          const prefer = ["PENDIENTE", "EN_PROGRESO"];
+          let chosen = estados.find((e) => prefer.includes(e.key))?.key;
+          if (!chosen) chosen = estados[0]?.key || undefined;
+          // Usar solo el campo 'codigo' (UUID) para updateTicket
+          const codigo = payload?.codigo ? String(payload.codigo) : undefined;
+          if (codigo && chosen) {
+            await updateTicket(codigo, { estado: chosen });
+          }
+        } catch (e) {
+          console.error("Failed to set default ticket estado:", e);
+        }
         setCreatedTicketPayload(payload);
         setShowCreatedModal(true);
         toast({ title: "Ticket creado exitosamente" });
@@ -382,6 +398,20 @@ export default function ChatHubPage() {
         archivos: ticketArchivos,
       });
       const payload = created?.data ?? created;
+      // Intentar asignar estado por defecto al ticket creado manualmente
+      try {
+        const estados = await getOpciones("estado_tickets");
+        const prefer = ["PENDIENTE", "EN_PROGRESO"];
+        let chosen = estados.find((e) => prefer.includes(e.key))?.key;
+        if (!chosen) chosen = estados[0]?.key || undefined;
+        // Usar solo el campo 'codigo' (UUID) para updateTicket
+        const codigo = payload?.codigo ? String(payload.codigo) : undefined;
+        if (codigo && chosen) {
+          await updateTicket(codigo, { estado: chosen });
+        }
+      } catch (e) {
+        console.error("Failed to set default ticket estado:", e);
+      }
       setCreatedTicketPayload(payload);
       setShowCreatedModal(true);
       toast({ title: "Ticket creado exitosamente" });
@@ -719,19 +749,49 @@ export default function ChatHubPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={ticketTipo} onValueChange={setTicketTipo}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccione un tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {ticketTipos.map((op) => (
-                    <SelectItem key={op.id} value={op.key}>
-                      {op.value}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between">
+                <Label>Tipo</Label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline"
+                  onClick={() => {
+                    // permitir alternar a edición libre
+                    if (ticketTipos.length === 0) return;
+                    // si ticketTipo está vacío, preseleccionar el primero
+                    if (!ticketTipo) setTicketTipo(ticketTipos[0]?.key || "");
+                  }}
+                >
+                  Editar
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div>
+                  <Select value={ticketTipo} onValueChange={setTicketTipo}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue>
+                        {ticketTipos.find((t) => t.key === ticketTipo)?.value ||
+                          ticketTipo ||
+                          "Seleccione un tipo"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ticketTipos.map((op) => (
+                        <SelectItem key={op.id} value={op.key}>
+                          {op.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Input
+                    value={ticketTipo}
+                    onChange={(e) => setTicketTipo(e.target.value)}
+                    placeholder="Editar clave de tipo (opcional)"
+                  />
+                </div>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Descripción</Label>

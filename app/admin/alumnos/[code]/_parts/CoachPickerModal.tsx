@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { dataService, type Team, type TeamMember } from "@/lib/data-service";
+import type { TeamMember } from "@/lib/data-service";
 import {
   Dialog,
   DialogContent,
@@ -15,8 +15,9 @@ import { Loader2, Search } from "lucide-react";
 
 /** Estructura que mostrará el modal */
 export type CoachCandidate = TeamMember & {
-  teamId: number;
-  teamName: string;
+  teamCode: string; // codigo from team endpoint
+  teamId?: number;
+  teamName?: string;
   puesto?: string | null;
   area?: string | null;
 };
@@ -33,14 +34,17 @@ export default function CoachPickerModal({
   open,
   onOpenChange,
   onPick,
+  onConfirm,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onPick: (c: CoachCandidate) => void;
+  onPick?: (c: CoachCandidate) => void;
+  onConfirm?: (selected: CoachCandidate[]) => void;
 }) {
   const [loading, setLoading] = useState(false);
-  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsRaw, setTeamsRaw] = useState<any[]>([]);
   const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (!open) return;
@@ -48,17 +52,19 @@ export default function CoachPickerModal({
     (async () => {
       setLoading(true);
       try {
-        // 👇 Usar getTeams (el que intenta parsear alumnos del formato antiguo)
-        const res = await dataService.getTeams({
-          page: 1,
-          pageSize: 1000,
-        });
+        // Llamar al endpoint explícito que devuelve los equipos/coach
+        const res = await fetch(
+          "https://v001.vercel.app/v1/team/get/team?page=1&pageSize=50",
+          { cache: "no-store" }
+        );
+        const j = await res.json().catch(() => ({}));
+        const rows = Array.isArray(j?.data) ? j.data : [];
         if (!alive) return;
-        setTeams(res.data ?? []);
+        setTeamsRaw(rows);
       } catch (e) {
         console.error(e);
         if (!alive) return;
-        setTeams([]);
+        setTeamsRaw([]);
       } finally {
         if (alive) setLoading(false);
       }
@@ -68,29 +74,18 @@ export default function CoachPickerModal({
     };
   }, [open]);
 
-  // Aplanar -> lista de candidatos
+  // Mapear rows del endpoint team -> candidatos (cada team es un coach)
   const candidates: CoachCandidate[] = useMemo(() => {
-    const out: CoachCandidate[] = [];
-    teams.forEach((t) => {
-      (t.alumnos ?? []).forEach((m) => {
-        out.push({
-          ...m,
-          teamId: t.id,
-          teamName: t.nombre,
-          // si tu API de equipos tuviera puesto/área, mapéalos aquí
-          puesto: t.puesto ?? null,
-          area: t.area ?? null,
-        });
-      });
-    });
-    // dedup por name+url
-    const uniq = new Map<string, CoachCandidate>();
-    out.forEach((c) => {
-      const key = `${c.name}|${c.url ?? ""}`;
-      if (!uniq.has(key)) uniq.set(key, c);
-    });
-    return Array.from(uniq.values());
-  }, [teams]);
+    return (teamsRaw || []).map((t: any) => ({
+      name: t.nombre ?? t.name ?? "",
+      teamCode: t.codigo ?? String(t.id ?? ""),
+      teamId: t.id ?? undefined,
+      teamName: t.nombre ?? undefined,
+      puesto: t.puesto ?? null,
+      area: t.area ?? null,
+      url: undefined,
+    }));
+  }, [teamsRaw]);
 
   const filtered = useMemo(() => {
     const q = normalize(query);
@@ -138,47 +133,94 @@ export default function CoachPickerModal({
             Sin coincidencias.
           </div>
         ) : (
-          <ul className="mt-2 space-y-2 max-h-[50vh] overflow-auto pr-2">
-            {filtered.map((c, idx) => (
-              <li
-                key={`${c.name}-${c.url ?? ""}-${idx}`}
-                className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50 cursor-pointer"
-                onClick={() => onPick(c)}
-                title="Seleccionar este integrante"
-              >
-                <div className="flex items-center justify-between gap-3 w-full">
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{c.name}</div>
-                    <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-2">
-                      <span className="truncate">Equipo: {c.teamName}</span>
-                      {c.puesto ? (
-                        <Badge variant="secondary" className="h-5 text-[11px]">
-                          {c.puesto}
-                        </Badge>
-                      ) : null}
-                      {c.area ? (
-                        <Badge className="h-5 text-[11px]">{c.area}</Badge>
-                      ) : null}
+          <div className="mt-2 max-h-[50vh] overflow-auto pr-2">
+            <ul className="space-y-2">
+              {filtered.map((c, idx) => {
+                const key = c.teamCode ?? `${c.name}-${idx}`;
+                const isSelected = !!selected[key];
+                return (
+                  <li
+                    key={key}
+                    className={`flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50 ${
+                      isSelected ? "ring-2 ring-primary/30" : ""
+                    }`}
+                    onClick={() => {
+                      // toggle selection
+                      setSelected((s) => ({ ...s, [key]: !s[key] }));
+                    }}
+                    title="Seleccionar este integrante"
+                  >
+                    <div className="flex items-center gap-3 w-full">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          setSelected((s) => ({
+                            ...s,
+                            [key]: e.target.checked,
+                          }));
+                        }}
+                        className="h-4 w-4"
+                      />
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{c.name}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap gap-2">
+                          <span className="truncate">Código: {c.teamCode}</span>
+                          {c.puesto ? (
+                            <Badge
+                              variant="secondary"
+                              className="h-5 text-[11px]"
+                            >
+                              {c.puesto}
+                            </Badge>
+                          ) : null}
+                          {c.area ? (
+                            <Badge className="h-5 text-[11px]">{c.area}</Badge>
+                          ) : null}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  {c.url ? (
-                    <a
-                      href={c.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-primary underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      Abrir perfil
-                    </a>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+                    {c.url ? (
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-primary underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Abrir perfil
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
+
+        {/* Footer con botón Asignar para confirmar selección múltiple */}
+        <div className="border-t border-gray-100 px-4 py-3">
+          <div className="flex items-center justify-end gap-2">
+            <div className="text-sm text-muted-foreground">
+              {Object.values(selected).filter(Boolean).length} seleccionados
+            </div>
+            <button
+              onClick={() => {
+                const keys = Object.keys(selected).filter((k) => selected[k]);
+                const sel = filtered.filter((c) => keys.includes(c.teamCode));
+                if (onConfirm) onConfirm(sel);
+                onOpenChange(false);
+              }}
+              disabled={Object.values(selected).filter(Boolean).length === 0}
+              className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              Asignar
+            </button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

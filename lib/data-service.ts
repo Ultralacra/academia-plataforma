@@ -407,8 +407,11 @@ type RawTicketsResponse = {
 async function fetchAllTicketsInRange(opts: {
   fechaDesde?: string;
   fechaHasta?: string;
-  pageSize?: number;       // sugerencia al server
-  hardLimit?: number;      // límite de seguridad en el cliente
+  search?: string;
+  estado?: string;
+  tipo?: string;
+  pageSize?: number; // sugerencia al server
+  hardLimit?: number; // límite de seguridad en el cliente
 }) {
   const pageSize = Math.max(1, Math.min(1000, opts.pageSize ?? 500));
   const hardLimit = Math.max(1, Math.min(20000, opts.hardLimit ?? 5000));
@@ -424,6 +427,9 @@ async function fetchAllTicketsInRange(opts: {
       pageSize,
       fechaDesde: opts.fechaDesde ?? "",
       fechaHasta: opts.fechaHasta ?? "",
+      search: opts.search ?? "",
+      estado: opts.estado ?? "",
+      tipo: opts.tipo ?? "",
     });
 
     const json = await apiFetch<RawTicketsResponse>(
@@ -478,7 +484,9 @@ export async function getTickets(opts: {
   const { rawItems, total } = await fetchAllTicketsInRange({
     fechaDesde: opts.fechaDesde ?? "",
     fechaHasta: opts.fechaHasta ?? "",
-    pageSize: 500,
+    search: opts.search ?? "",
+    // forward pageSize if provided
+    pageSize: opts.pageSize ?? 500,
     hardLimit: 10000, // seguridad
   });
 
