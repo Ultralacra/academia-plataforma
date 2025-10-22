@@ -271,32 +271,19 @@ export default function StudentsByCoachTable({
                 Inactividad (días)
               </th>
               <th className="px-3 py-2 text-left font-medium">Tickets</th>
-              <th className="px-3 py-2 text-left font-medium">Contrato</th>
-              <th className="px-3 py-2 text-left font-medium">Nicho</th>
-              <th className="px-3 py-2 text-left font-medium">F1</th>
-              <th className="px-3 py-2 text-left font-medium">F2</th>
-              <th className="px-3 py-2 text-left font-medium">F3</th>
-              <th className="px-3 py-2 text-left font-medium">F4</th>
-              <th className="px-3 py-2 text-left font-medium">F5</th>
             </tr>
           </thead>
           <tbody>
             {loadingFiltered && (
               <tr>
-                <td
-                  colSpan={15}
-                  className="px-3 py-4 text-center text-gray-500"
-                >
+                <td colSpan={8} className="px-3 py-4 text-center text-gray-500">
                   Cargando alumnos…
                 </td>
               </tr>
             )}
             {!loadingFiltered && filteredData.length === 0 && (
               <tr>
-                <td
-                  colSpan={15}
-                  className="px-3 py-4 text-center text-gray-500"
-                >
+                <td colSpan={8} className="px-3 py-4 text-center text-gray-500">
                   Sin data conseguida.
                 </td>
               </tr>
@@ -380,41 +367,6 @@ export default function StudentsByCoachTable({
                     </td>
                     <td className="px-3 py-2 text-gray-700">
                       {nf(fs.ticketsCount)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {fs.contrato ? (
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={fs.contrato}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center rounded border border-blue-200 bg-white px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:border-blue-300 shadow-none"
-                            title="Abrir contrato"
-                          >
-                            Ver
-                          </a>
-                        </div>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {fs.nicho || "—"}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {nf(fs.paso_f1)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {nf(fs.paso_f2)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {nf(fs.paso_f3)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {nf(fs.paso_f4)}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {nf(fs.paso_f5)}
                     </td>
                   </tr>
                 );

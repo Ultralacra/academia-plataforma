@@ -338,7 +338,13 @@ export async function getClients(opts: {
       // puede venir ISO con tiempo; el UI ya lo formatea
       joinDate: r.ingreso ?? r.joinDate ?? null,
       lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
-      inactivityDays: r.inactividad ?? r.inactivityDays ?? null,
+      // algunos backends envían 'dias_inactividad' o 'inactividad'
+      inactivityDays:
+        r.dias_inactividad ??
+        r.diasInactividad ??
+        r.inactividad ??
+        r.inactivityDays ??
+        null,
 
       contractUrl: r.contrato ?? r.contractUrl ?? null,
       ticketsCount: r.tickets ?? r.ticketsCount ?? null,
@@ -374,7 +380,13 @@ export async function getClients(opts: {
     stage: r.stage ?? r.etapa ?? null,
     joinDate: r.ingreso ?? r.joinDate ?? null,
     lastActivity: r.lastActivity ?? r.ultima_actividad ?? null,
-    inactivityDays: r.inactivityDays ?? r.inactividad ?? null,
+    // compatibilidad con múltiples nombres de campo
+    inactivityDays:
+      r.dias_inactividad ??
+      r.diasInactividad ??
+      r.inactividad ??
+      r.inactivityDays ??
+      null,
 
     contractUrl: r.contrato ?? r.contractUrl ?? null,
     ticketsCount: r.ticketsCount ?? r.tickets ?? null,

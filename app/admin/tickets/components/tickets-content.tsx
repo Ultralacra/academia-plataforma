@@ -165,6 +165,13 @@ function todayYMDLocal() {
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+/** Primer día del mes actual en YYYY-MM-DD (hora local) */
+function firstDayOfMonthYMDLocal() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01`;
+}
 
 /* ---------------------------------------
   TicketsContent (paginación local)
@@ -179,8 +186,10 @@ export default function TicketsContent() {
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<string>("all");
   const [tipo, setTipo] = useState<string>("all");
-  // Por defecto: mostrar los tickets de HOY
-  const [fechaDesde, setFechaDesde] = useState<string>(todayYMDLocal());
+  // Por defecto: desde el primer día del mes actual hasta hoy
+  const [fechaDesde, setFechaDesde] = useState<string>(
+    firstDayOfMonthYMDLocal()
+  );
   const [fechaHasta, setFechaHasta] = useState<string>(todayYMDLocal());
 
   // Paginación UI
