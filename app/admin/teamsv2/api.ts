@@ -128,11 +128,15 @@ export async function getCoachTickets(params: {
   coach: string; // id/código de coach que espera el endpoint
   page?: number;
   pageSize?: number;
+  fechaDesde?: string; // YYYY-MM-DD
+  fechaHasta?: string; // YYYY-MM-DD
 }): Promise<CoachTicketsResponse> {
   const q = new URLSearchParams();
   q.set("page", String(params.page ?? 1));
   q.set("pageSize", String(params.pageSize ?? 50));
   q.set("coach", params.coach);
+  if (params.fechaDesde) q.set("fechaDesde", params.fechaDesde);
+  if (params.fechaHasta) q.set("fechaHasta", params.fechaHasta);
   const url = `${BASE}/ticket/get/ticket?${q.toString()}`;
   const json = await fetchJson<any>(url);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];

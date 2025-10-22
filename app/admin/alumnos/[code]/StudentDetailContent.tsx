@@ -528,7 +528,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
         />
       )}
 
-      {/* Chat flotante para la vista de detalle del alumno */}
+      {/* Botón flotante para abrir el chat en vista completa (como antes) */}
       <Link
         href={`/chat/${encodeURIComponent(student.code || code)}`}
         className="fixed right-6 bottom-6 z-[12000] inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg hover:opacity-95"

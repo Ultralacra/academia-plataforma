@@ -93,7 +93,8 @@ export async function getAllStudents(): Promise<StudentRow[]> {
     stage: r.etapa ?? r.stage ?? null,
     joinDate: r.ingreso ?? r.joinDate ?? null,
     lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
-    inactivityDays: r.inactividad ?? r.inactivityDays ?? null,
+    inactivityDays:
+      r.dias_inactividad ?? r.inactividad ?? r.inactivityDays ?? null,
 
     contractUrl: r.contrato ?? r.contractUrl ?? null,
     ticketsCount: r.tickets ?? r.ticketsCount ?? null,

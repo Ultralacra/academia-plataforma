@@ -15,7 +15,6 @@ export default function StudentChatPage() {
     if (!v) return;
     setRoom(v);
   }
-
   return (
     <ProtectedRoute allowedRoles={["student"]}>
       <DashboardLayout>

@@ -56,7 +56,7 @@ type Message = {
   phase?: string;
 };
 
-type Transport = "ws" | "local";
+type Transport = "ws" | "local" | "sse";
 
 type TicketType =
   | "tecnico"
@@ -76,6 +76,9 @@ export default function ChatRealtime({
   className,
   transport = "ws",
   onBack,
+  showGenerateTicket = true,
+  showFilter = true,
+  showSelect = true,
 }: {
   room: string;
   role?: Sender;
@@ -86,6 +89,9 @@ export default function ChatRealtime({
   className?: string;
   transport?: Transport;
   onBack?: () => void;
+  showGenerateTicket?: boolean;
+  showFilter?: boolean;
+  showSelect?: boolean;
 }) {
   const normRoom = React.useMemo(
     () => (room || "").trim().toLowerCase(),
@@ -127,6 +133,7 @@ export default function ChatRealtime({
 
   const wsRef = React.useRef<WebSocket | null>(null);
   const bcRef = React.useRef<BroadcastChannel | null>(null);
+  const esRef = React.useRef<EventSource | null>(null);
   const pendingRef = React.useRef<any[]>([]);
   const seenRef = React.useRef<Set<string>>(new Set());
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
@@ -255,6 +262,49 @@ export default function ChatRealtime({
       wsRef.current = null;
     };
   }, [transport, normRoom, currentRole, markRead]);
+
+  // SSE transport (server-sent events via /api/realtime)
+  React.useEffect(() => {
+    if (transport !== "sse") return;
+    if (!normRoom) return;
+    let alive = true;
+    const url = `/api/realtime?room=${encodeURIComponent(normRoom)}`;
+    try {
+      const es = new EventSource(url);
+      esRef.current = es;
+      setConnected(true);
+      es.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(String(ev.data || "{}"));
+          // Esperamos objetos Message directos (sin wrapper type)
+          if (!msg || !msg.id) return;
+          if (!alive) return;
+          if (!seenRef.current.has(msg.id)) {
+            seenRef.current.add(msg.id);
+            setItems((prev) => [...prev, msg]);
+            if (
+              typeof document !== "undefined" &&
+              document.visibilityState === "visible"
+            ) {
+              markRead();
+            }
+          }
+        } catch {}
+      };
+      es.onerror = () => {
+        setConnected(false);
+      };
+    } catch {
+      setConnected(false);
+    }
+    return () => {
+      alive = false;
+      try {
+        esRef.current?.close();
+      } catch {}
+      esRef.current = null;
+    };
+  }, [transport, normRoom, markRead]);
 
   React.useEffect(() => {
     if (transport !== "local") return;
@@ -488,25 +538,47 @@ export default function ChatRealtime({
         return;
       }
 
-      setItems((prev) => [...prev, localMsg]);
-      seenRef.current.add(clientId);
-      const ws = wsRef.current;
-      const payload = {
-        type: "message" as const,
-        id: clientId,
-        room: normRoom,
-        sender: currentRole,
-        text: val,
-        attachments,
-      };
-      if (!ws || ws.readyState !== WS_OPEN) {
-        pendingRef.current.push({ ...payload });
-        if (!connected)
-          console.debug("Conectando… Tu mensaje se enviará al reconectarse.");
+      if (transport === "sse") {
+        // enviar vía POST al endpoint SSE
+        setItems((prev) => [...prev, localMsg]);
+        seenRef.current.add(clientId);
+        try {
+          await fetch(`/api/realtime`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              room: normRoom,
+              sender: currentRole,
+              text: val,
+            }),
+          });
+        } catch {}
+        markRead();
         return;
       }
-      ws.send(JSON.stringify(payload));
-      markRead();
+
+      // default ws
+      {
+        setItems((prev) => [...prev, localMsg]);
+        seenRef.current.add(clientId);
+        const ws = wsRef.current;
+        const payload = {
+          type: "message" as const,
+          id: clientId,
+          room: normRoom,
+          sender: currentRole,
+          text: val,
+          attachments,
+        };
+        if (!ws || ws.readyState !== WS_OPEN) {
+          pendingRef.current.push({ ...payload });
+          if (!connected)
+            console.debug("Conectando… Tu mensaje se enviará al reconectarse.");
+          return;
+        }
+        ws.send(JSON.stringify(payload));
+        markRead();
+      }
     } catch {
       console.debug("No se pudo enviar el mensaje");
     }
@@ -722,101 +794,106 @@ export default function ChatRealtime({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              title="Generar ticket (IA)"
-              onClick={generateTicketFromRecent}
-              className="p-2 rounded-full hover:bg-white/10 transition-colors flex items-center gap-2"
-            >
-              <Zap className="w-5 h-5" />
-              <span className="hidden sm:inline text-sm font-medium">
-                Generar ticket
-              </span>
-            </button>
-            <Popover open={filterOpen} onOpenChange={setFilterOpen}>
-              <PopoverTrigger asChild>
-                <button
-                  className="p-2 rounded-full hover:bg-white/10 transition-colors"
-                  title="Filtrar"
-                >
-                  <Filter className="w-5 h-5" />
-                  {(statusFilter || phaseFilter) && (
-                    <span className="absolute -top-1 -right-1 bg-sky-500 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center">
-                      !
-                    </span>
-                  )}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-56 p-4">
-                <div className="mb-2 text-sm font-semibold">
-                  Filtrar mensajes
-                </div>
-                <div className="mb-2">
-                  <div className="text-xs mb-1">Estatus</div>
-                  <div className="flex flex-wrap gap-1">
-                    {statusOptions.map((s) => (
-                      <Badge
-                        key={s}
-                        variant={statusFilter === s ? "default" : "secondary"}
-                        onClick={() =>
-                          setStatusFilter(statusFilter === s ? null : s)
-                        }
-                        className="cursor-pointer"
-                      >
-                        {s.replace("_", " ")}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs mb-1">Fase</div>
-                  <div className="flex flex-wrap gap-1">
-                    {phaseOptions.map((f) => (
-                      <Badge
-                        key={f}
-                        variant={phaseFilter === f ? "default" : "secondary"}
-                        onClick={() =>
-                          setPhaseFilter(phaseFilter === f ? null : f)
-                        }
-                        className="cursor-pointer"
-                      >
-                        {f}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                {(statusFilter || phaseFilter) && (
-                  <button
-                    className="mt-4 w-full text-xs text-sky-600 underline"
-                    onClick={() => {
-                      setStatusFilter(null);
-                      setPhaseFilter(null);
-                      setFilterOpen(false);
-                    }}
-                  >
-                    Limpiar filtros
-                  </button>
-                )}
-              </PopoverContent>
-            </Popover>
-            {selectMode ? (
+            {showGenerateTicket && (
               <button
-                onClick={() => {
-                  setSelectMode(false);
-                  setSelectedIds(new Set());
-                }}
-                className="px-2 py-1 rounded bg-white/10 text-xs"
+                title="Generar ticket (IA)"
+                onClick={generateTicketFromRecent}
+                className="p-2 rounded-full hover:bg-white/10 transition-colors flex items-center gap-2"
               >
-                Cancelar
-              </button>
-            ) : (
-              <button
-                onClick={() => setSelectMode(true)}
-                className="px-2 py-1 rounded bg-white/10 text-xs"
-                title="Seleccionar mensajes"
-              >
-                Seleccionar
+                <Zap className="w-5 h-5" />
+                <span className="hidden sm:inline text-sm font-medium">
+                  Generar ticket
+                </span>
               </button>
             )}
+            {showFilter && (
+              <Popover open={filterOpen} onOpenChange={setFilterOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    className="p-2 rounded-full hover:bg-white/10 transition-colors"
+                    title="Filtrar"
+                  >
+                    <Filter className="w-5 h-5" />
+                    {(statusFilter || phaseFilter) && (
+                      <span className="absolute -top-1 -right-1 bg-sky-500 text-white rounded-full w-4 h-4 text-xs flex items-center justify-center">
+                        !
+                      </span>
+                    )}
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-4">
+                  <div className="mb-2 text-sm font-semibold">
+                    Filtrar mensajes
+                  </div>
+                  <div className="mb-2">
+                    <div className="text-xs mb-1">Estatus</div>
+                    <div className="flex flex-wrap gap-1">
+                      {statusOptions.map((s) => (
+                        <Badge
+                          key={s}
+                          variant={statusFilter === s ? "default" : "secondary"}
+                          onClick={() =>
+                            setStatusFilter(statusFilter === s ? null : s)
+                          }
+                          className="cursor-pointer"
+                        >
+                          {s.replace("_", " ")}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs mb-1">Fase</div>
+                    <div className="flex flex-wrap gap-1">
+                      {phaseOptions.map((f) => (
+                        <Badge
+                          key={f}
+                          variant={phaseFilter === f ? "default" : "secondary"}
+                          onClick={() =>
+                            setPhaseFilter(phaseFilter === f ? null : f)
+                          }
+                          className="cursor-pointer"
+                        >
+                          {f}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  {(statusFilter || phaseFilter) && (
+                    <button
+                      className="mt-4 w-full text-xs text-sky-600 underline"
+                      onClick={() => {
+                        setStatusFilter(null);
+                        setPhaseFilter(null);
+                        setFilterOpen(false);
+                      }}
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
+                </PopoverContent>
+              </Popover>
+            )}
+            {showSelect &&
+              (selectMode ? (
+                <button
+                  onClick={() => {
+                    setSelectMode(false);
+                    setSelectedIds(new Set());
+                  }}
+                  className="px-2 py-1 rounded bg-white/10 text-xs"
+                >
+                  Cancelar
+                </button>
+              ) : (
+                <button
+                  onClick={() => setSelectMode(true)}
+                  className="px-2 py-1 rounded bg-white/10 text-xs"
+                  title="Seleccionar mensajes"
+                >
+                  Seleccionar
+                </button>
+              ))}
             {showRoleSwitch && (
               <select
                 className="text-xs border border-white/30 rounded-md px-2 py-1 bg-white/10 text-white backdrop-blur-sm"

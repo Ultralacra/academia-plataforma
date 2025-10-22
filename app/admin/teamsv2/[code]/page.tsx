@@ -251,31 +251,7 @@ export default function CoachDetailPage({
             )}
           </div>
 
-          <aside className="p-4 bg-white border rounded-lg">
-            <div className="text-sm text-neutral-500">Resumen</div>
-            <div className="mt-3 space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <div className="text-neutral-500">Tickets</div>
-                <div className="font-medium text-neutral-900">
-                  {coach?.tickets ?? 0}
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="text-neutral-500">Creado</div>
-                <div className="font-medium text-neutral-900">
-                  {coach?.created_at
-                    ? new Date(coach.created_at).toLocaleDateString()
-                    : "—"}
-                </div>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <div className="text-neutral-500">Código</div>
-                <div className="font-mono text-sm text-neutral-700">
-                  {coach?.codigo ?? "—"}
-                </div>
-              </div>
-            </div>
-          </aside>
+          {/* Resumen lateral eliminado a petición */}
         </div>
       </div>
       <CoachStudentsModal

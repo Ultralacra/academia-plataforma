@@ -68,6 +68,16 @@ export type Ticket = {
   creacion: string;          // ISO
   deadline?: string | null;  // ISO
   equipo_urls: string[];     // URLs a cruzar con teamMembers.url
+  coaches?: {
+    codigo_equipo?: string | null;
+    nombre?: string | null;
+    puesto?: string | null;
+    area?: string | null;
+  }[];
+  ultimo_estado?: {
+    estatus?: string | null;
+    fecha?: string | null; // ISO
+  } | null;
 };
 
 /* =======================
@@ -500,6 +510,20 @@ export async function getTickets(opts: {
     creacion: r.creacion ?? r.created_at ?? r.createdAt,
     deadline: r.deadline ?? null,
     equipo_urls: parseEquipoUrls(r.equipo_urls ?? r.equipo ?? r.team_urls),
+    coaches: Array.isArray(r.coaches)
+      ? r.coaches.map((c: any) => ({
+          codigo_equipo: c.codigo_equipo ?? null,
+          nombre: c.nombre ?? null,
+          puesto: c.puesto ?? null,
+          area: c.area ?? null,
+        }))
+      : [],
+    ultimo_estado: r.ultimo_estado
+      ? {
+          estatus: r.ultimo_estado.estatus ?? r.ultimo_estado.estado ?? null,
+          fecha: r.ultimo_estado.fecha ?? r.ultimo_estado.created_at ?? null,
+        }
+      : null,
   }));
 
   return {

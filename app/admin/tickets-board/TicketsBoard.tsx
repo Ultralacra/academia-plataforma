@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { dataService, type Ticket } from "@/lib/data-service";
+import { getTickets, type TicketBoardItem } from "./api";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 
@@ -31,6 +31,7 @@ import {
   getTicketFile,
   updateTicket,
 } from "@/app/admin/alumnos/api";
+import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
 
 type StatusKey =
   | "EN_PROGRESO"
@@ -103,8 +104,11 @@ function mimeFromName(name?: string | null): string | null {
 }
 
 export default function TicketsBoard() {
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // Coaches para filtro
+  const [coaches, setCoaches] = useState<CoachItem[]>([]);
+  const [coachFiltro, setCoachFiltro] = useState<string>(""); // código de coach; "" = Todos
   // Files dialog state
   const [openFiles, setOpenFiles] = useState<null | string>(null); // ticket code/UUID
   const [filesLoading, setFilesLoading] = useState(false);
@@ -141,17 +145,36 @@ export default function TicketsBoard() {
   const [fechaDesde, setFechaDesde] = useState<string>(todayStr);
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
 
+  // Cargar coaches para el select de filtro
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await getCoaches({ page: 1, pageSize: 10000 });
+        if (!mounted) return;
+        setCoaches(list);
+      } catch (e) {
+        console.error(e);
+        setCoaches([]);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     let mounted = true;
     const t = setTimeout(async () => {
       try {
         setLoading(true);
-        const res = await dataService.getTickets({
+        const res = await getTickets({
           page: 1,
           pageSize: 500,
           search,
           fechaDesde,
           fechaHasta,
+          coach: coachFiltro || undefined,
         });
         if (!mounted) return;
         setTickets(res.items ?? []);
@@ -167,7 +190,7 @@ export default function TicketsBoard() {
       mounted = false;
       clearTimeout(t);
     };
-  }, [search, fechaDesde, fechaHasta]);
+  }, [search, fechaDesde, fechaHasta, coachFiltro]);
 
   const estados = useMemo(() => {
     // Always show all 4 columns in this order
@@ -204,7 +227,7 @@ export default function TicketsBoard() {
     );
     // Persist if we have external code (UUID)
     const tk = tickets.find((t) => t.id === tid);
-    const codigo = tk?.id_externo ?? null;
+    const codigo = tk?.codigo ?? null;
     if (!codigo) return;
     updateTicket(codigo, { estado: targetEstado })
       .then(() => {
@@ -214,7 +237,7 @@ export default function TicketsBoard() {
         console.error(err);
         toast({ title: "Error al actualizar ticket" });
         try {
-          const res = await dataService.getTickets({
+          const res = await getTickets({
             page: 1,
             pageSize: 500,
             search,
@@ -226,8 +249,8 @@ export default function TicketsBoard() {
       });
   }
 
-  async function openFilesFor(ticket: Ticket) {
-    const code = ticket.id_externo || null;
+  async function openFilesFor(ticket: TicketBoardItem) {
+    const code = ticket.codigo || null;
     if (!code) return;
     try {
       setOpenFiles(code);
@@ -321,6 +344,23 @@ export default function TicketsBoard() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            {/* Filtro por coach/equipo */}
+            <div className="relative">
+              <select
+                className="rounded border px-2 py-2 text-sm min-w-[180px]"
+                value={coachFiltro}
+                onChange={(e) => setCoachFiltro(e.target.value)}
+                title="Filtrar por coach/equipo"
+              >
+                <option value="">Todos los coaches</option>
+                {coaches.map((c) => (
+                  <option key={c.codigo} value={c.codigo}>
+                    {c.nombre}
+                    {c.area ? ` · ${c.area}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="flex items-center gap-1">
               <CalendarIcon className="text-gray-400" />
               <input
@@ -342,12 +382,13 @@ export default function TicketsBoard() {
             onClick={async () => {
               setLoading(true);
               try {
-                const res = await dataService.getTickets({
+                const res = await getTickets({
                   page: 1,
                   pageSize: 500,
                   search,
                   fechaDesde,
                   fechaHasta,
+                  coach: coachFiltro || undefined,
                 });
                 setTickets(res.items ?? []);
                 toast({ title: "Tickets recargados" });
@@ -416,7 +457,9 @@ export default function TicketsBoard() {
                             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                               <span>
                                 Creado:{" "}
-                                {new Date(t.creacion).toLocaleDateString()}
+                                {t.created_at
+                                  ? new Date(t.created_at).toLocaleDateString()
+                                  : "—"}
                               </span>
                               {t.tipo && <span>· {t.tipo}</span>}
                               {t.deadline && (
@@ -425,10 +468,7 @@ export default function TicketsBoard() {
                                   {new Date(t.deadline).toLocaleDateString()}
                                 </span>
                               )}
-                              {t.id_externo && (
-                                <span>· Ref: {t.id_externo}</span>
-                              )}
-                              {t.id_externo && (
+                              {t.codigo && (
                                 <button
                                   className="underline hover:no-underline"
                                   onClick={() => openFilesFor(t)}
@@ -438,6 +478,57 @@ export default function TicketsBoard() {
                                 </button>
                               )}
                             </div>
+                            {/* Coaches asignados */}
+                            {Array.isArray((t as any).coaches) &&
+                              (t as any).coaches.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {(t as any).coaches
+                                    .slice(0, 4)
+                                    .map((c: any, idx: number) => (
+                                      <span
+                                        key={`${
+                                          c.codigo_equipo ?? c.nombre ?? idx
+                                        }`}
+                                        className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-700"
+                                        title={`${c.nombre ?? "Coach"}${
+                                          c.area ? ` · ${c.area}` : ""
+                                        }${c.puesto ? ` · ${c.puesto}` : ""}`}
+                                      >
+                                        {(c.nombre ?? "Coach").slice(0, 24)}
+                                        {c.area
+                                          ? ` · ${String(c.area).slice(0, 12)}`
+                                          : ""}
+                                      </span>
+                                    ))}
+                                  {((t as any).coaches?.length ?? 0) > 4 && (
+                                    <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-700">
+                                      +{(t as any).coaches.length - 4} más
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            {/* Último estado */}
+                            {(t as any).ultimo_estado?.estatus && (
+                              <div className="mt-1 text-[11px] text-neutral-500">
+                                Último:{" "}
+                                {
+                                  STATUS_LABEL[
+                                    coerceStatus(
+                                      (t as any).ultimo_estado.estatus
+                                    )
+                                  ]
+                                }
+                                {(t as any).ultimo_estado?.fecha && (
+                                  <>
+                                    {" "}
+                                    ·{" "}
+                                    {new Date(
+                                      (t as any).ultimo_estado.fecha
+                                    ).toLocaleString()}
+                                  </>
+                                )}
+                              </div>
+                            )}
                           </div>
                           <div className="flex flex-col items-end gap-2">
                             <span

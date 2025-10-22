@@ -150,11 +150,19 @@ export default function TicketsPanel({
   >([]);
   const [createNombre, setCreateNombre] = useState("");
   const [createTipo, setCreateTipo] = useState("");
+  const [createDescripcion, setCreateDescripcion] = useState("");
+  const [linkInput, setLinkInput] = useState("");
+  const [links, setLinks] = useState<string[]>([]);
   const [createFiles, setCreateFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<
     { url: string; type: string; name: string; size: number }[]
   >([]);
   const [creating, setCreating] = useState(false);
+  // Grabación de audio
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<any>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   // Estados posibles para update
   const [estadoOpts, setEstadoOpts] = useState<
     { key: string; value: string }[]
@@ -322,10 +330,17 @@ export default function TicketsPanel({
     try {
       setCreating(true);
       const archivos: File[] = createFiles.slice(0, 10);
+      // Compose descripcion + links
+      let descripcion = createDescripcion.trim();
+      if (links.length) {
+        const block = ["", "Links:", ...links.map((u) => `- ${u}`)].join("\n");
+        descripcion = (descripcion ? descripcion + "\n" : "") + block;
+      }
       await createTicket({
         nombre: createNombre.trim(),
         id_alumno: student.code,
         tipo: createTipo,
+        descripcion: descripcion || undefined,
         archivos,
       });
       // Refrescar lista de tickets
@@ -338,13 +353,70 @@ export default function TicketsPanel({
       setOpenCreate(false);
       setCreateNombre("");
       setCreateTipo("");
+      setCreateDescripcion("");
+      setLinks([]);
       setCreateFiles([]);
+      if (audioPreviewUrl) {
+        URL.revokeObjectURL(audioPreviewUrl);
+        setAudioPreviewUrl(null);
+      }
       onChangedTickets?.(fetched.length);
     } catch (e) {
       console.error(e);
     } finally {
       setCreating(false);
     }
+  }
+
+  function addLink() {
+    const raw = linkInput.trim();
+    if (!raw) return;
+    const url = raw.match(/^https?:\/\//i) ? raw : `https://${raw}`;
+    try {
+      // eslint-disable-next-line no-new
+      new URL(url);
+      setLinks((prev) => Array.from(new Set([...prev, url])).slice(0, 10));
+      setLinkInput("");
+    } catch {}
+  }
+
+  async function startRecording() {
+    try {
+      if (!(navigator as any)?.mediaDevices?.getUserMedia) return;
+      const stream = await (navigator as any).mediaDevices.getUserMedia({
+        audio: true,
+      });
+      const MR: any = (window as any).MediaRecorder;
+      if (!MR) return;
+      const mr: any = new MR(stream);
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e: any) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      mr.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setAudioPreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+        const file = new File([blob], `grabacion-${Date.now()}.webm`, {
+          type: "audio/webm",
+        });
+        setCreateFiles((prev) => [...prev, file].slice(0, 10));
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setIsRecording(true);
+    } catch {}
+  }
+
+  function stopRecording() {
+    try {
+      const mr = mediaRecorderRef.current;
+      if (mr && mr.state !== "inactive") mr.stop();
+    } catch {}
+    setIsRecording(false);
   }
 
   function onFileInputChange(e: ChangeEvent<HTMLInputElement>) {
@@ -605,6 +677,83 @@ export default function TicketsPanel({
                       </SelectContent>
                     </Select>
                   </div>
+                  {/* Descripción */}
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      Descripción (opcional)
+                    </label>
+                    <textarea
+                      className="w-full min-h-[70px] rounded-md border px-3 py-2 text-sm"
+                      value={createDescripcion}
+                      onChange={(e) => setCreateDescripcion(e.target.value)}
+                      placeholder="Notas del ticket, detalles del caso, etc."
+                    />
+                  </div>
+                  {/* Enlaces */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-muted-foreground">
+                        Enlaces (URL)
+                      </label>
+                      <span className="text-xs text-muted-foreground">
+                        {links.length}/10
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        className="h-9 flex-1"
+                        placeholder="https://…"
+                        value={linkInput}
+                        onChange={(e) => setLinkInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            addLink();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={addLink}
+                      >
+                        Agregar
+                      </Button>
+                    </div>
+                    {links.length > 0 && (
+                      <ul className="space-y-1 max-h-40 overflow-auto">
+                        {links.map((u, i) => (
+                          <li
+                            key={`${u}-${i}`}
+                            className="flex items-start gap-2 rounded border px-2 py-1 text-xs"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <a
+                                href={u}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="break-all text-blue-600 hover:underline"
+                              >
+                                {u}
+                              </a>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="shrink-0"
+                              onClick={() =>
+                                setLinks((prev) => prev.filter((x) => x !== u))
+                              }
+                            >
+                              Quitar
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <label className="text-xs text-muted-foreground">
@@ -629,6 +778,31 @@ export default function TicketsPanel({
                     >
                       Elegir archivos
                     </Button>
+                    {/* Grabación de audio rápida */}
+                    <div className="flex items-center gap-2">
+                      {!isRecording ? (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={startRecording}
+                        >
+                          Grabar audio
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={stopRecording}
+                        >
+                          Detener
+                        </Button>
+                      )}
+                      {audioPreviewUrl && (
+                        <audio src={audioPreviewUrl} controls className="h-8" />
+                      )}
+                    </div>
                     {createFiles.length > 0 && (
                       <ul className="space-y-2">
                         {previews.map((p, idx) => (

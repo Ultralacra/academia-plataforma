@@ -677,15 +677,16 @@ export default function StudentsContent() {
                     Última actividad
                   </div>
                 </th>
-                <th className="px-3 py-2 text-left font-medium">Inactividad</th>
-                <th className="px-3 py-2 text-left font-medium">Contrato</th>
+                <th className="px-3 py-2 text-left font-medium">
+                  Días inactividad
+                </th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-3 py-4 text-center text-gray-500"
                   >
                     Cargando alumnos…
@@ -694,7 +695,7 @@ export default function StudentsContent() {
               ) : pageItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-3 py-4 text-center text-gray-500"
                   >
                     No se encontraron estudiantes
@@ -780,22 +781,9 @@ export default function StudentsContent() {
                       {fmtDateSmart(student.lastActivity)}
                     </td>
                     <td className="px-3 py-2 text-gray-700">
-                      {student.inactivityDays ? (
+                      {student.inactivityDays != null &&
+                      student.inactivityDays !== undefined ? (
                         <span>{student.inactivityDays}d</span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700">
-                      {student.contractUrl ? (
-                        <a
-                          href={student.contractUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-700 hover:underline text-sm"
-                        >
-                          Ver
-                        </a>
                       ) : (
                         "—"
                       )}

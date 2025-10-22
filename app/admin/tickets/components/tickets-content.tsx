@@ -157,6 +157,14 @@ function fmtDateTime(iso?: string | null) {
   if (isNaN(d.getTime())) return "-";
   return fmt.format(d);
 }
+/** Devuelve YYYY-MM-DD en hora local (para <input type="date" />) */
+function todayYMDLocal() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 /* ---------------------------------------
   TicketsContent (paginación local)
@@ -171,8 +179,9 @@ export default function TicketsContent() {
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<string>("all");
   const [tipo, setTipo] = useState<string>("all");
-  const [fechaDesde, setFechaDesde] = useState<string>("");
-  const [fechaHasta, setFechaHasta] = useState<string>("");
+  // Por defecto: mostrar los tickets de HOY
+  const [fechaDesde, setFechaDesde] = useState<string>(todayYMDLocal());
+  const [fechaHasta, setFechaHasta] = useState<string>(todayYMDLocal());
 
   // Paginación UI
   const [page, setPage] = useState(1);

@@ -31,11 +31,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getCoachTickets, type CoachTicket } from "./api";
+import {
+  getCoachTickets,
+  type CoachTicket,
+  getCoachStudents,
+  type CoachStudent,
+  getCoachByCode,
+  type CoachItem,
+} from "./api";
 import {
   updateTicket,
   getTicketFiles,
   getTicketFile,
+  getOpciones,
+  createTicket,
 } from "@/app/admin/alumnos/api";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -139,12 +148,45 @@ export default function TicketsPanelCoach({
   coachCode?: string;
 }) {
   const coachCode = coachCodeProp ?? (student?.code as unknown as string);
+  const todayYMDLocal = () => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  };
 
   const [query, setQuery] = useState("");
   const [openCreate, setOpenCreate] = useState(false);
   const [createNombre, setCreateNombre] = useState("");
   const [createTipo, setCreateTipo] = useState("");
+  const [tipos, setTipos] = useState<
+    { id: string; key: string; value: string }[]
+  >([]);
+  const [creating, setCreating] = useState(false);
   const [localTickets, setLocalTickets] = useState<any[]>([]);
+  // alumnos del coach para asociar el ticket
+  const [coachStudents, setCoachStudents] = useState<
+    { alumno: string; nombre: string }[]
+  >([]);
+  const [selectedAlumno, setSelectedAlumno] = useState<string>("");
+  const [studentQuery, setStudentQuery] = useState("");
+  const [coachArea, setCoachArea] = useState<string | null>(null);
+  // descripción y enlaces opcionales
+  const [createDescripcion, setCreateDescripcion] = useState("");
+  const [linkInput, setLinkInput] = useState("");
+  const [links, setLinks] = useState<string[]>([]);
+  // archivos a adjuntar
+  const [createFiles, setCreateFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<
+    { url: string; type: string; name: string; size: number }[]
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // grabación de audio
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<any>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
 
   // server data
   const [loading, setLoading] = useState(false);
@@ -153,6 +195,9 @@ export default function TicketsPanelCoach({
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [rows, setRows] = useState<CoachTicket[]>([]);
+  // Filtros de fecha (por defecto: HOY)
+  const [fechaDesde, setFechaDesde] = useState<string>(todayYMDLocal());
+  const [fechaHasta, setFechaHasta] = useState<string>(todayYMDLocal());
   // Archivos del ticket seleccionado
   const [openFiles, setOpenFiles] = useState<null | string>(null); // ticketCode
   const [filesLoading, setFilesLoading] = useState(false);
@@ -175,6 +220,263 @@ export default function TicketsPanelCoach({
     url?: string;
   }>(null);
   const [blobCache, setBlobCache] = useState<Record<string, string>>({});
+  // Cargar opciones de tipo y alumnos del coach para creación
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        // tipos de ticket
+        try {
+          const tiposRes = await getOpciones("tipo_ticket");
+          const mapped = tiposRes
+            .map((o) => ({ id: o.id, key: o.key, value: o.value }))
+            .filter((x) => x.key && x.value);
+          if (alive) setTipos(mapped);
+        } catch {}
+        // alumnos asociados al coach
+        if (coachCode) {
+          try {
+            const list = await getCoachStudents(coachCode);
+            const simple = (list as CoachStudent[]).map((r) => ({
+              alumno: r.id_alumno,
+              nombre: r.alumno_nombre,
+            }));
+            if (alive) {
+              setCoachStudents(simple);
+              if (!selectedAlumno && simple.length > 0)
+                setSelectedAlumno(simple[0].alumno);
+            }
+          } catch {}
+          // área del coach para preseleccionar "tipo"
+          try {
+            const coach: CoachItem | null = await getCoachByCode(coachCode);
+            if (alive) setCoachArea(coach?.area ?? null);
+          } catch {}
+        }
+      } catch {}
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [coachCode]);
+
+  // Previsualizaciones de archivos
+  useEffect(() => {
+    const urls = createFiles.map((f) => ({
+      url: URL.createObjectURL(f),
+      type: f.type,
+      name: f.name,
+      size: f.size,
+    }));
+    setPreviews(urls);
+    return () => {
+      urls.forEach((p) => URL.revokeObjectURL(p.url));
+    };
+  }, [createFiles]);
+
+  // Deducción automática de tipo a partir del nombre
+  function normalize(s: string) {
+    return s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .trim();
+  }
+  function guessTipoKey(nombre: string): string | "" {
+    const n = normalize(nombre);
+    if (!n) return "";
+    // reglas simples por palabra clave
+    const pairs = [
+      { kw: ["copy", "copys"], match: (lab: string) => lab.includes("copy") },
+      {
+        kw: ["tecnica", "tecnica", "t\u00E9cnica"],
+        match: (lab: string) => lab.includes("tecn"),
+      },
+      {
+        kw: ["pauta", "ads", "campana", "campaña"],
+        match: (lab: string) => lab.includes("pauta") || lab.includes("ads"),
+      },
+      {
+        kw: ["diseno", "dise\u00F1o", "creativo"],
+        match: (lab: string) =>
+          lab.includes("disen") || lab.includes("creativ"),
+      },
+      {
+        kw: ["video", "edicion"],
+        match: (lab: string) => lab.includes("video"),
+      },
+    ];
+    const tipoList = tipos.map((t) => ({
+      key: normalize(t.key),
+      value: normalize(t.value),
+      raw: t,
+    }));
+    for (const rule of pairs) {
+      if (rule.kw.some((k) => n.includes(normalize(k)))) {
+        // buscar por label o key que haga match
+        const hit = tipoList.find(
+          (t) => rule.match(t.value) || rule.match(t.key)
+        );
+        if (hit) return hit.raw.key;
+      }
+    }
+    // fallback: si coincide exactamente con alguna opción por texto
+    const exact = tipoList.find(
+      (t) => n.includes(t.value) || n.includes(t.key)
+    );
+    return exact ? exact.raw.key : "";
+  }
+
+  // Cuando cambia el nombre, preseleccionar tipo si está vacío o fue autocompletado
+  useEffect(() => {
+    if (!createNombre) return;
+    // solo autocompletar si no fue modificado manualmente (heurística: cuando está vacío)
+    if (!createTipo) {
+      const g = guessTipoKey(createNombre);
+      if (g) setCreateTipo(g);
+    }
+  }, [createNombre, tipos]);
+
+  // Preseleccionar tipo desde el área del coach cuando se abre el modal y haya opciones disponibles
+  useEffect(() => {
+    if (!openCreate) return;
+    if (!coachArea) return;
+    if (!tipos.length) return;
+    if (createTipo) return; // no sobreescribir si el usuario ya eligió
+    const areaN = normalize(coachArea);
+    const match = tipos.find(
+      (t) =>
+        normalize(t.value) === areaN ||
+        normalize(t.key) === areaN ||
+        normalize(t.value).includes(areaN)
+    );
+    if (match) setCreateTipo(match.key);
+  }, [openCreate, coachArea, tipos]);
+
+  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = Array.from(e.target.files ?? []);
+    if (!picked.length) return;
+    setCreateFiles((prev) => {
+      const next = [...prev, ...picked];
+      return next.slice(0, 10);
+    });
+    e.currentTarget.value = "";
+  }
+
+  function removeFileAt(idx: number) {
+    setCreateFiles((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  async function handleCreateSubmit() {
+    if (!selectedAlumno) {
+      toast({ title: "Selecciona un alumno" });
+      return;
+    }
+    if (!createNombre.trim()) {
+      toast({ title: "Escribe un nombre" });
+      return;
+    }
+    const tipo =
+      createTipo || guessTipoKey(createNombre) || (tipos[0]?.key ?? "");
+    if (!tipo) {
+      toast({ title: "No se pudo determinar el tipo" });
+      return;
+    }
+    // Unir descripción + enlaces en un solo campo (si no hay soporte backend específico)
+    let descripcion = createDescripcion.trim();
+    if (links.length) {
+      const block = ["", "Links:", ...links.map((u) => `- ${u}`)].join("\n");
+      descripcion = (descripcion ? descripcion + "\n" : "") + block;
+    }
+    try {
+      setCreating(true);
+      await createTicket({
+        nombre: createNombre.trim(),
+        id_alumno: selectedAlumno,
+        tipo,
+        descripcion: descripcion || undefined,
+        archivos: createFiles.slice(0, 10),
+      });
+      // refrescar lista actual
+      const res = await getCoachTickets({
+        coach: coachCode,
+        page,
+        pageSize,
+        fechaDesde,
+        fechaHasta,
+      });
+      setRows(res.data);
+      setTotal(res.total);
+      // reset modal
+      setOpenCreate(false);
+      setCreateNombre("");
+      setCreateTipo("");
+      setCreateDescripcion("");
+      setLinks([]);
+      setCreateFiles([]);
+      if (audioPreviewUrl) {
+        URL.revokeObjectURL(audioPreviewUrl);
+        setAudioPreviewUrl(null);
+      }
+      toast({ title: "Ticket creado" });
+    } catch (e: any) {
+      toast({ title: e?.message ?? "Error al crear ticket" });
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  function addLink() {
+    const raw = linkInput.trim();
+    if (!raw) return;
+    const url = raw.match(/^https?:\/\//i) ? raw : `https://${raw}`;
+    try {
+      // validar URL simple
+      // eslint-disable-next-line no-new
+      new URL(url);
+      setLinks((prev) => Array.from(new Set([...prev, url])).slice(0, 10));
+      setLinkInput("");
+    } catch {}
+  }
+
+  async function startRecording() {
+    try {
+      if (!(navigator as any)?.mediaDevices?.getUserMedia) return;
+      const stream = await (navigator as any).mediaDevices.getUserMedia({
+        audio: true,
+      });
+      const MR: any = (window as any).MediaRecorder;
+      if (!MR) return;
+      const mr: any = new MR(stream);
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e: any) => {
+        if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      mr.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const url = URL.createObjectURL(blob);
+        setAudioPreviewUrl((prev) => {
+          if (prev) URL.revokeObjectURL(prev);
+          return url;
+        });
+        const file = new File([blob], `grabacion-${Date.now()}.webm`, {
+          type: "audio/webm",
+        });
+        setCreateFiles((prev) => [...prev, file].slice(0, 10));
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setIsRecording(true);
+    } catch {}
+  }
+
+  function stopRecording() {
+    try {
+      const mr = mediaRecorderRef.current;
+      if (mr && mr.state !== "inactive") mr.stop();
+    } catch {}
+    setIsRecording(false);
+  }
 
   useEffect(() => {
     if (!coachCode) return;
@@ -183,7 +485,13 @@ export default function TicketsPanelCoach({
       try {
         setLoading(true);
         setError(null);
-        const res = await getCoachTickets({ coach: coachCode, page, pageSize });
+        const res = await getCoachTickets({
+          coach: coachCode,
+          page,
+          pageSize,
+          fechaDesde,
+          fechaHasta,
+        });
         if (!ctrl.signal.aborted) {
           setRows(res.data);
           setTotal(res.total);
@@ -196,7 +504,7 @@ export default function TicketsPanelCoach({
       }
     })();
     return () => ctrl.abort();
-  }, [coachCode, page, pageSize]);
+  }, [coachCode, page, pageSize, fechaDesde, fechaHasta]);
 
   const combined = useMemo(() => {
     // combinar tickets de API con locales (solo para pruebas de UI)
@@ -339,6 +647,45 @@ export default function TicketsPanelCoach({
             <TicketIcon className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-semibold">Tickets (vista coach)</h3>
           </div>
+          {/* Filtro rápido de fecha */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground">Desde</label>
+              <input
+                type="date"
+                className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm"
+                value={fechaDesde}
+                onChange={(e) => {
+                  setFechaDesde(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground">Hasta</label>
+              <input
+                type="date"
+                className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm"
+                value={fechaHasta}
+                onChange={(e) => {
+                  setFechaHasta(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const hoy = todayYMDLocal();
+                setFechaDesde(hoy);
+                setFechaHasta(hoy);
+                setPage(1);
+              }}
+            >
+              Hoy
+            </Button>
+          </div>
           <Dialog open={openCreate} onOpenChange={setOpenCreate}>
             <DialogTrigger asChild>
               <Button variant="default" size="sm" className="h-8 gap-1.5">
@@ -348,9 +695,44 @@ export default function TicketsPanelCoach({
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
-                <DialogTitle>Crear ticket (local)</DialogTitle>
+                <DialogTitle>Crear ticket</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 py-2">
+                {/* Alumno del coach */}
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    Alumno
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      className="h-9 flex-1"
+                      placeholder="Buscar alumno por nombre o código…"
+                      value={studentQuery}
+                      onChange={(e) => setStudentQuery(e.target.value)}
+                    />
+                  </div>
+                  <select
+                    className="w-full h-9 rounded-md border px-3 text-sm"
+                    value={selectedAlumno}
+                    onChange={(e) => setSelectedAlumno(e.target.value)}
+                  >
+                    {(studentQuery
+                      ? coachStudents.filter((s) => {
+                          const q = normalize(studentQuery);
+                          return (
+                            normalize(s.nombre).includes(q) ||
+                            normalize(s.alumno).includes(q)
+                          );
+                        })
+                      : coachStudents
+                    ).map((s) => (
+                      <option key={s.alumno} value={s.alumno}>
+                        {s.nombre} ({s.alumno})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* Nombre del ticket */}
                 <div className="space-y-1">
                   <label className="text-xs text-muted-foreground">
                     Nombre
@@ -361,20 +743,205 @@ export default function TicketsPanelCoach({
                     placeholder="Asunto del ticket"
                   />
                 </div>
+                {/* Tipo autocompletado con posibilidad de override */}
                 <div className="space-y-1">
                   <label className="text-xs text-muted-foreground">Tipo</label>
-                  <Input
+                  <select
+                    className="w-full h-9 rounded-md border px-3 text-sm"
                     value={createTipo}
                     onChange={(e) => setCreateTipo(e.target.value)}
-                    placeholder="Tipo (libre)"
+                  >
+                    <option value="">(Automático)</option>
+                    {tipos.map((t) => (
+                      <option key={t.id} value={t.key}>
+                        {t.value}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* Descripción / Notas */}
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    Descripción (opcional)
+                  </label>
+                  <textarea
+                    className="w-full min-h-[70px] rounded-md border px-3 py-2 text-sm"
+                    value={createDescripcion}
+                    onChange={(e) => setCreateDescripcion(e.target.value)}
+                    placeholder="Notas del ticket, detalles del caso, etc."
                   />
+                </div>
+                {/* Enlaces */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-muted-foreground">
+                      Enlaces (URL)
+                    </label>
+                    <span className="text-xs text-muted-foreground">
+                      {links.length}/10
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      className="h-9 flex-1"
+                      placeholder="https://…"
+                      value={linkInput}
+                      onChange={(e) => setLinkInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addLink();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addLink}
+                    >
+                      Agregar
+                    </Button>
+                  </div>
+                  {links.length > 0 && (
+                    <ul className="space-y-1 max-h-40 overflow-auto">
+                      {links.map((u, i) => (
+                        <li
+                          key={`${u}-${i}`}
+                          className="flex items-start gap-2 rounded border px-2 py-1 text-xs"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <a
+                              href={u}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="break-all text-blue-600 hover:underline"
+                            >
+                              {u}
+                            </a>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() =>
+                              setLinks((prev) => prev.filter((x) => x !== u))
+                            }
+                          >
+                            Quitar
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                {/* Archivos */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-muted-foreground">
+                      Archivos
+                    </label>
+                    <span className="text-xs text-muted-foreground">
+                      {createFiles.length}/10
+                    </span>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    multiple
+                    onChange={onFileInputChange}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    Elegir archivos
+                  </Button>
+                  {/* Grabación de audio rápida */}
+                  <div className="flex items-center gap-2">
+                    {!isRecording ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={startRecording}
+                      >
+                        Grabar audio
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={stopRecording}
+                      >
+                        Detener
+                      </Button>
+                    )}
+                    {audioPreviewUrl && (
+                      <audio src={audioPreviewUrl} controls className="h-8" />
+                    )}
+                  </div>
+                  {createFiles.length > 0 && (
+                    <ul className="space-y-2">
+                      {previews.map((p, idx) => (
+                        <li
+                          key={`${p.name}-${idx}`}
+                          className="flex h-14 items-center gap-3 rounded border p-2"
+                        >
+                          {p.type.startsWith("image/") ? (
+                            <img
+                              src={p.url}
+                              alt={p.name}
+                              className="h-10 w-10 rounded object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-[10px] font-medium text-muted-foreground">
+                              {p.name.split(".").pop()?.toUpperCase() || "FILE"}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div
+                              className="truncate text-sm font-medium"
+                              title={p.name}
+                            >
+                              {p.name}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {Math.ceil(p.size / 1024)} KB
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFileAt(idx)}
+                          >
+                            Eliminar
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpenCreate(false)}>
                   Cancelar
                 </Button>
-                <Button onClick={handleCreateLocal}>Crear</Button>
+                <Button
+                  onClick={handleCreateSubmit}
+                  disabled={creating || !selectedAlumno || !createNombre.trim()}
+                >
+                  {creating && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Crear
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
