@@ -75,7 +75,9 @@ export default function CoachChatInline({
   const [otherTyping, setOtherTyping] = React.useState(false);
 
   const sioRef = React.useRef<any>(null);
-  const chatIdRef = React.useRef<string | number | null>(socketio?.chatId ?? null);
+  const chatIdRef = React.useRef<string | number | null>(
+    socketio?.chatId ?? null
+  );
   const myParticipantIdRef = React.useRef<string | number | null>(null);
   const seenRef = React.useRef<Set<string>>(new Set());
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
@@ -112,7 +114,6 @@ export default function CoachChatInline({
     chatIdRef.current = chatId;
   }, [chatId]);
 
-  // Auto-scroll solo cuando el usuario está abajo
   React.useEffect(() => {
     requestAnimationFrame(() => {
       try {
@@ -185,7 +186,6 @@ export default function CoachChatInline({
     } catch {}
   }, [chatId, role]);
 
-  // Conectar a Socket.IO
   React.useEffect(() => {
     let alive = true;
     (async () => {
@@ -236,7 +236,6 @@ export default function CoachChatInline({
           } catch {}
         });
 
-  // Mensajes entrantes
         sio.on("chat.message", (msg: any) => {
           try {
             const currentChatId = chatIdRef.current;
@@ -254,15 +253,20 @@ export default function CoachChatInline({
               msg?.id_chat != null &&
               String(msg.id_chat) !== String(currentChatId)
             ) {
-              // de otro chat: disparar refresh de lista (no abrir)
               try {
                 const evt = new CustomEvent("chat:list-refresh", {
-                  detail: { reason: "message-other-chat", id_chat: msg?.id_chat },
+                  detail: {
+                    reason: "message-other-chat",
+                    id_chat: msg?.id_chat,
+                  },
                 });
                 window.dispatchEvent(evt);
-                console.log("[CoachChat] chat.message de otro chat -> refresh lista", {
-                  id_chat: msg?.id_chat,
-                });
+                console.log(
+                  "[CoachChat] chat.message de otro chat -> refresh lista",
+                  {
+                    id_chat: msg?.id_chat,
+                  }
+                );
               } catch {}
               return;
             }
@@ -280,7 +284,6 @@ export default function CoachChatInline({
             const senderIsMeBySession =
               !!msg?.client_session &&
               String(msg.client_session) === String(clientSessionRef.current);
-            // Fallback adicional: comparar con outbox (texto y tiempo cercanos)
             let senderIsMeByOutbox = false;
             try {
               const txt = String(msg?.contenido ?? msg?.texto ?? "").trim();
@@ -300,12 +303,11 @@ export default function CoachChatInline({
               }
             } catch {}
 
-            // Clasificación conservadora para evitar que coach↔coach marque ambos lados como "míos"
             let sender: Sender;
             if (role === "coach") {
               const mineEval =
                 senderIsMeById || senderIsMeBySession || senderIsMeByOutbox;
-              sender = mineEval ? "coach" : "alumno"; // el otro lado no es mío => alinear a la izquierda
+              sender = mineEval ? "coach" : "alumno";
             } else if (role === "alumno") {
               const tipoNorm = normalizeTipo(
                 msg?.participante_tipo ||
@@ -341,13 +343,11 @@ export default function CoachChatInline({
             setItems((prev) => {
               if (sender === role) {
                 const next = [...prev];
-                // Reconciliar con el último mensaje mío con el mismo texto
                 for (let i = next.length - 1; i >= 0; i--) {
                   const mm = next[i];
                   if (mm.sender !== role) continue;
                   if ((mm.text || "").trim() !== (newMsg.text || "").trim())
                     continue;
-                  // Si es optimista o está muy cerca en el tiempo, reemplazar
                   const tNew = Date.parse(newMsg.at || "");
                   const tOld = Date.parse(mm.at || "");
                   const near =
@@ -379,17 +379,22 @@ export default function CoachChatInline({
             }
           } catch {}
         });
-        // Conversación creada en tiempo real (desde otro cliente): refrescar lista
         try {
           sio.on("chat.created", (data: any) => {
             try {
               const evt = new CustomEvent("chat:list-refresh", {
-                detail: { reason: "chat-created", id_chat: data?.id_chat ?? data?.id },
+                detail: {
+                  reason: "chat-created",
+                  id_chat: data?.id_chat ?? data?.id,
+                },
               });
               window.dispatchEvent(evt);
-              console.log("[CoachChat] chat.created recibido -> refresh lista", {
-                id_chat: data?.id_chat ?? data?.id,
-              });
+              console.log(
+                "[CoachChat] chat.created recibido -> refresh lista",
+                {
+                  id_chat: data?.id_chat ?? data?.id,
+                }
+              );
             } catch {}
           });
         } catch {}
@@ -408,7 +413,9 @@ export default function CoachChatInline({
         });
         sio.on("chat.read.all", () => {
           try {
-            console.log("[CoachChat] chat.read.all <= (marcar todos como leídos en UI)");
+            console.log(
+              "[CoachChat] chat.read.all <= (marcar todos como leídos en UI)"
+            );
             setItems((prev) =>
               prev.map((m) =>
                 (m.sender || "").toLowerCase() === role.toLowerCase()
@@ -428,7 +435,6 @@ export default function CoachChatInline({
               String(idChat) !== String(chatId)
             )
               return;
-            // Ignorar eventos de mi misma sesión cliente (evita eco local al escribir)
             if (
               data?.client_session &&
               String(data.client_session) === String(clientSessionRef.current)
@@ -441,8 +447,7 @@ export default function CoachChatInline({
               myPidNow2 != null &&
               String(emitter) === String(myPidNow2)
             )
-              return; // mi propio typing
-            // Mostrar si: client_session es distinta o el emisor está presente (y no es mío)
+              return;
             const hasClientDiff =
               !!data?.client_session &&
               String(data.client_session) !== String(clientSessionRef.current);
@@ -454,13 +459,11 @@ export default function CoachChatInline({
             const isOff = data?.typing === false || data?.on === false;
             if (isOff) return setOtherTyping(false);
             if (!isOn) return;
-            // Mostrar sólo si es del otro lado
             setOtherTyping(true);
             setTimeout(() => setOtherTyping(false), 1800);
           } catch {}
         });
 
-        // Auto-join si tenemos chatId y se permite
         const newId = socketio?.chatId ?? null;
         if (newId != null && (socketio?.autoJoin ?? true)) {
           tryJoin(newId);
@@ -477,7 +480,6 @@ export default function CoachChatInline({
       } catch {}
       sioRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     normRoom,
     role,
@@ -486,7 +488,6 @@ export default function CoachChatInline({
     socketio?.tokenId,
   ]);
 
-  // Join cuando cambia chatId pedido
   React.useEffect(() => {
     const newId = socketio?.chatId ?? null;
     const autoJoin = socketio?.autoJoin ?? true;
@@ -494,13 +495,11 @@ export default function CoachChatInline({
       return;
     latestRequestedChatIdRef.current = newId;
     if (newId == null || !autoJoin) return setIsJoining(false);
-    // evitar rejoin duplicado
     if (String(lastJoinedChatIdRef.current ?? "") === String(newId)) {
       setIsJoining(false);
       return;
     }
     tryJoin(newId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socketio?.chatId, socketio?.autoJoin]);
 
   function tryJoin(id: any) {
@@ -540,12 +539,16 @@ export default function CoachChatInline({
           const parts = data.participants || data.participantes || [];
           joinedParticipantsRef.current = Array.isArray(parts) ? parts : [];
           joinDataRef.current = { participants: joinedParticipantsRef.current };
-          // Inferir my_participante por participantes si no vino explícito
-          if (!myParticipantIdRef.current && role === "coach" && socketio?.idEquipo != null) {
+          if (
+            !myParticipantIdRef.current &&
+            role === "coach" &&
+            socketio?.idEquipo != null
+          ) {
             try {
               const mine = joinedParticipantsRef.current.find(
                 (p: any) =>
-                  String((p?.participante_tipo || "").toLowerCase()) === "equipo" &&
+                  String((p?.participante_tipo || "").toLowerCase()) ===
+                    "equipo" &&
                   String(p?.id_equipo) === String(socketio.idEquipo) &&
                   p?.id_chat_participante != null
               );
@@ -617,7 +620,6 @@ export default function CoachChatInline({
     });
   }
 
-  // Listar conversaciones cuando se pida
   React.useEffect(() => {
     if (!connected) return;
     if (requestListSignal == null) return;
@@ -671,9 +673,13 @@ export default function CoachChatInline({
       sio.emit("chat.list", payload, async (ack: any) => {
         try {
           try {
-            console.log("[CoachChat] chat.list =>", { payload, success: ack?.success, items: Array.isArray(ack?.data) ? ack.data.length : 0 });
+            console.log("[CoachChat] chat.list =>", {
+              payload,
+              success: ack?.success,
+              items: Array.isArray(ack?.data) ? ack.data.length : 0,
+            });
           } catch {}
-          if (ack && ack.success === false) return; // no sobrescribir en error
+          if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
           const baseList: any[] = Array.isArray(list) ? list : [];
           const needEnrich = baseList.some(
@@ -685,7 +691,6 @@ export default function CoachChatInline({
           }
           const now = Date.now();
           if (now - (lastEnrichAtRef.current || 0) < 20000) {
-            // throttle: entregar base si enriquecimiento fue reciente
             onChatsList?.(baseList);
             return;
           }
@@ -723,10 +728,8 @@ export default function CoachChatInline({
         } catch {}
       });
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connected, requestListSignal]);
 
-  // Helper: refrescar listado inmediatamente (para subir el chat tras primer mensaje)
   const refreshListNow = React.useCallback(() => {
     try {
       const sio = sioRef.current;
@@ -751,14 +754,15 @@ export default function CoachChatInline({
           const list = Array.isArray(ack?.data) ? ack.data : [];
           onChatsList?.(list);
           try {
-            console.log("[CoachChat] refreshListNow =>", { items: list.length });
+            console.log("[CoachChat] refreshListNow =>", {
+              items: list.length,
+            });
           } catch {}
         } catch {}
       });
     } catch {}
   }, [connected, role, socketio?.idEquipo, onChatsList]);
 
-  // Emitir read all cuando llegan mensajes y la ventana está visible
   React.useEffect(() => {
     if (!connected || chatId == null) return;
     if (typeof document === "undefined") return;
@@ -768,7 +772,6 @@ export default function CoachChatInline({
       sioRef.current?.emit("chat.read.all", { id_chat: chatId });
       markRead();
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length, connected, chatId]);
 
   async function ensureChatReadyForSend(): Promise<boolean> {
@@ -781,12 +784,14 @@ export default function CoachChatInline({
       if (!Array.isArray(participants) || participants.length === 0)
         return false;
       try {
-        console.log("[CoachChat] ensureChatReadyForSend: sin chatId, buscar/crear", {
-          autoCreate,
-          participants,
-        });
+        console.log(
+          "[CoachChat] ensureChatReadyForSend: sin chatId, buscar/crear",
+          {
+            autoCreate,
+            participants,
+          }
+        );
       } catch {}
-      // Primero intentamos listar y buscar coincidencia por participantes
       const listPayload: any = {};
       if (role === "coach" && socketio?.idEquipo != null) {
         listPayload.participante_tipo = "equipo";
@@ -813,7 +818,13 @@ export default function CoachChatInline({
           resolve([]);
         }
       });
-      try { console.log("[CoachChat] ensureChatReadyForSend: chat.list obtuvo", list.length, "items"); } catch {}
+      try {
+        console.log(
+          "[CoachChat] ensureChatReadyForSend: chat.list obtuvo",
+          list.length,
+          "items"
+        );
+      } catch {}
       const buildKey = (p: any) => {
         const t = normalizeTipo(p?.participante_tipo);
         if (t === "equipo" && p?.id_equipo)
@@ -854,10 +865,15 @@ export default function CoachChatInline({
         return matchedLocal || subsetMatchedLocal || null;
       };
 
-      let matched: any | null = findMatchInList(list);
+      const matched: any | null = findMatchInList(list);
 
       if (matched && (matched.id_chat || matched.id)) {
-        try { console.log("[CoachChat] ensureChatReadyForSend: MATCH existente", matched); } catch {}
+        try {
+          console.log(
+            "[CoachChat] ensureChatReadyForSend: MATCH existente",
+            matched
+          );
+        } catch {}
         return await new Promise<boolean>((resolve) => {
           try {
             sio.emit(
@@ -889,22 +905,28 @@ export default function CoachChatInline({
                     joinDataRef.current = {
                       participants: joinedParticipantsRef.current,
                     };
-                    // Inferir my_participante si no vino explícito
-                    if (!myParticipantIdRef.current && role === "coach" && socketio?.idEquipo != null) {
+                    if (
+                      !myParticipantIdRef.current &&
+                      role === "coach" &&
+                      socketio?.idEquipo != null
+                    ) {
                       try {
                         const mine = joinedParticipantsRef.current.find(
                           (p: any) =>
-                            String((p?.participante_tipo || "").toLowerCase()) === "equipo" &&
-                            String(p?.id_equipo) === String(socketio.idEquipo) &&
+                            String(
+                              (p?.participante_tipo || "").toLowerCase()
+                            ) === "equipo" &&
+                            String(p?.id_equipo) ===
+                              String(socketio.idEquipo) &&
                             p?.id_chat_participante != null
                         );
                         if (mine?.id_chat_participante != null) {
                           setMyParticipantId(mine.id_chat_participante);
-                          myParticipantIdRef.current = mine.id_chat_participante;
+                          myParticipantIdRef.current =
+                            mine.id_chat_participante;
                         }
                       } catch {}
                     }
-                    // mapear mensajes iniciales
                     const msgsSrc = Array.isArray(data.messages)
                       ? data.messages
                       : Array.isArray((data as any).mensajes)
@@ -973,7 +995,6 @@ export default function CoachChatInline({
 
       if (!autoCreate) return false;
 
-      // Crear si está permitido
       return await new Promise<boolean>((resolve) => {
         try {
           sio.emit(
@@ -983,16 +1004,26 @@ export default function CoachChatInline({
               try {
                 if (ack && ack.success && ack.data) {
                   const data = ack.data;
-                  // Intentar extraer id_chat con varios posibles formatos
-                  let cid = data.id_chat ?? data.id ?? data?.chat?.id ?? ack?.id_chat ?? ack?.id ?? null;
+                  const cid =
+                    data.id_chat ??
+                    data.id ??
+                    data?.chat?.id ??
+                    ack?.id_chat ??
+                    ack?.id ??
+                    null;
                   if (cid != null) {
                     setChatId(cid);
                     chatIdRef.current = cid;
                   } else {
-                    console.warn("[CoachChat] CREATE ok pero sin id_chat en ack; intentando localizar por participantes");
+                    console.warn(
+                      "[CoachChat] CREATE ok pero sin id_chat en ack; intentando localizar por participantes"
+                    );
                   }
                   try {
-                    console.log("[CoachChat] CREATE ok", { id_chat: cid, data });
+                    console.log("[CoachChat] CREATE ok", {
+                      id_chat: cid,
+                      data,
+                    });
                   } catch {}
                   const parts = data.participants || data.participantes || [];
                   joinedParticipantsRef.current = Array.isArray(parts)
@@ -1001,12 +1032,16 @@ export default function CoachChatInline({
                   joinDataRef.current = {
                     participants: joinedParticipantsRef.current,
                   };
-                  // Intentar fijar my_participante de inmediato por participantes
-                  if (!myParticipantIdRef.current && role === "coach" && socketio?.idEquipo != null) {
+                  if (
+                    !myParticipantIdRef.current &&
+                    role === "coach" &&
+                    socketio?.idEquipo != null
+                  ) {
                     try {
                       const mine = joinedParticipantsRef.current.find(
                         (p: any) =>
-                          String((p?.participante_tipo || "").toLowerCase()) === "equipo" &&
+                          String((p?.participante_tipo || "").toLowerCase()) ===
+                            "equipo" &&
                           String(p?.id_equipo) === String(socketio.idEquipo) &&
                           p?.id_chat_participante != null
                       );
@@ -1016,80 +1051,94 @@ export default function CoachChatInline({
                       }
                     } catch {}
                   }
-                  // Notificar a la vista local para refrescar lista
                   try {
                     const evt = new CustomEvent("chat:list-refresh", {
                       detail: { reason: "chat-created-local", id_chat: cid },
                     });
                     window.dispatchEvent(evt);
-                    console.log("[CoachChat] dispatch chat:list-refresh (created local)", { id_chat: cid });
+                    console.log(
+                      "[CoachChat] dispatch chat:list-refresh (created local)",
+                      { id_chat: cid }
+                    );
                   } catch {}
                   onChatInfo?.({
                     chatId: cid,
                     myParticipantId: null,
                     participants: joinedParticipantsRef.current,
                   });
-                  // Resolver chatId si no vino en el ack (buscar por participantes)
                   const finalizeWithJoin = (finalChatId: any) => {
-                    // join para asegurar my_participante y mensajes, y resolver sólo cuando lo tengamos
                     let settled = false;
                     const to = setTimeout(() => {
                       if (!settled) {
                         settled = true;
-                        console.warn("[CoachChat] JOIN post-create timeout (resolviendo true sin my_participante aún)");
+                        console.warn(
+                          "[CoachChat] JOIN post-create timeout (resolviendo true sin my_participante aún)"
+                        );
                         resolve(true);
                       }
                     }, 1500);
-                    sio.emit("chat.join", { id_chat: finalChatId }, (ackJoin: any) => {
-                      try {
-                        if (ackJoin && ackJoin.success) {
-                          const dj = ackJoin.data || {};
-                          if (dj.my_participante) {
-                            setMyParticipantId(dj.my_participante);
-                            myParticipantIdRef.current = dj.my_participante;
-                          }
-                          try {
-                            console.log("[CoachChat] JOIN ok (post-create)", {
-                              id_chat: finalChatId,
-                              my_participante: dj?.my_participante ?? null,
-                            });
-                          } catch {}
-                          const parts2 =
-                            dj.participants || dj.participantes || parts;
-                          joinedParticipantsRef.current = Array.isArray(parts2)
-                            ? parts2
-                            : [];
-                          joinDataRef.current = {
-                            participants: joinedParticipantsRef.current,
-                          };
-                          // Reforzar inferencia por participantes
-                          if (!myParticipantIdRef.current && role === "coach" && socketio?.idEquipo != null) {
+                    sio.emit(
+                      "chat.join",
+                      { id_chat: finalChatId },
+                      (ackJoin: any) => {
+                        try {
+                          if (ackJoin && ackJoin.success) {
+                            const dj = ackJoin.data || {};
+                            if (dj.my_participante) {
+                              setMyParticipantId(dj.my_participante);
+                              myParticipantIdRef.current = dj.my_participante;
+                            }
                             try {
-                              const mine = joinedParticipantsRef.current.find(
-                                (p: any) =>
-                                  String((p?.participante_tipo || "").toLowerCase()) === "equipo" &&
-                                  String(p?.id_equipo) === String(socketio.idEquipo) &&
-                                  p?.id_chat_participante != null
-                              );
-                              if (mine?.id_chat_participante != null) {
-                                setMyParticipantId(mine.id_chat_participante);
-                                myParticipantIdRef.current = mine.id_chat_participante;
-                              }
+                              console.log("[CoachChat] JOIN ok (post-create)", {
+                                id_chat: finalChatId,
+                                my_participante: dj?.my_participante ?? null,
+                              });
                             } catch {}
+                            const parts2 =
+                              dj.participants || dj.participantes || parts;
+                            joinedParticipantsRef.current = Array.isArray(
+                              parts2
+                            )
+                              ? parts2
+                              : [];
+                            joinDataRef.current = {
+                              participants: joinedParticipantsRef.current,
+                            };
+                            if (
+                              !myParticipantIdRef.current &&
+                              role === "coach" &&
+                              socketio?.idEquipo != null
+                            ) {
+                              try {
+                                const mine = joinedParticipantsRef.current.find(
+                                  (p: any) =>
+                                    String(
+                                      (p?.participante_tipo || "").toLowerCase()
+                                    ) === "equipo" &&
+                                    String(p?.id_equipo) ===
+                                      String(socketio.idEquipo) &&
+                                    p?.id_chat_participante != null
+                                );
+                                if (mine?.id_chat_participante != null) {
+                                  setMyParticipantId(mine.id_chat_participante);
+                                  myParticipantIdRef.current =
+                                    mine.id_chat_participante;
+                                }
+                              } catch {}
+                            }
                           }
+                        } catch {}
+                        if (!settled) {
+                          settled = true;
+                          clearTimeout(to);
+                          resolve(true);
                         }
-                      } catch {}
-                      if (!settled) {
-                        settled = true;
-                        clearTimeout(to);
-                        resolve(true);
                       }
-                    });
+                    );
                   };
                   if (cid != null) {
                     finalizeWithJoin(cid);
                   } else {
-                    // Buscar el chat recién creado por participantes (hasta 3 intentos)
                     (async () => {
                       let found: any | null = null;
                       for (let i = 0; i < 3; i++) {
@@ -1106,7 +1155,9 @@ export default function CoachChatInline({
                                 withParticipants: true,
                               },
                               (ack2: any) => {
-                                resolve2(Array.isArray(ack2?.data) ? ack2.data : []);
+                                resolve2(
+                                  Array.isArray(ack2?.data) ? ack2.data : []
+                                );
                               }
                             );
                           } catch {
@@ -1123,10 +1174,17 @@ export default function CoachChatInline({
                         const finalId = found.id_chat ?? found.id;
                         setChatId(finalId);
                         chatIdRef.current = finalId;
-                        console.log("[CoachChat] CREATE fallback: localizado chatId por participantes", { id_chat: finalId });
+                        console.log(
+                          "[CoachChat] CREATE fallback: localizado chatId por participantes",
+                          {
+                            id_chat: finalId,
+                          }
+                        );
                         finalizeWithJoin(finalId);
                       } else {
-                        console.warn("[CoachChat] CREATE fallback: no se pudo localizar el chat recién creado");
+                        console.warn(
+                          "[CoachChat] CREATE fallback: no se pudo localizar el chat recién creado"
+                        );
                         resolve(false);
                       }
                     })();
@@ -1159,16 +1217,19 @@ export default function CoachChatInline({
       const sio = sioRef.current;
       if (!sio) return;
       if (chatIdRef.current == null) {
-        console.log("[CoachChat] send(): no chatId, intentando ensureChatReadyForSend");
+        console.log(
+          "[CoachChat] send(): no chatId, intentando ensureChatReadyForSend"
+        );
         const ok = await ensureChatReadyForSend();
         if (chatIdRef.current == null) {
-          // Pequeña espera adicional por si el join terminó de forma ligeramente tardía
           for (let i = 0; i < 15 && chatIdRef.current == null; i++) {
             await new Promise((r) => setTimeout(r, 100));
           }
         }
         if (!ok || chatIdRef.current == null) {
-          console.warn("[CoachChat] send(): abortado, no hay chatId tras ensureChatReadyForSend");
+          console.warn(
+            "[CoachChat] send(): abortado, no hay chatId tras ensureChatReadyForSend"
+          );
           return;
         }
       }
@@ -1188,7 +1249,6 @@ export default function CoachChatInline({
             effectivePid = mine.id_chat_participante;
         }
       }
-      // Espera corta si aún no tenemos pid (join puede demorar)
       if (effectivePid == null) {
         console.log("[CoachChat] send(): esperando my_participante…");
         for (let i = 0; i < 30; i++) {
@@ -1246,7 +1306,7 @@ export default function CoachChatInline({
           id_chat: chatIdRef.current,
           pid: effectivePid,
         });
-        return; // safety: no enviar sin contexto
+        return;
       }
       sio.emit(
         "chat.message.send",
@@ -1272,9 +1332,7 @@ export default function CoachChatInline({
                   (m) => String(m.id) === serverIdStr
                 );
                 if (existingIdx >= 0) {
-                  // Ya llegó el mensaje del servidor (por evento) antes del ack; eliminar el optimista
                   if (optimisticIdx >= 0) next.splice(optimisticIdx, 1);
-                  // Asegurar delivered en el existente
                   next[existingIdx] = {
                     ...next[existingIdx],
                     delivered: !(ack && ack.success === false),
@@ -1293,10 +1351,7 @@ export default function CoachChatInline({
               }
               return next;
             });
-            // Nota: ya no refrescamos la lista en cada envío. La lista
-            // se refresca cuando se crea una nueva conversación vía onChatInfo.
             try {
-              // tras enviar, apagar "escribiendo"
               emitTyping(false);
               if (typingRef.current.timer) {
                 clearTimeout(typingRef.current.timer);
@@ -1332,7 +1387,6 @@ export default function CoachChatInline({
         emitTyping(true);
         state.on = true;
       }
-      // reiniciar temporizador para enviar "false" tras inactividad
       if (state.timer) {
         clearTimeout(state.timer);
       }
@@ -1362,34 +1416,40 @@ export default function CoachChatInline({
 
   return (
     <div className={`flex flex-col w-full min-h-0 ${className || ""}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b bg-white">
-        <div className="min-w-0">
-          <div className="text-sm font-semibold truncate">{title}</div>
-          {subtitle && (
-            <div className="text-xs text-muted-foreground truncate">
-              {subtitle}
-            </div>
-          )}
+      <div className="flex items-center justify-between px-4 py-3 bg-[#075E54] text-white">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-10 w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+            {(title || "C").charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-medium truncate">{title}</div>
+            {subtitle && (
+              <div className="text-xs text-gray-200 truncate">{subtitle}</div>
+            )}
+          </div>
         </div>
-        <div className="text-xs text-muted-foreground">
-          {connected ? "Conectado" : "Desconectado"}
+        <div className="text-xs text-gray-200 flex-shrink-0">
+          {connected ? "en línea" : "desconectado"}
         </div>
       </div>
 
-      {/* Mensajes */}
       <div
         ref={scrollRef}
         onScroll={onScrollContainer}
-        className="flex-1 overflow-y-auto p-3 min-h-0 bg-[#efeae2]"
+        className="flex-1 overflow-y-auto p-4 min-h-0 bg-[#ECE5DD]"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+        }}
       >
         {isJoining && items.length === 0 ? (
           <div className="h-full flex items-center justify-center">
-            <div className="text-xs text-muted-foreground">Cargando…</div>
+            <div className="text-sm text-gray-500">Cargando mensajes…</div>
           </div>
         ) : items.length === 0 ? (
           <div className="h-full flex items-center justify-center">
-            <div className="text-xs text-muted-foreground">Sin mensajes</div>
+            <div className="text-sm text-gray-500 bg-white/60 px-4 py-2 rounded-lg shadow-sm">
+              Sin mensajes aún
+            </div>
           </div>
         ) : (
           items.map((m, idx) => {
@@ -1401,21 +1461,22 @@ export default function CoachChatInline({
             const newGroup = !samePrev;
             const endGroup = !sameNext;
 
-            // Bordes estilo WhatsApp (agrupación)
-            let radius = "rounded-2xl";
+            let radius = "rounded-lg";
             if (isMine) {
-              if (newGroup && !endGroup) radius += " rounded-br-sm";
+              if (newGroup && !endGroup) radius = "rounded-lg rounded-br-sm";
               if (!newGroup && !endGroup)
-                radius += " rounded-tr-sm rounded-br-sm";
-              if (!newGroup && endGroup) radius += " rounded-tr-sm";
+                radius =
+                  "rounded-tr-sm rounded-br-sm rounded-tl-lg rounded-bl-lg";
+              if (!newGroup && endGroup) radius = "rounded-lg rounded-tr-sm";
             } else {
-              if (newGroup && !endGroup) radius += " rounded-bl-sm";
+              if (newGroup && !endGroup) radius = "rounded-lg rounded-bl-sm";
               if (!newGroup && !endGroup)
-                radius += " rounded-tl-sm rounded-bl-sm";
-              if (!newGroup && endGroup) radius += " rounded-tl-sm";
+                radius =
+                  "rounded-tl-sm rounded-bl-sm rounded-tr-lg rounded-br-lg";
+              if (!newGroup && endGroup) radius = "rounded-lg rounded-tl-sm";
             }
 
-            const wrapperMt = newGroup ? "mt-2.5" : "mt-1";
+            const wrapperMt = newGroup ? "mt-2" : "mt-0.5";
 
             return (
               <div
@@ -1425,28 +1486,26 @@ export default function CoachChatInline({
                 } ${wrapperMt}`}
               >
                 <div
-                  className={`w-fit max-w-[75%] px-3 py-2 text-sm shadow ${radius} ${
-                    isMine
-                      ? "bg-[#dcf8c6] text-gray-900"
-                      : "bg-white text-gray-900 border border-gray-200"
+                  className={`w-fit max-w-[75%] px-3 py-2 shadow-sm ${radius} ${
+                    isMine ? "bg-[#DCF8C6]" : "bg-white"
                   }`}
                 >
-                  <div className="whitespace-pre-wrap break-words leading-[1.15]">
+                  <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
                     {m.text}
                   </div>
                   <div
-                    className={`mt-1 text-[10px] ${
+                    className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
                       isMine ? "text-gray-600" : "text-gray-500"
-                    } flex items-center gap-1 justify-end select-none`}
+                    }`}
                   >
-                    {formatTime(m.at)}
+                    <span>{formatTime(m.at)}</span>
                     {isMine && (
                       <span
                         className={`ml-0.5 ${
-                          m.read ? "text-sky-600" : "text-gray-500"
+                          m.read ? "text-[#53BDEB]" : "text-gray-500"
                         }`}
                       >
-                        {m.read ? "✓✓" : "✓"}
+                        {m.read ? "✓✓" : m.delivered ? "✓✓" : "✓"}
                       </span>
                     )}
                   </div>
@@ -1456,14 +1515,35 @@ export default function CoachChatInline({
           })
         )}
         {otherTyping && (
-          <div className="text-xs text-muted-foreground px-2">Escribiendo…</div>
+          <div className="flex justify-start mt-2">
+            <div className="bg-white px-4 py-2 rounded-lg shadow-sm">
+              <div className="flex gap-1">
+                <span
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                ></span>
+                <span
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                ></span>
+                <span
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                ></span>
+              </div>
+            </div>
+          </div>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <div className="px-2 py-2 border-t bg-white">
+      <div className="px-3 py-3 bg-[#F0F0F0] border-t border-gray-200">
         <div className="flex items-center gap-2">
+          <button className="p-2 text-gray-600 hover:text-gray-800 transition-colors">
+            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+            </svg>
+          </button>
           <input
             value={text}
             onChange={(e) => {
@@ -1479,14 +1559,26 @@ export default function CoachChatInline({
               }
             }}
             placeholder="Escribe un mensaje"
-            className="flex-1 border rounded-full px-3 py-2 text-sm"
+            className="flex-1 bg-white border border-gray-300 rounded-full px-4 py-2.5 text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors"
           />
           <button
             onClick={send}
             disabled={!text.trim()}
-            className="px-3 py-2 rounded-full bg-blue-600 text-white text-sm disabled:opacity-50"
+            className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors"
           >
-            Enviar
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+              />
+            </svg>
           </button>
         </div>
       </div>

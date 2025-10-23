@@ -57,7 +57,6 @@ export default function CoachDetailPage({
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  // Estado para chat de equipo (equipo ↔ equipo)
   const [teamsList, setTeamsList] = useState<CoachMini[]>([]);
   const [targetTeamCode, setTargetTeamCode] = useState<string | null>(null);
   const [chatList, setChatList] = useState<any[]>([]);
@@ -69,17 +68,14 @@ export default function CoachDetailPage({
     participants?: any[] | null;
   }>({ chatId: null, myParticipantId: null, participants: null });
   const [chatsLoading, setChatsLoading] = useState<boolean>(true);
-  // Marca de decisión por contacto (evita logs/decisiones repetidas)
   const [decisionStamp, setDecisionStamp] = useState<string | null>(null);
   const [contactQuery, setContactQuery] = useState<string>("");
   const [readsBump, setReadsBump] = useState<number>(0);
 
-  // opciones API for puesto/area (use opcion_key/opcion_value)
   const [puestoOptionsApi, setPuestoOptionsApi] = useState<OpcionItem[]>([]);
   const [areaOptionsApi, setAreaOptionsApi] = useState<OpcionItem[]>([]);
   const [optsLoading, setOptsLoading] = useState(false);
 
-  // edit draft fields separate from coach state
   const [draftNombre, setDraftNombre] = useState("");
   const [draftPuesto, setDraftPuesto] = useState<string | undefined>(undefined);
   const [draftArea, setDraftArea] = useState<string | undefined>(undefined);
@@ -100,13 +96,11 @@ export default function CoachDetailPage({
         if (!ctrl.signal.aborted) setLoading(false);
       }
     })();
-    // Cargar lista de equipos para iniciar chats internos
     (async () => {
       try {
         setChatsLoading(true);
         const list = await getCoaches({ page: 1, pageSize: 200 });
         if (ctrl.signal.aborted) return;
-        // Excluir el propio equipo
         setTeamsList(
           list.filter(
             (t) => (t.codigo || "").toLowerCase() !== (code || "").toLowerCase()
@@ -139,9 +133,7 @@ export default function CoachDetailPage({
 
   function openContact(t: CoachMini) {
     setTargetTeamCode(t.codigo);
-    // reiniciar para que ChatRealtime cree o reutilice según corresponda
     setChatInfo({ chatId: null, myParticipantId: null });
-    // refrescar listado de chats propios por si hay existentes
     setChatsLoading(true);
     setRequestListSignal((n) => n + 1);
     setDecisionStamp(null);
@@ -153,7 +145,6 @@ export default function CoachDetailPage({
     } catch {}
   }
 
-  // Helpers para encontrar conversación existente equipo↔equipo y evitar duplicados visuales
   function normalizeTipo(v: any): "cliente" | "equipo" | "admin" | "" {
     const s = String(v || "")
       .trim()
@@ -206,7 +197,6 @@ export default function CoachDetailPage({
       const t = Date.parse(String(f || ""));
       if (!isNaN(t)) return t;
     }
-    // Fallback: usar id numérico si aplica, o 0
     const idNum = Number(it?.id_chat ?? it?.id ?? 0);
     return isNaN(idNum) ? 0 : idNum;
   }
@@ -246,7 +236,7 @@ export default function CoachDetailPage({
     try {
       const key = `chatLastReadById:coach:${String(chatId)}`;
       const v = localStorage.getItem(key);
-      const t = v ? parseInt(v, 10) : 0;
+      const t = v ? Number.parseInt(v, 10) : 0;
       return isNaN(t) ? 0 : t;
     } catch {
       return 0;
@@ -265,7 +255,6 @@ export default function CoachDetailPage({
     return top?.id_chat ?? top?.id ?? null;
   }
 
-  // Agrupar chats por contacto (equipo destino) y preparar listas para la UI
   const chatsByContact = useMemo(() => {
     const list = Array.isArray(chatList) ? chatList : [];
     const map = new Map<string, any[]>();
@@ -276,7 +265,6 @@ export default function CoachDetailPage({
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(it);
     }
-    // Construir arreglo con metadata útil
     const arr = Array.from(map.entries()).map(([key, chats]) => {
       chats.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
       const targetCode = chatsByKeyToOriginalCode(chats, key);
@@ -289,7 +277,6 @@ export default function CoachDetailPage({
       const lastAt = getChatTimestamp(top);
       const last = getChatLastMessage(top);
       const lastRead = topChatId != null ? getLastReadByChatId(topChatId) : 0;
-      // Si nunca se abrió (lastRead=0) pero hay mensajes (lastAt>0), contar como no leído
       const hasUnread = lastAt > (lastRead || 0);
       return {
         key,
@@ -302,7 +289,6 @@ export default function CoachDetailPage({
         hasUnread,
       };
     });
-    // Ordenar por actividad (más reciente primero)
     arr.sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
     return arr;
   }, [chatList, teamsList, code, readsBump]);
@@ -349,9 +335,6 @@ export default function CoachDetailPage({
     );
   }, [teamsList, chatsByContact, contactQuery]);
 
-  // Eliminado: la decisión se toma exclusivamente en onChatsList y onChatInfo para evitar bucles
-
-  // Hacer una primera carga cuando el chat se conecta (una vez)
   const listRequestedRef = useMemo(() => ({ done: false }), []);
   useEffect(() => {
     if (!chatConnected) return;
@@ -392,11 +375,9 @@ export default function CoachDetailPage({
 
   async function handleDelete() {
     if (!coach) return;
-    // open confirmation dialog
     setDeleteOpen(true);
   }
 
-  // fetch opciones when edit modal opens
   useEffect(() => {
     let mounted = true;
     if (!editOpen)
@@ -413,12 +394,10 @@ export default function CoachDetailPage({
         if (!mounted) return;
         setPuestoOptionsApi(puestosRes ?? []);
         setAreaOptionsApi(areasRes ?? []);
-        // populate draft fields from current coach
         setDraftNombre(coach?.nombre ?? "");
         setDraftPuesto(coach?.puesto ?? undefined);
         setDraftArea(coach?.area ?? undefined);
       } catch (e) {
-        // ignore
       } finally {
         if (mounted) setOptsLoading(false);
       }
@@ -428,7 +407,6 @@ export default function CoachDetailPage({
     };
   }, [editOpen, coach]);
 
-  // Mantener la lista actualizada y badges de no leído
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (!e.key) return;
@@ -541,7 +519,6 @@ export default function CoachDetailPage({
                   </h3>
                   <CoachStudentsInline coachCode={code} />
                 </div>
-                {/* Tickets panel para coach (sin endpoint aún) */}
                 <div>
                   <h3 className="text-sm font-medium mb-2">Tickets (coach)</h3>
                   <TicketsPanelCoach
@@ -553,46 +530,44 @@ export default function CoachDetailPage({
                     }}
                   />
                 </div>
-                {/* Chat de equipo (equipo ↔ equipo) */}
                 <div className="mt-6">
                   <h3 className="text-sm font-medium mb-2">Chat de equipo</h3>
                   <div className="grid grid-cols-5 gap-3">
-                    {/* Contactos estilo WhatsApp */}
                     <div className="col-span-2">
-                      <div className="rounded border bg-white">
-                        <div className="p-2 border-b">
+                      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+                        <div className="p-3 bg-[#F0F0F0] border-b">
                           <input
                             value={contactQuery}
                             onChange={(e) => setContactQuery(e.target.value)}
-                            placeholder="Buscar equipos..."
-                            className="w-full h-8 px-2 text-sm border rounded"
+                            placeholder="Buscar o iniciar un chat"
+                            className="w-full h-9 px-3 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-[#128C7E]"
                           />
                         </div>
-                        <div className="max-h-[40vh] overflow-auto">
+                        <div className="max-h-[40vh] overflow-auto bg-white">
                           {/* Sección: Chats creados */}
-                          <div className="p-2 pb-1 text-[11px] font-semibold text-neutral-600 uppercase tracking-wide">
-                            Chats
+                          <div className="px-3 py-2 text-[13px] font-semibold text-gray-600 bg-[#F0F0F0]">
+                            CHATS
                           </div>
                           {chatsLoading &&
                           filteredChatsByContact.length === 0 ? (
-                            <div className="px-3 pb-2 text-xs text-neutral-500">
+                            <div className="px-4 py-3 text-sm text-gray-500">
                               Cargando…
                             </div>
                           ) : filteredChatsByContact.length === 0 ? (
-                            <div className="px-3 pb-2 text-xs text-neutral-500">
+                            <div className="px-4 py-3 text-sm text-gray-500">
                               Sin chats creados
                             </div>
                           ) : (
-                            <ul className="divide-y">
+                            <ul className="divide-y divide-gray-100">
                               {filteredChatsByContact.map((c) => (
                                 <li key={`chat-${c.key}`}>
                                   <button
-                                    className={`w-full flex items-center gap-3 p-2 hover:bg-neutral-50 text-left ${
+                                    className={`w-full flex items-center gap-3 p-3 hover:bg-[#F5F5F5] text-left transition-colors ${
                                       targetTeamCode?.toLowerCase() ===
                                       c.targetCode.toLowerCase()
-                                        ? "bg-neutral-50"
+                                        ? "bg-[#F0F0F0]"
                                         : c.hasUnread
-                                        ? "bg-amber-50"
+                                        ? "bg-[#FFF9E6]"
                                         : ""
                                     }`}
                                     onClick={() => {
@@ -612,35 +587,37 @@ export default function CoachDetailPage({
                                       } catch {}
                                     }}
                                   >
-                                    <div className="h-8 w-8 rounded-full bg-sky-600 text-white grid place-items-center text-sm font-semibold">
+                                    <div className="h-12 w-12 rounded-full bg-[#128C7E] text-white grid place-items-center text-base font-semibold flex-shrink-0">
                                       {(c.targetName || c.targetCode)
                                         .slice(0, 1)
                                         .toUpperCase()}
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                      <div className="flex items-baseline gap-2">
-                                        <div className="text-sm font-medium truncate">
+                                      <div className="flex items-baseline justify-between gap-2">
+                                        <div className="text-[15px] font-medium truncate text-gray-900">
                                           {c.targetName}
                                         </div>
-                                        <div className="ml-auto text-[11px] text-neutral-500">
+                                        <div className="text-[12px] text-gray-500 flex-shrink-0">
                                           {formatTime(c.lastAt)}
                                         </div>
                                       </div>
-                                      <div
-                                        className={`text-[12px] truncate ${
-                                          c.hasUnread
-                                            ? "text-neutral-900 font-medium"
-                                            : "text-neutral-500"
-                                        }`}
-                                      >
-                                        {c.lastText || c.targetCode}
+                                      <div className="flex items-center gap-2">
+                                        <div
+                                          className={`text-[13px] truncate flex-1 ${
+                                            c.hasUnread
+                                              ? "text-gray-900 font-medium"
+                                              : "text-gray-500"
+                                          }`}
+                                        >
+                                          {c.lastText || c.targetCode}
+                                        </div>
+                                        {c.hasUnread && (
+                                          <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-semibold flex-shrink-0">
+                                            1
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
-                                    {c.hasUnread && (
-                                      <span className="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-2 rounded-full bg-emerald-600 text-white text-[10px] font-semibold">
-                                        1
-                                      </span>
-                                    )}
                                   </button>
                                 </li>
                               ))}
@@ -648,39 +625,39 @@ export default function CoachDetailPage({
                           )}
 
                           {/* Sección: Contactos sin chat */}
-                          <div className="p-2 pb-1 mt-3 text-[11px] font-semibold text-neutral-600 uppercase tracking-wide">
-                            Contactos sin chat
+                          <div className="px-3 py-2 mt-2 text-[13px] font-semibold text-gray-600 bg-[#F0F0F0]">
+                            CONTACTOS
                           </div>
                           {chatsLoading && contactsWithoutChat.length === 0 ? (
-                            <div className="px-3 pb-2 text-xs text-neutral-500">
+                            <div className="px-4 py-3 text-sm text-gray-500">
                               Cargando…
                             </div>
                           ) : contactsWithoutChat.length === 0 ? (
-                            <div className="px-3 pb-2 text-xs text-neutral-500">
+                            <div className="px-4 py-3 text-sm text-gray-500">
                               Sin contactos disponibles
                             </div>
                           ) : (
-                            <ul className="divide-y">
+                            <ul className="divide-y divide-gray-100">
                               {contactsWithoutChat.map((t: CoachMini) => (
                                 <li key={`noc-${t.codigo}`}>
                                   <button
-                                    className={`w-full flex items-center gap-3 p-2 hover:bg-neutral-50 text-left ${
+                                    className={`w-full flex items-center gap-3 p-3 hover:bg-[#F5F5F5] text-left transition-colors ${
                                       targetTeamCode === t.codigo
-                                        ? "bg-neutral-50"
+                                        ? "bg-[#F0F0F0]"
                                         : ""
                                     }`}
                                     onClick={() => openContact(t)}
                                   >
-                                    <div className="h-8 w-8 rounded-full bg-sky-600 text-white grid place-items-center text-sm font-semibold">
+                                    <div className="h-12 w-12 rounded-full bg-[#128C7E] text-white grid place-items-center text-base font-semibold flex-shrink-0">
                                       {(t.nombre || t.codigo)
                                         .slice(0, 1)
                                         .toUpperCase()}
                                     </div>
                                     <div className="min-w-0">
-                                      <div className="text-sm font-medium truncate">
+                                      <div className="text-[15px] font-medium truncate text-gray-900">
                                         {t.nombre}
                                       </div>
-                                      <div className="text-[11px] text-neutral-500">
+                                      <div className="text-[13px] text-gray-500">
                                         {t.codigo}
                                       </div>
                                     </div>
@@ -692,7 +669,6 @@ export default function CoachDetailPage({
                         </div>
                       </div>
                     </div>
-                    {/* Panel de conversación */}
                     <div className="col-span-3">
                       <CoachChatInline
                         key={`chat-${code}-${targetTeamCode ?? "inbox"}`}
@@ -707,7 +683,7 @@ export default function CoachDetailPage({
                           targetTeamCode ? `con ${targetTeamName}` : undefined
                         }
                         variant="card"
-                        className="h-[45vh]"
+                        className="h-[45vh] rounded-lg shadow-sm overflow-hidden"
                         socketio={{
                           url: "https://v001.onrender.com",
                           tokenEndpoint:
@@ -726,23 +702,18 @@ export default function CoachDetailPage({
                                 },
                               ]
                             : undefined,
-                          // Crear conversación al enviar el primer mensaje
                           autoCreate: true,
                           autoJoin: chatInfo.chatId != null,
                           chatId: chatInfo.chatId ?? undefined,
                         }}
                         onConnectionChange={setChatConnected}
                         onChatInfo={(info) => {
-                          // Guardar info cruda
                           setChatInfo(info);
-                          // Al confirmar chat, ya no estamos cargando lista por selección
                           setChatsLoading(false);
-                          // Si antes no había chat y ahora sí, refrescar la lista inmediatamente
                           if (!chatInfo.chatId && info.chatId) {
                             setChatsLoading(true);
                             setRequestListSignal((n) => n + 1);
                           }
-                          // Si ya confirma el par (yo↔target), cerrar decisión como EXISTE
                           try {
                             if (!targetTeamCode) return;
                             const parts = Array.isArray(info.participants)
@@ -789,7 +760,6 @@ export default function CoachDetailPage({
                           } catch {}
                           setChatList(list);
                           setChatsLoading(false);
-                          // Tomar decisión directa con el listado (una sola vez)
                           try {
                             if (!targetTeamCode) return;
                             const existing =
@@ -810,8 +780,6 @@ export default function CoachDetailPage({
                                 myParticipantId: null,
                               });
                             } else {
-                              // Si el listado no contiene participantes fiables no concluimos "NO existe" aquí.
-                              // El componente interno detectará/creará al enviar si no existe.
                             }
                           } catch {}
                         }}
@@ -819,7 +787,6 @@ export default function CoachDetailPage({
                     </div>
                   </div>
                 </div>
-                {/* Tabs removed per UI simplification request */}
               </div>
             ) : (
               <div className="text-sm text-neutral-500">
@@ -827,8 +794,6 @@ export default function CoachDetailPage({
               </div>
             )}
           </div>
-
-          {/* Resumen lateral eliminado a petición */}
         </div>
       </div>
       <CoachStudentsModal
@@ -837,7 +802,6 @@ export default function CoachDetailPage({
         coachCode={code}
         coachName={coach?.nombre ?? null}
       />
-      {/* Edit Coach Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
@@ -923,7 +887,6 @@ export default function CoachDetailPage({
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <DialogContent>
           <DialogHeader>
