@@ -53,6 +53,36 @@ export default function StudentChatPage() {
                 subtitle={`Código: ${room}`}
                 variant="fullscreen"
                 className="h-full"
+                transport="socketio"
+                socketio={{
+                  // Usa misma origin por defecto; cambia NEXT_PUBLIC_SOCKET_URL si hace falta
+                  url: process.env.NEXT_PUBLIC_SOCKET_URL,
+                  tokenEndpoint:
+                    process.env.NEXT_PUBLIC_CHAT_TOKEN_ENDPOINT ||
+                    "https://v001.vercel.app/v1/auth/token",
+                  tokenId: room,
+                  // Config por defecto segun el ejemplo provisto; ajusta via env si es necesario
+                  idCliente:
+                    Number(process.env.NEXT_PUBLIC_CHAT_ID_CLIENTE) || 456,
+                  idEquipo:
+                    Number(process.env.NEXT_PUBLIC_CHAT_ID_EQUIPO) || 789,
+                  participants: [
+                    {
+                      participante_tipo: "cliente",
+                      id_cliente:
+                        Number(process.env.NEXT_PUBLIC_CHAT_ID_CLIENTE) || 456,
+                      id_equipo:
+                        Number(process.env.NEXT_PUBLIC_CHAT_ID_EQUIPO) || 789,
+                    },
+                    {
+                      participante_tipo: "equipo",
+                      id_equipo:
+                        Number(process.env.NEXT_PUBLIC_CHAT_ID_EQUIPO) || 789,
+                    },
+                  ],
+                  autoCreate: true,
+                  autoJoin: true,
+                }}
               />
             </div>
           )}

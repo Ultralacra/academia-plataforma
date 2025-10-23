@@ -52,6 +52,7 @@ const adminItems: MenuItem[] = [
   { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
   { title: "Tickets", url: "/admin/tickets-board", icon: MessageSquare },
   { title: "Chat", url: "/chat", icon: MessageSquare },
+  { title: "Chat Beta", url: "/chat/beta", icon: MessageSquare },
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
   // Grupo colapsable renombrado a “Métricas”

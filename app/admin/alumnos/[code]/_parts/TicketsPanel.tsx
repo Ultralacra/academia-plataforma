@@ -48,6 +48,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 
 /* ========= helpers ========= */
 
@@ -136,6 +137,8 @@ export default function TicketsPanel({
   student: StudentItem;
   onChangedTickets?: (count: number) => void;
 }) {
+  const { user } = useAuth();
+  const isStudent = (user?.role || "").toLowerCase() === "student";
   const [loading, setLoading] = useState(true);
   const [all, setAll] = useState<StudentTicket[]>([]);
   const [query, setQuery] = useState("");
@@ -435,6 +438,14 @@ export default function TicketsPanel({
   }
 
   async function handleChangeEstado(ticketId: string, newEstado: string) {
+    if (isStudent) {
+      toast({
+        title: "Acción no permitida",
+        description: "Los alumnos no pueden editar el estado de los tickets.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       // Buscar el ticket por id y obtener su codigo (UUID)
       const ticket = all.find((t) => t.id === ticketId);
@@ -638,12 +649,27 @@ export default function TicketsPanel({
               <TicketIcon className="h-4 w-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold">Tickets del alumno</h3>
             </div>
-            <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+            <Dialog
+              open={!isStudent && openCreate}
+              onOpenChange={setOpenCreate}
+            >
               <DialogTrigger asChild>
-                <Button variant="default" size="sm" className="h-8 gap-1.5">
-                  <Plus className="h-3.5 w-3.5" />
-                  Nuevo
-                </Button>
+                <span>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    disabled={isStudent}
+                    title={
+                      isStudent
+                        ? "Los alumnos no pueden crear tickets desde este panel"
+                        : undefined
+                    }
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Nuevo
+                  </Button>
+                </span>
               </DialogTrigger>
               <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
@@ -857,7 +883,10 @@ export default function TicketsPanel({
                   <Button
                     onClick={handleCreateSubmit}
                     disabled={
-                      creating || !createNombre.trim() || !createTipo.trim()
+                      isStudent ||
+                      creating ||
+                      !createNombre.trim() ||
+                      !createTipo.trim()
                     }
                   >
                     {creating && (
@@ -945,9 +974,21 @@ export default function TicketsPanel({
                   <div
                     key={col}
                     className="min-h-[120px] rounded-md border border-gray-200 bg-white p-3"
-                    onDragOver={(e) => e.preventDefault()}
+                    onDragOver={(e) => {
+                      if (isStudent) return; // no permitir dragover si es alumno
+                      e.preventDefault();
+                    }}
                     onDrop={async (e) => {
                       e.preventDefault();
+                      if (isStudent) {
+                        toast({
+                          title: "Acción no permitida",
+                          description:
+                            "Los alumnos no pueden cambiar el estado de los tickets.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
                       const ticketId = e.dataTransfer.getData("text/plain");
                       if (!ticketId) return;
                       // Optimistic UI: move locally first
@@ -993,8 +1034,9 @@ export default function TicketsPanel({
                       {itemsForCol.map((t) => (
                         <div
                           key={t.id}
-                          draggable
+                          draggable={!isStudent}
                           onDragStart={(e) => {
+                            if (isStudent) return;
                             try {
                               e.dataTransfer.setData(
                                 "text/plain",

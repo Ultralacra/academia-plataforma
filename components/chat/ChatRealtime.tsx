@@ -1,6 +1,8 @@
 "use client";
 
 import React from "react";
+import Spinner from "@/components/ui/spinner";
+import MessageBubble from "@/components/chat/MessageBubble";
 // chat: disable snackbars in-chat — use console.debug for non-intrusive messages
 import {
   Smile,
@@ -13,6 +15,8 @@ import {
   Sparkles,
   FileText,
   MessageSquare,
+  CheckCheck,
+  Check,
 } from "lucide-react";
 import {
   Popover,
@@ -42,7 +46,7 @@ type Attachment = {
   name: string;
   mime: string;
   size: number;
-  data_base64: string; // opcional en render, presente al enviar
+  data_base64: string;
 };
 
 type Message = {
@@ -54,9 +58,24 @@ type Message = {
   attachments?: Attachment[];
   status?: string;
   phase?: string;
+  delivered?: boolean;
+  read?: boolean;
+  srcParticipantId?: string | number;
 };
 
-type Transport = "ws" | "local" | "sse";
+type Transport = "ws" | "local" | "sse" | "socketio";
+
+type SocketIOChatOptions = {
+  url?: string;
+  tokenEndpoint?: string;
+  tokenId?: string;
+  participants?: Array<any>;
+  idCliente?: number | string;
+  idEquipo?: number | string;
+  autoCreate?: boolean;
+  autoJoin?: boolean;
+  chatId?: number | string;
+};
 
 type TicketType =
   | "tecnico"
@@ -79,6 +98,16 @@ export default function ChatRealtime({
   showGenerateTicket = true,
   showFilter = true,
   showSelect = true,
+  socketio,
+  onConnectionChange,
+  onChatInfo,
+  onChatsList,
+  requestListSignal,
+  listOnConnect = false,
+  showTypingIndicator = true,
+  showReadControls = false,
+  // listParams: payload opcional para chat.list (e.g., { participante_tipo, id_cliente|id_equipo })
+  listParams,
 }: {
   room: string;
   role?: Sender;
@@ -92,6 +121,19 @@ export default function ChatRealtime({
   showGenerateTicket?: boolean;
   showFilter?: boolean;
   showSelect?: boolean;
+  socketio?: SocketIOChatOptions;
+  onConnectionChange?: (connected: boolean) => void;
+  onChatInfo?: (info: {
+    chatId: number | string | null;
+    myParticipantId: number | string | null;
+    participants?: any[] | null;
+  }) => void;
+  onChatsList?: (list: any[]) => void;
+  requestListSignal?: number;
+  listOnConnect?: boolean;
+  showTypingIndicator?: boolean;
+  showReadControls?: boolean;
+  listParams?: any;
 }) {
   const normRoom = React.useMemo(
     () => (room || "").trim().toLowerCase(),
@@ -132,21 +174,225 @@ export default function ChatRealtime({
   }, [items, statusFilter, phaseFilter]);
 
   const wsRef = React.useRef<WebSocket | null>(null);
+  const sioRef = React.useRef<any | null>(null);
   const bcRef = React.useRef<BroadcastChannel | null>(null);
   const esRef = React.useRef<EventSource | null>(null);
   const pendingRef = React.useRef<any[]>([]);
   const seenRef = React.useRef<Set<string>>(new Set());
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
+  const scrollRef = React.useRef<HTMLDivElement | null>(null);
+  const pinnedToBottomRef = React.useRef<boolean>(true);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [connected, setConnected] = React.useState(false);
   const WS_OPEN = typeof WebSocket !== "undefined" ? WebSocket.OPEN : 1;
+
+  // Estado específico de Socket.IO
+  const [chatId, setChatId] = React.useState<number | string | null>(null);
+  const [myParticipantId, setMyParticipantId] = React.useState<
+    number | string | null
+  >(null);
+  const [otherTyping, setOtherTyping] = React.useState<boolean>(false);
+  const otherTypingTimerRef = React.useRef<any>(null);
+  const lastReadEmitRef = React.useRef<number>(0);
+  const createdRef = React.useRef<boolean>(false);
+  const joinedRef = React.useRef<boolean>(false);
+  const listOnceRef = React.useRef<boolean>(false);
+  // Mantener una referencia estable de los participantes para evitar re-ejecuciones por identidad del array
+  const participantsRef = React.useRef<any[] | undefined>(undefined);
+  const participantsKey = React.useMemo(() => {
+    try {
+      return JSON.stringify(socketio?.participants ?? null);
+    } catch {
+      return "null";
+    }
+  }, [socketio?.participants]);
+  React.useEffect(() => {
+    participantsRef.current = Array.isArray(socketio?.participants)
+      ? socketio?.participants
+      : undefined;
+  }, [participantsKey]);
+
+  const [isJoining, setIsJoining] = React.useState<boolean>(false);
+  // Recordar el último id_participante usado para enviar (para clasificar el eco como "mío" si aún no hay myParticipantId)
+  const lastSentParticipantIdRef = React.useRef<any>(null);
+  // Guardar últimos participantes recibidos en join/create para resoluciones posteriores
+  const joinedParticipantsRef = React.useRef<any[]>([]);
+  // Evitar dobles creaciones al enviar por primera vez
+  const creatingRef = React.useRef<boolean>(false);
+  // Evitar dobles joins cuando cambia chatId o al montar
+  const joinInFlightRef = React.useRef<boolean>(false);
+  const lastJoinedChatIdRef = React.useRef<any>(null);
+  // Throttles para list/enrich
+  const lastListRefreshAtRef = React.useRef<number>(0);
+  const lastEnrichAtRef = React.useRef<number>(0);
+  // Mantener refs de autoJoin/chatId para abortar detecciones si cambian
+  const latestAutoJoinRef = React.useRef<boolean>(socketio?.autoJoin ?? true);
+  const latestChatIdRef = React.useRef<any>(socketio?.chatId ?? null);
+  React.useEffect(() => {
+    latestAutoJoinRef.current = socketio?.autoJoin ?? true;
+  }, [socketio?.autoJoin]);
+  React.useEffect(() => {
+    latestChatIdRef.current = socketio?.chatId ?? null;
+  }, [socketio?.chatId]);
+  // Identificador de sesión para ignorar ecos propios en eventos sin emisor explícito
+  const clientSessionRef = React.useRef<string>(
+    `sess-${Math.random().toString(36).slice(2, 10)}-${Date.now()}`
+  );
+
+  // Trackear última solicitud de chatId para evitar remounts innecesarios
+  const prevRequestedChatIdRef = React.useRef<any>(null);
+  // Outbox local para reconciliar mensajes optimistas con acks entrantes
+  const outboxRef = React.useRef<
+    Array<{ clientId: string; text: string; at: number; pid?: any }>
+  >([]);
+
+  // Normalización de tipo de participante proveniente del backend
+  function normalizeTipo(raw: any): "cliente" | "equipo" | "admin" | "" {
+    const v = String(raw || "")
+      .trim()
+      .toLowerCase();
+    if (!v) return "";
+    if (["cliente", "alumno", "student"].includes(v)) return "cliente";
+    if (["equipo", "coach", "entrenador"].includes(v)) return "equipo";
+    if (["admin", "administrador"].includes(v)) return "admin";
+    return "";
+  }
+  // Buscar tipo por id_chat_participante usando los participantes del último join
+  function getTipoByParticipantId(
+    idChatParticipante: any
+  ): "cliente" | "equipo" | "admin" | "" {
+    const idStr = String(idChatParticipante ?? "");
+    if (!idStr) return "";
+    const list = Array.isArray(joinedParticipantsRef.current)
+      ? joinedParticipantsRef.current
+      : [];
+    const found = list.find(
+      (p) => String(p?.id_chat_participante ?? "") === idStr
+    );
+    return normalizeTipo(found?.participante_tipo);
+  }
+
+  // Asignar mi id de participante desde una lista de participantes
+  function assignMyParticipantIdFromList(
+    participants: any[] | undefined | null
+  ) {
+    try {
+      const list = Array.isArray(participants) ? participants : [];
+      joinedParticipantsRef.current = list;
+      let mine: any = null;
+      if (currentRole === "alumno") {
+        if (socketio?.idCliente != null) {
+          mine = list.find(
+            (p) =>
+              normalizeTipo(p?.participante_tipo) === "cliente" &&
+              String(p?.id_cliente) === String(socketio?.idCliente)
+          );
+        }
+        if (!mine) {
+          const clientes = list.filter(
+            (p) => normalizeTipo(p?.participante_tipo) === "cliente"
+          );
+          // Solo asignar por unicidad, nunca elegir arbitrariamente si hay varios clientes
+          if (clientes.length === 1) mine = clientes[0];
+        }
+      } else if (currentRole === "coach") {
+        if (socketio?.idEquipo != null) {
+          mine = list.find(
+            (p) =>
+              normalizeTipo(p?.participante_tipo) === "equipo" &&
+              String(p?.id_equipo) === String(socketio?.idEquipo)
+          );
+        }
+        if (!mine) {
+          const equipos = list.filter(
+            (p) => normalizeTipo(p?.participante_tipo) === "equipo"
+          );
+          // Solo asignar por unicidad, nunca elegir arbitrariamente si hay varios equipos
+          if (equipos.length === 1) mine = equipos[0];
+        }
+      }
+      if (mine?.id_chat_participante != null) {
+        setMyParticipantId(mine.id_chat_participante);
+      }
+    } catch {}
+  }
+
+  // Claves para comparar grupos de participantes (para evitar duplicados)
+  function participantKey(p: any): string {
+    const tipo = normalizeTipo(p?.participante_tipo || p?.tipo);
+    let id = "";
+    if (tipo === "cliente") id = String(p?.id_cliente ?? "");
+    else if (tipo === "equipo") id = String(p?.id_equipo ?? "");
+    else id = String(p?.id ?? "");
+    return `${tipo}:${id}`;
+  }
+  function buildKeySetFromArray(arr: any[] | null | undefined): Set<string> {
+    const list = Array.isArray(arr) ? arr : [];
+    const keys = list
+      .map((p) => participantKey(p))
+      .filter((k) => !!k && !k.startsWith(":"));
+    return new Set(keys);
+  }
+  function equalKeySets(a: Set<string>, b: Set<string>): boolean {
+    if (a.size !== b.size) return false;
+    for (const k of a) if (!b.has(k)) return false;
+    return true;
+  }
+  function isSubsetSet(a: Set<string>, b: Set<string>): boolean {
+    // ¿a ⊆ b?
+    for (const k of a) if (!b.has(k)) return false;
+    return true;
+  }
+
+  const listParamsRef = React.useRef<any>({});
+
+  // Mantener listParams estable via ref para evitar re-renders que disparen list
+  React.useEffect(() => {
+    listParamsRef.current =
+      listParams && typeof listParams === "object" ? { ...listParams } : {};
+  }, [listParams]);
+
+  // Notificar cambios de conexión al padre si lo pide
+  React.useEffect(() => {
+    try {
+      onConnectionChange?.(connected);
+    } catch {}
+  }, [connected]);
+
+  // Notificar info del chat (chatId/mi participante)
+  React.useEffect(() => {
+    try {
+      onChatInfo?.({
+        chatId,
+        myParticipantId,
+        participants: joinedParticipantsRef.current || null,
+      });
+    } catch {}
+  }, [chatId, myParticipantId]);
 
   const storageKey = React.useMemo(() => `localChat:${normRoom}`, [normRoom]);
   const lastReadKey = React.useMemo(
     () => `chatLastRead:${normRoom}:${currentRole}`,
     [normRoom, currentRole]
   );
+
+  // Guardar lectura por chatId para que la bandeja pueda calcular no leídos
+  const markReadByChatId = React.useCallback(() => {
+    try {
+      if (chatId == null) return;
+      const key = `chatLastReadById:${currentRole}:${String(chatId)}`;
+      localStorage.setItem(key, Date.now().toString());
+      // Notificar en este mismo tab (storage no se dispara en la misma pestaña)
+      try {
+        window.dispatchEvent(
+          new CustomEvent("chat:last-read-updated", {
+            detail: { chatId, role: currentRole, at: Date.now() },
+          })
+        );
+      } catch {}
+    } catch {}
+  }, [chatId, currentRole]);
 
   const markRead = React.useCallback(() => {
     try {
@@ -155,8 +401,10 @@ export default function ChatRealtime({
         "chatLastReadPing",
         `${normRoom}:${currentRole}:${Date.now()}`
       );
+      // Además, guardar por chatId
+      markReadByChatId();
     } catch {}
-  }, [lastReadKey, normRoom, currentRole]);
+  }, [lastReadKey, normRoom, currentRole, markReadByChatId]);
 
   React.useEffect(() => setCurrentRole(role), [role]);
 
@@ -262,6 +510,1064 @@ export default function ChatRealtime({
       wsRef.current = null;
     };
   }, [transport, normRoom, currentRole, markRead]);
+
+  // Transporte Socket.IO (servidor externo que habla con eventos chat.*)
+  React.useEffect(() => {
+    if (transport !== "socketio") return;
+    let alive = true;
+    (async () => {
+      // Reinicia banderas por si cambiaron props (evita multi-create/join)
+      createdRef.current = false;
+      joinedRef.current = false;
+      try {
+        const url = socketio?.url || undefined;
+        const tokenEndpoint =
+          socketio?.tokenEndpoint || "https://v001.onrender.com/v1/auth/token";
+        const tokenId = socketio?.tokenId || `${currentRole}:${normRoom}`;
+        // 1) Obtener token
+        const res = await fetch(tokenEndpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: tokenId }),
+        });
+        const json = await res.json().catch(() => ({}));
+        const token = json?.token as string | undefined;
+        if (!token) throw new Error("No se pudo obtener token de chat");
+        // 2) Conectarse via socket.io
+        const { io } = await import("socket.io-client");
+        const sio = url
+          ? io(url, {
+              auth: { token },
+              transports: ["websocket", "polling"],
+              timeout: 20000,
+            })
+          : io({
+              auth: { token },
+              transports: ["websocket", "polling"],
+              timeout: 20000,
+            });
+        sioRef.current = sio;
+        sio.on("connect", () => {
+          if (!alive) return;
+          setConnected(true);
+          // Al reconectar, permitir una sola emisión si listOnConnect=true
+          listOnceRef.current = false;
+        });
+        sio.on("disconnect", () => {
+          if (!alive) return;
+          setConnected(false);
+        });
+        // 3) Escuchar mensajes entrantes
+        sio.on("chat.message", (msg: any) => {
+          if (!alive) return;
+          try {
+            try {
+              console.debug("[chat.message] <=", {
+                id_chat: msg?.id_chat,
+                id_mensaje: msg?.id_mensaje,
+                id_chat_participante_emisor: msg?.id_chat_participante_emisor,
+              });
+            } catch {}
+            // Si tenemos chatId actual y el mensaje pertenece a otro chat, ignorar
+            if (
+              chatId != null &&
+              msg?.id_chat != null &&
+              String(msg.id_chat) !== String(chatId)
+            ) {
+              return;
+            }
+            const id = String(
+              msg?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+            );
+            if (seenRef.current.has(id)) return;
+            seenRef.current.add(id);
+            const senderIsMeById =
+              (myParticipantId != null &&
+                String(msg?.id_chat_participante_emisor ?? "") ===
+                  String(myParticipantId)) ||
+              (lastSentParticipantIdRef.current != null &&
+                String(msg?.id_chat_participante_emisor ?? "") ===
+                  String(lastSentParticipantIdRef.current));
+            const otherRoleByPanel: Sender = (() => {
+              if (currentRole === "alumno") {
+                return socketio?.idEquipo != null ? "coach" : "admin";
+              }
+              if (currentRole === "coach") return "alumno";
+              return "alumno";
+            })();
+            const tipoNorm = normalizeTipo(
+              msg?.participante_tipo ||
+                getTipoByParticipantId(msg?.id_chat_participante_emisor)
+            );
+            const senderFromTipo: Sender | null = (() => {
+              if (!tipoNorm) return null;
+              if (tipoNorm === "cliente") return "alumno";
+              if (tipoNorm === "equipo") return "coach";
+              return "admin";
+            })();
+            const senderIsMineByTipo = (() => {
+              if (!tipoNorm) return false;
+              if (currentRole === "alumno") {
+                return (
+                  tipoNorm === "cliente" &&
+                  socketio?.idCliente != null &&
+                  String(msg?.id_cliente ?? "") === String(socketio?.idCliente)
+                );
+              }
+              if (currentRole === "coach") {
+                return (
+                  tipoNorm === "equipo" &&
+                  socketio?.idEquipo != null &&
+                  String(msg?.id_equipo ?? "") === String(socketio?.idEquipo)
+                );
+              }
+              return false;
+            })();
+            const sender: Sender =
+              senderIsMeById || senderIsMineByTipo
+                ? currentRole
+                : otherRoleByPanel;
+            const newMsg: Message = {
+              id,
+              room: normRoom,
+              sender,
+              text: String(msg?.contenido ?? ""),
+              at: String(msg?.fecha_envio || new Date().toISOString()),
+              delivered: true,
+              read: false,
+              srcParticipantId: msg?.id_chat_participante_emisor,
+            };
+            setItems((prev) => {
+              // Intentar reconciliar con mensaje optimista (mío) para evitar duplicados
+              if (sender === currentRole) {
+                const next = [...prev];
+                for (let i = next.length - 1; i >= 0; i--) {
+                  const mm = next[i];
+                  if (
+                    mm.sender === currentRole &&
+                    mm.text === newMsg.text &&
+                    mm.delivered === false
+                  ) {
+                    next[i] = { ...newMsg, read: mm.read || false };
+                    return next;
+                  }
+                }
+              }
+              return [...prev, newMsg];
+            });
+            if (
+              typeof document !== "undefined" &&
+              document.visibilityState === "visible"
+            )
+              markRead();
+            // Si aún no conocemos myParticipantId pero este mensaje es "mío", tomar su id_participante
+            if (
+              (myParticipantId == null || myParticipantId === "") &&
+              sender === currentRole &&
+              msg?.id_chat_participante_emisor != null
+            ) {
+              try {
+                console.debug(
+                  "[chat.message] derivado myParticipantId desde message <=",
+                  msg?.id_chat_participante_emisor
+                );
+              } catch {}
+              setMyParticipantId(msg.id_chat_participante_emisor);
+            }
+          } catch {}
+        });
+        // Recibimos notificaciones de lectura
+        sio.on("chat.message.read", (data: any) => {
+          try {
+            const idMsg = data?.id_mensaje ?? data?.id ?? null;
+            if (!idMsg) return;
+            setItems((prev) =>
+              prev.map((m) =>
+                String(m.id) === String(idMsg) ? { ...m, read: true } : m
+              )
+            );
+          } catch {}
+        });
+        sio.on("chat.read.all", (_: any) => {
+          try {
+            // Marcar todos mis mensajes como leídos
+            setItems((prev) =>
+              prev.map((m) =>
+                (m.sender || "").toLowerCase() ===
+                (currentRole || "").toLowerCase()
+                  ? { ...m, read: true }
+                  : m
+              )
+            );
+          } catch {}
+        });
+        // Typing indicator (on/off)
+        sio.on("chat.typing", (data: any) => {
+          try {
+            if (!showTypingIndicator) return;
+            const idChat = data?.id_chat ?? data?.chatId ?? null;
+            if (
+              idChat != null &&
+              chatId != null &&
+              String(idChat) !== String(chatId)
+            ) {
+              return; // evento de otro chat
+            }
+            // Si el backend reenvía a todos sin emisor, usa client_session para ignorar el propio
+            if (
+              data?.client_session &&
+              String(data.client_session) === String(clientSessionRef.current)
+            ) {
+              return;
+            }
+            // Si no viene el emisor y tampoco viene una client_session, ignora para evitar eco local
+            const emitterPid =
+              data?.id_chat_participante_emisor ?? data?.emisor ?? null;
+            if (
+              (emitterPid == null || emitterPid === "") &&
+              (!data?.client_session || data?.client_session === "")
+            ) {
+              return;
+            }
+            const isOn = data?.typing === true || data?.on === true;
+            const isOff = data?.typing === false || data?.on === false;
+            if (isOff) {
+              setOtherTyping(false);
+              return;
+            }
+            if (!isOn) return;
+            // Ignorar si el emisor soy yo (cuando el backend re-emite a todos)
+            if (
+              emitterPid != null &&
+              (myParticipantId != null ||
+                lastSentParticipantIdRef.current != null)
+            ) {
+              const mineById =
+                myParticipantId != null &&
+                String(emitterPid) === String(myParticipantId);
+              const mineByLast =
+                lastSentParticipantIdRef.current != null &&
+                String(emitterPid) === String(lastSentParticipantIdRef.current);
+              if (mineById || mineByLast) {
+                try {
+                  console.debug("[chat.typing] ignored self", {
+                    emitterPid,
+                    clientSession: data?.client_session,
+                  });
+                } catch {}
+                return;
+              }
+            }
+            if (!otherTyping) {
+              try {
+                console.debug("[chat.typing] <= show typing", {
+                  idChat,
+                  emitterPid: data?.id_chat_participante_emisor,
+                  clientSession: data?.client_session,
+                });
+              } catch {}
+            }
+            setOtherTyping(true);
+            if (otherTypingTimerRef.current)
+              clearTimeout(otherTypingTimerRef.current);
+            otherTypingTimerRef.current = setTimeout(
+              () => setOtherTyping(false),
+              1800
+            );
+          } catch {}
+        });
+
+        // 4) Crear o unirse al chat automáticamente si se pide
+        const wantCreate = socketio?.autoCreate ?? true;
+        const wantJoin = socketio?.autoJoin ?? true;
+        const initialChatId = socketio?.chatId ?? null;
+
+        // Si cambió el chat solicitado, limpiamos UI y preparamos skeleton
+        if (
+          String(prevRequestedChatIdRef.current ?? "") !==
+          String(initialChatId ?? "")
+        ) {
+          prevRequestedChatIdRef.current = initialChatId;
+          setIsJoining(true);
+          setItems([]);
+          seenRef.current = new Set();
+          setChatId(null);
+          setOtherTyping(false);
+        }
+
+        // Delegar SIEMPRE a la versión conservadora para no confundir "mi" participante
+        function assignMyParticipantId(participants: any[] | undefined | null) {
+          assignMyParticipantIdFromList(participants);
+        }
+
+        if (
+          wantCreate &&
+          !initialChatId &&
+          Array.isArray(socketio?.participants) &&
+          !createdRef.current
+        ) {
+          // Find-or-create: antes de crear, buscar si ya existe un chat compatible con los participantes deseados
+          createdRef.current = true; // evita dobles intentos si el effect re-ejecuta
+          try {
+            const desiredSet = buildKeySetFromArray(socketio!.participants);
+            try {
+              console.debug("[find-or-create] participantes deseados =>", {
+                desired: Array.from(desiredSet.values()),
+                raw: socketio!.participants,
+              });
+            } catch {}
+            const listPayload: any = {};
+            if (socketio?.idCliente != null) {
+              listPayload.participante_tipo = "cliente";
+              listPayload.id_cliente = String(socketio.idCliente);
+            } else if (socketio?.idEquipo != null) {
+              // Si solo tenemos equipo, listamos por equipo
+              listPayload.participante_tipo = "equipo";
+              listPayload.id_equipo = String(socketio.idEquipo);
+            }
+            // Si tenemos ambos (cliente y equipo), añadimos ambos filtros para acotar mejor
+            if (socketio?.idEquipo != null) {
+              listPayload.id_equipo = String(socketio.idEquipo);
+            }
+            const tryList = new Promise<any[]>((resolve) => {
+              try {
+                if (!listPayload.participante_tipo) return resolve([]);
+                sio.emit("chat.list", listPayload, (ack: any) => {
+                  const list: any[] = Array.isArray(ack?.data) ? ack.data : [];
+                  resolve(list);
+                });
+              } catch {
+                resolve([]);
+              }
+            });
+            const list = await tryList;
+            let matched: any | null = null;
+            let subsetMatched: any | null = null;
+            try {
+              console.debug("[find-or-create] chats listados =>", list);
+            } catch {}
+            // Intentar macheo por participantes si vienen en el payload del listado
+            for (const it of list) {
+              const parts = it?.participants || it?.participantes || [];
+              const remoteSet = buildKeySetFromArray(parts);
+              const hasParts = remoteSet.size > 0;
+              if (hasParts) {
+                const eq = equalKeySets(desiredSet, remoteSet);
+                const sub = isSubsetSet(desiredSet, remoteSet);
+                try {
+                  console.debug("[find-or-create] comparar", {
+                    id_chat: it?.id_chat ?? it?.id,
+                    remote: Array.from(remoteSet.values()),
+                    equal: eq,
+                    subset: sub,
+                  });
+                } catch {}
+                if (eq) {
+                  matched = it;
+                  break;
+                }
+                if (!subsetMatched && sub) subsetMatched = it;
+              }
+            }
+            if (!matched && subsetMatched) matched = subsetMatched;
+            // Si no hay info de participantes en el listado, pero existen chats, tomar el más reciente
+            // Importante: si el listado no trae participantes fiables, NO reutilizamos por "más reciente".
+            // Creamos un chat nuevo al enviar para evitar reabrir conversaciones incorrectas.
+            if (matched && matched.id_chat) {
+              // Existe: hacemos join en lugar de crear
+              const joinPayload = { id_chat: matched.id_chat };
+              joinedRef.current = true;
+              const matchedParts =
+                matched?.participants || matched?.participantes || [];
+              sio.emit("chat.join", joinPayload, (ack: any) => {
+                try {
+                  if (ack && ack.success) {
+                    const data = ack.data || {};
+                    const cid = data.id_chat ?? matched.id_chat;
+                    if (cid != null) setChatId(cid);
+                    if (data.my_participante)
+                      setMyParticipantId(data.my_participante);
+                    assignMyParticipantId(
+                      data.participants || data.participantes || matchedParts
+                    );
+                    const msgsSrc = Array.isArray(data.messages)
+                      ? data.messages
+                      : Array.isArray((data as any).mensajes)
+                      ? (data as any).mensajes
+                      : [];
+                    const msgs: any[] = msgsSrc;
+                    try {
+                      console.debug(
+                        "[find-or-create] reutilizado chat existente",
+                        {
+                          id_chat: cid,
+                          motivo: equalKeySets(
+                            desiredSet,
+                            buildKeySetFromArray(matchedParts)
+                          )
+                            ? "equal"
+                            : "subset",
+                          total_mensajes: msgs.length,
+                        }
+                      );
+                    } catch {}
+                    // Ocultar skeleton
+                    setIsJoining(false);
+                  } else {
+                    // Si el join falla, caer a creación
+                    doCreate();
+                  }
+                } catch {
+                  doCreate();
+                }
+              });
+            } else {
+              // No existe: crear
+              doCreate();
+            }
+          } catch {
+            // Cualquier error: crear
+            doCreate();
+          }
+          // helper local para crear
+          function doCreate() {
+            const payload: any = { participants: socketio!.participants };
+            try {
+              console.debug(
+                "[find-or-create] creando chat con participantes =>",
+                payload.participants
+              );
+            } catch {}
+            sio.emit("chat.create-with-participants", payload, (ack: any) => {
+              try {
+                if (ack && ack.success && ack.data) {
+                  const data = ack.data;
+                  const cid = data.id_chat ?? data.id ?? null;
+                  if (cid != null) setChatId(cid);
+                  const parts = data.participants || data.participantes;
+                  assignMyParticipantId(parts);
+                  // Propagar a consumidores para que actualicen encabezados
+                  try {
+                    onChatInfo?.({
+                      chatId: cid,
+                      myParticipantId: myParticipantId,
+                      participants: Array.isArray(parts) ? parts : null,
+                    });
+                  } catch {}
+                  setIsJoining(false);
+                } else if (ack && !ack.success) {
+                  console.debug("Error create chat:", ack.error);
+                  setIsJoining(false);
+                }
+              } catch {}
+            });
+          }
+        }
+      } catch (e) {
+        console.debug("Socket.IO: no conectado:", e);
+        setConnected(false);
+      }
+    })();
+    return () => {
+      alive = false;
+      try {
+        sioRef.current?.disconnect();
+      } catch {}
+      sioRef.current = null;
+    };
+  }, [
+    transport,
+    normRoom,
+    currentRole,
+    socketio?.url,
+    socketio?.tokenEndpoint,
+    socketio?.tokenId,
+    socketio?.autoCreate,
+    socketio?.autoJoin,
+    socketio?.idCliente,
+    markRead,
+    // Importante: NO dependemos de socketio?.participants para evitar reconexiones por identidad de array.
+    listOnConnect,
+    showTypingIndicator,
+  ]);
+
+  // Listar conversaciones al conectar o bajo demanda
+  React.useEffect(() => {
+    if (transport !== "socketio") return;
+    if (!connected) return;
+    const sio = sioRef.current;
+    if (!sio) return;
+    // Si se solicita listado en la conexión o el padre cambia la señal
+    if (listOnConnect) {
+      if (listOnceRef.current) return; // sólo una vez por conexión
+      listOnceRef.current = true;
+    } else {
+      if (requestListSignal == null) return;
+    }
+    try {
+      const base = (listParamsRef.current || {}) as any;
+      // Backend requiere participante_tipo + id_*; si llega "participants" desde el padre,
+      // agregamos también el filtro válido por rol propio para evitar errores.
+      const roleFilter: any = {};
+      if (currentRole === "alumno" && socketio?.idCliente != null) {
+        roleFilter.participante_tipo = "cliente";
+        roleFilter.id_cliente = String(socketio.idCliente);
+      } else if (currentRole === "coach" && socketio?.idEquipo != null) {
+        roleFilter.participante_tipo = "equipo";
+        roleFilter.id_equipo = String(socketio.idEquipo);
+      }
+      const payload = {
+        ...(base?.participants ? roleFilter : {}),
+        ...base,
+        // pedir explícitamente los participantes cuando el backend lo soporte
+        include_participants: true,
+        with_participants: true,
+        includeParticipants: true,
+        withParticipants: true,
+      } as any;
+      console.log("[chat.list] payload =>", payload);
+      sio.emit("chat.list", payload, (ack: any) => {
+        try {
+          console.log("[chat.list] ack <=", ack);
+          if (ack && ack.success === false) {
+            console.log("[chat.list] error:", ack.error);
+            // No sobrescribir la lista previa del padre en caso de error
+            return;
+          }
+          const list = ack?.data ?? [];
+          const baseList: any[] = Array.isArray(list) ? list : [];
+          // Enriquecer: si el backend no envía participantes, probamos un join ligero para obtenerlos (máx 10)
+          const needEnrich = baseList.some(
+            (it) => !Array.isArray(it?.participants || it?.participantes)
+          );
+          if (needEnrich) {
+            const now = Date.now();
+            if (now - (lastEnrichAtRef.current || 0) < 20000) {
+              // Evitar enriquecer demasiadas veces seguidas (join probes)
+              // Entregar base una sola vez
+              onChatsList?.(baseList);
+              return;
+            }
+            lastEnrichAtRef.current = now;
+            (async () => {
+              try {
+                const sorted = [...baseList]
+                  .sort((a, b) => getItemTimestamp(b) - getItemTimestamp(a))
+                  .slice(0, 10);
+                const enriched: any[] = [];
+                for (const it of sorted) {
+                  const id = it?.id_chat ?? it?.id;
+                  if (id == null) {
+                    enriched.push(it);
+                    continue;
+                  }
+                  const data = await probeJoin(id);
+                  if (data && (data.participants || data.participantes)) {
+                    enriched.push({
+                      ...it,
+                      participants: data.participants || data.participantes,
+                    });
+                  } else {
+                    enriched.push(it);
+                  }
+                }
+                // Mezclar enriquecidos con el resto (manteniendo orden original lo más posible)
+                const byId = new Map<string, any>();
+                for (const e of enriched) {
+                  const id = String(e?.id_chat ?? e?.id ?? "");
+                  if (id) byId.set(id, e);
+                }
+                const merged = baseList.map((it) => {
+                  const id = String(it?.id_chat ?? it?.id ?? "");
+                  return (id && byId.get(id)) || it;
+                });
+                onChatsList?.(merged);
+              } catch {}
+            })();
+          } else {
+            onChatsList?.(baseList);
+          }
+          // Si el padre pasó participants (yo↔target) y no tenemos chatId, intentar localizar conversación existente
+          const desiredParts = participantsRef.current;
+          const autoJoin = socketio?.autoJoin ?? true;
+          const autoCreate = socketio?.autoCreate ?? true;
+          if (
+            Array.isArray(desiredParts) &&
+            desiredParts.length >= 2 &&
+            (chatId == null || chatId === "") &&
+            autoJoin === false &&
+            autoCreate === false
+          ) {
+            findExistingByParticipants(
+              Array.isArray(list) ? list : [],
+              desiredParts
+            ).catch(() => {});
+          }
+        } catch {}
+      });
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, requestListSignal, listOnConnect]);
+
+  // Forzar refresco de listado (mis chats) para que el padre se actualice tras crear/join
+  const refreshChatsList = React.useCallback(() => {
+    try {
+      if (transport !== "socketio") return;
+      if (!connected) return;
+      const now = Date.now();
+      if (now - (lastListRefreshAtRef.current || 0) < 5000) return;
+      lastListRefreshAtRef.current = now;
+      const sio = sioRef.current;
+      if (!sio) return;
+      const base = (listParamsRef.current || {}) as any;
+      const roleFilter: any = {};
+      if (currentRole === "alumno" && socketio?.idCliente != null) {
+        roleFilter.participante_tipo = "cliente";
+        roleFilter.id_cliente = String(socketio.idCliente);
+      } else if (currentRole === "coach" && socketio?.idEquipo != null) {
+        roleFilter.participante_tipo = "equipo";
+        roleFilter.id_equipo = String(socketio.idEquipo);
+      }
+      const payload = {
+        ...(base?.participants ? roleFilter : {}),
+        ...base,
+        include_participants: true,
+        with_participants: true,
+        includeParticipants: true,
+        withParticipants: true,
+      } as any;
+      sio.emit("chat.list", payload, (ack: any) => {
+        try {
+          if (ack && ack.success === false) {
+            console.log("[chat.list/refresh] error:", ack.error);
+            // Mantener la lista actual del padre
+            return;
+          }
+          const list = ack?.data ?? [];
+          onChatsList?.(Array.isArray(list) ? list : []);
+        } catch {}
+      });
+    } catch {}
+  }, [
+    connected,
+    transport,
+    currentRole,
+    socketio?.idCliente,
+    socketio?.idEquipo,
+  ]);
+
+  // Búsqueda activa de conversación existente por participantes (sin crear)
+  const isFindingExistingRef = React.useRef<boolean>(false);
+  function getItemTimestamp(it: any): number {
+    const fields = [
+      it?.last_message_at,
+      it?.fecha_ultimo_mensaje,
+      it?.updated_at,
+      it?.fecha_actualizacion,
+      it?.created_at,
+      it?.fecha_creacion,
+    ];
+    for (const f of fields) {
+      const t = Date.parse(String(f || ""));
+      if (!isNaN(t)) return t;
+    }
+    const idNum = Number(it?.id_chat ?? it?.id ?? 0);
+    return isNaN(idNum) ? 0 : idNum;
+  }
+  async function probeJoin(id: any): Promise<any | null> {
+    return await new Promise((resolve) => {
+      try {
+        const sio = sioRef.current;
+        if (!sio) return resolve(null);
+        sio.emit("chat.join", { id_chat: id }, (ack: any) => {
+          if (ack && ack.success) resolve(ack.data || {});
+          else resolve(null);
+        });
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+  async function findExistingByParticipants(list: any[], desired: any[]) {
+    if (isFindingExistingRef.current) return;
+    isFindingExistingRef.current = true;
+    try {
+      // Si durante la detección ya hay chatId o se habilitó autoJoin, abortar
+      if (latestChatIdRef.current != null || latestAutoJoinRef.current) return;
+      const desiredSet = buildKeySetFromArray(desired);
+      // 1) Intento directo si el listado ya trae participantes
+      let candidate: any | null = null;
+      const withParts = list.filter((it) =>
+        Array.isArray(it?.participants || it?.participantes)
+      );
+      for (const it of withParts) {
+        const parts = it?.participants || it?.participantes || [];
+        const remoteSet = buildKeySetFromArray(parts);
+        if (remoteSet.size === 0) continue;
+        if (
+          equalKeySets(desiredSet, remoteSet) ||
+          isSubsetSet(desiredSet, remoteSet)
+        ) {
+          candidate = it;
+          break;
+        }
+      }
+      // 2) Si no hay participantes en el listado, probar unirse a los más recientes (límite 8)
+      if (!candidate) {
+        const sorted = [...list]
+          .sort((a, b) => getItemTimestamp(b) - getItemTimestamp(a))
+          .slice(0, 8);
+        for (const it of sorted) {
+          const id = it?.id_chat ?? it?.id;
+          if (id == null) continue;
+          const data = await probeJoin(id);
+          // Revalidar condiciones tras await
+          if (latestChatIdRef.current != null || latestAutoJoinRef.current)
+            return;
+          if (!data) continue;
+          const parts = data.participants || data.participantes || [];
+          const remoteSet = buildKeySetFromArray(parts);
+          if (remoteSet.size === 0) continue;
+          if (
+            equalKeySets(desiredSet, remoteSet) ||
+            isSubsetSet(desiredSet, remoteSet)
+          ) {
+            candidate = { ...it, participants: parts };
+            // Conservar data del join para establecer estado sin segunda llamada
+            const cid = data.id_chat ?? id;
+            // Última validación antes de setear estado
+            if (latestChatIdRef.current != null || latestAutoJoinRef.current)
+              return;
+            if (cid != null) setChatId(cid);
+            if (data.my_participante) setMyParticipantId(data.my_participante);
+            assignMyParticipantIdFromList(parts);
+            const msgsSrc = Array.isArray(data.messages)
+              ? data.messages
+              : Array.isArray((data as any).mensajes)
+              ? (data as any).mensajes
+              : [];
+            const otherRoleOnJoin: Sender = (() => {
+              if (currentRole === "alumno") {
+                return socketio?.idEquipo != null ? "coach" : "admin";
+              }
+              if (currentRole === "coach") return "alumno";
+              return "alumno";
+            })();
+            const mapped: Message[] = msgsSrc.map((m: any) => {
+              const isMineById =
+                myParticipantId != null &&
+                String(m?.id_chat_participante_emisor ?? "") ===
+                  String(myParticipantId);
+              const tipoNorm = normalizeTipo(
+                m?.participante_tipo ||
+                  getTipoByParticipantId(m?.id_chat_participante_emisor)
+              );
+              const isMineByTipo = (() => {
+                if (!tipoNorm) return false;
+                if (currentRole === "alumno") {
+                  return (
+                    tipoNorm === "cliente" &&
+                    socketio?.idCliente != null &&
+                    String(m?.id_cliente ?? "") === String(socketio?.idCliente)
+                  );
+                }
+                if (currentRole === "coach") {
+                  return (
+                    tipoNorm === "equipo" &&
+                    socketio?.idEquipo != null &&
+                    String(m?.id_equipo ?? "") === String(socketio?.idEquipo)
+                  );
+                }
+                return false;
+              })();
+              const senderFromTipo: Sender | null = (() => {
+                if (tipoNorm === "cliente") return "alumno";
+                if (tipoNorm === "equipo") return "coach";
+                return null;
+              })();
+              const sender: Sender = isMineById
+                ? currentRole
+                : isMineByTipo
+                ? currentRole
+                : senderFromTipo || otherRoleOnJoin;
+              return {
+                id: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+                room: normRoom,
+                sender,
+                text: String(m?.Contenido ?? m?.contenido ?? ""),
+                at: String(m?.fecha_envio || new Date().toISOString()),
+                delivered: true,
+                read: !!m?.leido,
+                srcParticipantId: m?.id_chat_participante_emisor,
+              };
+            });
+            setItems(mapped);
+            for (const m of mapped) seenRef.current.add(m.id);
+            setIsJoining(false);
+            try {
+              console.debug("[find-existing] join por detección <=", {
+                id_chat: cid,
+              });
+            } catch {}
+            return;
+          }
+        }
+      }
+      if (candidate && (candidate.id_chat || candidate.id)) {
+        // Unirse formalmente si no lo hicimos en el probe
+        const id = candidate.id_chat ?? candidate.id;
+        try {
+          if (latestChatIdRef.current != null || latestAutoJoinRef.current)
+            return;
+          const sio = sioRef.current;
+          sio?.emit("chat.join", { id_chat: id }, (ack: any) => {
+            try {
+              if (latestChatIdRef.current != null || latestAutoJoinRef.current)
+                return;
+              if (ack && ack.success) {
+                const data = ack.data || {};
+                const cid = data.id_chat ?? id;
+                if (cid != null) setChatId(cid);
+                if (data.my_participante)
+                  setMyParticipantId(data.my_participante);
+                assignMyParticipantIdFromList(
+                  data.participants || data.participantes || []
+                );
+                const msgsSrc = Array.isArray(data.messages)
+                  ? data.messages
+                  : Array.isArray((data as any).mensajes)
+                  ? (data as any).mensajes
+                  : [];
+                const otherRoleOnJoin: Sender = (() => {
+                  if (currentRole === "alumno") {
+                    return socketio?.idEquipo != null ? "coach" : "admin";
+                  }
+                  if (currentRole === "coach") return "alumno";
+                  return "alumno";
+                })();
+                const mapped: Message[] = msgsSrc.map((m: any) => {
+                  const isMineById =
+                    myParticipantId != null &&
+                    String(m?.id_chat_participante_emisor ?? "") ===
+                      String(myParticipantId);
+                  const tipoNorm = normalizeTipo(
+                    m?.participante_tipo ||
+                      getTipoByParticipantId(m?.id_chat_participante_emisor)
+                  );
+                  const isMineByTipo = (() => {
+                    if (!tipoNorm) return false;
+                    if (currentRole === "alumno") {
+                      return (
+                        tipoNorm === "cliente" &&
+                        socketio?.idCliente != null &&
+                        String(m?.id_cliente ?? "") ===
+                          String(socketio?.idCliente)
+                      );
+                    }
+                    if (currentRole === "coach") {
+                      return (
+                        tipoNorm === "equipo" &&
+                        socketio?.idEquipo != null &&
+                        String(m?.id_equipo ?? "") ===
+                          String(socketio?.idEquipo)
+                      );
+                    }
+                    return false;
+                  })();
+                  const senderFromTipo: Sender | null = (() => {
+                    if (tipoNorm === "cliente") return "alumno";
+                    if (tipoNorm === "equipo") return "coach";
+                    return null;
+                  })();
+                  const sender: Sender = isMineById
+                    ? currentRole
+                    : isMineByTipo
+                    ? currentRole
+                    : senderFromTipo || otherRoleOnJoin;
+                  return {
+                    id: String(
+                      m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                    ),
+                    room: normRoom,
+                    sender,
+                    text: String(m?.Contenido ?? m?.contenido ?? ""),
+                    at: String(m?.fecha_envio || new Date().toISOString()),
+                    delivered: true,
+                    read: !!m?.leido,
+                    srcParticipantId: m?.id_chat_participante_emisor,
+                  };
+                });
+                setItems(mapped);
+                for (const m of mapped) seenRef.current.add(m.id);
+                setIsJoining(false);
+                console.debug("[find-existing] join directo <=", {
+                  id_chat: cid,
+                });
+              }
+            } catch {}
+          });
+        } catch {}
+      }
+    } finally {
+      isFindingExistingRef.current = false;
+    }
+  }
+
+  // Unirse a un chat existente cuando cambia socketio.chatId SIN reconectar el socket
+  React.useEffect(() => {
+    if (transport !== "socketio") return;
+    const sio = sioRef.current;
+    if (!sio) {
+      // Si no hay socket disponible, no bloquear la UI con el skeleton
+      setIsJoining(false);
+      return;
+    }
+    const newId = socketio?.chatId ?? null;
+    const autoJoin = socketio?.autoJoin ?? true;
+    if (String(prevRequestedChatIdRef.current ?? "") === String(newId ?? ""))
+      return;
+    prevRequestedChatIdRef.current = newId;
+    // Antes de limpiar UI, verificar si realmente haremos join
+    if (newId == null || !autoJoin) {
+      setIsJoining(false);
+      return;
+    }
+    if (joinInFlightRef.current) {
+      setIsJoining(false);
+      return;
+    }
+    if (String(lastJoinedChatIdRef.current ?? "") === String(newId)) {
+      // Ya estamos en este chat: no limpiar la UI ni unir de nuevo
+      setIsJoining(false);
+      return;
+    }
+    // Reset de UI minimal para el nuevo chat (ahora sí)
+    setIsJoining(true);
+    setItems([]);
+    seenRef.current = new Set();
+    setChatId(null);
+    setOtherTyping(false);
+    try {
+      // Failsafe: si no recibimos ack en tiempo razonable, ocultar skeleton
+      const t = setTimeout(() => {
+        try {
+          setIsJoining(false);
+        } catch {}
+      }, 6000);
+      joinInFlightRef.current = true;
+      sio.emit("chat.join", { id_chat: newId }, (ack: any) => {
+        try {
+          clearTimeout(t);
+          joinInFlightRef.current = false;
+          if (ack && ack.success) {
+            const data = ack.data || {};
+            const cid = data.id_chat ?? newId;
+            if (cid != null) setChatId(cid);
+            lastJoinedChatIdRef.current = cid;
+            if (data.my_participante) setMyParticipantId(data.my_participante);
+            const parts = data.participants || data.participantes;
+            assignMyParticipantIdFromList(parts);
+            // Mapear mensajes cargados
+            const msgsSrc = Array.isArray(data.messages)
+              ? data.messages
+              : Array.isArray((data as any).mensajes)
+              ? (data as any).mensajes
+              : [];
+            const otherRoleOnJoin: Sender = (() => {
+              if (currentRole === "alumno") {
+                return socketio?.idEquipo != null ? "coach" : "admin";
+              }
+              if (currentRole === "coach") return "alumno";
+              return "alumno";
+            })();
+            const mapped: Message[] = msgsSrc.map((m: any) => {
+              const isMineById =
+                myParticipantId != null &&
+                String(m?.id_chat_participante_emisor ?? "") ===
+                  String(myParticipantId);
+              const tipoNorm = normalizeTipo(
+                m?.participante_tipo ||
+                  getTipoByParticipantId(m?.id_chat_participante_emisor)
+              );
+              const isMineByTipo = (() => {
+                if (!tipoNorm) return false;
+                if (currentRole === "alumno") {
+                  return (
+                    tipoNorm === "cliente" &&
+                    socketio?.idCliente != null &&
+                    String(m?.id_cliente ?? "") === String(socketio?.idCliente)
+                  );
+                }
+                if (currentRole === "coach") {
+                  return (
+                    tipoNorm === "equipo" &&
+                    socketio?.idEquipo != null &&
+                    String(m?.id_equipo ?? "") === String(socketio?.idEquipo)
+                  );
+                }
+                return false;
+              })();
+              const senderFromTipo: Sender | null = (() => {
+                if (tipoNorm === "cliente") return "alumno";
+                if (tipoNorm === "equipo") return "coach";
+                return null;
+              })();
+              const sender: Sender = isMineById
+                ? currentRole
+                : isMineByTipo
+                ? currentRole
+                : senderFromTipo || otherRoleOnJoin;
+              return {
+                id: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+                room: normRoom,
+                sender,
+                text: String(m?.Contenido ?? m?.contenido ?? ""),
+                at: String(m?.fecha_envio || new Date().toISOString()),
+                delivered: true,
+                read: !!m?.leido,
+                srcParticipantId: m?.id_chat_participante_emisor,
+              };
+            });
+            setItems(mapped);
+            for (const m of mapped) seenRef.current.add(m.id);
+            try {
+              console.debug("[chat.join] (on chatId change) <=", {
+                id_chat: cid,
+                my_participante: data?.my_participante,
+                total_mensajes: mapped.length,
+              });
+            } catch {}
+            setIsJoining(false);
+          } else {
+            setIsJoining(false);
+          }
+        } catch {
+          joinInFlightRef.current = false;
+          setIsJoining(false);
+        }
+      });
+    } catch {
+      joinInFlightRef.current = false;
+      setIsJoining(false);
+    }
+  }, [socketio?.chatId]);
+
+  // Enviar "read all" automáticamente si la ventana está visible y hay chatId
+  React.useEffect(() => {
+    if (transport !== "socketio") return;
+    if (!connected || chatId == null) return;
+    if (typeof document === "undefined") return;
+    if (document.visibilityState !== "visible") return;
+    const now = Date.now();
+    if (now - (lastReadEmitRef.current || 0) < 1200) return;
+    const sio = sioRef.current;
+    try {
+      lastReadEmitRef.current = now;
+      sio?.emit("chat.read.all", { id_chat: chatId });
+      markRead();
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length, connected, chatId]);
 
   // SSE transport (server-sent events via /api/realtime)
   React.useEffect(() => {
@@ -377,8 +1683,126 @@ export default function ChatRealtime({
   }, [transport, normRoom, storageKey, currentRole]);
 
   React.useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    if (typeof window === "undefined") return;
+    // Auto-scroll solo si el usuario está cerca del fondo
+    requestAnimationFrame(() => {
+      try {
+        if (pinnedToBottomRef.current) {
+          bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+        }
+      } catch {}
+    });
   }, [items.length]);
+
+  const onScrollContainer = React.useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const threshold = 100;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    pinnedToBottomRef.current = distance <= threshold;
+  }, []);
+  // Intenta resolver mi id de participante consultando chat.list
+  const resolveMyParticipantIdFromList = React.useCallback(async (): Promise<
+    string | number | null
+  > => {
+    try {
+      if (transport !== "socketio") return null;
+      const sio = sioRef.current;
+      if (!sio) return null;
+      // Construir payload en función del rol actual. Esto evita elegir el participante equivocado
+      // cuando, por ejemplo, en la vista del alumno sólo se proporcionó idEquipo.
+      const payload: any = {};
+      if (currentRole === "alumno") {
+        payload.participante_tipo = "cliente";
+        if (socketio?.idCliente != null) {
+          payload.id_cliente = String(socketio.idCliente);
+        }
+      } else if (currentRole === "coach") {
+        payload.participante_tipo = "equipo";
+        if (socketio?.idEquipo != null) {
+          payload.id_equipo = String(socketio.idEquipo);
+        }
+      } else {
+        // Sin un rol determinístico, no podemos resolver correctamente
+        return null;
+      }
+      return await new Promise((resolve) => {
+        try {
+          sio.emit("chat.list", payload, (ack: any) => {
+            try {
+              const list: any[] = Array.isArray(ack?.data) ? ack.data : [];
+              const currentId = chatId != null ? String(chatId) : null;
+              const item = currentId
+                ? list.find(
+                    (it) => String(it?.id_chat ?? it?.id ?? "") === currentId
+                  )
+                : list[0];
+              if (!item) return resolve(null);
+              if (item?.my_participante != null)
+                return resolve(item.my_participante);
+              const parts = item?.participants || item?.participantes || [];
+              if (Array.isArray(parts) && parts.length) {
+                if (payload.participante_tipo === "cliente") {
+                  // Buscar mi participante cliente (por id o por unicidad)
+                  let mine = null as any;
+                  if (payload.id_cliente != null) {
+                    mine = parts.find(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "cliente" &&
+                        String(p?.id_cliente) === String(payload.id_cliente)
+                    );
+                  }
+                  if (!mine) {
+                    const clientes = parts.filter(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "cliente"
+                    );
+                    if (clientes.length === 1) mine = clientes[0];
+                    else if (clientes.length > 1)
+                      mine =
+                        clientes.find((p: any) => !!p?.id_chat_participante) ??
+                        clientes[0];
+                  }
+                  if (mine?.id_chat_participante != null)
+                    return resolve(mine.id_chat_participante);
+                } else if (payload.participante_tipo === "equipo") {
+                  // Buscar mi participante equipo (por id o por unicidad)
+                  let mine = null as any;
+                  if (payload.id_equipo != null) {
+                    mine = parts.find(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "equipo" &&
+                        String(p?.id_equipo) === String(payload.id_equipo)
+                    );
+                  }
+                  if (!mine) {
+                    const equipos = parts.filter(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "equipo"
+                    );
+                    if (equipos.length === 1) mine = equipos[0];
+                    else if (equipos.length > 1)
+                      mine =
+                        equipos.find((p: any) => !!p?.id_chat_participante) ??
+                        equipos[0];
+                  }
+                  if (mine?.id_chat_participante != null)
+                    return resolve(mine.id_chat_participante);
+                }
+              }
+              resolve(null);
+            } catch {
+              resolve(null);
+            }
+          });
+        } catch {
+          resolve(null);
+        }
+      });
+    } catch {
+      return null;
+    }
+  }, [transport, socketio?.idCliente, socketio?.idEquipo, chatId, currentRole]);
 
   function autoSize() {
     const ta = inputRef.current;
@@ -557,6 +1981,231 @@ export default function ChatRealtime({
         return;
       }
 
+      // Socket.IO
+      if (transport === "socketio") {
+        const sio = sioRef.current;
+        try {
+          if (!sio) throw new Error("No socket");
+          // Si no hay chatId aún, intenta encontrar o crear uno al vuelo
+          if (chatId == null) {
+            const ok = await ensureChatReadyForSend();
+            if (!ok) {
+              console.debug(
+                "[chat.message.send] bloqueado: no se pudo preparar chat"
+              );
+              return; // Evitar continuar sin contexto y provocar loops de consultas
+            }
+          }
+          // Resolver myParticipantId si falta (histórico -> lista)
+          let effectiveMyParticipantId: any = myParticipantId;
+          if (effectiveMyParticipantId == null) {
+            const lastMine = [...items]
+              .reverse()
+              .find(
+                (m) => m.sender === currentRole && m.srcParticipantId != null
+              );
+            if (lastMine && lastMine.srcParticipantId != null) {
+              effectiveMyParticipantId = lastMine.srcParticipantId as any;
+              setMyParticipantId(effectiveMyParticipantId);
+            }
+          }
+          if (
+            chatId != null &&
+            (effectiveMyParticipantId == null ||
+              effectiveMyParticipantId === "")
+          ) {
+            try {
+              const pid = await resolveMyParticipantIdFromList();
+              if (pid != null) {
+                effectiveMyParticipantId = pid as any;
+                setMyParticipantId(pid);
+              }
+            } catch {}
+          }
+          // Fallback adicional: intenta resolver a partir de participantes del último join
+          if (
+            chatId != null &&
+            (effectiveMyParticipantId == null ||
+              effectiveMyParticipantId === "")
+          ) {
+            try {
+              const parts = Array.isArray(joinedParticipantsRef.current)
+                ? joinedParticipantsRef.current
+                : [];
+              if (parts.length) {
+                if (currentRole === "alumno") {
+                  const mine1 = parts.find(
+                    (p: any) =>
+                      normalizeTipo(p?.participante_tipo) === "cliente" &&
+                      (socketio?.idCliente != null
+                        ? String(p?.id_cliente) === String(socketio?.idCliente)
+                        : true)
+                  );
+                  if (mine1?.id_chat_participante != null)
+                    effectiveMyParticipantId = mine1.id_chat_participante;
+                  if (effectiveMyParticipantId == null) {
+                    const onlyCliente = parts.filter(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "cliente"
+                    );
+                    if (
+                      onlyCliente.length === 1 &&
+                      onlyCliente[0]?.id_chat_participante != null
+                    )
+                      effectiveMyParticipantId =
+                        onlyCliente[0].id_chat_participante;
+                  }
+                } else if (currentRole === "coach") {
+                  const mine2 = parts.find(
+                    (p: any) =>
+                      normalizeTipo(p?.participante_tipo) === "equipo" &&
+                      (socketio?.idEquipo != null
+                        ? String(p?.id_equipo) === String(socketio?.idEquipo)
+                        : true)
+                  );
+                  if (mine2?.id_chat_participante != null)
+                    effectiveMyParticipantId = mine2.id_chat_participante;
+                  if (effectiveMyParticipantId == null) {
+                    const onlyEquipo = parts.filter(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "equipo"
+                    );
+                    if (
+                      onlyEquipo.length === 1 &&
+                      onlyEquipo[0]?.id_chat_participante != null
+                    )
+                      effectiveMyParticipantId =
+                        onlyEquipo[0].id_chat_participante;
+                  }
+                }
+                if (effectiveMyParticipantId != null)
+                  setMyParticipantId(effectiveMyParticipantId);
+              }
+            } catch {}
+          }
+          // Pequeña espera activa para permitir que ensureChatReadyForSend/joins asignen myParticipantId
+          if (
+            chatId != null &&
+            (effectiveMyParticipantId == null ||
+              effectiveMyParticipantId === "")
+          ) {
+            for (let i = 0; i < 5; i++) {
+              await new Promise((r) => setTimeout(r, 120));
+              if (myParticipantId != null && myParticipantId !== "") {
+                effectiveMyParticipantId = myParticipantId as any;
+                break;
+              }
+              // Try derive from joinedParticipantsRef
+              try {
+                const parts = Array.isArray(joinedParticipantsRef.current)
+                  ? joinedParticipantsRef.current
+                  : [];
+                if (parts.length) {
+                  if (currentRole === "alumno") {
+                    const mine1 = parts.find(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "cliente" &&
+                        (socketio?.idCliente != null
+                          ? String(p?.id_cliente) ===
+                            String(socketio?.idCliente)
+                          : true)
+                    );
+                    if (mine1?.id_chat_participante != null) {
+                      effectiveMyParticipantId = mine1.id_chat_participante;
+                      setMyParticipantId(effectiveMyParticipantId);
+                      break;
+                    }
+                  } else if (currentRole === "coach") {
+                    const mine2 = parts.find(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "equipo" &&
+                        (socketio?.idEquipo != null
+                          ? String(p?.id_equipo) === String(socketio?.idEquipo)
+                          : true)
+                    );
+                    if (mine2?.id_chat_participante != null) {
+                      effectiveMyParticipantId = mine2.id_chat_participante;
+                      setMyParticipantId(effectiveMyParticipantId);
+                      break;
+                    }
+                  }
+                }
+              } catch {}
+            }
+          }
+          if (chatId == null || effectiveMyParticipantId == null) {
+            console.debug("[chat.message.send] bloqueado: falta contexto", {
+              chatId,
+              myParticipantId: effectiveMyParticipantId,
+              role: currentRole,
+              destino: currentRole === "alumno" ? "coach" : "alumno",
+            });
+            return;
+          } else {
+            const payload = {
+              id_chat: chatId,
+              id_chat_participante_emisor: effectiveMyParticipantId,
+              contenido: val,
+              client_session: clientSessionRef.current,
+            };
+            try {
+              console.debug("[chat.message.send] =>", {
+                id_chat: payload.id_chat,
+                emisor: payload.id_chat_participante_emisor,
+                role: currentRole,
+                destino: currentRole === "alumno" ? "coach" : "alumno",
+                texto: String(val).slice(0, 120),
+              });
+            } catch {}
+            // Marca el último id de participante usado para enviar
+            lastSentParticipantIdRef.current = effectiveMyParticipantId;
+            // Optimista: mostrar el mensaje local y registrar para reconciliar
+            setItems((prev) => [
+              ...prev,
+              {
+                ...localMsg,
+                delivered: false,
+                read: false,
+                srcParticipantId: effectiveMyParticipantId,
+              },
+            ]);
+            seenRef.current.add(clientId);
+            outboxRef.current.push({
+              clientId,
+              text: val,
+              at: Date.now(),
+              pid: effectiveMyParticipantId,
+            });
+            sio.emit("chat.message.send", payload, (ack: any) => {
+              try {
+                if (ack && !ack.success) {
+                  console.debug("[chat.message.send] error:", ack.error);
+                } else {
+                  console.debug("[chat.message.send] ack <=", ack);
+                  // Marcar optimista como entregado y reconciliar id si viene en el ack
+                  setItems((prev) => {
+                    const next = [...prev];
+                    const idx = next.findIndex((m) => m.id === clientId);
+                    if (idx >= 0) {
+                      const serverId = ack?.data?.id_mensaje ?? ack?.data?.id;
+                      next[idx] = {
+                        ...next[idx],
+                        id: serverId ? String(serverId) : next[idx].id,
+                        delivered: true,
+                      };
+                      if (serverId) seenRef.current.add(String(serverId));
+                    }
+                    return next;
+                  });
+                }
+              } catch {}
+            });
+          }
+        } catch {}
+        markRead();
+        return;
+      }
+
       // default ws
       {
         setItems((prev) => [...prev, localMsg]);
@@ -588,6 +2237,423 @@ export default function ChatRealtime({
     fileRef.current?.click();
   }
 
+  // Emite eventos typing on/off para Socket.IO
+  const typingTimerRef = React.useRef<any>(null);
+  function emitTyping(on: boolean) {
+    try {
+      if (transport !== "socketio") return;
+      const sio = sioRef.current;
+      if (!sio) return;
+      if (chatId == null) return;
+      // incluir el id del emisor cuando lo tengamos para que el backend pueda excluir al emisor
+      const emitter =
+        myParticipantId != null
+          ? myParticipantId
+          : lastSentParticipantIdRef.current != null
+          ? lastSentParticipantIdRef.current
+          : undefined;
+      const payload: any = { id_chat: chatId, typing: !!on };
+      if (emitter != null) payload.id_chat_participante_emisor = emitter;
+      payload.client_session = clientSessionRef.current;
+      sio.emit("chat.typing", payload);
+    } catch {}
+  }
+
+  // Garantiza que exista un chat listo para enviar. Busca existente o crea si no hay.
+  async function ensureChatReadyForSend(): Promise<boolean> {
+    try {
+      if (transport !== "socketio") return false;
+      if (chatId != null) return true;
+      const sio = sioRef.current;
+      if (!sio) return false;
+      if (creatingRef.current) {
+        // Espera activa simple a que termine otro hilo de creación
+        for (let i = 0; i < 20; i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          if (chatId != null) return true;
+        }
+        return chatId != null;
+      }
+      const participants = participantsRef.current ?? socketio?.participants;
+      if (!Array.isArray(participants) || participants.length === 0) {
+        console.log("[ensureChatReadyForSend] faltan participants para crear");
+        return false;
+      }
+      creatingRef.current = true;
+      setIsJoining(true);
+      // Intentar encontrar existente
+      const desiredSet = buildKeySetFromArray(participants);
+      try {
+        console.log("[ensureChatReadyForSend] participantes deseados =>", {
+          desired: Array.from(desiredSet.values()),
+          raw: participants,
+          role: currentRole,
+          idCliente: socketio?.idCliente,
+          idEquipo: socketio?.idEquipo,
+        });
+      } catch {}
+      // NOTA: el backend requiere participante_tipo + id_*, por lo que evitamos pedir chat.list por participants aquí.
+      const listPayload: any = {};
+      if (socketio?.idCliente != null) {
+        listPayload.participante_tipo = "cliente";
+        listPayload.id_cliente = String(socketio.idCliente);
+      } else if (socketio?.idEquipo != null) {
+        listPayload.participante_tipo = "equipo";
+        listPayload.id_equipo = String(socketio.idEquipo);
+      }
+      if (socketio?.idEquipo != null) {
+        listPayload.id_equipo = String(socketio.idEquipo);
+      }
+      const list: any[] = await new Promise((resolve) => {
+        try {
+          if (!listPayload.participante_tipo) return resolve([]);
+          sio.emit(
+            "chat.list",
+            {
+              ...listPayload,
+              include_participants: true,
+              with_participants: true,
+              includeParticipants: true,
+              withParticipants: true,
+            },
+            (ack: any) => {
+              const arr = Array.isArray(ack?.data) ? ack.data : [];
+              try {
+                console.log("[ensureChatReadyForSend] chat.list <=", {
+                  payload: listPayload,
+                  total: arr.length,
+                });
+              } catch {}
+              resolve(arr);
+            }
+          );
+        } catch {
+          resolve([]);
+        }
+      });
+      let matched: any | null = null;
+      let subsetMatched: any | null = null;
+      for (const it of list) {
+        const parts = it?.participants || it?.participantes || [];
+        const remoteSet = buildKeySetFromArray(parts);
+        if (remoteSet.size > 0) {
+          if (equalKeySets(desiredSet, remoteSet)) {
+            matched = it;
+            break;
+          }
+          if (!subsetMatched && isSubsetSet(desiredSet, remoteSet)) {
+            subsetMatched = it;
+          }
+        }
+      }
+      if (!matched && subsetMatched) matched = subsetMatched;
+      try {
+        console.log("[ensureChatReadyForSend] resultado match =>", {
+          matched: matched?.id_chat ?? matched?.id ?? null,
+          via: matched
+            ? equalKeySets(
+                desiredSet,
+                buildKeySetFromArray(
+                  matched?.participants || matched?.participantes || []
+                )
+              )
+              ? "equal"
+              : "subset"
+            : "none",
+        });
+      } catch {}
+      // Fallback: si no hay participantes en el listado, probar unirse a los más recientes para leer participantes
+      if (!matched && Array.isArray(list) && list.length > 0) {
+        try {
+          const sorted = [...list]
+            .sort((a, b) => getItemTimestamp(b) - getItemTimestamp(a))
+            .slice(0, 8);
+          for (const it of sorted) {
+            const id = it?.id_chat ?? it?.id;
+            if (id == null) continue;
+            const data = await probeJoin(id);
+            if (!data) continue;
+            const parts = data.participants || data.participantes || [];
+            const remoteSet = buildKeySetFromArray(parts);
+            if (remoteSet.size === 0) continue;
+            const eq = equalKeySets(desiredSet, remoteSet);
+            const sub = isSubsetSet(desiredSet, remoteSet);
+            if (eq || sub) {
+              // Confirmado: usar este chat y mapear mensajes inmediatamente
+              const cid = data.id_chat ?? id;
+              if (cid != null) setChatId(cid);
+              if (data.my_participante)
+                setMyParticipantId(data.my_participante);
+              assignMyParticipantIdFromList(parts);
+              const msgsSrc = Array.isArray(data.messages)
+                ? data.messages
+                : Array.isArray((data as any).mensajes)
+                ? (data as any).mensajes
+                : [];
+              const otherRoleOnJoin: Sender = (() => {
+                if (currentRole === "alumno") {
+                  return socketio?.idEquipo != null ? "coach" : "admin";
+                }
+                if (currentRole === "coach") return "alumno";
+                return "alumno";
+              })();
+              const mapped: Message[] = msgsSrc.map((m: any) => {
+                const isMineById =
+                  myParticipantId != null &&
+                  String(m?.id_chat_participante_emisor ?? "") ===
+                    String(myParticipantId);
+                const tipoNorm = normalizeTipo(
+                  m?.participante_tipo ||
+                    getTipoByParticipantId(m?.id_chat_participante_emisor)
+                );
+                const isMineByTipo = (() => {
+                  if (!tipoNorm) return false;
+                  if (currentRole === "alumno") {
+                    return (
+                      tipoNorm === "cliente" &&
+                      socketio?.idCliente != null &&
+                      String(m?.id_cliente ?? "") ===
+                        String(socketio?.idCliente)
+                    );
+                  }
+                  if (currentRole === "coach") {
+                    return (
+                      tipoNorm === "equipo" &&
+                      socketio?.idEquipo != null &&
+                      String(m?.id_equipo ?? "") === String(socketio?.idEquipo)
+                    );
+                  }
+                  return false;
+                })();
+                const senderFromTipo: Sender | null = (() => {
+                  if (tipoNorm === "cliente") return "alumno";
+                  if (tipoNorm === "equipo") return "coach";
+                  return null;
+                })();
+                const sender: Sender = isMineById
+                  ? currentRole
+                  : isMineByTipo
+                  ? currentRole
+                  : senderFromTipo || otherRoleOnJoin;
+                return {
+                  id: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+                  room: normRoom,
+                  sender,
+                  text: String(m?.Contenido ?? m?.contenido ?? ""),
+                  at: String(m?.fecha_envio || new Date().toISOString()),
+                  delivered: true,
+                  read: !!m?.leido,
+                  srcParticipantId: m?.id_chat_participante_emisor,
+                };
+              });
+              setItems(mapped);
+              for (const mm of mapped) seenRef.current.add(mm.id);
+              console.log(
+                "[ensureChatReadyForSend] detectado existente via probeJoin <=",
+                { id_chat: cid }
+              );
+              setIsJoining(false);
+              creatingRef.current = false;
+              return true;
+            }
+          }
+        } catch {}
+      }
+      // Sin coincidencia exacta o por subconjunto: no reusar "más reciente"; proceder a crear.
+      if (matched && matched.id_chat) {
+        const joinPayload = { id_chat: matched.id_chat };
+        joinedRef.current = true;
+        const matchedParts =
+          matched?.participants || matched?.participantes || [];
+        return await new Promise<boolean>((resolve) => {
+          try {
+            sio.emit("chat.join", joinPayload, (ack: any) => {
+              try {
+                if (ack && ack.success) {
+                  const data = ack.data || {};
+                  const cid = data.id_chat ?? matched.id_chat;
+                  if (cid != null) setChatId(cid);
+                  if (data.my_participante)
+                    setMyParticipantId(data.my_participante);
+                  assignMyParticipantIdFromList(
+                    data.participants || data.participantes || matchedParts
+                  );
+                  // Mapear mensajes cargados en el join
+                  const msgsSrc = Array.isArray(data.messages)
+                    ? data.messages
+                    : Array.isArray((data as any).mensajes)
+                    ? (data as any).mensajes
+                    : [];
+                  const otherRoleOnJoin: Sender = (() => {
+                    if (currentRole === "alumno") {
+                      return socketio?.idEquipo != null ? "coach" : "admin";
+                    }
+                    if (currentRole === "coach") return "alumno";
+                    return "alumno";
+                  })();
+                  const mapped: Message[] = msgsSrc.map((m: any) => {
+                    const isMineById =
+                      myParticipantId != null &&
+                      String(m?.id_chat_participante_emisor ?? "") ===
+                        String(myParticipantId);
+                    const tipoNorm = normalizeTipo(
+                      m?.participante_tipo ||
+                        getTipoByParticipantId(m?.id_chat_participante_emisor)
+                    );
+                    const isMineByTipo = (() => {
+                      if (!tipoNorm) return false;
+                      if (currentRole === "alumno") {
+                        return (
+                          tipoNorm === "cliente" &&
+                          socketio?.idCliente != null &&
+                          String(m?.id_cliente ?? "") ===
+                            String(socketio?.idCliente)
+                        );
+                      }
+                      if (currentRole === "coach") {
+                        return (
+                          tipoNorm === "equipo" &&
+                          socketio?.idEquipo != null &&
+                          String(m?.id_equipo ?? "") ===
+                            String(socketio?.idEquipo)
+                        );
+                      }
+                      return false;
+                    })();
+                    const senderFromTipo: Sender | null = (() => {
+                      if (tipoNorm === "cliente") return "alumno";
+                      if (tipoNorm === "equipo") return "coach";
+                      return null;
+                    })();
+                    const sender: Sender = isMineById
+                      ? currentRole
+                      : isMineByTipo
+                      ? currentRole
+                      : senderFromTipo || otherRoleOnJoin;
+                    return {
+                      id: String(
+                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                      ),
+                      room: normRoom,
+                      sender,
+                      text: String(m?.Contenido ?? m?.contenido ?? ""),
+                      at: String(m?.fecha_envio || new Date().toISOString()),
+                      delivered: true,
+                      read: !!m?.leido,
+                      srcParticipantId: m?.id_chat_participante_emisor,
+                    };
+                  });
+                  setItems(mapped);
+                  for (const mm of mapped) seenRef.current.add(mm.id);
+                  try {
+                    console.log("[ensureChatReadyForSend] join existente <=", {
+                      id_chat: cid,
+                      my_participante: data?.my_participante,
+                      total_mensajes: mapped.length,
+                    });
+                  } catch {}
+                  setIsJoining(false);
+                  creatingRef.current = false;
+                  // Actualizar listado en el padre para reflejar la conversación existente
+                  refreshChatsList();
+                  resolve(true);
+                } else {
+                  setIsJoining(false);
+                  creatingRef.current = false;
+                  resolve(false);
+                }
+              } catch {
+                setIsJoining(false);
+                creatingRef.current = false;
+                resolve(false);
+              }
+            });
+          } catch {
+            setIsJoining(false);
+            creatingRef.current = false;
+            resolve(false);
+          }
+        });
+      }
+      // Crear
+      return await new Promise<boolean>((resolve) => {
+        try {
+          sio.emit(
+            "chat.create-with-participants",
+            { participants },
+            (ack: any) => {
+              try {
+                if (ack && ack.success && ack.data) {
+                  const data = ack.data;
+                  const cid = data.id_chat ?? data.id ?? null;
+                  if (cid != null) setChatId(cid);
+                  const parts = data.participants || data.participantes;
+                  assignMyParticipantIdFromList(parts);
+                  try {
+                    console.log("[ensureChatReadyForSend] creado chat", {
+                      id_chat: cid,
+                      participants: parts,
+                    });
+                  } catch {}
+                  // Unir para obtener my_participante definitivo y mensajes
+                  try {
+                    sio.emit("chat.join", { id_chat: cid }, (ackJoin: any) => {
+                      try {
+                        if (ackJoin && ackJoin.success) {
+                          const dj = ackJoin.data || {};
+                          if (dj.my_participante)
+                            setMyParticipantId(dj.my_participante);
+                          assignMyParticipantIdFromList(
+                            dj.participants || dj.participantes || parts
+                          );
+                          console.log(
+                            "[ensureChatReadyForSend] join tras crear <=",
+                            {
+                              id_chat: cid,
+                              my_participante: dj?.my_participante,
+                            }
+                          );
+                        }
+                      } catch {}
+                    });
+                  } catch {}
+                  try {
+                    onChatInfo?.({
+                      chatId: cid,
+                      myParticipantId: myParticipantId,
+                      participants: Array.isArray(parts) ? parts : null,
+                    });
+                  } catch {}
+                  setIsJoining(false);
+                  creatingRef.current = false;
+                  // Refrescar listado para que el padre detecte el nuevo chat
+                  refreshChatsList();
+                  resolve(true);
+                } else {
+                  setIsJoining(false);
+                  creatingRef.current = false;
+                  resolve(false);
+                }
+              } catch {
+                setIsJoining(false);
+                creatingRef.current = false;
+                resolve(false);
+              }
+            }
+          );
+        } catch {
+          setIsJoining(false);
+          creatingRef.current = false;
+          resolve(false);
+        }
+      });
+    } catch {
+      creatingRef.current = false;
+      setIsJoining(false);
+      return false;
+    }
+  }
+
   function fileFromAttachment(a: Attachment): File | null {
     try {
       const binary = atob(a.data_base64);
@@ -602,6 +2668,22 @@ export default function ChatRealtime({
     } catch {
       return null;
     }
+  }
+
+  // Marcar como leído (todo el chat) vía Socket.IO
+  function markAllRead() {
+    try {
+      if (transport !== "socketio") return;
+      const sio = sioRef.current;
+      if (!sio || chatId == null) return;
+      sio.emit("chat.read.all", { id_chat: chatId }, (ack: any) => {
+        if (ack && !ack.success) {
+          console.debug("read.all error:", ack.error);
+        }
+      });
+      // Marca local (timestamp) para UI
+      markRead();
+    } catch {}
   }
 
   const sameDay = (a: Date, b: Date) =>
@@ -918,10 +3000,20 @@ export default function ChatRealtime({
         </div>
 
         <div
+          ref={scrollRef}
+          onScroll={onScrollContainer}
           className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0"
           style={bgPatternStyle}
         >
-          {enhanced.length === 0 && (
+          {isJoining && (
+            <div className="h-full flex items-center justify-center py-10">
+              <div className="flex flex-col items-center gap-2 text-gray-600">
+                <Spinner size={24} thickness={3} />
+                <div className="text-xs">Cargando conversación…</div>
+              </div>
+            </div>
+          )}
+          {!isJoining && enhanced.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-white/50 flex items-center justify-center">
@@ -945,209 +3037,46 @@ export default function ChatRealtime({
               </div>
             </div>
           )}
-          {enhanced.map((e) => {
-            if (e.type === "day") {
-              return (
-                <div
-                  key={e.key}
-                  className="flex items-center justify-center my-4"
-                >
-                  <span className="text-xs px-3 py-1.5 rounded-lg bg-white/90 shadow-sm text-gray-600 font-medium">
-                    {e.day}
-                  </span>
-                </div>
-              );
-            }
-            const m = e.msg!;
-            const mine =
-              (m.sender || "").toLowerCase() ===
-              (currentRole || "").toLowerCase();
-            return (
-              <div
-                key={e.key}
-                className={`flex ${
-                  mine ? "justify-end" : "justify-start"
-                } mb-1`}
-              >
-                <div
-                  onClick={() => selectMode && toggleSelect(m.id)}
-                  style={
-                    selectMode
-                      ? {
-                          outline: selectedIds.has(m.id)
-                            ? "2px solid #0ea5e9"
-                            : "1px dashed #94a3b8",
-                        }
-                      : undefined
-                  }
-                  className={`relative max-w-[85%] sm:max-w-[75%] rounded-lg px-3 py-2 shadow-sm ${
-                    mine
-                      ? "bg-[#d9fdd3] text-gray-900 rounded-br-none"
-                      : "bg-white text-gray-900 rounded-bl-none"
-                  }`}
-                >
-                  {!mine && (
-                    <div className="text-xs font-semibold text-[#075e54] mb-0.5">
-                      {m.sender.charAt(0).toUpperCase() + m.sender.slice(1)}
-                    </div>
-                  )}
-                  {m.text && (
-                    <div
-                      className="text-sm whitespace-pre-wrap break-words leading-relaxed pb-2"
-                      style={{
-                        overflowWrap: "anywhere",
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      {m.text}
-                    </div>
-                  )}
-                  {m.attachments && m.attachments.length > 0 && (
-                    <div className="mt-1 grid grid-cols-2 gap-2">
-                      {m.attachments.map((a) => {
-                        const url = `data:${a.mime};base64,${a.data_base64}`;
-                        const selected = selectedAttachmentIds.has(a.id);
-                        const commonWrapCls = `relative group rounded-md overflow-hidden ${
-                          selectMode && selected ? "ring-2 ring-sky-500" : ""
-                        }`;
-                        const overlay = selectMode ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              toggleSelectAttachment(a.id);
-                            }}
-                            className={`absolute top-1 right-1 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full text-white text-xs ${
-                              selected ? "bg-sky-600" : "bg-black/50"
-                            }`}
-                            title={selected ? "Quitar" : "Seleccionar"}
-                          >
-                            {selected ? "✓" : "+"}
-                          </button>
-                        ) : null;
-
-                        if ((a.mime || "").startsWith("image/")) {
-                          return (
-                            <div key={a.id} className={commonWrapCls}>
-                              {overlay}
-                              {selectMode ? (
-                                <img
-                                  src={url || "/placeholder.svg"}
-                                  alt={a.name}
-                                  className="max-h-40 w-full object-cover"
-                                  onClick={() => toggleSelectAttachment(a.id)}
-                                />
-                              ) : (
-                                <a href={url} target="_blank" rel="noreferrer">
-                                  <img
-                                    src={url || "/placeholder.svg"}
-                                    alt={a.name}
-                                    className="max-h-40 w-full object-cover"
-                                  />
-                                </a>
-                              )}
-                            </div>
-                          );
-                        }
-                        if ((a.mime || "").startsWith("video/")) {
-                          return (
-                            <div key={a.id} className={commonWrapCls}>
-                              {overlay}
-                              {selectMode ? (
-                                <video
-                                  src={url}
-                                  className="max-h-40 w-full"
-                                  onClick={() => toggleSelectAttachment(a.id)}
-                                />
-                              ) : (
-                                <video
-                                  src={url}
-                                  controls
-                                  className="max-h-40 w-full"
-                                />
-                              )}
-                            </div>
-                          );
-                        }
-                        if ((a.mime || "").startsWith("audio/")) {
-                          return (
-                            <div key={a.id} className={commonWrapCls}>
-                              {overlay}
-                              <audio src={url} controls className="w-full" />
-                            </div>
-                          );
-                        }
-                        return (
-                          <div
-                            key={a.id}
-                            className={`${commonWrapCls} p-2 bg-white`}
-                          >
-                            {overlay}
-                            {selectMode ? (
-                              <div
-                                className="text-xs underline break-all cursor-pointer"
-                                onClick={() => toggleSelectAttachment(a.id)}
-                                title={a.name}
-                              >
-                                {a.name}
-                              </div>
-                            ) : (
-                              <a
-                                href={url}
-                                download={a.name}
-                                className="text-xs underline break-all block"
-                                title={a.name}
-                              >
-                                {a.name}
-                              </a>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 select-none justify-end">
-                    <span>
-                      {new Date(m.at).toLocaleTimeString("es-ES", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+          {!isJoining &&
+            enhanced.map((e) => {
+              if (e.type === "day") {
+                return (
+                  <div
+                    key={e.key}
+                    className="flex items-center justify-center my-4"
+                  >
+                    <span className="text-xs px-3 py-1.5 rounded-lg bg-white/90 shadow-sm text-gray-600 font-medium">
+                      {e.day}
                     </span>
-                    {mine && (
-                      <svg
-                        className="w-4 h-4 text-[#53bdeb]"
-                        viewBox="0 0 16 15"
-                        fill="none"
-                      >
-                        <path
-                          d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"
-                          fill="currentColor"
-                        />
-                      </svg>
-                    )}
-                    {m.status && (
-                      <span
-                        className={`ml-2 inline-flex items-center px-2 py-0.5 text-xs rounded-full font-semibold text-white ${
-                          m.status === "EN_CURSO"
-                            ? "bg-yellow-500"
-                            : m.status === "COMPLETADO"
-                            ? "bg-emerald-600"
-                            : m.status === "ABANDONO"
-                            ? "bg-red-600"
-                            : m.status === "PAUSA"
-                            ? "bg-gray-500"
-                            : "bg-sky-600"
-                        }`}
-                      >
-                        {String(m.status).replace("_", " ")}
-                      </span>
-                    )}
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              }
+              const m = e.msg!;
+              const mine =
+                (m.sender || "").toLowerCase() ===
+                (currentRole || "").toLowerCase();
+              return (
+                <MessageBubble
+                  key={e.key}
+                  msg={{
+                    id: m.id,
+                    sender: m.sender as any,
+                    text: m.text,
+                    at: m.at,
+                    attachments: m.attachments as any,
+                    status: m.status,
+                    delivered: m.delivered,
+                    read: m.read,
+                  }}
+                  mine={mine}
+                  selectMode={selectMode}
+                  selected={selectedIds.has(m.id)}
+                  onToggleSelect={() => toggleSelect(m.id)}
+                  selectedAttachmentIds={selectedAttachmentIds}
+                  onToggleSelectAttachment={toggleSelectAttachment}
+                />
+              );
+            })}
           <div ref={bottomRef} />
         </div>
 
@@ -1155,6 +3084,11 @@ export default function ChatRealtime({
           className="sticky bottom-0 z-10 p-2 bg-[#f0f0f0] border-t border-gray-200"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
         >
+          {showTypingIndicator && otherTyping && (
+            <div className="px-3 pb-1 text-xs text-gray-600">
+              El otro está escribiendo…
+            </div>
+          )}
           <div className="flex items-end gap-2">
             <button
               className="p-2.5 rounded-full hover:bg-gray-200 transition-colors active:scale-95"
@@ -1180,7 +3114,18 @@ export default function ChatRealtime({
               <textarea
                 ref={inputRef}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  emitTyping(true);
+                  try {
+                    if (typingTimerRef.current)
+                      clearTimeout(typingTimerRef.current);
+                  } catch {}
+                  typingTimerRef.current = setTimeout(
+                    () => emitTyping(false),
+                    1500
+                  );
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();

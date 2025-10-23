@@ -35,6 +35,9 @@ import {
 } from "@/components/ui/table";
 import Link from "next/link";
 import TicketsPanelCoach from "../TicketsPanelCoach";
+import CoachChatInline from "./CoachChatInline";
+import { getCoaches, type CoachItem as CoachMini } from "../api";
+import { useMemo } from "react";
 
 export default function CoachDetailPage({
   params,
@@ -54,6 +57,22 @@ export default function CoachDetailPage({
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  // Estado para chat de equipo (equipo ↔ equipo)
+  const [teamsList, setTeamsList] = useState<CoachMini[]>([]);
+  const [targetTeamCode, setTargetTeamCode] = useState<string | null>(null);
+  const [chatList, setChatList] = useState<any[]>([]);
+  const [requestListSignal, setRequestListSignal] = useState<number>(0);
+  const [chatConnected, setChatConnected] = useState<boolean>(false);
+  const [chatInfo, setChatInfo] = useState<{
+    chatId: string | number | null;
+    myParticipantId: string | number | null;
+    participants?: any[] | null;
+  }>({ chatId: null, myParticipantId: null, participants: null });
+  const [chatsLoading, setChatsLoading] = useState<boolean>(true);
+  // Marca de decisión por contacto (evita logs/decisiones repetidas)
+  const [decisionStamp, setDecisionStamp] = useState<string | null>(null);
+  const [contactQuery, setContactQuery] = useState<string>("");
+  const [readsBump, setReadsBump] = useState<number>(0);
 
   // opciones API for puesto/area (use opcion_key/opcion_value)
   const [puestoOptionsApi, setPuestoOptionsApi] = useState<OpcionItem[]>([]);
@@ -81,8 +100,268 @@ export default function CoachDetailPage({
         if (!ctrl.signal.aborted) setLoading(false);
       }
     })();
+    // Cargar lista de equipos para iniciar chats internos
+    (async () => {
+      try {
+        setChatsLoading(true);
+        const list = await getCoaches({ page: 1, pageSize: 200 });
+        if (ctrl.signal.aborted) return;
+        // Excluir el propio equipo
+        setTeamsList(
+          list.filter(
+            (t) => (t.codigo || "").toLowerCase() !== (code || "").toLowerCase()
+          )
+        );
+      } catch {}
+    })();
     return () => ctrl.abort();
   }, [code]);
+
+  const targetTeamName = useMemo(() => {
+    if (!targetTeamCode) return "";
+    const found = teamsList.find(
+      (t) =>
+        (t.codigo || "").toLowerCase() === String(targetTeamCode).toLowerCase()
+    );
+    return found?.nombre || String(targetTeamCode);
+  }, [teamsList, targetTeamCode]);
+
+  const filteredTeams = useMemo(() => {
+    const q = (contactQuery || "").trim().toLowerCase();
+    const list = Array.isArray(teamsList) ? teamsList : [];
+    if (!q) return list;
+    return list.filter(
+      (t) =>
+        (t.nombre || "").toLowerCase().includes(q) ||
+        (t.codigo || "").toLowerCase().includes(q)
+    );
+  }, [teamsList, contactQuery]);
+
+  function openContact(t: CoachMini) {
+    setTargetTeamCode(t.codigo);
+    // reiniciar para que ChatRealtime cree o reutilice según corresponda
+    setChatInfo({ chatId: null, myParticipantId: null });
+    // refrescar listado de chats propios por si hay existentes
+    setChatsLoading(true);
+    setRequestListSignal((n) => n + 1);
+    setDecisionStamp(null);
+    try {
+      console.log("[teamsv2] contacto seleccionado =>", {
+        target: t.codigo,
+        myself: code,
+      });
+    } catch {}
+  }
+
+  // Helpers para encontrar conversación existente equipo↔equipo y evitar duplicados visuales
+  function normalizeTipo(v: any): "cliente" | "equipo" | "admin" | "" {
+    const s = String(v || "")
+      .trim()
+      .toLowerCase();
+    if (["cliente", "alumno", "student"].includes(s)) return "cliente";
+    if (["equipo", "coach", "entrenador"].includes(s)) return "equipo";
+    if (["admin", "administrador"].includes(s)) return "admin";
+    return "";
+  }
+  function itemParticipants(it: any): any[] {
+    const parts = it?.participants || it?.participantes || [];
+    return Array.isArray(parts) ? parts : [];
+  }
+  function chatHasEquipoPair(it: any, a: string, b: string): boolean {
+    const parts = itemParticipants(it);
+    const set = new Set<string>();
+    for (const p of parts) {
+      if (normalizeTipo(p?.participante_tipo) === "equipo" && p?.id_equipo) {
+        set.add(String(p.id_equipo).toLowerCase());
+      }
+    }
+    return set.has(String(a).toLowerCase()) && set.has(String(b).toLowerCase());
+  }
+  function chatOtherTeamCode(it: any, myCode: string): string | null {
+    try {
+      const parts = itemParticipants(it);
+      for (const p of parts) {
+        if (normalizeTipo(p?.participante_tipo) !== "equipo") continue;
+        const val = p?.id_equipo;
+        if (!val) continue;
+        const codeStr = String(val);
+        if (codeStr.toLowerCase() !== String(myCode).toLowerCase())
+          return codeStr;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  function getChatTimestamp(it: any): number {
+    const fields = [
+      it?.last_message_at,
+      it?.fecha_ultimo_mensaje,
+      it?.updated_at,
+      it?.fecha_actualizacion,
+      it?.created_at,
+      it?.fecha_creacion,
+    ];
+    for (const f of fields) {
+      const t = Date.parse(String(f || ""));
+      if (!isNaN(t)) return t;
+    }
+    // Fallback: usar id numérico si aplica, o 0
+    const idNum = Number(it?.id_chat ?? it?.id ?? 0);
+    return isNaN(idNum) ? 0 : idNum;
+  }
+  function getChatLastMessage(it: any): { text: string; at: number } {
+    try {
+      const m = it?.last_message || {};
+      const text =
+        String(
+          m?.contenido ?? m?.Contenido ?? m?.text ?? it?.last_message_text ?? ""
+        ) || "";
+      const atFields = [
+        m?.fecha_envio,
+        it?.last_message_at,
+        it?.fecha_ultimo_mensaje,
+        it?.updated_at,
+        it?.fecha_actualizacion,
+      ];
+      for (const f of atFields) {
+        const t = Date.parse(String(f || ""));
+        if (!isNaN(t)) return { text, at: t };
+      }
+      return { text, at: 0 };
+    } catch {
+      return { text: "", at: 0 };
+    }
+  }
+  const formatTime = (ms: number): string => {
+    if (!ms || isNaN(ms)) return "";
+    const d = new Date(ms);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString("es-ES", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+  function getLastReadByChatId(chatId: any): number {
+    try {
+      const key = `chatLastReadById:coach:${String(chatId)}`;
+      const v = localStorage.getItem(key);
+      const t = v ? parseInt(v, 10) : 0;
+      return isNaN(t) ? 0 : t;
+    } catch {
+      return 0;
+    }
+  }
+  function pickExistingChatIdForTarget(
+    targetCode: string
+  ): string | number | null {
+    const list = Array.isArray(chatList) ? chatList : [];
+    const matches = list.filter((it) =>
+      chatHasEquipoPair(it, code, targetCode)
+    );
+    if (matches.length === 0) return null;
+    matches.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
+    const top = matches[0];
+    return top?.id_chat ?? top?.id ?? null;
+  }
+
+  // Agrupar chats por contacto (equipo destino) y preparar listas para la UI
+  const chatsByContact = useMemo(() => {
+    const list = Array.isArray(chatList) ? chatList : [];
+    const map = new Map<string, any[]>();
+    for (const it of list) {
+      const target = chatOtherTeamCode(it, code);
+      if (!target) continue;
+      const key = String(target).toLowerCase();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(it);
+    }
+    // Construir arreglo con metadata útil
+    const arr = Array.from(map.entries()).map(([key, chats]) => {
+      chats.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
+      const targetCode = chatsByKeyToOriginalCode(chats, key);
+      const target = teamsList.find(
+        (t) => (t.codigo || "").toLowerCase() === key
+      );
+      const targetName = target?.nombre ?? targetCode ?? key;
+      const top = chats[0];
+      const topChatId = top?.id_chat ?? top?.id ?? null;
+      const lastAt = getChatTimestamp(top);
+      const last = getChatLastMessage(top);
+      const lastRead = topChatId != null ? getLastReadByChatId(topChatId) : 0;
+      // Si nunca se abrió (lastRead=0) pero hay mensajes (lastAt>0), contar como no leído
+      const hasUnread = lastAt > (lastRead || 0);
+      return {
+        key,
+        targetCode: targetCode ?? key,
+        targetName,
+        chats,
+        topChatId,
+        lastAt,
+        lastText: (last.text || "").trim(),
+        hasUnread,
+      };
+    });
+    // Ordenar por actividad (más reciente primero)
+    arr.sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+    return arr;
+  }, [chatList, teamsList, code, readsBump]);
+
+  function chatsByKeyToOriginalCode(
+    chats: any[],
+    keyLower: string
+  ): string | null {
+    for (const it of chats) {
+      const other = chatOtherTeamCode(it, code);
+      if (other && other.toLowerCase() === keyLower) return other;
+    }
+    return null;
+  }
+
+  const filteredChatsByContact = useMemo(() => {
+    const q = (contactQuery || "").trim().toLowerCase();
+    if (!q) return chatsByContact;
+    return chatsByContact.filter(
+      (c) =>
+        String(c.targetName || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(c.targetCode || "")
+          .toLowerCase()
+          .includes(q)
+    );
+  }, [chatsByContact, contactQuery]);
+
+  const contactsWithoutChat = useMemo(() => {
+    const withChat = new Set(
+      chatsByContact.map((c) => c.targetCode.toLowerCase())
+    );
+    const list = Array.isArray(teamsList) ? teamsList : [];
+    const noChat = list.filter(
+      (t) => !withChat.has(String(t.codigo || "").toLowerCase())
+    );
+    const q = (contactQuery || "").trim().toLowerCase();
+    if (!q) return noChat;
+    return noChat.filter(
+      (t) =>
+        (t.nombre || "").toLowerCase().includes(q) ||
+        (t.codigo || "").toLowerCase().includes(q)
+    );
+  }, [teamsList, chatsByContact, contactQuery]);
+
+  // Eliminado: la decisión se toma exclusivamente en onChatsList y onChatInfo para evitar bucles
+
+  // Hacer una primera carga cuando el chat se conecta (una vez)
+  const listRequestedRef = useMemo(() => ({ done: false }), []);
+  useEffect(() => {
+    if (!chatConnected) return;
+    if (listRequestedRef.done) return;
+    if (chatList.length === 0) {
+      setChatsLoading(true);
+      setRequestListSignal((n) => n + 1);
+    }
+    listRequestedRef.done = true;
+  }, [chatConnected]);
 
   useEffect(() => {
     if (!coach) return;
@@ -148,6 +427,38 @@ export default function CoachDetailPage({
       mounted = false;
     };
   }, [editOpen, coach]);
+
+  // Mantener la lista actualizada y badges de no leído
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (!e.key) return;
+      if (e.key.startsWith("chatLastReadById:coach:")) {
+        setReadsBump((n) => n + 1);
+      }
+    };
+    const onCustom = (e: any) => {
+      try {
+        if (e?.detail?.role === "coach") setReadsBump((n) => n + 1);
+      } catch {}
+    };
+    const onListRefresh = () => {
+      setChatsLoading(true);
+      setRequestListSignal((n) => n + 1);
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("chat:last-read-updated", onCustom as any);
+    window.addEventListener("chat:list-refresh", onListRefresh as any);
+    const iv = setInterval(() => {
+      setChatsLoading(true);
+      setRequestListSignal((n) => n + 1);
+    }, 25000);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("chat:last-read-updated", onCustom as any);
+      window.removeEventListener("chat:list-refresh", onListRefresh as any);
+      clearInterval(iv);
+    };
+  }, []);
 
   return (
     <DashboardLayout>
@@ -241,6 +552,272 @@ export default function CoachDetailPage({
                       teamMembers: [],
                     }}
                   />
+                </div>
+                {/* Chat de equipo (equipo ↔ equipo) */}
+                <div className="mt-6">
+                  <h3 className="text-sm font-medium mb-2">Chat de equipo</h3>
+                  <div className="grid grid-cols-5 gap-3">
+                    {/* Contactos estilo WhatsApp */}
+                    <div className="col-span-2">
+                      <div className="rounded border bg-white">
+                        <div className="p-2 border-b">
+                          <input
+                            value={contactQuery}
+                            onChange={(e) => setContactQuery(e.target.value)}
+                            placeholder="Buscar equipos..."
+                            className="w-full h-8 px-2 text-sm border rounded"
+                          />
+                        </div>
+                        <div className="max-h-[40vh] overflow-auto">
+                          {/* Sección: Chats creados */}
+                          <div className="p-2 pb-1 text-[11px] font-semibold text-neutral-600 uppercase tracking-wide">
+                            Chats
+                          </div>
+                          {chatsLoading &&
+                          filteredChatsByContact.length === 0 ? (
+                            <div className="px-3 pb-2 text-xs text-neutral-500">
+                              Cargando…
+                            </div>
+                          ) : filteredChatsByContact.length === 0 ? (
+                            <div className="px-3 pb-2 text-xs text-neutral-500">
+                              Sin chats creados
+                            </div>
+                          ) : (
+                            <ul className="divide-y">
+                              {filteredChatsByContact.map((c) => (
+                                <li key={`chat-${c.key}`}>
+                                  <button
+                                    className={`w-full flex items-center gap-3 p-2 hover:bg-neutral-50 text-left ${
+                                      targetTeamCode?.toLowerCase() ===
+                                      c.targetCode.toLowerCase()
+                                        ? "bg-neutral-50"
+                                        : c.hasUnread
+                                        ? "bg-amber-50"
+                                        : ""
+                                    }`}
+                                    onClick={() => {
+                                      setTargetTeamCode(c.targetCode);
+                                      setChatInfo({
+                                        chatId: c.topChatId,
+                                        myParticipantId: null,
+                                      });
+                                      try {
+                                        console.log(
+                                          "[teamsv2] abrir chat existente",
+                                          {
+                                            target: c.targetCode,
+                                            chatId: c.topChatId,
+                                          }
+                                        );
+                                      } catch {}
+                                    }}
+                                  >
+                                    <div className="h-8 w-8 rounded-full bg-sky-600 text-white grid place-items-center text-sm font-semibold">
+                                      {(c.targetName || c.targetCode)
+                                        .slice(0, 1)
+                                        .toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-baseline gap-2">
+                                        <div className="text-sm font-medium truncate">
+                                          {c.targetName}
+                                        </div>
+                                        <div className="ml-auto text-[11px] text-neutral-500">
+                                          {formatTime(c.lastAt)}
+                                        </div>
+                                      </div>
+                                      <div
+                                        className={`text-[12px] truncate ${
+                                          c.hasUnread
+                                            ? "text-neutral-900 font-medium"
+                                            : "text-neutral-500"
+                                        }`}
+                                      >
+                                        {c.lastText || c.targetCode}
+                                      </div>
+                                    </div>
+                                    {c.hasUnread && (
+                                      <span className="ml-auto inline-flex items-center justify-center min-w-5 h-5 px-2 rounded-full bg-emerald-600 text-white text-[10px] font-semibold">
+                                        1
+                                      </span>
+                                    )}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+
+                          {/* Sección: Contactos sin chat */}
+                          <div className="p-2 pb-1 mt-3 text-[11px] font-semibold text-neutral-600 uppercase tracking-wide">
+                            Contactos sin chat
+                          </div>
+                          {chatsLoading && contactsWithoutChat.length === 0 ? (
+                            <div className="px-3 pb-2 text-xs text-neutral-500">
+                              Cargando…
+                            </div>
+                          ) : contactsWithoutChat.length === 0 ? (
+                            <div className="px-3 pb-2 text-xs text-neutral-500">
+                              Sin contactos disponibles
+                            </div>
+                          ) : (
+                            <ul className="divide-y">
+                              {contactsWithoutChat.map((t: CoachMini) => (
+                                <li key={`noc-${t.codigo}`}>
+                                  <button
+                                    className={`w-full flex items-center gap-3 p-2 hover:bg-neutral-50 text-left ${
+                                      targetTeamCode === t.codigo
+                                        ? "bg-neutral-50"
+                                        : ""
+                                    }`}
+                                    onClick={() => openContact(t)}
+                                  >
+                                    <div className="h-8 w-8 rounded-full bg-sky-600 text-white grid place-items-center text-sm font-semibold">
+                                      {(t.nombre || t.codigo)
+                                        .slice(0, 1)
+                                        .toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium truncate">
+                                        {t.nombre}
+                                      </div>
+                                      <div className="text-[11px] text-neutral-500">
+                                        {t.codigo}
+                                      </div>
+                                    </div>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Panel de conversación */}
+                    <div className="col-span-3">
+                      <CoachChatInline
+                        key={`chat-${code}-${targetTeamCode ?? "inbox"}`}
+                        room={`${code}:equipo:${targetTeamCode ?? "inbox"}`}
+                        role="coach"
+                        title={
+                          coach?.nombre
+                            ? `Equipo: ${coach?.nombre}`
+                            : `Equipo ${code}`
+                        }
+                        subtitle={
+                          targetTeamCode ? `con ${targetTeamName}` : undefined
+                        }
+                        variant="card"
+                        className="h-[45vh]"
+                        socketio={{
+                          url: "https://v001.onrender.com",
+                          tokenEndpoint:
+                            "https://v001.onrender.com/v1/auth/token",
+                          tokenId: `equipo:${String(code)}`,
+                          idEquipo: String(code),
+                          participants: targetTeamCode
+                            ? [
+                                {
+                                  participante_tipo: "equipo",
+                                  id_equipo: String(code),
+                                },
+                                {
+                                  participante_tipo: "equipo",
+                                  id_equipo: String(targetTeamCode),
+                                },
+                              ]
+                            : undefined,
+                          // Crear conversación al enviar el primer mensaje
+                          autoCreate: true,
+                          autoJoin: chatInfo.chatId != null,
+                          chatId: chatInfo.chatId ?? undefined,
+                        }}
+                        onConnectionChange={setChatConnected}
+                        onChatInfo={(info) => {
+                          // Guardar info cruda
+                          setChatInfo(info);
+                          // Al confirmar chat, ya no estamos cargando lista por selección
+                          setChatsLoading(false);
+                          // Si antes no había chat y ahora sí, refrescar la lista inmediatamente
+                          if (!chatInfo.chatId && info.chatId) {
+                            setChatsLoading(true);
+                            setRequestListSignal((n) => n + 1);
+                          }
+                          // Si ya confirma el par (yo↔target), cerrar decisión como EXISTE
+                          try {
+                            if (!targetTeamCode) return;
+                            const parts = Array.isArray(info.participants)
+                              ? info.participants
+                              : [];
+                            const set = new Set<string>();
+                            for (const p of parts) {
+                              const tipo = String(
+                                p?.participante_tipo || ""
+                              ).toLowerCase();
+                              if (tipo === "equipo" && p?.id_equipo) {
+                                set.add(String(p.id_equipo).toLowerCase());
+                              }
+                            }
+                            const hasPair =
+                              info.chatId != null &&
+                              set.has(String(code).toLowerCase()) &&
+                              set.has(String(targetTeamCode).toLowerCase());
+                            if (
+                              hasPair &&
+                              decisionStamp !== `exist:${targetTeamCode}`
+                            ) {
+                              console.log(
+                                "[teamsv2] chat (chatInfo) EXISTE — continuar",
+                                {
+                                  target: targetTeamCode,
+                                  chatId: info.chatId,
+                                }
+                              );
+                              setDecisionStamp(`exist:${targetTeamCode}`);
+                            }
+                          } catch {}
+                        }}
+                        requestListSignal={requestListSignal}
+                        listParams={{
+                          participante_tipo: "equipo",
+                          id_equipo: String(code),
+                          include_participants: true,
+                          with_participants: true,
+                        }}
+                        onChatsList={(list) => {
+                          try {
+                            console.log("[teamsv2] chat.list <=", list);
+                          } catch {}
+                          setChatList(list);
+                          setChatsLoading(false);
+                          // Tomar decisión directa con el listado (una sola vez)
+                          try {
+                            if (!targetTeamCode) return;
+                            const existing =
+                              pickExistingChatIdForTarget(targetTeamCode);
+                            if (existing != null) {
+                              if (decisionStamp !== `exist:${targetTeamCode}`) {
+                                console.log(
+                                  "[teamsv2] Decisión de chat: EXISTE — continuar",
+                                  {
+                                    target: targetTeamCode,
+                                    chatId: existing,
+                                  }
+                                );
+                                setDecisionStamp(`exist:${targetTeamCode}`);
+                              }
+                              setChatInfo({
+                                chatId: existing,
+                                myParticipantId: null,
+                              });
+                            } else {
+                              // Si el listado no contiene participantes fiables no concluimos "NO existe" aquí.
+                              // El componente interno detectará/creará al enviar si no existe.
+                            }
+                          } catch {}
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
                 {/* Tabs removed per UI simplification request */}
               </div>
