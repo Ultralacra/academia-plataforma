@@ -32,6 +32,39 @@ export default function StudentChatMinimal({
   const [text, setText] = React.useState("");
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
   const srcRef = React.useRef<EventSource | null>(null);
+  // Manejo de lectura/no leídos persistente por chatId (usamos room como chatId)
+  const chatId = normRoom; // alias para mantener misma semántica que otras vistas
+  const lastReadKey = React.useMemo(
+    () => `chatLastReadById:${role}:${chatId}`,
+    [role, chatId]
+  );
+  const unreadKey = React.useMemo(
+    () => `chatUnreadById:${role}:${chatId}`,
+    [role, chatId]
+  );
+
+  const markRead = React.useCallback(() => {
+    try {
+      if (!chatId) return;
+      localStorage.setItem(lastReadKey, Date.now().toString());
+      localStorage.setItem(unreadKey, "0");
+      // Notificar cambios a otras vistas (sidebar/listas)
+      try {
+        window.dispatchEvent(
+          new CustomEvent("chat:unread-count-updated", {
+            detail: { chatId, role, count: 0 },
+          })
+        );
+      } catch {}
+      try {
+        window.dispatchEvent(
+          new CustomEvent("chat:last-read-updated", {
+            detail: { chatId, role, at: Date.now() },
+          })
+        );
+      } catch {}
+    } catch {}
+  }, [chatId, lastReadKey, unreadKey, role]);
 
   React.useEffect(() => {
     if (!normRoom) return;
@@ -42,6 +75,37 @@ export default function StudentChatMinimal({
       try {
         const msg = JSON.parse(String(ev.data)) as Message;
         setItems((prev) => [...prev, msg]);
+        // Unificar con lógica existente: refrescar listas y acumular no leídos
+        const mine = (msg.sender || "").toLowerCase() === role.toLowerCase();
+        try {
+          window.dispatchEvent(
+            new CustomEvent("chat:list-refresh", {
+              detail: { reason: "message-current-chat", id_chat: chatId },
+            })
+          );
+        } catch {}
+        if (!mine) {
+          const isVisible =
+            typeof document !== "undefined" &&
+            document.visibilityState === "visible" &&
+            document.hasFocus();
+          if (isVisible) {
+            // Si está visible/enfocado, marcamos como leído inmediatamente
+            markRead();
+          } else {
+            // Incrementar contador persistente
+            try {
+              const prev = parseInt(localStorage.getItem(unreadKey) || "0", 10);
+              const next = (isNaN(prev) ? 0 : prev) + 1;
+              localStorage.setItem(unreadKey, String(next));
+              window.dispatchEvent(
+                new CustomEvent("chat:unread-count-updated", {
+                  detail: { chatId, role, count: next },
+                })
+              );
+            } catch {}
+          }
+        }
       } catch {}
     };
     es.onerror = () => {
@@ -58,6 +122,26 @@ export default function StudentChatMinimal({
   React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [items.length]);
+
+  // Marcar leído al montar si está visible, y al enfocar/visibilidad
+  React.useEffect(() => {
+    const onVis = () => {
+      if (typeof document === "undefined") return;
+      if (document.visibilityState === "visible") markRead();
+    };
+    const onFocus = () => markRead();
+    if (typeof document !== "undefined") onVis();
+    if (typeof window !== "undefined") {
+      document.addEventListener("visibilitychange", onVis);
+      window.addEventListener("focus", onFocus);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        document.removeEventListener("visibilitychange", onVis);
+        window.removeEventListener("focus", onFocus);
+      }
+    };
+  }, [markRead]);
 
   async function send() {
     const val = text.trim();

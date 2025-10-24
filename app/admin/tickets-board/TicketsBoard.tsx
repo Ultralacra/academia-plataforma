@@ -196,8 +196,8 @@ export default function TicketsBoard() {
     // Always show all 4 columns in this order
     return [
       "PENDIENTE",
-      "PENDIENTE_DE_ENVIO",
       "EN_PROGRESO",
+      "PENDIENTE_DE_ENVIO",
       "RESUELTO",
     ] as string[];
   }, []);

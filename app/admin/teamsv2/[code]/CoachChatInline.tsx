@@ -34,6 +34,7 @@ export default function CoachChatInline({
   className,
   variant = "card",
   socketio,
+  precreateOnParticipants,
   onConnectionChange,
   onChatInfo,
   requestListSignal,
@@ -47,6 +48,7 @@ export default function CoachChatInline({
   className?: string;
   variant?: "card" | "minimal";
   socketio?: SocketIOConfig;
+  precreateOnParticipants?: boolean; // si true, intenta crear/matchear chat al seleccionar participantes
   onConnectionChange?: (connected: boolean) => void;
   onChatInfo?: (info: {
     chatId: string | number | null;
@@ -100,6 +102,9 @@ export default function CoachChatInline({
     socketio?.participants
   );
   const listParamsRef = React.useRef<any>(listParams);
+  const lastPartsKeyRef = React.useRef<string>(
+    JSON.stringify(socketio?.participants || [])
+  );
 
   React.useEffect(() => {
     participantsRef.current = socketio?.participants;
@@ -114,6 +119,38 @@ export default function CoachChatInline({
     chatIdRef.current = chatId;
   }, [chatId]);
 
+  // Reset suave al cambiar participantes (para permitir abrir nuevo destino)
+  React.useEffect(() => {
+    try {
+      const parts = participantsRef.current ?? socketio?.participants;
+      const key = JSON.stringify(parts || []);
+      if (key === lastPartsKeyRef.current) return;
+      lastPartsKeyRef.current = key;
+      if (!precreateOnParticipants) return;
+      // Reiniciar estado de chat para que pueda unirse al nuevo destino
+      setChatId(null);
+      chatIdRef.current = null;
+      setItems([]);
+      seenRef.current = new Set();
+      setOtherTyping(false);
+      lastJoinedChatIdRef.current = null;
+    } catch {}
+  }, [socketio?.participants, precreateOnParticipants]);
+
+  // Unión automática a chat existente cuando cambian los participantes (solo join, sin crear)
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (!connected) return;
+        if (!precreateOnParticipants) return;
+        if (chatIdRef.current != null) return;
+        const parts = participantsRef.current ?? socketio?.participants;
+        if (!Array.isArray(parts) || parts.length === 0) return;
+        await ensureChatReadyForSend({ onlyFind: true });
+      } catch {}
+    })();
+  }, [connected, precreateOnParticipants, socketio?.participants]);
+
   React.useEffect(() => {
     requestAnimationFrame(() => {
       try {
@@ -126,7 +163,8 @@ export default function CoachChatInline({
   const onScrollContainer = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const threshold = 100;
+    // Umbral pequeño para considerar "pegado al fondo"
+    const threshold = 48; // margen mayor para evitar parpadeos al near-bottom
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottomRef.current = distance <= threshold;
   }, []);
@@ -179,6 +217,16 @@ export default function CoachChatInline({
       if (chatId == null) return;
       const key = `chatLastReadById:coach:${String(chatId)}`;
       localStorage.setItem(key, String(Date.now()));
+      // Reiniciar contador persistente de no leídos por chatId
+      try {
+        const unreadKey = `chatUnreadById:${role}:${String(chatId)}`;
+        localStorage.setItem(unreadKey, "0");
+        window.dispatchEvent(
+          new CustomEvent("chat:unread-count-updated", {
+            detail: { chatId, role, count: 0 },
+          })
+        );
+      } catch {}
       const evt = new CustomEvent("chat:last-read-updated", {
         detail: { chatId, role: role },
       });
@@ -248,24 +296,60 @@ export default function CoachChatInline({
                 currentChatId,
               });
             } catch {}
+            // Si el mensaje es de otro chat (o no hay chat unido aún), avisa para refrescar y sumar no leídos
             if (
-              currentChatId != null &&
               msg?.id_chat != null &&
-              String(msg.id_chat) !== String(currentChatId)
+              String(msg.id_chat) !== String(currentChatId ?? "")
             ) {
               try {
-                const evt = new CustomEvent("chat:list-refresh", {
+                // Avisar para refrescar bandejas
+                const evtRefresh = new CustomEvent("chat:list-refresh", {
                   detail: {
                     reason: "message-other-chat",
                     id_chat: msg?.id_chat,
                   },
                 });
-                window.dispatchEvent(evt);
+                window.dispatchEvent(evtRefresh);
+                // Incrementar contador local de no leídos (si no es eco propio)
+                const myPidNow = myParticipantIdRef.current;
+                const isMineById =
+                  (myPidNow != null &&
+                    String(getEmitter(msg) ?? "") === String(myPidNow)) ||
+                  false;
+                const isMineBySession =
+                  !!msg?.client_session &&
+                  String(msg.client_session) ===
+                    String(clientSessionRef.current);
+                if (!isMineById && !isMineBySession) {
+                  const evtBump = new CustomEvent("chat:unread-bump", {
+                    detail: { chatId: msg?.id_chat, role, at: Date.now() },
+                  });
+                  window.dispatchEvent(evtBump);
+                  // Persistir incremento de no leídos por chatId
+                  try {
+                    const unreadKey = `chatUnreadById:${role}:${String(
+                      msg?.id_chat
+                    )}`;
+                    const prev = parseInt(
+                      localStorage.getItem(unreadKey) || "0",
+                      10
+                    );
+                    const next = (isNaN(prev) ? 0 : prev) + 1;
+                    localStorage.setItem(unreadKey, String(next));
+                    window.dispatchEvent(
+                      new CustomEvent("chat:unread-count-updated", {
+                        detail: {
+                          chatId: msg?.id_chat,
+                          role,
+                          count: next,
+                        },
+                      })
+                    );
+                  } catch {}
+                }
                 console.log(
-                  "[CoachChat] chat.message de otro chat -> refresh lista",
-                  {
-                    id_chat: msg?.id_chat,
-                  }
+                  "[CoachChat] chat.message de otro chat -> refresh+bump",
+                  { id_chat: msg?.id_chat }
                 );
               } catch {}
               return;
@@ -362,6 +446,16 @@ export default function CoachChatInline({
               }
               return [...prev, newMsg];
             });
+            // Pedir refresco de listado también cuando llega mensaje del chat actual
+            try {
+              const evtRefresh = new CustomEvent("chat:list-refresh", {
+                detail: {
+                  reason: "message-current-chat",
+                  id_chat: currentChatId,
+                },
+              });
+              window.dispatchEvent(evtRefresh);
+            } catch {}
             markRead();
             try {
               console.log("[CoachChat] mensaje agregado", {
@@ -774,7 +868,9 @@ export default function CoachChatInline({
     } catch {}
   }, [items.length, connected, chatId]);
 
-  async function ensureChatReadyForSend(): Promise<boolean> {
+  async function ensureChatReadyForSend(opts?: {
+    onlyFind?: boolean;
+  }): Promise<boolean> {
     try {
       if (chatId != null) return true;
       const sio = sioRef.current;
@@ -991,6 +1087,11 @@ export default function CoachChatInline({
             resolve(false);
           }
         });
+      }
+
+      if (opts?.onlyFind === true) {
+        // Solo se pidió localizar y unirse si existe
+        return false;
       }
 
       if (!autoCreate) return false;
@@ -1436,9 +1537,13 @@ export default function CoachChatInline({
       <div
         ref={scrollRef}
         onScroll={onScrollContainer}
-        className="flex-1 overflow-y-auto p-4 min-h-0 bg-[#ECE5DD]"
+        className="relative flex-1 overflow-y-auto p-4 min-h-0 bg-[#ECE5DD]"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+          scrollbarGutter: "stable both-edges",
+          overscrollBehavior: "contain",
+          overflowAnchor: "none", // evitar saltos por scroll anchoring
+          overflowY: "scroll", // mantener el espacio del scrollbar estable
         }}
       >
         {isJoining && items.length === 0 ? (
@@ -1514,26 +1619,30 @@ export default function CoachChatInline({
             );
           })
         )}
-        {otherTyping && (
-          <div className="flex justify-start mt-2">
-            <div className="bg-white px-4 py-2 rounded-lg shadow-sm">
-              <div className="flex gap-1">
-                <span
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "0ms" }}
-                ></span>
-                <span
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "150ms" }}
-                ></span>
-                <span
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "300ms" }}
-                ></span>
-              </div>
+        {/* Indicador de escritura como overlay absoluto para no alterar el layout */}
+        <div
+          className={`pointer-events-none absolute left-4 bottom-4 transition-opacity duration-150 ${
+            otherTyping ? "opacity-100" : "opacity-0"
+          }`}
+          aria-hidden
+        >
+          <div className="bg-white/95 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200">
+            <div className="flex gap-1 items-center">
+              <span
+                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              ></span>
+              <span
+                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              ></span>
+              <span
+                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              ></span>
             </div>
           </div>
-        )}
+        </div>
         <div ref={bottomRef} />
       </div>
 

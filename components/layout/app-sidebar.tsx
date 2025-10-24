@@ -51,7 +51,6 @@ const adminItems: MenuItem[] = [
   { title: "Coachs", url: "/admin/teamsv2", icon: Users },
   { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
   { title: "Tickets", url: "/admin/tickets-board", icon: MessageSquare },
-  { title: "Chat", url: "/chat", icon: MessageSquare },
   { title: "Chat Beta", url: "/chat/beta", icon: MessageSquare },
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
@@ -110,14 +109,56 @@ export function AppSidebar() {
       : "Invitado";
 
   const [metricsOpen, setMetricsOpen] = useState(false);
-  const { unreadTotal, lastEvent } = useChatNotifications({
-    role: (user?.role === "student"
+  const roleKey = (
+    user?.role === "student"
       ? "alumno"
       : user?.role === "coach"
       ? "coach"
-      : "admin") as any,
+      : "admin"
+  ) as "admin" | "alumno" | "coach";
+  const { unreadTotal, lastEvent } = useChatNotifications({
+    role: roleKey as any,
     enableToast: true,
   });
+
+  // Sumar contadores persistentes por chatId (Socket.IO) guardados en localStorage
+  const [unreadByIdSum, setUnreadByIdSum] = useState<number>(0);
+  useEffect(() => {
+    function compute() {
+      try {
+        if (typeof window === "undefined") return;
+        const prefix = `chatUnreadById:${roleKey}:`;
+        let sum = 0;
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const k = window.localStorage.key(i) as string;
+          if (!k || !k.startsWith(prefix)) continue;
+          const v = parseInt(window.localStorage.getItem(k) || "0", 10);
+          if (!isNaN(v)) sum += v;
+        }
+        setUnreadByIdSum(sum);
+      } catch {}
+    }
+    compute();
+    function onCountUpdated() {
+      compute();
+    }
+    function onStorage(ev: StorageEvent) {
+      try {
+        if (!ev.key) return;
+        if (ev.key.startsWith(`chatUnreadById:${roleKey}:`)) compute();
+      } catch {}
+    }
+    window.addEventListener("chat:unread-count-updated", onCountUpdated as any);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(
+        "chat:unread-count-updated",
+        onCountUpdated as any
+      );
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [roleKey]);
+  const unreadGrandTotal = (unreadTotal || 0) + (unreadByIdSum || 0);
 
   // Toast cuando hay mensaje nuevo y estamos visibles pero fuera de /chat
   useEffect(() => {
@@ -226,11 +267,11 @@ export function AppSidebar() {
                                   <span className="truncate flex items-center gap-2">
                                     {item.title}
                                     {item.title === "Chat" &&
-                                      unreadTotal > 0 && (
+                                      unreadGrandTotal > 0 && (
                                         <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold">
-                                          {unreadTotal > 99
+                                          {unreadGrandTotal > 99
                                             ? "99+"
-                                            : unreadTotal}
+                                            : unreadGrandTotal}
                                         </span>
                                       )}
                                   </span>

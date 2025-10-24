@@ -60,7 +60,7 @@ export default function StudentChatPage() {
                   tokenEndpoint:
                     process.env.NEXT_PUBLIC_CHAT_TOKEN_ENDPOINT ||
                     "https://v001.vercel.app/v1/auth/token",
-                  tokenId: room,
+                  tokenId: room || undefined,
                   // Config por defecto segun el ejemplo provisto; ajusta via env si es necesario
                   idCliente:
                     Number(process.env.NEXT_PUBLIC_CHAT_ID_CLIENTE) || 456,

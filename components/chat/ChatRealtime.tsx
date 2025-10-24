@@ -383,6 +383,17 @@ export default function ChatRealtime({
       if (chatId == null) return;
       const key = `chatLastReadById:${currentRole}:${String(chatId)}`;
       localStorage.setItem(key, Date.now().toString());
+      // Reiniciar contador persistente de no leídos por chatId (si existe)
+      try {
+        const unreadKey = `chatUnreadById:${currentRole}:${String(chatId)}`;
+        localStorage.setItem(unreadKey, "0");
+        // Notificar cambio de contador para UIs que lean desde localStorage
+        window.dispatchEvent(
+          new CustomEvent("chat:unread-count-updated", {
+            detail: { chatId, role: currentRole, count: 0 },
+          })
+        );
+      } catch {}
       // Notificar en este mismo tab (storage no se dispara en la misma pestaña)
       try {
         window.dispatchEvent(
@@ -568,12 +579,66 @@ export default function ChatRealtime({
                 id_chat_participante_emisor: msg?.id_chat_participante_emisor,
               });
             } catch {}
-            // Si tenemos chatId actual y el mensaje pertenece a otro chat, ignorar
+            // Si el mensaje pertenece a OTRO chat (o aún no hay chat unido), avisar a la bandeja y salir
             if (
-              chatId != null &&
               msg?.id_chat != null &&
-              String(msg.id_chat) !== String(chatId)
+              String(msg.id_chat) !== String(chatId ?? "")
             ) {
+              try {
+                // Refrescar bandejas para traer último mensaje/orden
+                window.dispatchEvent(
+                  new CustomEvent("chat:list-refresh", {
+                    detail: {
+                      reason: "message-other-chat",
+                      id_chat: msg?.id_chat,
+                    },
+                  })
+                );
+                // Evitar eco propio (por participante o por client_session)
+                const isMineById =
+                  (myParticipantId != null &&
+                    String(msg?.id_chat_participante_emisor ?? "") ===
+                      String(myParticipantId)) ||
+                  (lastSentParticipantIdRef.current != null &&
+                    String(msg?.id_chat_participante_emisor ?? "") ===
+                      String(lastSentParticipantIdRef.current));
+                const isMineBySession =
+                  !!msg?.client_session &&
+                  String(msg.client_session) ===
+                    String(clientSessionRef.current);
+                if (!isMineById && !isMineBySession) {
+                  window.dispatchEvent(
+                    new CustomEvent("chat:unread-bump", {
+                      detail: {
+                        chatId: msg?.id_chat,
+                        role: currentRole,
+                        at: Date.now(),
+                      },
+                    })
+                  );
+                  // Persistir incremento de no leídos por chatId
+                  try {
+                    const unreadKey = `chatUnreadById:${currentRole}:${String(
+                      msg?.id_chat
+                    )}`;
+                    const prev = parseInt(
+                      localStorage.getItem(unreadKey) || "0",
+                      10
+                    );
+                    const next = (isNaN(prev) ? 0 : prev) + 1;
+                    localStorage.setItem(unreadKey, String(next));
+                    window.dispatchEvent(
+                      new CustomEvent("chat:unread-count-updated", {
+                        detail: {
+                          chatId: msg?.id_chat,
+                          role: currentRole,
+                          count: next,
+                        },
+                      })
+                    );
+                  } catch {}
+                }
+              } catch {}
               return;
             }
             const id = String(
@@ -655,6 +720,14 @@ export default function ChatRealtime({
               }
               return [...prev, newMsg];
             });
+            // Solicitar refresco de listado también cuando llega mensaje del chat actual
+            try {
+              window.dispatchEvent(
+                new CustomEvent("chat:list-refresh", {
+                  detail: { reason: "message-current-chat", id_chat: chatId },
+                })
+              );
+            } catch {}
             if (
               typeof document !== "undefined" &&
               document.visibilityState === "visible"

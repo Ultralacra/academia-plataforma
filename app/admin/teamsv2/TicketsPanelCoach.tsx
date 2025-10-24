@@ -956,8 +956,8 @@ export default function TicketsPanelCoach({
           {(
             [
               "PENDIENTE",
-              "PENDIENTE_DE_ENVIO",
               "EN_PROGRESO",
+              "PENDIENTE_DE_ENVIO",
               "RESUELTO",
             ] as StatusKey[]
           ).map((s) => {
@@ -1006,8 +1006,8 @@ export default function TicketsPanelCoach({
             {(
               [
                 "PENDIENTE",
-                "PENDIENTE_DE_ENVIO",
                 "EN_PROGRESO",
+                "PENDIENTE_DE_ENVIO",
                 "RESUELTO",
               ] as StatusKey[]
             ).map((col) => {

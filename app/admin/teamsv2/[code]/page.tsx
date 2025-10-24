@@ -71,6 +71,12 @@ export default function CoachDetailPage({
   const [decisionStamp, setDecisionStamp] = useState<string | null>(null);
   const [contactQuery, setContactQuery] = useState<string>("");
   const [readsBump, setReadsBump] = useState<number>(0);
+  // Bump para forzar re-render cuando cambian contadores persistentes de no leídos
+  const [unreadBump, setUnreadBump] = useState<number>(0);
+  // Chat abierto (por chatId) — opcional, solo informativo
+  const [currentOpenChatId, setCurrentOpenChatId] = useState<
+    string | number | null
+  >(null);
 
   const [puestoOptionsApi, setPuestoOptionsApi] = useState<OpcionItem[]>([]);
   const [areaOptionsApi, setAreaOptionsApi] = useState<OpcionItem[]>([]);
@@ -238,6 +244,16 @@ export default function CoachDetailPage({
       const v = localStorage.getItem(key);
       const t = v ? Number.parseInt(v, 10) : 0;
       return isNaN(t) ? 0 : t;
+    } catch {
+      return 0;
+    }
+  }
+  function getUnreadCountByChatId(chatId: any): number {
+    try {
+      const key = `chatUnreadById:coach:${String(chatId)}`;
+      const v = localStorage.getItem(key);
+      const n = v ? Number.parseInt(v, 10) : 0;
+      return isNaN(n) ? 0 : n;
     } catch {
       return 0;
     }
@@ -413,10 +429,18 @@ export default function CoachDetailPage({
       if (e.key.startsWith("chatLastReadById:coach:")) {
         setReadsBump((n) => n + 1);
       }
+      if (e.key.startsWith("chatUnreadById:coach:")) {
+        setUnreadBump((n) => n + 1);
+      }
     };
-    const onCustom = (e: any) => {
+    const onLastReadUpdated = (e: any) => {
       try {
         if (e?.detail?.role === "coach") setReadsBump((n) => n + 1);
+      } catch {}
+    };
+    const onUnreadCountUpdated = (e: any) => {
+      try {
+        if (e?.detail?.role === "coach") setUnreadBump((n) => n + 1);
       } catch {}
     };
     const onListRefresh = () => {
@@ -424,7 +448,11 @@ export default function CoachDetailPage({
       setRequestListSignal((n) => n + 1);
     };
     window.addEventListener("storage", onStorage);
-    window.addEventListener("chat:last-read-updated", onCustom as any);
+    window.addEventListener("chat:last-read-updated", onLastReadUpdated as any);
+    window.addEventListener(
+      "chat:unread-count-updated",
+      onUnreadCountUpdated as any
+    );
     window.addEventListener("chat:list-refresh", onListRefresh as any);
     const iv = setInterval(() => {
       setChatsLoading(true);
@@ -432,7 +460,14 @@ export default function CoachDetailPage({
     }, 25000);
     return () => {
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("chat:last-read-updated", onCustom as any);
+      window.removeEventListener(
+        "chat:last-read-updated",
+        onLastReadUpdated as any
+      );
+      window.removeEventListener(
+        "chat:unread-count-updated",
+        onUnreadCountUpdated as any
+      );
       window.removeEventListener("chat:list-refresh", onListRefresh as any);
       clearInterval(iv);
     };
@@ -505,12 +540,6 @@ export default function CoachDetailPage({
                   <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium text-neutral-700 bg-neutral-100">
                     {coach.area ?? "—"}
                   </span>
-                  <span className="ml-auto text-sm text-neutral-500">
-                    Alumnos:{" "}
-                    <strong className="text-neutral-900">
-                      {coach.alumnos ?? 0}
-                    </strong>
-                  </span>
                 </div>
 
                 <div>
@@ -532,9 +561,9 @@ export default function CoachDetailPage({
                 </div>
                 <div className="mt-6">
                   <h3 className="text-sm font-medium mb-2">Chat de equipo</h3>
-                  <div className="grid grid-cols-5 gap-3">
+                  <div className="grid grid-cols-5 gap-3 min-h-0">
                     <div className="col-span-2">
-                      <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
+                      <div className="rounded-lg border bg-white shadow-sm overflow-hidden h-[70vh] flex flex-col">
                         <div className="p-3 bg-[#F0F0F0] border-b">
                           <input
                             value={contactQuery}
@@ -543,7 +572,7 @@ export default function CoachDetailPage({
                             className="w-full h-9 px-3 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-[#128C7E]"
                           />
                         </div>
-                        <div className="max-h-[40vh] overflow-auto bg-white">
+                        <div className="flex-1 overflow-auto bg-white">
                           {/* Sección: Chats creados */}
                           <div className="px-3 py-2 text-[13px] font-semibold text-gray-600 bg-[#F0F0F0]">
                             CHATS
@@ -559,68 +588,109 @@ export default function CoachDetailPage({
                             </div>
                           ) : (
                             <ul className="divide-y divide-gray-100">
-                              {filteredChatsByContact.map((c) => (
-                                <li key={`chat-${c.key}`}>
-                                  <button
-                                    className={`w-full flex items-center gap-3 p-3 hover:bg-[#F5F5F5] text-left transition-colors ${
-                                      targetTeamCode?.toLowerCase() ===
-                                      c.targetCode.toLowerCase()
-                                        ? "bg-[#F0F0F0]"
-                                        : c.hasUnread
-                                        ? "bg-[#FFF9E6]"
-                                        : ""
-                                    }`}
-                                    onClick={() => {
-                                      setTargetTeamCode(c.targetCode);
-                                      setChatInfo({
-                                        chatId: c.topChatId,
-                                        myParticipantId: null,
-                                      });
-                                      try {
-                                        console.log(
-                                          "[teamsv2] abrir chat existente",
-                                          {
-                                            target: c.targetCode,
-                                            chatId: c.topChatId,
-                                          }
+                              {filteredChatsByContact.map((c) => {
+                                // Sumar conteos persistentes de todos los chats del contacto
+                                const count = (
+                                  Array.isArray(c.chats) ? c.chats : []
+                                ).reduce((acc: number, it: any) => {
+                                  const id = it?.id_chat ?? it?.id;
+                                  if (id == null) return acc;
+                                  return acc + getUnreadCountByChatId(id);
+                                }, 0);
+                                const isActive =
+                                  targetTeamCode?.toLowerCase() ===
+                                  c.targetCode.toLowerCase();
+                                const highlight =
+                                  (c.hasUnread || count > 0) && !isActive;
+                                return (
+                                  <li key={`chat-${c.key}`}>
+                                    <button
+                                      className={`w-full flex items-center gap-3 p-3 hover:bg-[#F5F5F5] text-left transition-colors ${
+                                        isActive
+                                          ? "bg-[#F0F0F0]"
+                                          : highlight
+                                          ? "bg-emerald-50"
+                                          : ""
+                                      }`}
+                                      onClick={() => {
+                                        setTargetTeamCode(c.targetCode);
+                                        setChatInfo({
+                                          chatId: c.topChatId,
+                                          myParticipantId: null,
+                                        });
+                                        setCurrentOpenChatId(
+                                          c.topChatId ?? null
                                         );
-                                      } catch {}
-                                    }}
-                                  >
-                                    <div className="h-12 w-12 rounded-full bg-[#128C7E] text-white grid place-items-center text-base font-semibold flex-shrink-0">
-                                      {(c.targetName || c.targetCode)
-                                        .slice(0, 1)
-                                        .toUpperCase()}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-baseline justify-between gap-2">
-                                        <div className="text-[15px] font-medium truncate text-gray-900">
-                                          {c.targetName}
+                                        // Reiniciar contadores persistentes al abrir el contacto
+                                        try {
+                                          for (const it of c.chats || []) {
+                                            const id = it?.id_chat ?? it?.id;
+                                            if (id == null) continue;
+                                            const uKey = `chatUnreadById:coach:${String(
+                                              id
+                                            )}`;
+                                            localStorage.setItem(uKey, "0");
+                                            window.dispatchEvent(
+                                              new CustomEvent(
+                                                "chat:unread-count-updated",
+                                                {
+                                                  detail: {
+                                                    chatId: id,
+                                                    role: "coach",
+                                                    count: 0,
+                                                  },
+                                                }
+                                              )
+                                            );
+                                          }
+                                          setUnreadBump((n) => n + 1);
+                                        } catch {}
+                                        try {
+                                          console.log(
+                                            "[teamsv2] abrir chat existente",
+                                            {
+                                              target: c.targetCode,
+                                              chatId: c.topChatId,
+                                            }
+                                          );
+                                        } catch {}
+                                      }}
+                                    >
+                                      <div className="h-12 w-12 rounded-full bg-[#128C7E] text-white grid place-items-center text-base font-semibold flex-shrink-0">
+                                        {(c.targetName || c.targetCode)
+                                          .slice(0, 1)
+                                          .toUpperCase()}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="flex items-baseline justify-between gap-2">
+                                          <div className="text-[15px] font-medium truncate text-gray-900">
+                                            {c.targetName}
+                                          </div>
+                                          <div className="text-[12px] text-gray-500 flex-shrink-0">
+                                            {formatTime(c.lastAt)}
+                                          </div>
                                         </div>
-                                        <div className="text-[12px] text-gray-500 flex-shrink-0">
-                                          {formatTime(c.lastAt)}
+                                        <div className="flex items-center gap-2">
+                                          <div
+                                            className={`text-[13px] truncate flex-1 ${
+                                              c.hasUnread || count > 0
+                                                ? "text-gray-900 font-medium"
+                                                : "text-gray-500"
+                                            }`}
+                                          >
+                                            {c.lastText || c.targetCode}
+                                          </div>
+                                          {(c.hasUnread || count > 0) && (
+                                            <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-semibold flex-shrink-0">
+                                              {count > 0 ? count : "•"}
+                                            </span>
+                                          )}
                                         </div>
                                       </div>
-                                      <div className="flex items-center gap-2">
-                                        <div
-                                          className={`text-[13px] truncate flex-1 ${
-                                            c.hasUnread
-                                              ? "text-gray-900 font-medium"
-                                              : "text-gray-500"
-                                          }`}
-                                        >
-                                          {c.lastText || c.targetCode}
-                                        </div>
-                                        {c.hasUnread && (
-                                          <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-semibold flex-shrink-0">
-                                            1
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  </button>
-                                </li>
-                              ))}
+                                    </button>
+                                  </li>
+                                );
+                              })}
                             </ul>
                           )}
 
@@ -669,7 +739,7 @@ export default function CoachDetailPage({
                         </div>
                       </div>
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-3 min-h-0">
                       <CoachChatInline
                         key={`chat-${code}-${targetTeamCode ?? "inbox"}`}
                         room={`${code}:equipo:${targetTeamCode ?? "inbox"}`}
@@ -683,7 +753,8 @@ export default function CoachDetailPage({
                           targetTeamCode ? `con ${targetTeamName}` : undefined
                         }
                         variant="card"
-                        className="h-[45vh] rounded-lg shadow-sm overflow-hidden"
+                        className="h-[70vh] rounded-lg shadow-sm overflow-hidden"
+                        precreateOnParticipants
                         socketio={{
                           url: "https://v001.onrender.com",
                           tokenEndpoint:
@@ -710,6 +781,7 @@ export default function CoachDetailPage({
                         onChatInfo={(info) => {
                           setChatInfo(info);
                           setChatsLoading(false);
+                          setCurrentOpenChatId(info?.chatId ?? null);
                           if (!chatInfo.chatId && info.chatId) {
                             setChatsLoading(true);
                             setRequestListSignal((n) => n + 1);
