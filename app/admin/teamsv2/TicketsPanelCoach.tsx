@@ -13,6 +13,7 @@ import {
   FileArchive,
   Loader2,
   Search,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +54,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
 
 type StatusKey =
   | "EN_PROGRESO"
@@ -220,6 +231,70 @@ export default function TicketsPanelCoach({
     url?: string;
   }>(null);
   const [blobCache, setBlobCache] = useState<Record<string, string>>({});
+
+  // Panel lateral de edición
+  type ExtraDetails = {
+    prioridad?: "BAJA" | "MEDIA" | "ALTA";
+    plazo?: number | null; // días
+    restante?: number | null; // días restantes
+    informante?: string;
+    resolucion?: string;
+    resuelto_por?: string;
+    revision?: string;
+    tarea?: string;
+    equipo?: string[]; // códigos
+  };
+  const [editOpen, setEditOpen] = useState(false);
+  const [editTicket, setEditTicket] = useState<CoachTicket | null>(null);
+  const [editForm, setEditForm] = useState<
+    ExtraDetails & {
+      nombre?: string | null;
+      estado?: StatusKey | string | null;
+      deadline?: string | null; // ISO
+    }
+  >({});
+  const [editFiles, setEditFiles] = useState<File[]>([]);
+  const [editPreviews, setEditPreviews] = useState<
+    { url: string; type: string; name: string; size: number }[]
+  >([]);
+  const editFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [detailsById, setDetailsById] = useState<
+    Record<string | number, ExtraDetails>
+  >({});
+
+  // Archivos existentes del ticket seleccionado (para mostrar dentro del panel)
+  const [editFilesLoading, setEditFilesLoading] = useState(false);
+  const [editExistingFiles, setEditExistingFiles] = useState<
+    {
+      id: string;
+      nombre_archivo: string;
+      mime_type: string | null;
+      tamano_bytes: number | null;
+      created_at: string | null;
+    }[]
+  >([]);
+
+  useEffect(() => {
+    // Cargar archivos existentes cuando se abre el panel y haya ticket con código
+    if (!editOpen || !editTicket?.codigo) return;
+    let alive = true;
+    (async () => {
+      try {
+        setEditFilesLoading(true);
+        const list = await getTicketFiles(editTicket.codigo!);
+        if (!alive) return;
+        setEditExistingFiles(list);
+      } catch (e) {
+        if (!alive) return;
+        setEditExistingFiles([]);
+      } finally {
+        if (alive) setEditFilesLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [editOpen, editTicket?.codigo]);
   // Cargar opciones de tipo y alumnos del coach para creación
   useEffect(() => {
     let alive = true;
@@ -275,8 +350,9 @@ export default function TicketsPanelCoach({
   }, [createFiles]);
 
   // Deducción automática de tipo a partir del nombre
-  function normalize(s: string) {
-    return s
+  function normalize(s?: string | null) {
+    const str = (s ?? "").toString();
+    return str
       .toLowerCase()
       .normalize("NFD")
       .replace(/\p{Diacritic}/gu, "")
@@ -1087,6 +1163,37 @@ export default function TicketsPanelCoach({
                             >
                               {STATUS_LABEL[col]}
                             </span>
+                            <button
+                              type="button"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-muted-foreground hover:bg-gray-50"
+                              title="Editar"
+                              onClick={() => {
+                                setEditTicket(t);
+                                const saved = detailsById[t.id] || {};
+                                setEditForm({
+                                  nombre: t.nombre ?? "",
+                                  estado: (t.estado as any) ?? "PENDIENTE",
+                                  deadline: t.deadline ?? null,
+                                  prioridad: (saved.prioridad ??
+                                    "MEDIA") as any,
+                                  plazo: saved.plazo ?? null,
+                                  restante: saved.restante ?? null,
+                                  informante: saved.informante ?? "",
+                                  resolucion: saved.resolucion ?? "",
+                                  resuelto_por: saved.resuelto_por ?? "",
+                                  revision: saved.revision ?? "",
+                                  tarea: saved.tarea ?? "",
+                                  equipo: Array.isArray(saved.equipo)
+                                    ? saved.equipo
+                                    : [],
+                                });
+                                setEditFiles([]);
+                                setEditPreviews([]);
+                                setEditOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -1341,6 +1448,450 @@ export default function TicketsPanelCoach({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Panel lateral de detalle/edición */}
+      <Drawer open={editOpen} onOpenChange={setEditOpen} direction="right">
+        <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-sm md:max-w-md lg:max-w-lg">
+          <DrawerHeader>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <DrawerTitle>Detalle del ticket</DrawerTitle>
+                <DrawerDescription>
+                  {editTicket?.codigo ? `Código: ${editTicket.codigo}` : ""}
+                </DrawerDescription>
+              </div>
+              {editForm.estado && (
+                <span
+                  className={`inline-flex h-6 items-center rounded-full px-2 text-xs font-medium ${
+                    STATUS_STYLE[
+                      String(editForm.estado).toUpperCase() as StatusKey
+                    ] || "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {STATUS_LABEL[
+                    String(editForm.estado).toUpperCase() as StatusKey
+                  ] || String(editForm.estado)}
+                </span>
+              )}
+            </div>
+          </DrawerHeader>
+          <div className="px-4 pb-4">
+            {!editTicket ? (
+              <div className="text-sm text-muted-foreground">
+                Selecciona un ticket
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Columna izquierda */}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      Título
+                    </label>
+                    <Input
+                      value={editForm.nombre ?? ""}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, nombre: e.target.value }))
+                      }
+                      placeholder="Nombre o asunto"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Estado
+                      </label>
+                      <Select
+                        value={String(editForm.estado ?? "PENDIENTE")}
+                        onValueChange={(v) =>
+                          setEditForm((f) => ({ ...f, estado: v }))
+                        }
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(
+                            [
+                              "PENDIENTE",
+                              "EN_PROGRESO",
+                              "PENDIENTE_DE_ENVIO",
+                              "RESUELTO",
+                            ] as StatusKey[]
+                          ).map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {STATUS_LABEL[s]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Prioridad
+                      </label>
+                      <Select
+                        value={String(editForm.prioridad ?? "MEDIA")}
+                        onValueChange={(v) =>
+                          setEditForm((f) => ({ ...f, prioridad: v as any }))
+                        }
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {["BAJA", "MEDIA", "ALTA"].map((p) => (
+                            <SelectItem key={p} value={p}>
+                              {p}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Plazo (días)
+                      </label>
+                      <Input
+                        type="number"
+                        value={editForm.plazo ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            plazo: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          }))
+                        }
+                        min={0}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Restante (días)
+                      </label>
+                      <Input
+                        type="number"
+                        value={editForm.restante ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            restante: e.target.value
+                              ? Number(e.target.value)
+                              : null,
+                          }))
+                        }
+                        min={0}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Deadline (fecha)
+                      </label>
+                      <Input
+                        type="date"
+                        value={(() => {
+                          const iso = editForm.deadline ?? "";
+                          if (!iso) return "";
+                          const d = new Date(iso);
+                          if (isNaN(d.getTime())) return "";
+                          return d.toISOString().slice(0, 10);
+                        })()}
+                        onChange={(e) => {
+                          const prev = editForm.deadline
+                            ? new Date(editForm.deadline)
+                            : new Date();
+                          const time = isNaN(prev.getTime())
+                            ? "00:00"
+                            : prev.toISOString().slice(11, 16);
+                          const iso = e.target.value
+                            ? `${e.target.value}T${time}:00.000Z`
+                            : null;
+                          setEditForm((f) => ({ ...f, deadline: iso }));
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Hora
+                      </label>
+                      <Input
+                        type="time"
+                        value={(() => {
+                          const iso = editForm.deadline ?? "";
+                          if (!iso) return "";
+                          const d = new Date(iso);
+                          if (isNaN(d.getTime())) return "";
+                          return d.toISOString().slice(11, 16);
+                        })()}
+                        onChange={(e) => {
+                          const dateStr = (() => {
+                            const iso = editForm.deadline ?? "";
+                            const d = new Date(iso);
+                            if (isNaN(d.getTime())) return "";
+                            return d.toISOString().slice(0, 10);
+                          })();
+                          const iso =
+                            dateStr && e.target.value
+                              ? `${dateStr}T${e.target.value}:00.000Z`
+                              : editForm.deadline;
+                          setEditForm((f) => ({ ...f, deadline: iso }));
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      Informante
+                    </label>
+                    <Input
+                      value={editForm.informante ?? ""}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          informante: e.target.value,
+                        }))
+                      }
+                      placeholder="Nombre del informante"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      Equipo (códigos separados por coma)
+                    </label>
+                    <Input
+                      value={(editForm.equipo ?? []).join(", ")}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          equipo: e.target.value
+                            .split(",")
+                            .map((s) => s.trim())
+                            .filter(Boolean),
+                        }))
+                      }
+                      placeholder="JJp8..., hQycZc..., ..."
+                    />
+                    {editForm.equipo && editForm.equipo.length > 0 && (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {editForm.equipo.map((c) => (
+                          <span
+                            key={c}
+                            className="rounded-full bg-muted px-2 py-0.5 text-xs"
+                          >
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Columna derecha */}
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      Tarea
+                    </label>
+                    <textarea
+                      className="w-full min-h-[72px] rounded-md border px-3 py-2 text-sm"
+                      value={editForm.tarea ?? ""}
+                      onChange={(e) =>
+                        setEditForm((f) => ({ ...f, tarea: e.target.value }))
+                      }
+                      placeholder="Descripción de la tarea"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs text-muted-foreground">
+                      Resolución
+                    </label>
+                    <textarea
+                      className="w-full min-h-[72px] rounded-md border px-3 py-2 text-sm"
+                      value={editForm.resolucion ?? ""}
+                      onChange={(e) =>
+                        setEditForm((f) => ({
+                          ...f,
+                          resolucion: e.target.value,
+                        }))
+                      }
+                      placeholder="Notas de resolución"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Resuelto por
+                      </label>
+                      <Input
+                        value={editForm.resuelto_por ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            resuelto_por: e.target.value,
+                          }))
+                        }
+                        placeholder="Nombre de la persona"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        Revisión
+                      </label>
+                      <Input
+                        value={editForm.revision ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({
+                            ...f,
+                            revision: e.target.value,
+                          }))
+                        }
+                        placeholder="Notas de revisión"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium">Archivos</label>
+                      {editTicket?.codigo && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openFilesFor(editTicket.codigo!)}
+                        >
+                          Ver existentes
+                        </Button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        ref={editFileInputRef}
+                        type="file"
+                        className="hidden"
+                        multiple
+                        onChange={(e) => {
+                          const picked = Array.from(e.target.files ?? []);
+                          if (!picked.length) return;
+                          setEditFiles((prev) =>
+                            [...prev, ...picked].slice(0, 10)
+                          );
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => editFileInputRef.current?.click()}
+                        >
+                          Adjuntar archivos
+                        </Button>
+                        {editFiles.length > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            {editFiles.length} seleccionados
+                          </span>
+                        )}
+                      </div>
+                      {editFiles.length > 0 && (
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {editFiles.map((f, i) => (
+                            <div
+                              key={`${f.name}-${i}`}
+                              className="rounded border bg-background p-2"
+                            >
+                              <div
+                                className="text-sm font-medium truncate"
+                                title={f.name}
+                              >
+                                {f.name}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {f.type || "archivo"} · {f.size} bytes
+                              </div>
+                              <div className="mt-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() =>
+                                    setEditFiles((prev) =>
+                                      prev.filter((_, idx) => idx !== i)
+                                    )
+                                  }
+                                >
+                                  Quitar
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+          <DrawerFooter>
+            <div className="flex items-center justify-end gap-2">
+              <DrawerClose asChild>
+                <Button variant="outline">Cancelar</Button>
+              </DrawerClose>
+              <Button
+                onClick={() => {
+                  if (!editTicket) return;
+                  // Guardar localmente cambios básicos en la grilla
+                  setRows((prev) =>
+                    prev.map((r) =>
+                      r.id === editTicket.id
+                        ? {
+                            ...r,
+                            nombre: editForm.nombre ?? r.nombre,
+                            estado: (editForm.estado as any) ?? r.estado,
+                            deadline: editForm.deadline ?? r.deadline,
+                          }
+                        : r
+                    )
+                  );
+                  // Persistir detalles extra en memoria local
+                  setDetailsById((prev) => ({
+                    ...prev,
+                    [editTicket.id]: {
+                      prioridad: editForm.prioridad as any,
+                      plazo: editForm.plazo ?? null,
+                      restante: editForm.restante ?? null,
+                      informante: editForm.informante ?? "",
+                      resolucion: editForm.resolucion ?? "",
+                      resuelto_por: editForm.resuelto_por ?? "",
+                      revision: editForm.revision ?? "",
+                      tarea: editForm.tarea ?? "",
+                      equipo: Array.isArray(editForm.equipo)
+                        ? editForm.equipo
+                        : [],
+                    },
+                  }));
+                  toast({ title: "Cambios guardados localmente" });
+                  setEditOpen(false);
+                }}
+              >
+                Guardar
+              </Button>
+            </div>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
     </div>
   );
 }
