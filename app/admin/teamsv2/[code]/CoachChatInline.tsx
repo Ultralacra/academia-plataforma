@@ -126,6 +126,8 @@ export default function CoachChatInline({
   const latestRequestedChatIdRef = React.useRef<any>(socketio?.chatId ?? null);
   const joinInFlightRef = React.useRef<boolean>(false);
   const lastJoinedChatIdRef = React.useRef<any>(null);
+  // Controla auto-scroll inicial por chatId para evitar quedar "a la mitad"
+  const autoScrolledChatRef = React.useRef<string | number | null>(null);
   const participantsRef = React.useRef<any[] | undefined>(
     socketio?.participants
   );
@@ -182,12 +184,72 @@ export default function CoachChatInline({
   React.useEffect(() => {
     requestAnimationFrame(() => {
       try {
+        const currentChat = chatIdRef.current ?? chatId;
+        const sc = scrollRef.current;
+        const br = bottomRef.current;
+        // Si aún no hemos auto-scrolleado este chat, forzar ir al fondo una vez
+        if (
+          currentChat != null &&
+          autoScrolledChatRef.current !== currentChat
+        ) {
+          if (sc && br) {
+            br.scrollIntoView({ behavior: "auto", block: "end" });
+            // También fijar manualmente por robustez
+            sc.scrollTop = sc.scrollHeight;
+            pinnedToBottomRef.current = true;
+          }
+          autoScrolledChatRef.current = currentChat;
+          return;
+        }
+        // Comportamiento normal: si estamos "pegados" al fondo, mantenernos abajo
         if (pinnedToBottomRef.current) {
-          bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+          br?.scrollIntoView({ behavior: "auto", block: "end" });
         }
       } catch {}
     });
+  }, [items.length, chatId]);
+
+  // Scroll síncrono antes de pintar cuando llegan los primeros mensajes
+  React.useLayoutEffect(() => {
+    try {
+      const currentChat = chatIdRef.current ?? chatId;
+      if (currentChat == null) return;
+      if (autoScrolledChatRef.current === currentChat) return;
+      const sc = scrollRef.current;
+      const br = bottomRef.current;
+      if (sc && br) {
+        br.scrollIntoView({ behavior: "auto", block: "end" });
+        sc.scrollTop = sc.scrollHeight;
+        pinnedToBottomRef.current = true;
+        autoScrolledChatRef.current = currentChat;
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length]);
+
+  // Cuando cambia de chat, permitir nuevo auto-scroll inicial
+  React.useEffect(() => {
+    autoScrolledChatRef.current = null;
+    // Al cambiar de chat, asumimos que deseamos iniciar abajo
+    pinnedToBottomRef.current = true;
+  }, [chatId]);
+
+  // Cuando termina el join inicial, aseguremos salto al fondo si hay mensajes
+  React.useEffect(() => {
+    if (!isJoining) {
+      requestAnimationFrame(() => {
+        try {
+          const sc = scrollRef.current;
+          const br = bottomRef.current;
+          if (sc && br) {
+            br.scrollIntoView({ behavior: "auto", block: "end" });
+            sc.scrollTop = sc.scrollHeight;
+            pinnedToBottomRef.current = true;
+          }
+        } catch {}
+      });
+    }
+  }, [isJoining]);
   const onScrollContainer = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -583,7 +645,7 @@ export default function CoachChatInline({
                     const unreadKey = `chatUnreadById:${role}:${String(
                       msg?.id_chat
                     )}`;
-                    const prev = parseInt(
+                    const prev = Number.parseInt(
                       localStorage.getItem(unreadKey) || "0",
                       10
                     );

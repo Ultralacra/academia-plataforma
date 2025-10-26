@@ -581,7 +581,7 @@ export default function TeamsPage() {
                     <TableCell className="align-middle">
                       {t.puesto ? (
                         <span
-                          className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full ${getPuestoColorClass(
+                          className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-md ${getPuestoColorClass(
                             t.puesto
                           )}`}
                         >

@@ -211,7 +211,7 @@ export function CoachStudentsModal({
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Buscar por ID o nombre…"
+                placeholder="Buscar por nombre…"
                 className="pl-8 rounded-xl bg-white border border-gray-200 shadow-none"
               />
             </div>
@@ -226,9 +226,6 @@ export function CoachStudentsModal({
               <Table className="min-w-full text-sm">
                 <TableHeader>
                   <TableRow className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide sticky top-0 z-10">
-                    <TableHead className="px-3 py-2 text-left font-medium w-[40%]">
-                      ID
-                    </TableHead>
                     <TableHead className="px-3 py-2 text-left font-medium">
                       Nombre
                     </TableHead>
@@ -241,7 +238,7 @@ export function CoachStudentsModal({
                         key={`sk-${i}`}
                         className="border-t border-gray-100"
                       >
-                        <TableCell colSpan={2} className="px-3 py-2">
+                        <TableCell colSpan={1} className="px-3 py-2">
                           <div className="h-5 animate-pulse rounded bg-neutral-100" />
                         </TableCell>
                       </TableRow>
@@ -249,7 +246,7 @@ export function CoachStudentsModal({
                   ) : filtered.length === 0 ? (
                     <TableRow className="border-t border-gray-100">
                       <TableCell
-                        colSpan={2}
+                        colSpan={1}
                         className="px-3 py-2 text-sm text-neutral-500"
                       >
                         {q
@@ -263,20 +260,6 @@ export function CoachStudentsModal({
                         key={`${r.id}_${r.id_alumno}`}
                         className="border-t border-gray-100 hover:bg-gray-50"
                       >
-                        <TableCell className="px-3 py-2 font-mono text-gray-700">
-                          {r.id_alumno ? (
-                            <Link
-                              href={`/admin/alumnos/${encodeURIComponent(
-                                String(r.id_alumno)
-                              )}`}
-                              className="text-blue-600 hover:underline"
-                            >
-                              {r.id_alumno}
-                            </Link>
-                          ) : (
-                            r.id_alumno
-                          )}
-                        </TableCell>
                         <TableCell className="px-3 py-2 truncate text-gray-900">
                           {r.id_alumno ? (
                             <Link

@@ -6,7 +6,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Edit } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { toast } from "@/components/ui/use-toast";
+import { toast } from "@/components/ui/toast";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -39,6 +39,8 @@ import CoachChatInline from "./CoachChatInline";
 import { getCoaches, type CoachItem as CoachMini } from "../api";
 import { useMemo } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import PersonalMetrics from "../PersonalMetrics";
 
 export default function CoachDetailPage({
   params,
@@ -499,6 +501,24 @@ export default function CoachDetailPage({
                     : "—"}
                 </span>
               </div>
+              <div className="flex flex-wrap gap-2 items-center mt-2">
+                {coach?.puesto && (
+                  <Badge
+                    variant="outline"
+                    className="rounded-md border-sky-200 bg-sky-50 text-sky-700"
+                  >
+                    {coach.puesto}
+                  </Badge>
+                )}
+                {coach?.area && (
+                  <Badge
+                    variant="outline"
+                    className="rounded-md border-neutral-200 bg-neutral-50 text-neutral-700"
+                  >
+                    {coach.area}
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
 
@@ -523,17 +543,17 @@ export default function CoachDetailPage({
           </div>
         </div>
 
-        {/* Tabs principales: Tickets (default), Detalles y Chat al final */}
         <Tabs defaultValue="tickets" className="mt-2">
           <TabsList>
             <TabsTrigger value="tickets">Tickets</TabsTrigger>
+            <TabsTrigger value="metricas">Métricas</TabsTrigger>
             <TabsTrigger value="detalles">Detalles</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
           </TabsList>
 
           {/* Pestaña Tickets: scroll interno, pantalla completa */}
-          <TabsContent value="tickets" className="mt-3">
-            <div className="h-[calc(100vh-180px)] min-h-[60vh] overflow-auto rounded-lg border bg-white p-4">
+          <TabsContent value="tickets" className="mt-0">
+            <div className="h-[calc(100vh-180px)] overflow-auto rounded-lg border bg-white p-4">
               {loading ? (
                 <div>Cargando...</div>
               ) : error ? (
@@ -555,35 +575,50 @@ export default function CoachDetailPage({
             </div>
           </TabsContent>
 
-          <TabsContent value="chat" className="mt-3">
-            {/* Contenedor de altura completa para evitar scroll del documento */}
-            <div className="h-[calc(100vh-180px)] min-h-[60vh]">
-              <div className="grid grid-cols-5 gap-3 min-h-0 h-full">
-                <div className="col-span-2">
-                  <div className="rounded-lg border bg-white shadow-sm overflow-hidden h-full flex flex-col">
-                    <div className="p-3 bg-[#F0F0F0] border-b">
+          <TabsContent value="metricas" className="mt-0">
+            <div className="h-[calc(100vh-180px)] overflow-auto rounded-lg border bg-white p-4">
+              {loading ? (
+                <div>Cargando...</div>
+              ) : error ? (
+                <div className="text-sm text-red-600">{error}</div>
+              ) : coach ? (
+                <PersonalMetrics
+                  coachCode={coach.codigo}
+                  coachName={coach.nombre}
+                />
+              ) : (
+                <div className="text-sm text-neutral-500">
+                  No se encontró información del coach.
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="chat" className="mt-0">
+            <div className="h-[calc(100vh-180px)] overflow-hidden">
+              <div className="grid grid-cols-12 gap-4 h-full">
+                {/* Sección: Chats creados */}
+                <div className="col-span-3 h-full flex flex-col overflow-hidden">
+                  <div className="rounded-lg border bg-white shadow-sm h-full flex flex-col overflow-hidden">
+                    <div className="p-3 bg-slate-50 border-b flex-shrink-0">
                       <input
                         value={contactQuery}
                         onChange={(e) => setContactQuery(e.target.value)}
                         placeholder="Buscar o iniciar un chat"
-                        className="w-full h-9 px-3 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-[#128C7E]"
+                        className="w-full h-9 px-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
                       />
                     </div>
-                    <div className="flex-1 overflow-auto bg-white">
-                      {/* Sección: Chats creados */}
-                      <div className="px-3 py-2 text-[13px] font-semibold text-gray-600 bg-[#F0F0F0]">
-                        CHATS
-                      </div>
+                    <div className="flex-1 overflow-y-auto min-h-0">
                       {chatsLoading && filteredChatsByContact.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-500">
+                        <div className="px-4 py-3 text-sm text-slate-500">
                           Cargando…
                         </div>
                       ) : filteredChatsByContact.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-500">
+                        <div className="px-4 py-3 text-sm text-slate-500">
                           Sin chats creados
                         </div>
                       ) : (
-                        <ul className="divide-y divide-gray-100">
+                        <ul className="divide-y divide-slate-100">
                           {filteredChatsByContact.map((c) => {
                             const count = (
                               Array.isArray(c.chats) ? c.chats : []
@@ -600,11 +635,11 @@ export default function CoachDetailPage({
                             return (
                               <li key={`chat-${c.key}`}>
                                 <button
-                                  className={`w-full flex items-center gap-3 p-3 hover:bg-[#F5F5F5] text-left transition-colors ${
+                                  className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${
                                     isActive
-                                      ? "bg-[#F0F0F0]"
+                                      ? "bg-slate-100"
                                       : highlight
-                                      ? "bg-emerald-50"
+                                      ? "bg-teal-50"
                                       : ""
                                   }`}
                                   onClick={() => {
@@ -637,43 +672,34 @@ export default function CoachDetailPage({
                                       }
                                       setUnreadBump((n) => n + 1);
                                     } catch {}
-                                    try {
-                                      console.log(
-                                        "[teamsv2] abrir chat existente",
-                                        {
-                                          target: c.targetCode,
-                                          chatId: c.topChatId,
-                                        }
-                                      );
-                                    } catch {}
                                   }}
                                 >
-                                  <div className="h-12 w-12 rounded-full bg-[#128C7E] text-white grid place-items-center text-base font-semibold flex-shrink-0">
+                                  <div className="h-11 w-11 rounded-full bg-teal-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
                                     {(c.targetName || c.targetCode)
                                       .slice(0, 1)
                                       .toUpperCase()}
                                   </div>
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-baseline justify-between gap-2">
-                                      <div className="text-[15px] font-medium truncate text-gray-900">
+                                      <div className="text-sm font-medium truncate text-slate-900">
                                         {c.targetName}
                                       </div>
-                                      <div className="text-[12px] text-gray-500 flex-shrink-0">
+                                      <div className="text-xs text-slate-500 flex-shrink-0">
                                         {formatTime(c.lastAt)}
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                       <div
-                                        className={`text-[13px] truncate flex-1 ${
+                                        className={`text-xs truncate flex-1 ${
                                           c.hasUnread || count > 0
-                                            ? "text-gray-900 font-medium"
-                                            : "text-gray-500"
+                                            ? "text-slate-900 font-medium"
+                                            : "text-slate-500"
                                         }`}
                                       >
                                         {c.lastText || c.targetCode}
                                       </div>
                                       {(c.hasUnread || count > 0) && (
-                                        <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-[#25D366] text-white text-[11px] font-semibold flex-shrink-0">
+                                        <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-teal-500 text-white text-xs font-semibold flex-shrink-0">
                                           {count > 0 ? count : "•"}
                                         </span>
                                       )}
@@ -687,39 +713,39 @@ export default function CoachDetailPage({
                       )}
 
                       {/* Sección: Contactos sin chat */}
-                      <div className="px-3 py-2 mt-2 text-[13px] font-semibold text-gray-600 bg-[#F0F0F0]">
+                      <div className="px-3 py-2 mt-2 text-xs font-semibold text-slate-600 bg-slate-50 sticky top-0 z-10">
                         CONTACTOS
                       </div>
                       {chatsLoading && contactsWithoutChat.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-500">
+                        <div className="px-4 py-3 text-sm text-slate-500">
                           Cargando…
                         </div>
                       ) : contactsWithoutChat.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-500">
+                        <div className="px-4 py-3 text-sm text-slate-500">
                           Sin contactos disponibles
                         </div>
                       ) : (
-                        <ul className="divide-y divide-gray-100">
+                        <ul className="divide-y divide-slate-100">
                           {contactsWithoutChat.map((t: CoachMini) => (
                             <li key={`noc-${t.codigo}`}>
                               <button
-                                className={`w-full flex items-center gap-3 p-3 hover:bg-[#F5F5F5] text-left transition-colors ${
+                                className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${
                                   targetTeamCode === t.codigo
-                                    ? "bg-[#F0F0F0]"
+                                    ? "bg-slate-100"
                                     : ""
                                 }`}
                                 onClick={() => openContact(t)}
                               >
-                                <div className="h-12 w-12 rounded-full bg-[#128C7E] text-white grid place-items-center text-base font-semibold flex-shrink-0">
+                                <div className="h-11 w-11 rounded-full bg-teal-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
                                   {(t.nombre || t.codigo)
                                     .slice(0, 1)
                                     .toUpperCase()}
                                 </div>
                                 <div className="min-w-0">
-                                  <div className="text-[15px] font-medium truncate text-gray-900">
+                                  <div className="text-sm font-medium truncate text-slate-900">
                                     {t.nombre}
                                   </div>
-                                  <div className="text-[13px] text-gray-500">
+                                  <div className="text-xs text-slate-500">
                                     {t.codigo}
                                   </div>
                                 </div>
@@ -731,7 +757,8 @@ export default function CoachDetailPage({
                     </div>
                   </div>
                 </div>
-                <div className="col-span-3 min-h-0">
+
+                <div className="col-span-9 h-full overflow-hidden">
                   <CoachChatInline
                     key={`chat-${code}-${targetTeamCode ?? "inbox"}`}
                     room={`${code}:equipo:${targetTeamCode ?? "inbox"}`}
@@ -745,7 +772,7 @@ export default function CoachDetailPage({
                       targetTeamCode ? `con ${targetTeamName}` : undefined
                     }
                     variant="card"
-                    className="h-full rounded-lg shadow-sm overflow-hidden"
+                    className="h-full"
                     precreateOnParticipants
                     socketio={{
                       url: "https://v001.onrender.com",
@@ -798,13 +825,6 @@ export default function CoachDetailPage({
                           hasPair &&
                           decisionStamp !== `exist:${targetTeamCode}`
                         ) {
-                          console.log(
-                            "[teamsv2] chat (chatInfo) EXISTE — continuar",
-                            {
-                              target: targetTeamCode,
-                              chatId: info.chatId,
-                            }
-                          );
                           setDecisionStamp(`exist:${targetTeamCode}`);
                         }
                       } catch {}
@@ -817,9 +837,6 @@ export default function CoachDetailPage({
                       with_participants: true,
                     }}
                     onChatsList={(list) => {
-                      try {
-                        console.log("[teamsv2] chat.list <=", list);
-                      } catch {}
                       setChatList(list);
                       setChatsLoading(false);
                       try {
@@ -828,20 +845,12 @@ export default function CoachDetailPage({
                           pickExistingChatIdForTarget(targetTeamCode);
                         if (existing != null) {
                           if (decisionStamp !== `exist:${targetTeamCode}`) {
-                            console.log(
-                              "[teamsv2] Decisión de chat: EXISTE — continuar",
-                              {
-                                target: targetTeamCode,
-                                chatId: existing,
-                              }
-                            );
                             setDecisionStamp(`exist:${targetTeamCode}`);
                           }
                           setChatInfo({
                             chatId: existing,
                             myParticipantId: null,
                           });
-                        } else {
                         }
                       } catch {}
                     }}
@@ -851,9 +860,9 @@ export default function CoachDetailPage({
             </div>
           </TabsContent>
 
-          <TabsContent value="detalles" className="mt-3">
+          <TabsContent value="detalles" className="mt-0">
             {/* Detalles: ocupar pantalla completa con scroll interno */}
-            <div className="h-[calc(100vh-180px)] min-h-[60vh] overflow-auto">
+            <div className="h-[calc(100vh-180px)] overflow-auto">
               <div className="p-4 bg-white border rounded-lg">
                 {loading ? (
                   <div>Cargando...</div>
@@ -861,18 +870,6 @@ export default function CoachDetailPage({
                   <div className="text-sm text-red-600">{error}</div>
                 ) : coach ? (
                   <div className="space-y-4">
-                    <div className="flex flex-wrap gap-3 items-center">
-                      <span
-                        className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold text-white"
-                        style={{ background: "#0ea5e9" }}
-                      >
-                        {coach.puesto ?? "—"}
-                      </span>
-                      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium text-neutral-700 bg-neutral-100">
-                        {coach.area ?? "—"}
-                      </span>
-                    </div>
-
                     <div>
                       <h3 className="text-sm font-medium mb-2">
                         Alumnos asociados
@@ -1058,7 +1055,6 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
-              <TableHead className="px-3 py-2 text-left">ID Alumno</TableHead>
               <TableHead className="px-3 py-2 text-left">Nombre</TableHead>
             </TableRow>
           </TableHeader>
@@ -1066,7 +1062,7 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
             {loading ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <TableRow key={`sk-${i}`} className="border-t border-gray-100">
-                  <TableCell colSpan={2} className="px-3 py-2">
+                  <TableCell colSpan={1} className="px-3 py-2">
                     <div className="h-4 w-32 animate-pulse rounded bg-neutral-100" />
                   </TableCell>
                 </TableRow>
@@ -1074,7 +1070,7 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
             ) : items.length === 0 ? (
               <TableRow className="border-t border-gray-100">
                 <TableCell
-                  colSpan={2}
+                  colSpan={1}
                   className="px-3 py-2 text-sm text-neutral-500"
                 >
                   No hay alumnos asociados.
@@ -1086,20 +1082,6 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
                   key={`${r.id}_${r.id_alumno}`}
                   className="border-t border-gray-100 hover:bg-gray-50"
                 >
-                  <TableCell className="px-3 py-2 font-mono text-gray-700">
-                    {r.id_alumno ? (
-                      <Link
-                        href={`/admin/alumnos/${encodeURIComponent(
-                          String(r.id_alumno)
-                        )}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        {r.id_alumno}
-                      </Link>
-                    ) : (
-                      r.id_alumno
-                    )}
-                  </TableCell>
                   <TableCell className="px-3 py-2 truncate text-gray-900">
                     {r.id_alumno ? (
                       <Link
