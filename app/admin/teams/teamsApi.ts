@@ -1,5 +1,6 @@
 // teamsApi.ts
-// Consulta de coachs para equipos (sin usar api-config ni data-service)
+// Consulta de coachs para equipos
+import { apiFetch } from "@/lib/api-config";
 
 export type Coach = {
   id: number;
@@ -13,9 +14,9 @@ export type Coach = {
 };
 
 export async function fetchCoachs(): Promise<Coach[]> {
-  const res = await fetch("https://v001.vercel.app/v1/team/get/team?page=1&pageSize=25");
-  if (!res.ok) throw new Error("Error al consultar coachs");
-  const json = await res.json();
+  const json = await apiFetch<any>(
+    "/team/get/team?page=1&pageSize=25"
+  );
   return json.data as Coach[];
 }
 
@@ -45,10 +46,8 @@ export type RawClient = {
 
 export async function fetchStudentsByCoach(coachCode: string): Promise<RawClient[]> {
   if (!coachCode) return [];
-  const url = `https://v001.vercel.app/v1/client/get/clients-coaches?coach=${encodeURIComponent(coachCode)}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Error al consultar alumnos del coach");
-  const json = await res.json();
+  const url = `/client/get/clients-coaches?coach=${encodeURIComponent(coachCode)}`;
+  const json = await apiFetch<any>(url);
   // El endpoint devuelve objetos con campos: id, id_alumno, alumno_nombre, coach_nombre, puesto, area, created_at, updated_at
   // Normalizamos al shape RawClient usando:
   //  - codigo <- id_alumno
@@ -80,11 +79,7 @@ export async function fetchAllStudents(
   if (fechaDesde) params.set("fechaDesde", fechaDesde);
   if (fechaHasta) params.set("fechaHasta", fechaHasta);
   const qs = `?${params.toString()}`;
-  const res = await fetch(
-    `https://v001.vercel.app/v1/client/get/clients${qs}`
-  );
-  if (!res.ok) throw new Error("Error al consultar todos los alumnos");
-  const json = await res.json();
+  const json = await apiFetch<any>(`/client/get/clients${qs}`);
   return Array.isArray(json.data) ? (json.data as RawClient[]) : [];
 }
 
@@ -100,10 +95,8 @@ export async function fetchMetrics(
   if (fechaHasta) params.set("fechaHasta", fechaHasta);
   if (coachCode) params.set("coach", coachCode);
   const qs = params.toString() ? `?${params.toString()}` : "";
-  const url = `https://v001.vercel.app/v1/metrics/get/metrics-v2${qs}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error("Error al consultar métricas v2");
-  const json = await res.json();
+  const url = `/metrics/get/metrics-v2${qs}`;
+  const json = await apiFetch<any>(url);
 
   // Mapear al shape esperado por TeamsMetricsContent (root.data.teams....)
   const d = (json?.data as any) || {};

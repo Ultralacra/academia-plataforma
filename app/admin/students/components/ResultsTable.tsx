@@ -28,20 +28,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateSmart } from "./utils/students-utils";
 import type { ClientItem } from "@/lib/data-service";
-import type { LifecycleItem } from "./phase-faker";
-
-const SintBadge = ({ v }: { v?: string | null }) => {
-  const s = (v || "").toUpperCase();
-  if (s === "COMPLETADO")
-    return (
-      <Badge className="bg-emerald-600 hover:bg-emerald-600">COMPLETADO</Badge>
-    );
-  if (s === "ABANDONO")
-    return <Badge className="bg-rose-600 hover:bg-rose-600">ABANDONO</Badge>;
-  if (s === "PAUSA")
-    return <Badge className="bg-amber-500 hover:bg-amber-500">PAUSA</Badge>;
-  return <Badge className="bg-sky-600 hover:bg-sky-600">EN CURSO</Badge>;
-};
+// Nota: eliminamos estado sintético; solo mostramos datos reales del API
 
 export default function ResultsTable({
   loading,
@@ -52,7 +39,6 @@ export default function ResultsTable({
   onPrev,
   onNext,
   onOpenTeam,
-  lifecycleByCode,
 }: {
   loading: boolean;
   pageItems: ClientItem[];
@@ -62,7 +48,6 @@ export default function ResultsTable({
   onPrev: () => void;
   onNext: () => void;
   onOpenTeam: (c: ClientItem) => void;
-  lifecycleByCode: Record<string, LifecycleItem>;
 }) {
   return (
     <Card>
@@ -107,7 +92,6 @@ export default function ResultsTable({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[90px]">Código</TableHead>
                     <TableHead className="min-w-[220px]">Nombre</TableHead>
                     <TableHead className="min-w-[120px]">Equipo</TableHead>
                     <TableHead>Estado</TableHead>
@@ -116,36 +100,15 @@ export default function ResultsTable({
                     <TableHead>Tickets</TableHead>
                     <TableHead>Últ. actividad</TableHead>
                     <TableHead>Inactividad (d)</TableHead>
-                    <TableHead className="min-w-[120px]">
-                      Estado (sint.)
-                    </TableHead>
-                    <TableHead>Salida</TableHead>
-                    <TableHead>Permanencia (d)</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {pageItems.map((c, idx) => {
-                    const lk = c.code ?? "";
-                    const life = lifecycleByCode[lk];
                     return (
                       <TableRow
                         key={c.id}
                         className={idx % 2 ? "bg-muted/30" : ""}
                       >
-                        <TableCell className="font-medium">
-                          {c.code ? (
-                            <Link
-                              href={`/admin/alumnos/${encodeURIComponent(
-                                String(c.code)
-                              )}`}
-                              className="text-blue-600 hover:underline"
-                            >
-                              {c.code}
-                            </Link>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
                         <TableCell>
                           {c.code ? (
                             <Link
@@ -174,32 +137,70 @@ export default function ResultsTable({
                         </TableCell>
 
                         <TableCell>
-                          {c.state ? (
-                            <Badge variant="outline">{c.state}</Badge>
-                          ) : (
-                            "—"
-                          )}
+                          {(() => {
+                            const v = (c.state || "").toUpperCase();
+                            const classes = v.includes("INACTIVO")
+                              ? "bg-rose-100 text-rose-800"
+                              : v.includes("ACTIVO")
+                              ? "bg-sky-100 text-sky-800"
+                              : v.includes("PROCESO")
+                              ? "bg-violet-100 text-violet-800"
+                              : v.includes("PAUSA")
+                              ? "bg-amber-100 text-amber-800"
+                              : v
+                              ? "bg-gray-100 text-gray-700"
+                              : "bg-gray-100 text-gray-500";
+                            return c.state ? (
+                              <span
+                                className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
+                              >
+                                {c.state}
+                              </span>
+                            ) : (
+                              "—"
+                            );
+                          })()}
                         </TableCell>
-                        <TableCell>{c.stage ?? "—"}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const v = (c.stage || "").toUpperCase();
+                            const classes = v.includes("ONBOARD")
+                              ? "bg-indigo-100 text-indigo-800"
+                              : v.includes("F1")
+                              ? "bg-emerald-100 text-emerald-800"
+                              : v.includes("F2")
+                              ? "bg-lime-100 text-lime-800"
+                              : v.includes("F3")
+                              ? "bg-cyan-100 text-cyan-800"
+                              : v.includes("F4")
+                              ? "bg-sky-100 text-sky-800"
+                              : v.includes("F5")
+                              ? "bg-purple-100 text-purple-800"
+                              : v
+                              ? "bg-gray-100 text-gray-700"
+                              : "bg-gray-100 text-gray-500";
+                            return c.stage ? (
+                              <span
+                                className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
+                              >
+                                {c.stage}
+                              </span>
+                            ) : (
+                              "—"
+                            );
+                          })()}
+                        </TableCell>
                         <TableCell>{formatDateSmart(c.joinDate)}</TableCell>
                         <TableCell>{c.ticketsCount ?? 0}</TableCell>
                         <TableCell>{formatDateSmart(c.lastActivity)}</TableCell>
                         <TableCell>{c.inactivityDays ?? "—"}</TableCell>
-
-                        <TableCell>
-                          {life ? <SintBadge v={life.status_sint} /> : "—"}
-                        </TableCell>
-                        <TableCell>{life?.salida ?? "—"}</TableCell>
-                        <TableCell className="tabular-nums">
-                          {life?.permanencia_d ?? "—"}
-                        </TableCell>
                       </TableRow>
                     );
                   })}
                   {pageItems.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={12}
+                        colSpan={8}
                         className="py-10 text-center text-muted-foreground"
                       >
                         No hay resultados para los filtros aplicados.

@@ -1,5 +1,6 @@
 // app/admin/tickets-board/api.ts
-// API local para el tablero de tickets (consulta directa al endpoint)
+// API local para el tablero de tickets (usa apiFetch con Bearer)
+import { apiFetch } from "@/lib/api-config";
 
 export type TicketBoardItem = {
   id: number;
@@ -66,13 +67,8 @@ export async function getTickets(opts: {
     tipo: opts.tipo ?? "",
     coach: opts.coach ?? "",
   });
-  const url = `https://v001.vercel.app/v1/ticket/get/ticket${q}`;
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    throw new Error(txt || `HTTP ${res.status} on ${url}`);
-  }
-  const json = (await res.json()) as TicketBoardResponse;
+  const url = `/ticket/get/ticket${q}`;
+  const json = (await apiFetch<TicketBoardResponse>(url)) as TicketBoardResponse;
   const rows = Array.isArray(json?.data) ? json.data : [];
 
   const items: TicketBoardItem[] = rows.map((r: any) => ({

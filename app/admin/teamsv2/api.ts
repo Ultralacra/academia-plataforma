@@ -1,5 +1,6 @@
 // app/admin/teamsv2/api.ts
 // Helpers para consultas relacionadas con el módulo teamsv2 (coaches)
+import { apiFetch } from "@/lib/api-config";
 
 export type CoachItem = {
   id: number;
@@ -25,24 +26,17 @@ export type CoachStudent = {
   created_at?: string;
 };
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, cache: "no-store" });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status} on ${url}`);
-  }
-  if (res.status === 204) return undefined as unknown as T;
-  return (await res.json()) as T;
+async function fetchJson<T>(pathOrUrl: string, init?: RequestInit): Promise<T> {
+  // Delegamos en apiFetch que ya adjunta el token Bearer automáticamente
+  return apiFetch<T>(pathOrUrl, init);
 }
-
-const BASE = "https://v001.vercel.app/v1";
 
 export async function getCoaches(opts?: { page?: number; pageSize?: number; search?: string }) {
   const q = new URLSearchParams();
   if (opts?.page) q.set("page", String(opts.page));
   if (opts?.pageSize) q.set("pageSize", String(opts.pageSize));
   if (opts?.search) q.set("search", String(opts.search));
-  const url = `${BASE}/team/get/team?${q.toString()}`;
+  const url = `/team/get/team?${q.toString()}`;
   const json = await fetchJson<any>(url);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   return rows.map((r) => ({
@@ -69,7 +63,7 @@ export async function getCoachById(id: number) {
 }
 
 export async function getCoachStudents(coachCode: string) {
-  const url = `${BASE}/client/get/clients-coaches?coach=${encodeURIComponent(
+  const url = `/client/get/clients-coaches?coach=${encodeURIComponent(
     coachCode
   )}`;
   const json = await fetchJson<any>(url);
@@ -137,7 +131,7 @@ export async function getCoachTickets(params: {
   q.set("coach", params.coach);
   if (params.fechaDesde) q.set("fechaDesde", params.fechaDesde);
   if (params.fechaHasta) q.set("fechaHasta", params.fechaHasta);
-  const url = `${BASE}/ticket/get/ticket?${q.toString()}`;
+  const url = `/ticket/get/ticket?${q.toString()}`;
   const json = await fetchJson<any>(url);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   const data: CoachTicket[] = rows.map((r) => ({
@@ -160,27 +154,26 @@ export async function getCoachTickets(params: {
 }
 
 export type CreateCoachPayload = {
-  nombre: string;
+  name: string;
+  email: string;
+  password: string;
+  role: string; // e.g., "manager"
+  tipo: "equipo";
   puesto?: string | null;
   area?: string | null;
 };
 
 export async function createCoach(payload: CreateCoachPayload) {
-  const url = `${BASE}/team/create/team`;
+  // Nuevo endpoint de creación de usuario/coach
+  const url = `/auth/register`;
   // log for debugging
   // eslint-disable-next-line no-console
   console.debug('[teamsv2 api] POST', url, 'payload=', payload);
-  const res = await fetch(url, {
+  return fetchJson<any>(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-    cache: 'no-store',
   });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(txt || `HTTP ${res.status} on ${url}`);
-  }
-  return (await res.json()) as any;
 }
 
 export type UpdateCoachPayload = {
@@ -190,30 +183,19 @@ export type UpdateCoachPayload = {
 };
 
 export async function updateCoach(code: string, payload: UpdateCoachPayload) {
-  const url = `${BASE}/team/update/team/${encodeURIComponent(code)}`;
+  const url = `/team/update/team/${encodeURIComponent(code)}`;
   // eslint-disable-next-line no-console
   console.debug('[teamsv2 api] PUT', url, 'payload=', payload);
-  const res = await fetch(url, {
+  return fetchJson<any>(url, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-    cache: 'no-store',
   });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(txt || `HTTP ${res.status} on ${url}`);
-  }
-  return (await res.json()) as any;
 }
 
 export async function deleteCoach(code: string) {
-  const url = `${BASE}/team/delete/team/${encodeURIComponent(code)}`;
+  const url = `/team/delete/team/${encodeURIComponent(code)}`;
   // eslint-disable-next-line no-console
   console.debug('[teamsv2 api] DELETE', url);
-  const res = await fetch(url, { method: 'DELETE', cache: 'no-store' });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(txt || `HTTP ${res.status} on ${url}`);
-  }
-  return (await res.json()) as any;
+  return fetchJson<any>(url, { method: 'DELETE' });
 }

@@ -16,7 +16,25 @@ export function useAuth() {
     // Load auth state from localStorage on mount
     const currentAuthState = authService.getAuthState()
     setAuthState(currentAuthState)
-    setIsLoading(false)
+
+    // Si hay token, refrescar datos del usuario desde /auth/me
+    const hasToken = !!currentAuthState.token
+    if (hasToken) {
+      ;(async () => {
+        try {
+          const me = await authService.me()
+          setAuthState({ user: me, isAuthenticated: true, token: currentAuthState.token })
+        } catch (e) {
+          // Token inválido o expirado: limpiar sesión
+          authService.logout()
+          setAuthState({ user: null, isAuthenticated: false, token: null })
+        } finally {
+          setIsLoading(false)
+        }
+      })()
+    } else {
+      setIsLoading(false)
+    }
   }, [])
 
   const login = async (email: string, password: string): Promise<void> => {

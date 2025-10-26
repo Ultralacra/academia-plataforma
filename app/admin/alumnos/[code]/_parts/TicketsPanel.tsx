@@ -19,12 +19,22 @@ import {
   Plus,
   Search,
   TicketIcon,
-  File as FileIcon,
+  FileIcon,
   FileImage,
   FileVideo,
   FileAudio,
   FileText,
   FileArchive,
+  Calendar,
+  Clock,
+  CheckCircle2,
+  Upload,
+  X,
+  Download,
+  Eye,
+  User,
+  Users,
+  Paperclip,
 } from "lucide-react";
 import {
   Dialog,
@@ -47,12 +57,22 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
+import { Separator } from "@/components/ui/separator";
 
-/* ========= helpers ========= */
-
-// Nota: funciones de demo eliminadas. Mantenemos utilidades reales como fmtDate/normalize.
 function fmtDate(iso?: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -65,6 +85,7 @@ function fmtDate(iso?: string | null) {
     })
     .replace(".", "");
 }
+
 function normalize(s: string) {
   return s
     .toLowerCase()
@@ -83,13 +104,12 @@ function shortenFileName(name: string, max = 42) {
   return base.slice(0, keep) + "…" + ext;
 }
 
-// Eliminado: RNG y helpers usados para datos de demostración.
-
 type StatusKey =
   | "EN_PROGRESO"
   | "PENDIENTE"
   | "PENDIENTE_DE_ENVIO"
   | "RESUELTO";
+
 const STATUS_LABEL: Record<StatusKey, string> = {
   EN_PROGRESO: "En progreso",
   PENDIENTE: "Pendiente",
@@ -99,13 +119,13 @@ const STATUS_LABEL: Record<StatusKey, string> = {
 
 const STATUS_STYLE: Record<StatusKey, string> = {
   PENDIENTE:
-    "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-500/20",
+    "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20",
   EN_PROGRESO:
-    "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20",
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
   PENDIENTE_DE_ENVIO:
-    "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200/50 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20",
+    "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20",
   RESUELTO:
-    "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20",
+    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
 };
 
 function coerceStatus(raw?: string | null): StatusKey {
@@ -122,13 +142,8 @@ function coerceStatus(raw?: string | null): StatusKey {
   )
     return "EN_PROGRESO";
   if (s.includes("PENDIENTE")) return "PENDIENTE";
-  // Por defecto tratar como PENDIENTE
   return "PENDIENTE";
 }
-
-// Eliminado: datos de demostración. El panel ahora refleja exclusivamente lo que devuelve la API.
-
-/* ========= componente ========= */
 
 export default function TicketsPanel({
   student,
@@ -143,10 +158,8 @@ export default function TicketsPanel({
   const [all, setAll] = useState<StudentTicket[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string>("ALL");
-  // Filtro por fecha de creación
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
-  // Crear ticket
   const [openCreate, setOpenCreate] = useState(false);
   const [tipos, setTipos] = useState<
     { id: string; key: string; value: string }[]
@@ -161,18 +174,15 @@ export default function TicketsPanel({
     { url: string; type: string; name: string; size: number }[]
   >([]);
   const [creating, setCreating] = useState(false);
-  // Grabación de audio
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
-  // Estados posibles para update
   const [estadoOpts, setEstadoOpts] = useState<
     { key: string; value: string }[]
   >([]);
-  const [allFull, setAllFull] = useState<StudentTicket[]>([]); // lista completa para conteos y "ALL"
-  // Archivos del ticket seleccionado
-  const [openFiles, setOpenFiles] = useState<null | string>(null); // ticketId
+  const [allFull, setAllFull] = useState<StudentTicket[]>([]);
+  const [openFiles, setOpenFiles] = useState<null | string>(null);
   const [filesLoading, setFilesLoading] = useState(false);
   const [files, setFiles] = useState<
     {
@@ -183,25 +193,44 @@ export default function TicketsPanel({
       created_at: string | null;
     }[]
   >([]);
-  // Previsualización de archivo individual
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFile, setPreviewFile] = useState<null | {
     id: string;
     nombre_archivo: string;
     mime_type: string | null;
-    url?: string; // blob url
+    url?: string;
   }>(null);
-  // Cache de blobs (fileId -> objectURL)
   const [blobCache, setBlobCache] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [selectedTicket, setSelectedTicket] = useState<StudentTicket | null>(
+    null
+  );
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    nombre: "",
+    estado: "",
+    prioridad: "",
+    plazo: null as number | null,
+    restante: null as number | null,
+    deadline: "",
+    deadlineTime: "",
+    tipo: "",
+    descripcion: "",
+    resolucion: "",
+    informante: "",
+    resuelto_por: "",
+    equipo: [] as string[],
+    tarea: "",
+    revision: "",
+  });
 
   useEffect(() => {
     let alive = true;
     (async () => {
       setLoading(true);
       try {
-        // Cargar opciones (tipos y estados)
         try {
           const tiposRes = await getOpciones("tipo_ticket");
           const mapped = tiposRes
@@ -217,7 +246,6 @@ export default function TicketsPanel({
           if (alive && estList.length) setEstadoOpts(estList);
         } catch {}
 
-        // Cargar lista completa para "ALL" y conteos
         const fetchedAll = await getStudentTickets(student.code || "");
         if (!alive) return;
         const normalized = fetchedAll
@@ -239,7 +267,6 @@ export default function TicketsPanel({
     };
   }, [student]);
 
-  // Re-fetch al cambiar filtro de estado (lado servidor)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -268,7 +295,6 @@ export default function TicketsPanel({
     };
   }, [status, student.code, allFull]);
 
-  // Generar y liberar URLs de previsualización cuando cambian los archivos
   useEffect(() => {
     const urls = createFiles.map((f) => ({
       url: URL.createObjectURL(f),
@@ -283,7 +309,6 @@ export default function TicketsPanel({
   }, [createFiles]);
 
   const counts = useMemo(() => {
-    // Conteos a partir de la lista completa (ALL); por clave exacta del backend
     const acc: Record<string, number> = {};
     allFull.forEach((t) => {
       const key = String(t.estado ?? "").toUpperCase();
@@ -295,7 +320,6 @@ export default function TicketsPanel({
 
   const filtered = useMemo(() => {
     let rows = all;
-    // Si el filtro no es ALL, el backend ya devolvió la lista filtrada; no volver a filtrar por coerce.
     if (status !== "ALL") {
       rows = rows.filter(
         (t) => String(t.estado ?? "").toUpperCase() === String(status)
@@ -309,7 +333,6 @@ export default function TicketsPanel({
           normalize(t.tipo ?? "").includes(q)
       );
     }
-    // Filtro por fecha de creación (rango)
     if (dateFrom) {
       const from = new Date(dateFrom);
       rows = rows.filter((t) => {
@@ -333,7 +356,6 @@ export default function TicketsPanel({
     try {
       setCreating(true);
       const archivos: File[] = createFiles.slice(0, 10);
-      // Compose descripcion + links
       let descripcion = createDescripcion.trim();
       if (links.length) {
         const block = ["", "Links:", ...links.map((u) => `- ${u}`)].join("\n");
@@ -346,7 +368,6 @@ export default function TicketsPanel({
         descripcion: descripcion || undefined,
         archivos,
       });
-      // Refrescar lista de tickets
       const fetched = await getStudentTickets(student.code);
       setAll(
         fetched
@@ -376,7 +397,6 @@ export default function TicketsPanel({
     if (!raw) return;
     const url = raw.match(/^https?:\/\//i) ? raw : `https://${raw}`;
     try {
-      // eslint-disable-next-line no-new
       new URL(url);
       setLinks((prev) => Array.from(new Set([...prev, url])).slice(0, 10));
       setLinkInput("");
@@ -429,7 +449,6 @@ export default function TicketsPanel({
       const next = [...prev, ...picked];
       return next.slice(0, 10);
     });
-    // Reset input para permitir volver a seleccionar el mismo archivo si se elimina
     e.currentTarget.value = "";
   }
 
@@ -447,12 +466,10 @@ export default function TicketsPanel({
       return;
     }
     try {
-      // Buscar el ticket por id y obtener su codigo (UUID)
       const ticket = all.find((t) => t.id === ticketId);
       const codigo = ticket?.codigo;
       if (!codigo) throw new Error("No se encontró el código UUID del ticket");
       await updateTicket(codigo, { estado: newEstado });
-      // Emitir un evento websocket para notificar a otros clientes (si existe)
       try {
         if (typeof window !== "undefined") {
           const proto = window.location.protocol === "https:" ? "wss" : "ws";
@@ -476,7 +493,6 @@ export default function TicketsPanel({
               ws.close();
             } catch {}
           });
-          // cleanup: if ws doesn't open after 2s, close
           setTimeout(() => {
             try {
               ws.close();
@@ -484,11 +500,9 @@ export default function TicketsPanel({
           }, 2000);
         }
       } catch {}
-      // Guardar la clave real del backend en `estado` para que el Select muestre el valor correcto
       setAll((prev) =>
         prev.map((t) => (t.id === ticketId ? { ...t, estado: newEstado } : t))
       );
-      // Mostrar toast usando la API compatible con el componente
       toast({
         title: "Ticket actualizado",
         description: "El ticket cambió de estado exitosamente.",
@@ -592,7 +606,6 @@ export default function TicketsPanel({
     try {
       setPreviewOpen(true);
       setPreviewLoading(true);
-      // Usar caché si existe
       const cached = blobCache[f.id];
       if (cached) {
         setPreviewFile({ ...f, url: cached });
@@ -621,343 +634,420 @@ export default function TicketsPanel({
     setBlobCache({});
   }
 
+  function openTicketDetail(ticket: StudentTicket) {
+    setSelectedTicket(ticket);
+    setEditForm({
+      nombre: ticket.nombre || "",
+      estado: ticket.estado || "",
+      prioridad: (ticket as any).prioridad || "MEDIA",
+      plazo: (ticket as any).plazo || null,
+      restante: (ticket as any).restante || null,
+      deadline: ticket.deadline
+        ? new Date(ticket.deadline).toISOString().split("T")[0]
+        : "",
+      deadlineTime: ticket.deadline
+        ? new Date(ticket.deadline).toISOString().split("T")[1].slice(0, 5)
+        : "",
+      tipo: ticket.tipo || "",
+      descripcion: (ticket as any).descripcion || "",
+      resolucion: (ticket as any).resolucion || "",
+      informante: (ticket as any).informante || "",
+      resuelto_por: (ticket as any).resuelto_por || "",
+      equipo: (ticket as any).equipo || [],
+      tarea: (ticket as any).tarea || "",
+      revision: (ticket as any).revision || "",
+    });
+    setDrawerOpen(true);
+  }
+
+  async function handleSaveTicket() {
+    if (!selectedTicket || isStudent) return;
+    try {
+      const codigo = selectedTicket.codigo;
+      if (!codigo) throw new Error("No se encontró el código UUID del ticket");
+
+      const deadlineISO =
+        editForm.deadline && editForm.deadlineTime
+          ? `${editForm.deadline}T${editForm.deadlineTime}:00`
+          : editForm.deadline
+          ? `${editForm.deadline}T00:00:00`
+          : undefined;
+
+      await updateTicket(codigo, {
+        nombre: editForm.nombre,
+        estado: editForm.estado,
+        prioridad: editForm.prioridad,
+        plazo: editForm.plazo ?? undefined,
+        restante: editForm.restante ?? undefined,
+        deadline: deadlineISO,
+        tipo: editForm.tipo,
+        descripcion: editForm.descripcion,
+        resolucion: editForm.resolucion,
+        informante: editForm.informante,
+        resuelto_por: editForm.resuelto_por,
+        equipo: editForm.equipo,
+        tarea: editForm.tarea,
+        revision: editForm.revision,
+      });
+
+      const fetched = await getStudentTickets(student.code || "");
+      setAll(
+        fetched
+          .map((t) => ({ ...t }))
+          .sort((a, b) => (a.creacion > b.creacion ? -1 : 1))
+      );
+      setAllFull(fetched);
+
+      setDrawerOpen(false);
+      toast({
+        title: "Ticket actualizado",
+        description: "Los cambios se guardaron exitosamente.",
+      });
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Error al actualizar",
+        description: "No se pudieron guardar los cambios.",
+        variant: "destructive",
+      });
+    }
+  }
+
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
-          {/* Filtro por fecha de creación */}
-          <div className="flex flex-wrap gap-2 mb-2 items-center">
-            <label className="text-xs text-muted-foreground">Desde:</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="border rounded px-2 py-1 text-xs"
-              style={{ minWidth: 120 }}
-            />
-            <label className="text-xs text-muted-foreground ml-2">Hasta:</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="border rounded px-2 py-1 text-xs"
-              style={{ minWidth: 120 }}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <TicketIcon className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Tickets del alumno</h3>
+      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
+          <div className="flex flex-col gap-4">
+            {/* Date filters */}
+            <div className="flex flex-wrap items-center gap-3">
+              <label className="text-sm font-medium text-slate-700">
+                Desde:
+              </label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+              />
+              <label className="text-sm font-medium text-slate-700">
+                Hasta:
+              </label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+              />
             </div>
-            <Dialog
-              open={!isStudent && openCreate}
-              onOpenChange={setOpenCreate}
-            >
-              <DialogTrigger asChild>
-                <span>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="h-8 gap-1.5"
-                    disabled={isStudent}
-                    title={
-                      isStudent
-                        ? "Los alumnos no pueden crear tickets desde este panel"
-                        : undefined
-                    }
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Nuevo
-                  </Button>
-                </span>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>Crear ticket</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3 py-2">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Nombre
-                    </label>
-                    <Input
-                      value={createNombre}
-                      onChange={(e) => setCreateNombre(e.target.value)}
-                      placeholder="Asunto del ticket"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Tipo
-                    </label>
-                    <Select value={createTipo} onValueChange={setCreateTipo}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Selecciona tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tipos.map((t) => (
-                          <SelectItem key={t.id} value={t.key}>
-                            {t.value}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {/* Descripción */}
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Descripción (opcional)
-                    </label>
-                    <textarea
-                      className="w-full min-h-[70px] rounded-md border px-3 py-2 text-sm"
-                      value={createDescripcion}
-                      onChange={(e) => setCreateDescripcion(e.target.value)}
-                      placeholder="Notas del ticket, detalles del caso, etc."
-                    />
-                  </div>
-                  {/* Enlaces */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs text-muted-foreground">
-                        Enlaces (URL)
-                      </label>
-                      <span className="text-xs text-muted-foreground">
-                        {links.length}/10
-                      </span>
-                    </div>
-                    <div className="flex gap-2">
+
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <TicketIcon className="h-5 w-5 text-slate-600" />
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Tickets del alumno
+                </h3>
+              </div>
+              <Dialog
+                open={!isStudent && openCreate}
+                onOpenChange={setOpenCreate}
+              >
+                <DialogTrigger asChild>
+                  <span>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      className="gap-2"
+                      disabled={isStudent}
+                      title={
+                        isStudent
+                          ? "Los alumnos no pueden crear tickets desde este panel"
+                          : undefined
+                      }
+                    >
+                      <Plus className="h-4 w-4" />
+                      Nuevo ticket
+                    </Button>
+                  </span>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Crear nuevo ticket</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="nombre">Nombre del ticket</Label>
                       <Input
-                        className="h-9 flex-1"
-                        placeholder="https://…"
-                        value={linkInput}
-                        onChange={(e) => setLinkInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addLink();
-                          }
-                        }}
+                        id="nombre"
+                        value={createNombre}
+                        onChange={(e) => setCreateNombre(e.target.value)}
+                        placeholder="Asunto del ticket"
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={addLink}
-                      >
-                        Agregar
-                      </Button>
                     </div>
-                    {links.length > 0 && (
-                      <ul className="space-y-1 max-h-40 overflow-auto">
-                        {links.map((u, i) => (
-                          <li
-                            key={`${u}-${i}`}
-                            className="flex items-start gap-2 rounded border px-2 py-1 text-xs"
-                          >
-                            <div className="min-w-0 flex-1">
+                    <div className="space-y-2">
+                      <Label htmlFor="tipo">Tipo</Label>
+                      <Select value={createTipo} onValueChange={setCreateTipo}>
+                        <SelectTrigger id="tipo">
+                          <SelectValue placeholder="Selecciona tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tipos.map((t) => (
+                            <SelectItem key={t.id} value={t.key}>
+                              {t.value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="descripcion">Descripción</Label>
+                      <Textarea
+                        id="descripcion"
+                        value={createDescripcion}
+                        onChange={(e) => setCreateDescripcion(e.target.value)}
+                        placeholder="Detalles del ticket..."
+                        rows={4}
+                      />
+                    </div>
+
+                    {/* Links section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Enlaces</Label>
+                        <span className="text-xs text-slate-500">
+                          {links.length}/10
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="https://..."
+                          value={linkInput}
+                          onChange={(e) => setLinkInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addLink();
+                            }
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={addLink}
+                        >
+                          Agregar
+                        </Button>
+                      </div>
+                      {links.length > 0 && (
+                        <div className="space-y-1 max-h-32 overflow-auto">
+                          {links.map((u, i) => (
+                            <div
+                              key={`${u}-${i}`}
+                              className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+                            >
                               <a
                                 href={u}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="break-all text-blue-600 hover:underline"
+                                className="flex-1 truncate text-sm text-blue-600 hover:underline"
                               >
                                 {u}
                               </a>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="shrink-0"
-                              onClick={() =>
-                                setLinks((prev) => prev.filter((x) => x !== u))
-                              }
-                            >
-                              Quitar
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs text-muted-foreground">
-                        Archivos
-                      </label>
-                      <span className="text-xs text-muted-foreground">
-                        {createFiles.length}/10
-                      </span>
-                    </div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      className="hidden"
-                      multiple
-                      onChange={onFileInputChange}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Elegir archivos
-                    </Button>
-                    {/* Grabación de audio rápida */}
-                    <div className="flex items-center gap-2">
-                      {!isRecording ? (
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={startRecording}
-                        >
-                          Grabar audio
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="sm"
-                          onClick={stopRecording}
-                        >
-                          Detener
-                        </Button>
-                      )}
-                      {audioPreviewUrl && (
-                        <audio src={audioPreviewUrl} controls className="h-8" />
-                      )}
-                    </div>
-                    {createFiles.length > 0 && (
-                      <ul className="space-y-2">
-                        {previews.map((p, idx) => (
-                          <li
-                            key={`${p.name}-${idx}`}
-                            className="flex h-14 items-center gap-3 rounded border p-2"
-                          >
-                            {p.type.startsWith("image/") ? (
-                              <img
-                                src={p.url}
-                                alt={p.name}
-                                className="h-10 w-10 rounded object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-[10px] font-medium text-muted-foreground">
-                                {p.name.split(".").pop()?.toUpperCase() ||
-                                  "FILE"}
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <div
-                                className="truncate text-sm font-medium"
-                                title={p.name}
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  setLinks((prev) =>
+                                    prev.filter((x) => x !== u)
+                                  )
+                                }
                               >
-                                {shortenFileName(p.name)}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {Math.ceil(p.size / 1024)} KB
-                              </div>
+                                <X className="h-4 w-4" />
+                              </Button>
                             </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => removeFileAt(idx)}
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Files section */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Archivos</Label>
+                        <span className="text-xs text-slate-500">
+                          {createFiles.length}/10
+                        </span>
+                      </div>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        multiple
+                        onChange={onFileInputChange}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Upload className="mr-2 h-4 w-4" />
+                          Elegir archivos
+                        </Button>
+                        {!isRecording ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={startRecording}
+                          >
+                            Grabar audio
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="sm"
+                            onClick={stopRecording}
+                          >
+                            Detener
+                          </Button>
+                        )}
+                      </div>
+                      {audioPreviewUrl && (
+                        <audio
+                          src={audioPreviewUrl}
+                          controls
+                          className="w-full"
+                        />
+                      )}
+                      {createFiles.length > 0 && (
+                        <div className="space-y-2 max-h-48 overflow-auto">
+                          {previews.map((p, idx) => (
+                            <div
+                              key={`${p.name}-${idx}`}
+                              className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"
                             >
-                              Eliminar
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
+                              {p.type.startsWith("image/") ? (
+                                <img
+                                  src={p.url || "/placeholder.svg"}
+                                  alt={p.name}
+                                  className="h-12 w-12 rounded object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-200 text-xs font-medium text-slate-600">
+                                  {p.name.split(".").pop()?.toUpperCase() ||
+                                    "FILE"}
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <div className="truncate text-sm font-medium">
+                                  {shortenFileName(p.name)}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {Math.ceil(p.size / 1024)} KB
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeFileAt(idx)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setOpenCreate(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleCreateSubmit}
-                    disabled={
-                      isStudent ||
-                      creating ||
-                      !createNombre.trim() ||
-                      !createTipo.trim()
-                    }
-                  >
-                    {creating && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Crear
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setOpenCreate(false)}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      onClick={handleCreateSubmit}
+                      disabled={
+                        isStudent ||
+                        creating ||
+                        !createNombre.trim() ||
+                        !createTipo.trim()
+                      }
+                    >
+                      {creating && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Crear ticket
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
 
-          {/* Summary pills */}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {/* ALL */}
-            <button
-              onClick={() => setStatus("ALL")}
-              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                status === "ALL"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              <span className="font-semibold">{allFull.length}</span>
-              Todos
-            </button>
-            {/* Estados dinámicos desde opciones */}
-            {estadoOpts.map((opt) => {
-              const k = opt.key.toUpperCase();
-              const count = counts[k] ?? 0;
-              return (
-                <button
-                  key={k}
-                  onClick={() => setStatus(k)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                    status === k
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:bg-muted/80"
-                  }`}
-                >
-                  <span className="font-semibold">{count}</span>
-                  {opt.value}
-                </button>
-              );
-            })}
-          </div>
+            {/* Status filters */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setStatus("ALL")}
+                className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                  status === "ALL"
+                    ? "bg-slate-900 text-white shadow-sm"
+                    : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                }`}
+              >
+                <span className="font-semibold">{allFull.length}</span>
+                Todos
+              </button>
+              {estadoOpts.map((opt) => {
+                const k = opt.key.toUpperCase();
+                const count = counts[k] ?? 0;
+                return (
+                  <button
+                    key={k}
+                    onClick={() => setStatus(k)}
+                    className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                      status === k
+                        ? "bg-slate-900 text-white shadow-sm"
+                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    }`}
+                  >
+                    <span className="font-semibold">{count}</span>
+                    {opt.value}
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* Search */}
-          <div className="relative mt-3">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="h-9 pl-9 border-gray-200 bg-white"
-              placeholder="Buscar por asunto o tipo…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                className="pl-10 border-slate-200 bg-white"
+                placeholder="Buscar por asunto o tipo..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        <div className="p-3">
+        <div className="p-6">
           {loading ? (
-            <div className="flex items-center justify-center py-12 text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Cargando tickets…
+            <div className="flex items-center justify-center py-16 text-slate-500">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Cargando tickets...
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-12 text-center text-sm text-muted-foreground">
+            <div className="py-16 text-center text-sm text-slate-500">
               No hay tickets en este filtro
             </div>
           ) : (
-            // Kanban grid: columnas por estado (orden solicitado)
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {(
                 [
@@ -973,9 +1063,9 @@ export default function TicketsPanel({
                 return (
                   <div
                     key={col}
-                    className="min-h-[120px] rounded-md border border-gray-200 bg-white p-3"
+                    className="min-h-[200px] rounded-lg border border-slate-200 bg-slate-50/50 p-4"
                     onDragOver={(e) => {
-                      if (isStudent) return; // no permitir dragover si es alumno
+                      if (isStudent) return;
                       e.preventDefault();
                     }}
                     onDrop={async (e) => {
@@ -991,7 +1081,6 @@ export default function TicketsPanel({
                       }
                       const ticketId = e.dataTransfer.getData("text/plain");
                       if (!ticketId) return;
-                      // Optimistic UI: move locally first
                       setAll((prev) =>
                         prev.map((t) =>
                           String(t.id) === String(ticketId)
@@ -1002,7 +1091,6 @@ export default function TicketsPanel({
                       try {
                         await handleChangeEstado(ticketId, col);
                       } catch (err) {
-                        // Revert by refetching tickets for the student
                         const refreshed = await getStudentTickets(
                           student.code || ""
                         );
@@ -1014,23 +1102,19 @@ export default function TicketsPanel({
                       }
                     }}
                   >
-                    <div className="mb-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[col]}`}
-                        >
-                          {STATUS_LABEL[col]}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {itemsForCol.length}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        &nbsp;
-                      </div>
+                    <div className="mb-4 flex items-center justify-between">
+                      <Badge
+                        variant="outline"
+                        className={`${STATUS_STYLE[col]} border`}
+                      >
+                        {STATUS_LABEL[col]}
+                      </Badge>
+                      <span className="text-sm font-medium text-slate-500">
+                        {itemsForCol.length}
+                      </span>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {itemsForCol.map((t) => (
                         <div
                           key={t.id}
@@ -1045,46 +1129,48 @@ export default function TicketsPanel({
                             } catch {}
                             e.dataTransfer.effectAllowed = "move";
                           }}
-                          className="rounded-md border border-gray-200 bg-white p-3 shadow-sm hover:bg-gray-50 cursor-grab active:cursor-grabbing"
+                          onClick={() => openTicketDetail(t)}
+                          className="group cursor-pointer rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:border-slate-300"
                         >
-                          <div className="flex items-start gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="font-medium leading-tight">
-                                {t.nombre ?? "Ticket"}
-                              </div>
-                              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                                <span>Creado: {fmtDate(t.creacion)}</span>
-                                {t.tipo && <span>· {t.tipo}</span>}
-                                {t.deadline && (
-                                  <span>· Vence: {fmtDate(t.deadline)}</span>
-                                )}
-                                {t.id_externo && (
-                                  <span>· Ref: {t.id_externo}</span>
-                                )}
-                                <button
-                                  className="underline hover:no-underline"
-                                  onClick={() =>
-                                    openFilesFor(
-                                      (t as any).codigo ||
-                                        (t as any).id_externo ||
-                                        t.id
-                                    )
-                                  }
-                                  type="button"
-                                >
-                                  · Archivos
-                                </button>
-                              </div>
+                          <div className="space-y-3">
+                            <div className="font-medium text-slate-900 leading-snug">
+                              {t.nombre ?? "Ticket"}
                             </div>
-                            <div className="flex flex-col items-end gap-2">
-                              {/* Mostrar solo la etiqueta de estado; el cambio se hace arrastrando */}
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                  STATUS_STYLE[coerceStatus(t.estado)]
-                                }`}
+                            <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                              {t.tipo && (
+                                <div className="flex items-center gap-1">
+                                  <TicketIcon className="h-3 w-3" />
+                                  {t.tipo}
+                                </div>
+                              )}
+                              {t.creacion && (
+                                <div className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {fmtDate(t.creacion)}
+                                </div>
+                              )}
+                              {t.deadline && (
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {fmtDate(t.deadline)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <button
+                                className="text-xs text-blue-600 hover:underline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openFilesFor(
+                                    (t as any).codigo ||
+                                      (t as any).id_externo ||
+                                      t.id
+                                  );
+                                }}
+                                type="button"
                               >
-                                {STATUS_LABEL[coerceStatus(t.estado)]}
-                              </span>
+                                Ver archivos
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -1097,7 +1183,462 @@ export default function TicketsPanel({
           )}
         </div>
       </div>
-      {/* Dialog archivos */}
+
+      <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} direction="right">
+        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-xl md:max-w-2xl flex flex-col">
+          <DrawerHeader className="border-b pb-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <DrawerTitle className="text-lg font-semibold text-slate-900">
+                  {selectedTicket?.nombre || "Detalle del ticket"}
+                </DrawerTitle>
+                <DrawerDescription className="mt-1">
+                  {selectedTicket?.tipo && (
+                    <Badge variant="outline" className="mt-2">
+                      {selectedTicket.tipo}
+                    </Badge>
+                  )}
+                </DrawerDescription>
+              </div>
+              {selectedTicket && (
+                <Badge
+                  variant="outline"
+                  className={`${
+                    STATUS_STYLE[coerceStatus(selectedTicket.estado)]
+                  } border`}
+                >
+                  {STATUS_LABEL[coerceStatus(selectedTicket.estado)]}
+                </Badge>
+              )}
+            </div>
+          </DrawerHeader>
+
+          <div className="flex-1 overflow-y-auto">
+            <Tabs defaultValue="general" className="w-full">
+              <div className="border-b px-6">
+                <TabsList className="w-full justify-start h-12 bg-transparent p-0">
+                  <TabsTrigger
+                    value="general"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                  >
+                    General
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="detalles"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                  >
+                    Detalles
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="archivos"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                  >
+                    Archivos
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              <TabsContent value="general" className="p-6 space-y-6 mt-0">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="edit-nombre"
+                      className="text-sm font-medium"
+                    >
+                      Título del ticket
+                    </Label>
+                    <Input
+                      id="edit-nombre"
+                      className="h-10"
+                      value={editForm.nombre}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, nombre: e.target.value })
+                      }
+                      disabled={isStudent}
+                      placeholder="Nombre o asunto"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="edit-estado"
+                        className="text-sm font-medium"
+                      >
+                        Estado
+                      </Label>
+                      <Select
+                        value={editForm.estado}
+                        onValueChange={(v) =>
+                          setEditForm({ ...editForm, estado: v })
+                        }
+                        disabled={isStudent}
+                      >
+                        <SelectTrigger id="edit-estado" className="h-10">
+                          <SelectValue placeholder="Seleccionar estado" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {estadoOpts.map((opt) => (
+                            <SelectItem key={opt.key} value={opt.key}>
+                              {opt.value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="edit-prioridad"
+                        className="text-sm font-medium"
+                      >
+                        Prioridad
+                      </Label>
+                      <Select
+                        value={editForm.prioridad}
+                        onValueChange={(v) =>
+                          setEditForm({ ...editForm, prioridad: v })
+                        }
+                        disabled={isStudent}
+                      >
+                        <SelectTrigger id="edit-prioridad" className="h-10">
+                          <SelectValue placeholder="Seleccionar prioridad" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="BAJA">Baja</SelectItem>
+                          <SelectItem value="MEDIA">Media</SelectItem>
+                          <SelectItem value="ALTA">Alta</SelectItem>
+                          <SelectItem value="URGENTE">Urgente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Clock className="h-4 w-4 text-slate-500" />
+                      Plazos y fechas
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-plazo" className="text-sm">
+                          Plazo (días)
+                        </Label>
+                        <Input
+                          id="edit-plazo"
+                          type="number"
+                          className="h-10"
+                          value={editForm.plazo ?? ""}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              plazo: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            })
+                          }
+                          disabled={isStudent}
+                          min={0}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-restante" className="text-sm">
+                          Restante (días)
+                        </Label>
+                        <Input
+                          id="edit-restante"
+                          type="number"
+                          className="h-10"
+                          value={editForm.restante ?? ""}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              restante: e.target.value
+                                ? Number(e.target.value)
+                                : null,
+                            })
+                          }
+                          disabled={isStudent}
+                          min={0}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-deadline" className="text-sm">
+                          Fecha límite
+                        </Label>
+                        <Input
+                          id="edit-deadline"
+                          type="date"
+                          className="h-10"
+                          value={editForm.deadline}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              deadline: e.target.value,
+                            })
+                          }
+                          disabled={isStudent}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-deadline-time" className="text-sm">
+                          Hora
+                        </Label>
+                        <Input
+                          id="edit-deadline-time"
+                          type="time"
+                          className="h-10"
+                          value={editForm.deadlineTime}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              deadlineTime: e.target.value,
+                            })
+                          }
+                          disabled={isStudent}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedTicket?.creacion && (
+                    <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        <span>
+                          Creado el {fmtDate(selectedTicket.creacion)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="detalles" className="p-6 space-y-6 mt-0">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <User className="h-4 w-4 text-slate-500" />
+                    Personas involucradas
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-informante" className="text-sm">
+                        Informante
+                      </Label>
+                      <Input
+                        id="edit-informante"
+                        className="h-10"
+                        value={editForm.informante}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            informante: e.target.value,
+                          })
+                        }
+                        disabled={isStudent}
+                        placeholder="Nombre del informante"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-resuelto-por" className="text-sm">
+                        Resuelto por
+                      </Label>
+                      <Input
+                        id="edit-resuelto-por"
+                        className="h-10"
+                        value={editForm.resuelto_por}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            resuelto_por: e.target.value,
+                          })
+                        }
+                        disabled={isStudent}
+                        placeholder="Nombre de quien resolvió"
+                      />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Users className="h-4 w-4 text-slate-500" />
+                      Equipo asignado
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-equipo" className="text-sm">
+                        Códigos de equipo (separados por coma)
+                      </Label>
+                      <Input
+                        id="edit-equipo"
+                        className="h-10"
+                        value={editForm.equipo.join(", ")}
+                        onChange={(e) =>
+                          setEditForm({
+                            ...editForm,
+                            equipo: e.target.value
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean),
+                          })
+                        }
+                        disabled={isStudent}
+                        placeholder="JJp8..., hQycZc..., ..."
+                      />
+                      {editForm.equipo.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {editForm.equipo.map((c) => (
+                            <Badge
+                              key={c}
+                              variant="secondary"
+                              className="gap-1"
+                            >
+                              {c}
+                              {!isStudent && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditForm({
+                                      ...editForm,
+                                      equipo: editForm.equipo.filter(
+                                        (x) => x !== c
+                                      ),
+                                    })
+                                  }
+                                  className="ml-1 hover:text-slate-900"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <CheckCircle2 className="h-4 w-4 text-slate-500" />
+                      Trabajo y resolución
+                    </div>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-tarea" className="text-sm">
+                          Descripción de la tarea
+                        </Label>
+                        <Textarea
+                          id="edit-tarea"
+                          value={editForm.tarea}
+                          onChange={(e) =>
+                            setEditForm({ ...editForm, tarea: e.target.value })
+                          }
+                          rows={4}
+                          disabled={isStudent}
+                          placeholder="Describe la tarea a realizar..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-resolucion" className="text-sm">
+                          Notas de resolución
+                        </Label>
+                        <Textarea
+                          id="edit-resolucion"
+                          value={editForm.resolucion}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              resolucion: e.target.value,
+                            })
+                          }
+                          rows={4}
+                          disabled={isStudent}
+                          placeholder="Cómo se resolvió el ticket..."
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-revision" className="text-sm">
+                          Revisión
+                        </Label>
+                        <Input
+                          id="edit-revision"
+                          className="h-10"
+                          value={editForm.revision}
+                          onChange={(e) =>
+                            setEditForm({
+                              ...editForm,
+                              revision: e.target.value,
+                            })
+                          }
+                          disabled={isStudent}
+                          placeholder="Notas de revisión"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="archivos" className="p-6 space-y-6 mt-0">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Paperclip className="h-4 w-4 text-slate-500" />
+                      Archivos adjuntos
+                    </div>
+                    {selectedTicket && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          openFilesFor(
+                            (selectedTicket as any).codigo ||
+                              (selectedTicket as any).id_externo ||
+                              selectedTicket.id
+                          )
+                        }
+                      >
+                        Ver todos
+                      </Button>
+                    )}
+                  </div>
+
+                  {selectedTicket && (
+                    <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+                      <p>
+                        Haz clic en "Ver todos" para gestionar los archivos
+                        adjuntos a este ticket.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          <DrawerFooter className="border-t">
+            <div className="flex items-center justify-end gap-3">
+              <Button variant="outline" onClick={() => setDrawerOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveTicket} disabled={isStudent}>
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Guardar cambios
+              </Button>
+            </div>
+          </DrawerFooter>
+        </DrawerContent>
+      </Drawer>
+
+      {/* Files dialog */}
       <Dialog
         open={!!openFiles}
         onOpenChange={(v) => {
@@ -1107,115 +1648,95 @@ export default function TicketsPanel({
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
             <DialogTitle>Archivos adjuntos</DialogTitle>
           </DialogHeader>
           {filesLoading ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando
-              archivos…
+            <div className="flex items-center justify-center py-12 text-slate-500">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando
+              archivos...
             </div>
           ) : files.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              Sin archivos
+            <div className="py-12 text-center text-sm text-slate-500">
+              Sin archivos adjuntos
             </div>
           ) : (
             <TooltipProvider>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {files.map((f) => (
-                    <div
-                      key={f.id}
-                      className="group rounded border bg-background p-2"
-                    >
-                      <div className="mx-auto flex aspect-square w-28 items-center justify-center overflow-hidden rounded bg-muted">
-                        {/* Thumbnail por tipo */}
-                        {(() => {
-                          const m =
-                            f.mime_type || mimeFromName(f.nombre_archivo);
-                          if (m?.startsWith("image/")) {
-                            const thumb = blobCache[f.id];
-                            return thumb ? (
-                              <img
-                                src={thumb}
-                                alt={f.nombre_archivo}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <FileImage className="h-8 w-8 text-muted-foreground" />
-                            );
-                          }
-                          if (m === "application/pdf") {
-                            return (
-                              <FileText className="h-8 w-8 text-muted-foreground" />
-                            );
-                          }
-                          if (m?.startsWith("video/")) {
-                            return (
-                              <FileVideo className="h-8 w-8 text-muted-foreground" />
-                            );
-                          }
-                          if (m?.startsWith("audio/")) {
-                            return (
-                              <FileAudio className="h-8 w-8 text-muted-foreground" />
-                            );
-                          }
-                          return (
-                            <FileIcon className="h-8 w-8 text-muted-foreground" />
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+                {files.map((f) => (
+                  <div
+                    key={f.id}
+                    className="group rounded-lg border border-slate-200 bg-white p-3 transition-all hover:shadow-md"
+                  >
+                    <div className="mx-auto flex aspect-square w-full items-center justify-center overflow-hidden rounded-md bg-slate-50">
+                      {(() => {
+                        const m = f.mime_type || mimeFromName(f.nombre_archivo);
+                        if (m?.startsWith("image/")) {
+                          const thumb = blobCache[f.id];
+                          return thumb ? (
+                            <img
+                              src={thumb || "/placeholder.svg"}
+                              alt={f.nombre_archivo}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <FileImage className="h-10 w-10 text-slate-400" />
                           );
-                        })()}
+                        }
+                        return iconFor(m, f.nombre_archivo);
+                      })()}
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div
+                            className="truncate text-sm font-medium text-slate-900"
+                            title={f.nombre_archivo}
+                          >
+                            {shortenFileName(f.nombre_archivo, 20)}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent
+                          side="top"
+                          className="max-w-xs break-all"
+                        >
+                          {f.nombre_archivo}
+                        </TooltipContent>
+                      </Tooltip>
+                      <div className="text-xs text-slate-500">
+                        {f.tamano_bytes
+                          ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
+                          : ""}
                       </div>
-                      <div className="mt-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              className="truncate text-sm font-medium"
-                              title={f.nombre_archivo}
-                            >
-                              {shortenFileName(f.nombre_archivo, 30)}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            className="max-w-xs break-all"
-                          >
-                            {f.nombre_archivo}
-                          </TooltipContent>
-                        </Tooltip>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {(f.mime_type || "").split(";")[0]}{" "}
-                          {f.tamano_bytes ? `· ${f.tamano_bytes} bytes` : ""}
-                        </div>
-                        <div className="mt-2 flex gap-2">
-                          <Button
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            variant="outline"
-                            onClick={() => downloadFile(f.id, f.nombre_archivo)}
-                          >
-                            Descargar
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            variant="secondary"
-                            onClick={() => openPreview(f)}
-                          >
-                            Ver
-                          </Button>
-                        </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 bg-transparent"
+                          onClick={() => downloadFile(f.id, f.nombre_archivo)}
+                        >
+                          <Download className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 bg-transparent"
+                          onClick={() => openPreview(f)}
+                        >
+                          <Eye className="h-3 w-3" />
+                        </Button>
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </TooltipProvider>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Sub-modal de previsualización */}
+      {/* Preview dialog */}
       <Dialog
         open={previewOpen}
         onOpenChange={(v) => {
@@ -1223,19 +1744,19 @@ export default function TicketsPanel({
           if (!v) setPreviewFile(null);
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {previewFile?.nombre_archivo || "Previsualización"}
             </DialogTitle>
           </DialogHeader>
           {previewLoading ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando
-              previsualización…
+            <div className="flex items-center justify-center py-16 text-slate-500">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando
+              previsualización...
             </div>
           ) : previewFile?.url ? (
-            <div className="max-h-[70vh] overflow-auto rounded border bg-background p-2">
+            <div className="max-h-[70vh] overflow-auto rounded-lg border bg-slate-50 p-4">
               {(() => {
                 const m =
                   previewFile?.mime_type ||
@@ -1244,9 +1765,9 @@ export default function TicketsPanel({
                 if (m.startsWith("image/")) {
                   return (
                     <img
-                      src={previewFile.url}
+                      src={previewFile.url || "/placeholder.svg"}
                       alt={previewFile.nombre_archivo || "imagen"}
-                      className="mx-auto max-h-[65vh]"
+                      className="mx-auto max-h-[65vh] rounded"
                     />
                   );
                 }
@@ -1254,7 +1775,7 @@ export default function TicketsPanel({
                   return (
                     <iframe
                       src={previewFile.url}
-                      className="h-[65vh] w-full"
+                      className="h-[65vh] w-full rounded"
                       title="PDF"
                     />
                   );
@@ -1264,7 +1785,7 @@ export default function TicketsPanel({
                     <video
                       src={previewFile.url}
                       controls
-                      className="mx-auto max-h-[65vh]"
+                      className="mx-auto max-h-[65vh] rounded"
                     />
                   );
                 }
@@ -1277,13 +1798,13 @@ export default function TicketsPanel({
                   return (
                     <iframe
                       src={previewFile.url}
-                      className="h-[65vh] w-full"
+                      className="h-[65vh] w-full rounded"
                       title="Texto"
                     />
                   );
                 }
                 return (
-                  <div className="py-10 text-center text-sm text-muted-foreground">
+                  <div className="py-16 text-center text-sm text-slate-500">
                     No se puede previsualizar este tipo de archivo. Descárgalo
                     para verlo.
                   </div>
@@ -1291,7 +1812,7 @@ export default function TicketsPanel({
               })()}
             </div>
           ) : (
-            <div className="py-10 text-center text-sm text-muted-foreground">
+            <div className="py-16 text-center text-sm text-slate-500">
               No hay previsualización disponible.
             </div>
           )}

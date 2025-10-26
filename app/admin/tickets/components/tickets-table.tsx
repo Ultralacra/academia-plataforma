@@ -42,14 +42,12 @@ export default function TicketsTable({
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 z-[1] bg-white">
             <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-600">
-              <th className="px-4 py-2">ID Externo</th>
               <th className="px-4 py-2">Asunto</th>
               <th className="px-4 py-2">Alumno</th>
               <th className="px-4 py-2">Estado</th>
               <th className="px-4 py-2">Tipo</th>
               <th className="px-4 py-2">Creación</th>
               <th className="px-4 py-2">Deadline</th>
-              <th className="px-4 py-2 text-right"># URLs</th>
             </tr>
           </thead>
           <tbody>
@@ -58,25 +56,44 @@ export default function TicketsTable({
                 key={t.id}
                 className="border-b hover:bg-muted/40 transition-colors"
               >
-                <td className="px-4 py-2 font-mono text-xs">
-                  {t.id_externo ?? "-"}
-                </td>
                 <td className="px-4 py-2">{t.nombre ?? "-"}</td>
                 <td className="px-4 py-2">{t.alumno_nombre ?? "-"}</td>
-                <td className="px-4 py-2">{t.estado ?? "—"}</td>
+                <td className="px-4 py-2">
+                  {(() => {
+                    const v = String(t.estado ?? "").toUpperCase();
+                    const classes =
+                      v.includes("RESUELT") || v.includes("CERR")
+                        ? "bg-emerald-100 text-emerald-800"
+                        : v.includes("PROGRESO")
+                        ? "bg-sky-100 text-sky-800"
+                        : v.includes("PEND")
+                        ? "bg-amber-100 text-amber-800"
+                        : v.includes("BLOQUE") || v.includes("ESCAL")
+                        ? "bg-rose-100 text-rose-800"
+                        : v
+                        ? "bg-gray-100 text-gray-700"
+                        : "bg-gray-100 text-gray-500";
+                    return t.estado ? (
+                      <span
+                        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
+                      >
+                        {t.estado}
+                      </span>
+                    ) : (
+                      "—"
+                    );
+                  })()}
+                </td>
                 <td className="px-4 py-2">{(t.tipo ?? "—").toUpperCase()}</td>
                 <td className="px-4 py-2">{fmtDate(t.creacion)}</td>
                 <td className="px-4 py-2">
                   {t.deadline ? fmtDate(t.deadline) : "—"}
                 </td>
-                <td className="px-4 py-2 text-right tabular-nums">
-                  {t.equipo_urls?.length ?? 0}
-                </td>
               </tr>
             ))}
             {items.length === 0 && !loading && (
               <tr>
-                <td className="px-4 py-6 text-center text-gray-500" colSpan={8}>
+                <td className="px-4 py-6 text-center text-gray-500" colSpan={6}>
                   No hay tickets para los filtros seleccionados.
                 </td>
               </tr>

@@ -1,11 +1,13 @@
 "use client";
 
+import type React from "react";
+
 import { useEffect, useMemo, useState, useRef } from "react";
 import type { StudentItem } from "@/lib/data-service";
 import {
   Plus,
   TicketIcon,
-  File as FileIcon,
+  FileIcon,
   FileImage,
   FileVideo,
   FileAudio,
@@ -14,6 +16,18 @@ import {
   Loader2,
   Search,
   Pencil,
+  X,
+  Paperclip,
+  Mic,
+  LinkIcon,
+  Calendar,
+  Clock,
+  User,
+  Users,
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,29 +76,36 @@ import {
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
-  DrawerTrigger,
 } from "@/components/ui/drawer";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type StatusKey =
   | "EN_PROGRESO"
   | "PENDIENTE"
   | "PENDIENTE_DE_ENVIO"
   | "RESUELTO";
+
 const STATUS_LABEL: Record<StatusKey, string> = {
   EN_PROGRESO: "En progreso",
   PENDIENTE: "Pendiente",
   PENDIENTE_DE_ENVIO: "Pendiente de envío",
   RESUELTO: "Resuelto",
 };
+
 const STATUS_STYLE: Record<StatusKey, string> = {
-  PENDIENTE:
-    "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400 dark:ring-blue-500/20",
-  EN_PROGRESO:
-    "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20",
-  PENDIENTE_DE_ENVIO:
-    "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200/50 dark:bg-sky-500/10 dark:text-sky-400 dark:ring-sky-500/20",
-  RESUELTO:
-    "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20",
+  PENDIENTE: "bg-blue-50 text-blue-700 border-blue-200",
+  EN_PROGRESO: "bg-amber-50 text-amber-700 border-amber-200",
+  PENDIENTE_DE_ENVIO: "bg-sky-50 text-sky-700 border-sky-200",
+  RESUELTO: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
+
+const PRIORITY_COLORS = {
+  BAJA: "bg-slate-100 text-slate-700 border-slate-200",
+  MEDIA: "bg-blue-100 text-blue-700 border-blue-200",
+  ALTA: "bg-red-100 text-red-700 border-red-200",
 };
 
 function fmtDate(iso?: string | null) {
@@ -136,10 +157,10 @@ function mimeFromName(name?: string | null): string | null {
 
 function iconFor(mime: string | null, name?: string) {
   const m = mime || mimeFromName(name) || "";
-  if (m.startsWith("image/")) return <FileImage className="h-5 w-5" />;
-  if (m.startsWith("video/")) return <FileVideo className="h-5 w-5" />;
-  if (m.startsWith("audio/")) return <FileAudio className="h-5 w-5" />;
-  if (m === "application/pdf") return <FileText className="h-5 w-5" />;
+  if (m.startsWith("image/")) return <FileImage className="h-4 w-4" />;
+  if (m.startsWith("video/")) return <FileVideo className="h-4 w-4" />;
+  if (m.startsWith("audio/")) return <FileAudio className="h-4 w-4" />;
+  if (m === "application/pdf") return <FileText className="h-4 w-4" />;
   if (
     [
       "application/zip",
@@ -147,8 +168,8 @@ function iconFor(mime: string | null, name?: string) {
       "application/x-rar-compressed",
     ].includes(m)
   )
-    return <FileArchive className="h-5 w-5" />;
-  return <FileIcon className="h-5 w-5" />;
+    return <FileArchive className="h-4 w-4" />;
+  return <FileIcon className="h-4 w-4" />;
 }
 
 export default function TicketsPanelCoach({
@@ -176,41 +197,34 @@ export default function TicketsPanelCoach({
   >([]);
   const [creating, setCreating] = useState(false);
   const [localTickets, setLocalTickets] = useState<any[]>([]);
-  // alumnos del coach para asociar el ticket
   const [coachStudents, setCoachStudents] = useState<
     { alumno: string; nombre: string }[]
   >([]);
   const [selectedAlumno, setSelectedAlumno] = useState<string>("");
   const [studentQuery, setStudentQuery] = useState("");
   const [coachArea, setCoachArea] = useState<string | null>(null);
-  // descripción y enlaces opcionales
   const [createDescripcion, setCreateDescripcion] = useState("");
   const [linkInput, setLinkInput] = useState("");
   const [links, setLinks] = useState<string[]>([]);
-  // archivos a adjuntar
   const [createFiles, setCreateFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<
     { url: string; type: string; name: string; size: number }[]
   >([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  // grabación de audio
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
 
-  // server data
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [rows, setRows] = useState<CoachTicket[]>([]);
-  // Filtros de fecha (por defecto: HOY)
   const [fechaDesde, setFechaDesde] = useState<string>(todayYMDLocal());
   const [fechaHasta, setFechaHasta] = useState<string>(todayYMDLocal());
-  // Archivos del ticket seleccionado
-  const [openFiles, setOpenFiles] = useState<null | string>(null); // ticketCode
+  const [openFiles, setOpenFiles] = useState<null | string>(null);
   const [filesLoading, setFilesLoading] = useState(false);
   const [files, setFiles] = useState<
     {
@@ -221,7 +235,6 @@ export default function TicketsPanelCoach({
       created_at: string | null;
     }[]
   >([]);
-  // Previsualización de archivo individual
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFile, setPreviewFile] = useState<null | {
@@ -232,17 +245,16 @@ export default function TicketsPanelCoach({
   }>(null);
   const [blobCache, setBlobCache] = useState<Record<string, string>>({});
 
-  // Panel lateral de edición
   type ExtraDetails = {
     prioridad?: "BAJA" | "MEDIA" | "ALTA";
-    plazo?: number | null; // días
-    restante?: number | null; // días restantes
+    plazo?: number | null;
+    restante?: number | null;
     informante?: string;
     resolucion?: string;
     resuelto_por?: string;
     revision?: string;
     tarea?: string;
-    equipo?: string[]; // códigos
+    equipo?: string[];
   };
   const [editOpen, setEditOpen] = useState(false);
   const [editTicket, setEditTicket] = useState<CoachTicket | null>(null);
@@ -250,7 +262,7 @@ export default function TicketsPanelCoach({
     ExtraDetails & {
       nombre?: string | null;
       estado?: StatusKey | string | null;
-      deadline?: string | null; // ISO
+      deadline?: string | null;
     }
   >({});
   const [editFiles, setEditFiles] = useState<File[]>([]);
@@ -262,7 +274,6 @@ export default function TicketsPanelCoach({
     Record<string | number, ExtraDetails>
   >({});
 
-  // Archivos existentes del ticket seleccionado (para mostrar dentro del panel)
   const [editFilesLoading, setEditFilesLoading] = useState(false);
   const [editExistingFiles, setEditExistingFiles] = useState<
     {
@@ -275,7 +286,6 @@ export default function TicketsPanelCoach({
   >([]);
 
   useEffect(() => {
-    // Cargar archivos existentes cuando se abre el panel y haya ticket con código
     if (!editOpen || !editTicket?.codigo) return;
     let alive = true;
     (async () => {
@@ -295,12 +305,11 @@ export default function TicketsPanelCoach({
       alive = false;
     };
   }, [editOpen, editTicket?.codigo]);
-  // Cargar opciones de tipo y alumnos del coach para creación
+
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        // tipos de ticket
         try {
           const tiposRes = await getOpciones("tipo_ticket");
           const mapped = tiposRes
@@ -308,7 +317,6 @@ export default function TicketsPanelCoach({
             .filter((x) => x.key && x.value);
           if (alive) setTipos(mapped);
         } catch {}
-        // alumnos asociados al coach
         if (coachCode) {
           try {
             const list = await getCoachStudents(coachCode);
@@ -322,7 +330,6 @@ export default function TicketsPanelCoach({
                 setSelectedAlumno(simple[0].alumno);
             }
           } catch {}
-          // área del coach para preseleccionar "tipo"
           try {
             const coach: CoachItem | null = await getCoachByCode(coachCode);
             if (alive) setCoachArea(coach?.area ?? null);
@@ -335,7 +342,6 @@ export default function TicketsPanelCoach({
     };
   }, [coachCode]);
 
-  // Previsualizaciones de archivos
   useEffect(() => {
     const urls = createFiles.map((f) => ({
       url: URL.createObjectURL(f),
@@ -349,7 +355,6 @@ export default function TicketsPanelCoach({
     };
   }, [createFiles]);
 
-  // Deducción automática de tipo a partir del nombre
   function normalize(s?: string | null) {
     const str = (s ?? "").toString();
     return str
@@ -358,14 +363,14 @@ export default function TicketsPanelCoach({
       .replace(/\p{Diacritic}/gu, "")
       .trim();
   }
+
   function guessTipoKey(nombre: string): string | "" {
     const n = normalize(nombre);
     if (!n) return "";
-    // reglas simples por palabra clave
     const pairs = [
       { kw: ["copy", "copys"], match: (lab: string) => lab.includes("copy") },
       {
-        kw: ["tecnica", "tecnica", "t\u00E9cnica"],
+        kw: ["tecnica", "tecnica", "técnica"],
         match: (lab: string) => lab.includes("tecn"),
       },
       {
@@ -373,7 +378,7 @@ export default function TicketsPanelCoach({
         match: (lab: string) => lab.includes("pauta") || lab.includes("ads"),
       },
       {
-        kw: ["diseno", "dise\u00F1o", "creativo"],
+        kw: ["diseno", "diseño", "creativo"],
         match: (lab: string) =>
           lab.includes("disen") || lab.includes("creativ"),
       },
@@ -389,36 +394,31 @@ export default function TicketsPanelCoach({
     }));
     for (const rule of pairs) {
       if (rule.kw.some((k) => n.includes(normalize(k)))) {
-        // buscar por label o key que haga match
         const hit = tipoList.find(
           (t) => rule.match(t.value) || rule.match(t.key)
         );
         if (hit) return hit.raw.key;
       }
     }
-    // fallback: si coincide exactamente con alguna opción por texto
     const exact = tipoList.find(
       (t) => n.includes(t.value) || n.includes(t.key)
     );
     return exact ? exact.raw.key : "";
   }
 
-  // Cuando cambia el nombre, preseleccionar tipo si está vacío o fue autocompletado
   useEffect(() => {
     if (!createNombre) return;
-    // solo autocompletar si no fue modificado manualmente (heurística: cuando está vacío)
     if (!createTipo) {
       const g = guessTipoKey(createNombre);
       if (g) setCreateTipo(g);
     }
   }, [createNombre, tipos]);
 
-  // Preseleccionar tipo desde el área del coach cuando se abre el modal y haya opciones disponibles
   useEffect(() => {
     if (!openCreate) return;
     if (!coachArea) return;
     if (!tipos.length) return;
-    if (createTipo) return; // no sobreescribir si el usuario ya eligió
+    if (createTipo) return;
     const areaN = normalize(coachArea);
     const match = tipos.find(
       (t) =>
@@ -458,7 +458,6 @@ export default function TicketsPanelCoach({
       toast({ title: "No se pudo determinar el tipo" });
       return;
     }
-    // Unir descripción + enlaces en un solo campo (si no hay soporte backend específico)
     let descripcion = createDescripcion.trim();
     if (links.length) {
       const block = ["", "Links:", ...links.map((u) => `- ${u}`)].join("\n");
@@ -473,7 +472,6 @@ export default function TicketsPanelCoach({
         descripcion: descripcion || undefined,
         archivos: createFiles.slice(0, 10),
       });
-      // refrescar lista actual
       const res = await getCoachTickets({
         coach: coachCode,
         page,
@@ -483,7 +481,6 @@ export default function TicketsPanelCoach({
       });
       setRows(res.data);
       setTotal(res.total);
-      // reset modal
       setOpenCreate(false);
       setCreateNombre("");
       setCreateTipo("");
@@ -507,8 +504,6 @@ export default function TicketsPanelCoach({
     if (!raw) return;
     const url = raw.match(/^https?:\/\//i) ? raw : `https://${raw}`;
     try {
-      // validar URL simple
-      // eslint-disable-next-line no-new
       new URL(url);
       setLinks((prev) => Array.from(new Set([...prev, url])).slice(0, 10));
       setLinkInput("");
@@ -583,7 +578,6 @@ export default function TicketsPanelCoach({
   }, [coachCode, page, pageSize, fechaDesde, fechaHasta]);
 
   const combined = useMemo(() => {
-    // combinar tickets de API con locales (solo para pruebas de UI)
     const locals = localTickets.map((t) => ({
       id: t.id,
       codigo: "",
@@ -608,32 +602,15 @@ export default function TicketsPanelCoach({
     );
   }, [combined, query]);
 
-  function handleCreateLocal() {
-    if (!createNombre.trim() || !createTipo.trim()) return;
-    const t = {
-      id: `local-${Date.now()}`,
-      nombre: createNombre.trim(),
-      tipo: createTipo.trim(),
-      creacion: new Date().toISOString(),
-      estado: "PENDIENTE",
-    };
-    setLocalTickets((s) => [t, ...s]);
-    setOpenCreate(false);
-    setCreateNombre("");
-    setCreateTipo("");
-  }
-
   async function handleChangeEstado(
     ticketCodigo: string,
     newEstado: StatusKey
   ) {
-    // Optimistic: ya movimos en UI en el onDrop. Aquí confirmamos con backend
     try {
       await updateTicket(ticketCodigo, { estado: newEstado });
       toast({ title: "Ticket actualizado" });
     } catch (e: any) {
       toast({ title: e?.message ?? "Error al actualizar ticket" });
-      // Revertir refetch de la página actual
       try {
         const res = await getCoachTickets({ coach: coachCode, page, pageSize });
         setRows(res.data);
@@ -716,32 +693,37 @@ export default function TicketsPanelCoach({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <TicketIcon className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-semibold">Tickets (vista coach)</h3>
+    <div className="h-full flex flex-col overflow-hidden bg-white">
+      <div className="border-b bg-white px-6 py-4 shrink-0">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
+              <TicketIcon className="h-4 w-4 text-slate-700" />
+            </div>
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">
+                Tickets
+              </h3>
+              <p className="text-xs text-slate-500">Vista de coach</p>
+            </div>
           </div>
-          {/* Filtro rápido de fecha */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">Desde</label>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Calendar className="h-4 w-4 text-slate-400" />
               <input
                 type="date"
-                className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm"
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
                 value={fechaDesde}
                 onChange={(e) => {
                   setFechaDesde(e.target.value);
                   setPage(1);
                 }}
               />
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-muted-foreground">Hasta</label>
+              <span className="text-slate-400">—</span>
               <input
                 type="date"
-                className="h-8 rounded-md border border-gray-200 bg-white px-2 text-sm"
+                className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
                 value={fechaHasta}
                 onChange={(e) => {
                   setFechaHasta(e.target.value);
@@ -752,6 +734,7 @@ export default function TicketsPanelCoach({
             <Button
               variant="outline"
               size="sm"
+              className="h-9 bg-transparent"
               onClick={() => {
                 const hoy = todayYMDLocal();
                 setFechaDesde(hoy);
@@ -761,274 +744,299 @@ export default function TicketsPanelCoach({
             >
               Hoy
             </Button>
-          </div>
-          <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-            <DialogTrigger asChild>
-              <Button variant="default" size="sm" className="h-8 gap-1.5">
-                <Plus className="h-3.5 w-3.5" />
-                Nuevo
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Crear ticket</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3 py-2">
-                {/* Alumno del coach */}
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">
-                    Alumno
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      className="h-9 flex-1"
-                      placeholder="Buscar alumno por nombre o código…"
-                      value={studentQuery}
-                      onChange={(e) => setStudentQuery(e.target.value)}
-                    />
+            <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="h-9 gap-2">
+                  <Plus className="h-4 w-4" />
+                  Nuevo ticket
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Crear nuevo ticket</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="alumno" className="text-sm font-medium">
+                      Alumno
+                    </Label>
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          id="alumno-search"
+                          className="h-10 pl-9"
+                          placeholder="Buscar por nombre o código…"
+                          value={studentQuery}
+                          onChange={(e) => setStudentQuery(e.target.value)}
+                        />
+                      </div>
+                      <Select
+                        value={selectedAlumno}
+                        onValueChange={setSelectedAlumno}
+                      >
+                        <SelectTrigger className="h-10">
+                          <SelectValue placeholder="Selecciona un alumno" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(studentQuery
+                            ? coachStudents.filter((s) => {
+                                const q = normalize(studentQuery);
+                                return (
+                                  normalize(s.nombre).includes(q) ||
+                                  normalize(s.alumno).includes(q)
+                                );
+                              })
+                            : coachStudents
+                          ).map((s) => (
+                            <SelectItem key={s.alumno} value={s.alumno}>
+                              {s.nombre} ({s.alumno})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <select
-                    className="w-full h-9 rounded-md border px-3 text-sm"
-                    value={selectedAlumno}
-                    onChange={(e) => setSelectedAlumno(e.target.value)}
-                  >
-                    {(studentQuery
-                      ? coachStudents.filter((s) => {
-                          const q = normalize(studentQuery);
-                          return (
-                            normalize(s.nombre).includes(q) ||
-                            normalize(s.alumno).includes(q)
-                          );
-                        })
-                      : coachStudents
-                    ).map((s) => (
-                      <option key={s.alumno} value={s.alumno}>
-                        {s.nombre} ({s.alumno})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {/* Nombre del ticket */}
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">
-                    Nombre
-                  </label>
-                  <Input
-                    value={createNombre}
-                    onChange={(e) => setCreateNombre(e.target.value)}
-                    placeholder="Asunto del ticket"
-                  />
-                </div>
-                {/* Tipo autocompletado con posibilidad de override */}
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Tipo</label>
-                  <select
-                    className="w-full h-9 rounded-md border px-3 text-sm"
-                    value={createTipo}
-                    onChange={(e) => setCreateTipo(e.target.value)}
-                  >
-                    <option value="">(Automático)</option>
-                    {tipos.map((t) => (
-                      <option key={t.id} value={t.key}>
-                        {t.value}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {/* Descripción / Notas */}
-                <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">
-                    Descripción (opcional)
-                  </label>
-                  <textarea
-                    className="w-full min-h-[70px] rounded-md border px-3 py-2 text-sm"
-                    value={createDescripcion}
-                    onChange={(e) => setCreateDescripcion(e.target.value)}
-                    placeholder="Notas del ticket, detalles del caso, etc."
-                  />
-                </div>
-                {/* Enlaces */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs text-muted-foreground">
-                      Enlaces (URL)
-                    </label>
-                    <span className="text-xs text-muted-foreground">
-                      {links.length}/10
-                    </span>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="nombre" className="text-sm font-medium">
+                        Nombre del ticket
+                      </Label>
+                      <Input
+                        id="nombre"
+                        className="h-10"
+                        value={createNombre}
+                        onChange={(e) => setCreateNombre(e.target.value)}
+                        placeholder="Asunto del ticket"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="tipo" className="text-sm font-medium">
+                        Tipo
+                      </Label>
+                      <Select value={createTipo} onValueChange={setCreateTipo}>
+                        <SelectTrigger id="tipo" className="h-10">
+                          <SelectValue placeholder="(Automático)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">(Automático)</SelectItem>
+                          {tipos.map((t) => (
+                            <SelectItem key={t.id} value={t.key}>
+                              {t.value}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Input
-                      className="h-9 flex-1"
-                      placeholder="https://…"
-                      value={linkInput}
-                      onChange={(e) => setLinkInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addLink();
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={addLink}
+
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="descripcion"
+                      className="text-sm font-medium"
                     >
-                      Agregar
-                    </Button>
+                      Descripción
+                    </Label>
+                    <textarea
+                      id="descripcion"
+                      className="w-full min-h-[80px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                      value={createDescripcion}
+                      onChange={(e) => setCreateDescripcion(e.target.value)}
+                      placeholder="Detalles del ticket..."
+                    />
                   </div>
-                  {links.length > 0 && (
-                    <ul className="space-y-1 max-h-40 overflow-auto">
-                      {links.map((u, i) => (
-                        <li
-                          key={`${u}-${i}`}
-                          className="flex items-start gap-2 rounded border px-2 py-1 text-xs"
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Adjuntos</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        multiple
+                        onChange={onFileInputChange}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="gap-2"
+                      >
+                        <Paperclip className="h-4 w-4" />
+                        Archivos
+                      </Button>
+                      {!isRecording ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={startRecording}
+                          className="gap-2 bg-transparent"
                         >
-                          <div className="min-w-0 flex-1">
+                          <Mic className="h-4 w-4" />
+                          Grabar audio
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          onClick={stopRecording}
+                          className="gap-2"
+                        >
+                          <div className="h-2 w-2 rounded-full bg-white animate-pulse" />
+                          Detener
+                        </Button>
+                      )}
+                    </div>
+
+                    {audioPreviewUrl && (
+                      <div className="rounded-lg border bg-slate-50 p-3">
+                        <audio
+                          src={audioPreviewUrl}
+                          controls
+                          className="w-full"
+                        />
+                      </div>
+                    )}
+
+                    {createFiles.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500">
+                          {createFiles.length} archivo(s) seleccionado(s)
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {previews.map((p, idx) => (
+                            <div
+                              key={`${p.name}-${idx}`}
+                              className="group relative flex items-center gap-3 rounded-lg border bg-white p-3 hover:bg-slate-50"
+                            >
+                              {p.type.startsWith("image/") ? (
+                                <img
+                                  src={p.url || "/placeholder.svg"}
+                                  alt={p.name}
+                                  className="h-10 w-10 rounded object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-10 w-10 items-center justify-center rounded bg-slate-100">
+                                  {iconFor(p.type, p.name)}
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <div
+                                  className="truncate text-sm font-medium"
+                                  title={p.name}
+                                >
+                                  {p.name}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {Math.ceil(p.size / 1024)} KB
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100"
+                                onClick={() => removeFileAt(idx)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">Enlaces</Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          className="h-10 pl-9"
+                          placeholder="https://..."
+                          value={linkInput}
+                          onChange={(e) => setLinkInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addLink();
+                            }
+                          }}
+                        />
+                      </div>
+                      <Button type="button" variant="outline" onClick={addLink}>
+                        Agregar
+                      </Button>
+                    </div>
+                    {links.length > 0 && (
+                      <div className="space-y-2">
+                        {links.map((u, i) => (
+                          <div
+                            key={`${u}-${i}`}
+                            className="flex items-center gap-2 rounded-lg border bg-slate-50 px-3 py-2"
+                          >
+                            <LinkIcon className="h-4 w-4 shrink-0 text-slate-400" />
                             <a
                               href={u}
                               target="_blank"
                               rel="noreferrer"
-                              className="break-all text-blue-600 hover:underline"
+                              className="min-w-0 flex-1 truncate text-sm text-blue-600 hover:underline"
                             >
                               {u}
                             </a>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="shrink-0"
-                            onClick={() =>
-                              setLinks((prev) => prev.filter((x) => x !== u))
-                            }
-                          >
-                            Quitar
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-                {/* Archivos */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs text-muted-foreground">
-                      Archivos
-                    </label>
-                    <span className="text-xs text-muted-foreground">
-                      {createFiles.length}/10
-                    </span>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    multiple
-                    onChange={onFileInputChange}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    Elegir archivos
-                  </Button>
-                  {/* Grabación de audio rápida */}
-                  <div className="flex items-center gap-2">
-                    {!isRecording ? (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={startRecording}
-                      >
-                        Grabar audio
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={stopRecording}
-                      >
-                        Detener
-                      </Button>
-                    )}
-                    {audioPreviewUrl && (
-                      <audio src={audioPreviewUrl} controls className="h-8" />
-                    )}
-                  </div>
-                  {createFiles.length > 0 && (
-                    <ul className="space-y-2">
-                      {previews.map((p, idx) => (
-                        <li
-                          key={`${p.name}-${idx}`}
-                          className="flex h-14 items-center gap-3 rounded border p-2"
-                        >
-                          {p.type.startsWith("image/") ? (
-                            <img
-                              src={p.url}
-                              alt={p.name}
-                              className="h-10 w-10 rounded object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded bg-muted text-[10px] font-medium text-muted-foreground">
-                              {p.name.split(".").pop()?.toUpperCase() || "FILE"}
-                            </div>
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <div
-                              className="truncate text-sm font-medium"
-                              title={p.name}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={() =>
+                                setLinks((prev) => prev.filter((x) => x !== u))
+                              }
                             >
-                              {p.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {Math.ceil(p.size / 1024)} KB
-                            </div>
+                              <X className="h-4 w-4" />
+                            </Button>
                           </div>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFileAt(idx)}
-                          >
-                            Eliminar
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOpenCreate(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleCreateSubmit}
-                  disabled={creating || !selectedAlumno || !createNombre.trim()}
-                >
-                  {creating && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Crear
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                <DialogFooter>
+                  <Button
+                    variant="outline"
+                    onClick={() => setOpenCreate(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleCreateSubmit}
+                    disabled={
+                      creating || !selectedAlumno || !createNombre.trim()
+                    }
+                  >
+                    {creating && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Crear ticket
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <div
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium bg-muted text-muted-foreground`}
-          >
-            {filtered.length} Todos
-          </div>
+        <div className="flex flex-wrap items-center gap-2 mb-4">
+          <Badge variant="outline" className="gap-1.5 font-normal">
+            <div className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+            {filtered.length} Total
+          </Badge>
           {(
             [
               "PENDIENTE",
@@ -1041,41 +1049,48 @@ export default function TicketsPanelCoach({
               (t) => String(t.estado).toUpperCase() === s
             ).length;
             return (
-              <div
+              <Badge
                 key={s}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLE[s]}`}
+                variant="outline"
+                className={`gap-1.5 font-normal ${STATUS_STYLE[s]}`}
               >
                 {STATUS_LABEL[s]}: {count}
-              </div>
+              </Badge>
             );
           })}
         </div>
 
-        <div className="relative mt-3">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
-            className="h-9 pl-9 border-gray-200 bg-white"
-            placeholder="Buscar por asunto o tipo…"
+            className="h-10 pl-9 border-slate-200 bg-white"
+            placeholder="Buscar tickets..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="p-3">
+      <div className="flex-1 min-h-0 overflow-auto p-6 bg-slate-50">
         {error && (
-          <div className="mb-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle className="h-4 w-4 shrink-0" />
             {error}
           </div>
         )}
         {loading ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            <Loader2 className="mr-2 inline h-4 w-4 animate-spin" /> Cargando
-            tickets…
+          <div className="flex items-center justify-center py-20 text-sm text-slate-500">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando tickets…
           </div>
         ) : filtered.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            No hay tickets para este coach.
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-3">
+              <TicketIcon className="h-6 w-6 text-slate-400" />
+            </div>
+            <p className="text-sm font-medium text-slate-900">No hay tickets</p>
+            <p className="text-sm text-slate-500">
+              Crea un nuevo ticket para comenzar
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1093,13 +1108,12 @@ export default function TicketsPanelCoach({
               return (
                 <div
                   key={col}
-                  className="min-h-[120px] rounded-md border border-gray-200 bg-white p-3"
+                  className="flex flex-col rounded-xl border border-slate-200 bg-white"
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={async (e) => {
                     e.preventDefault();
                     const codigo = e.dataTransfer.getData("text/plain");
                     if (!codigo) return;
-                    // optimistic move in local state
                     setRows((prev) =>
                       prev.map((t) =>
                         t.codigo === codigo ? { ...t, estado: col } : t
@@ -1108,20 +1122,21 @@ export default function TicketsPanelCoach({
                     await handleChangeEstado(codigo, col);
                   }}
                 >
-                  <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center justify-between border-b px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[col]}`}
+                      <Badge
+                        variant="outline"
+                        className={`font-medium ${STATUS_STYLE[col]}`}
                       >
                         {STATUS_LABEL[col]}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
+                      </Badge>
+                      <span className="text-sm text-slate-500">
                         {items.length}
                       </span>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="flex-1 space-y-2 p-3">
                     {items.map((t) => (
                       <div
                         key={t.id}
@@ -1131,70 +1146,68 @@ export default function TicketsPanelCoach({
                           e.dataTransfer.setData("text/plain", t.codigo);
                           e.dataTransfer.effectAllowed = "move";
                         }}
-                        className="rounded-md border border-gray-200 bg-white p-3 shadow-sm hover:bg-gray-50 cursor-grab active:cursor-grabbing"
+                        className="group rounded-lg border border-slate-200 bg-white p-3 shadow-sm hover:shadow-md hover:border-slate-300 cursor-grab active:cursor-grabbing transition-all"
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div
-                              className="font-medium leading-tight truncate"
-                              title={t.nombre ?? undefined}
-                            >
-                              {t.nombre ?? "—"}
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                              <span>Creado: {fmtDate(t.created_at)}</span>
-                              {t.alumno_nombre && (
-                                <span>· {t.alumno_nombre}</span>
-                              )}
-                              {t.codigo && (
-                                <button
-                                  className="underline hover:no-underline"
-                                  onClick={() => openFilesFor(t.codigo)}
-                                  type="button"
-                                >
-                                  · Archivos
-                                </button>
-                              )}
-                            </div>
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <h4
+                            className="flex-1 text-sm font-medium text-slate-900 line-clamp-2"
+                            title={t.nombre ?? undefined}
+                          >
+                            {t.nombre ?? "—"}
+                          </h4>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => {
+                              setEditTicket(t);
+                              const saved = detailsById[t.id] || {};
+                              setEditForm({
+                                nombre: t.nombre ?? "",
+                                estado: (t.estado as any) ?? "PENDIENTE",
+                                deadline: t.deadline ?? null,
+                                prioridad: (saved.prioridad ?? "MEDIA") as any,
+                                plazo: saved.plazo ?? null,
+                                restante: saved.restante ?? null,
+                                informante: saved.informante ?? "",
+                                resolucion: saved.resolucion ?? "",
+                                resuelto_por: saved.resuelto_por ?? "",
+                                revision: saved.revision ?? "",
+                                tarea: saved.tarea ?? "",
+                                equipo: Array.isArray(saved.equipo)
+                                  ? saved.equipo
+                                  : [],
+                              });
+                              setEditFiles([]);
+                              setEditPreviews([]);
+                              setEditOpen(true);
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                        <div className="space-y-1.5 text-xs text-slate-500">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5" />
+                            {fmtDate(t.created_at)}
                           </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLE[col]}`}
-                            >
-                              {STATUS_LABEL[col]}
-                            </span>
+                          {t.alumno_nombre && (
+                            <div className="flex items-center gap-1.5">
+                              <User className="h-3.5 w-3.5" />
+                              {t.alumno_nombre}
+                            </div>
+                          )}
+                          {t.codigo && (
                             <button
+                              className="flex items-center gap-1.5 text-blue-600 hover:underline"
+                              onClick={() => openFilesFor(t.codigo)}
                               type="button"
-                              className="inline-flex h-7 w-7 items-center justify-center rounded border border-gray-200 text-muted-foreground hover:bg-gray-50"
-                              title="Editar"
-                              onClick={() => {
-                                setEditTicket(t);
-                                const saved = detailsById[t.id] || {};
-                                setEditForm({
-                                  nombre: t.nombre ?? "",
-                                  estado: (t.estado as any) ?? "PENDIENTE",
-                                  deadline: t.deadline ?? null,
-                                  prioridad: (saved.prioridad ??
-                                    "MEDIA") as any,
-                                  plazo: saved.plazo ?? null,
-                                  restante: saved.restante ?? null,
-                                  informante: saved.informante ?? "",
-                                  resolucion: saved.resolucion ?? "",
-                                  resuelto_por: saved.resuelto_por ?? "",
-                                  revision: saved.revision ?? "",
-                                  tarea: saved.tarea ?? "",
-                                  equipo: Array.isArray(saved.equipo)
-                                    ? saved.equipo
-                                    : [],
-                                });
-                                setEditFiles([]);
-                                setEditPreviews([]);
-                                setEditOpen(true);
-                              }}
                             >
-                              <Pencil className="h-4 w-4" />
+                              <Paperclip className="h-3.5 w-3.5" />
+                              Ver archivos
                             </button>
-                          </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -1205,10 +1218,9 @@ export default function TicketsPanelCoach({
           </div>
         )}
 
-        {/* Paginación simple */}
-        <div className="mt-4 flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            Página {page} · {total} tickets
+        <div className="mt-6 flex items-center justify-between rounded-lg border bg-white px-4 py-3">
+          <div className="text-sm text-slate-600">
+            Página {page} · {total} tickets en total
           </div>
           <div className="flex items-center gap-2">
             <Select
@@ -1218,13 +1230,13 @@ export default function TicketsPanelCoach({
                 setPage(1);
               }}
             >
-              <SelectTrigger className="h-8 w-[110px]">
+              <SelectTrigger className="h-9 w-[110px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {[10, 25, 50, 100].map((n) => (
                   <SelectItem key={n} value={String(n)}>
-                    {n}/pág
+                    {n}/página
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -1249,7 +1261,7 @@ export default function TicketsPanelCoach({
         </div>
       </div>
 
-      {/* Dialog archivos */}
+      {/* Files Dialog */}
       <Dialog
         open={!!openFiles}
         onOpenChange={(v) => {
@@ -1259,114 +1271,98 @@ export default function TicketsPanelCoach({
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Archivos adjuntos</DialogTitle>
           </DialogHeader>
           {filesLoading ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando
+            <div className="flex items-center justify-center py-12 text-slate-500">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando
               archivos…
             </div>
           ) : files.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              Sin archivos
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-3">
+                <FileIcon className="h-6 w-6 text-slate-400" />
+              </div>
+              <p className="text-sm text-slate-500">Sin archivos adjuntos</p>
             </div>
           ) : (
             <TooltipProvider>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {files.map((f) => (
-                    <div
-                      key={f.id}
-                      className="group rounded border bg-background p-2"
-                    >
-                      <div className="mx-auto flex aspect-square w-28 items-center justify-center overflow-hidden rounded bg-muted">
-                        {(() => {
-                          const m =
-                            f.mime_type || mimeFromName(f.nombre_archivo);
-                          if (m?.startsWith("image/")) {
-                            const thumb = blobCache[f.id];
-                            return thumb ? (
-                              <img
-                                src={thumb}
-                                alt={f.nombre_archivo}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <FileImage className="h-8 w-8 text-muted-foreground" />
-                            );
-                          }
-                          if (m === "application/pdf") {
-                            return (
-                              <FileText className="h-8 w-8 text-muted-foreground" />
-                            );
-                          }
-                          if (m?.startsWith("video/")) {
-                            return (
-                              <FileVideo className="h-8 w-8 text-muted-foreground" />
-                            );
-                          }
-                          if (m?.startsWith("audio/")) {
-                            return (
-                              <FileAudio className="h-8 w-8 text-muted-foreground" />
-                            );
-                          }
-                          return (
-                            <FileIcon className="h-8 w-8 text-muted-foreground" />
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {files.map((f) => (
+                  <div
+                    key={f.id}
+                    className="group rounded-lg border bg-white p-3 hover:bg-slate-50"
+                  >
+                    <div className="mx-auto flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg bg-slate-100 mb-2">
+                      {(() => {
+                        const m = f.mime_type || mimeFromName(f.nombre_archivo);
+                        if (m?.startsWith("image/")) {
+                          const thumb = blobCache[f.id];
+                          return thumb ? (
+                            <img
+                              src={thumb || "/placeholder.svg"}
+                              alt={f.nombre_archivo}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <FileImage className="h-8 w-8 text-slate-400" />
                           );
-                        })()}
-                      </div>
-                      <div className="mt-2">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              className="truncate text-sm font-medium"
-                              title={f.nombre_archivo}
-                            >
-                              {shortenFileName(f.nombre_archivo, 30)}
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="top"
-                            className="max-w-xs break-all"
-                          >
-                            {f.nombre_archivo}
-                          </TooltipContent>
-                        </Tooltip>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {(f.mime_type || "").split(";")[0]}{" "}
-                          {f.tamano_bytes ? `· ${f.tamano_bytes} bytes` : ""}
-                        </div>
-                        <div className="mt-2 flex gap-2">
-                          <Button
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            variant="outline"
-                            onClick={() => downloadFile(f.id, f.nombre_archivo)}
-                          >
-                            Descargar
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-7 px-2 text-xs"
-                            variant="secondary"
-                            onClick={() => openPreview(f)}
-                          >
-                            Ver
-                          </Button>
-                        </div>
-                      </div>
+                        }
+                        return (
+                          <div className="text-slate-400">
+                            {iconFor(m, f.nombre_archivo)}
+                          </div>
+                        );
+                      })()}
                     </div>
-                  ))}
-                </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="truncate text-sm font-medium mb-1"
+                          title={f.nombre_archivo}
+                        >
+                          {shortenFileName(f.nombre_archivo, 20)}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs break-all">
+                        {f.nombre_archivo}
+                      </TooltipContent>
+                    </Tooltip>
+                    <div className="text-xs text-slate-500 mb-2">
+                      {f.tamano_bytes
+                        ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
+                        : "—"}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 flex-1 gap-1.5 bg-transparent"
+                        onClick={() => downloadFile(f.id, f.nombre_archivo)}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Descargar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 w-8 p-0"
+                        onClick={() => openPreview(f)}
+                      >
+                        <Eye className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </TooltipProvider>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Sub-modal de previsualización */}
+      {/* Preview Dialog */}
       <Dialog
         open={previewOpen}
         onOpenChange={(v) => {
@@ -1374,19 +1370,18 @@ export default function TicketsPanelCoach({
           if (!v) setPreviewFile(null);
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
             <DialogTitle>
               {previewFile?.nombre_archivo || "Previsualización"}
             </DialogTitle>
           </DialogHeader>
           {previewLoading ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cargando
-              previsualización…
+            <div className="flex items-center justify-center py-20 text-slate-500">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando…
             </div>
           ) : previewFile?.url ? (
-            <div className="max-h-[70vh] overflow-auto rounded border bg-background p-2">
+            <div className="max-h-[70vh] overflow-auto rounded-lg border bg-slate-50 p-4">
               {(() => {
                 const m =
                   previewFile?.mime_type ||
@@ -1395,7 +1390,7 @@ export default function TicketsPanelCoach({
                 if (m.startsWith("image/")) {
                   return (
                     <img
-                      src={previewFile.url}
+                      src={previewFile.url || "/placeholder.svg"}
                       alt={previewFile.nombre_archivo || "imagen"}
                       className="mx-auto max-h-[65vh]"
                     />
@@ -1434,348 +1429,521 @@ export default function TicketsPanelCoach({
                   );
                 }
                 return (
-                  <div className="py-10 text-center text-sm text-muted-foreground">
-                    No se puede previsualizar este tipo de archivo. Descárgalo
-                    para verlo.
+                  <div className="py-20 text-center text-sm text-slate-500">
+                    No se puede previsualizar este tipo de archivo.
                   </div>
                 );
               })()}
             </div>
           ) : (
-            <div className="py-10 text-center text-sm text-muted-foreground">
+            <div className="py-20 text-center text-sm text-slate-500">
               No hay previsualización disponible.
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Panel lateral de detalle/edición */}
       <Drawer open={editOpen} onOpenChange={setEditOpen} direction="right">
-        <DrawerContent className="data-[vaul-drawer-direction=right]:sm:max-w-sm md:max-w-md lg:max-w-lg">
-          <DrawerHeader>
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <DrawerTitle>Detalle del ticket</DrawerTitle>
-                <DrawerDescription>
-                  {editTicket?.codigo ? `Código: ${editTicket.codigo}` : ""}
+        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-xl md:max-w-2xl flex flex-col">
+          <DrawerHeader className="border-b">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <DrawerTitle className="text-lg">
+                  {editTicket?.nombre || "Detalle del ticket"}
+                </DrawerTitle>
+                <DrawerDescription className="mt-1">
+                  {editTicket?.codigo && (
+                    <span className="text-xs text-slate-500">
+                      Código: {editTicket.codigo}
+                    </span>
+                  )}
                 </DrawerDescription>
               </div>
               {editForm.estado && (
-                <span
-                  className={`inline-flex h-6 items-center rounded-full px-2 text-xs font-medium ${
+                <Badge
+                  variant="outline"
+                  className={`${
                     STATUS_STYLE[
                       String(editForm.estado).toUpperCase() as StatusKey
-                    ] || "bg-muted text-muted-foreground"
+                    ] || "bg-slate-100 text-slate-700"
                   }`}
                 >
                   {STATUS_LABEL[
                     String(editForm.estado).toUpperCase() as StatusKey
                   ] || String(editForm.estado)}
-                </span>
+                </Badge>
               )}
             </div>
           </DrawerHeader>
-          <div className="px-4 pb-4">
+
+          <div className="flex-1 overflow-y-auto">
             {!editTicket ? (
-              <div className="text-sm text-muted-foreground">
+              <div className="flex items-center justify-center h-full text-sm text-slate-500">
                 Selecciona un ticket
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Columna izquierda */}
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Título
-                    </label>
-                    <Input
-                      value={editForm.nombre ?? ""}
-                      onChange={(e) =>
-                        setEditForm((f) => ({ ...f, nombre: e.target.value }))
-                      }
-                      placeholder="Nombre o asunto"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        Estado
-                      </label>
-                      <Select
-                        value={String(editForm.estado ?? "PENDIENTE")}
-                        onValueChange={(v) =>
-                          setEditForm((f) => ({ ...f, estado: v }))
-                        }
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(
-                            [
-                              "PENDIENTE",
-                              "EN_PROGRESO",
-                              "PENDIENTE_DE_ENVIO",
-                              "RESUELTO",
-                            ] as StatusKey[]
-                          ).map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {STATUS_LABEL[s]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        Prioridad
-                      </label>
-                      <Select
-                        value={String(editForm.prioridad ?? "MEDIA")}
-                        onValueChange={(v) =>
-                          setEditForm((f) => ({ ...f, prioridad: v as any }))
-                        }
-                      >
-                        <SelectTrigger className="h-9">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {["BAJA", "MEDIA", "ALTA"].map((p) => (
-                            <SelectItem key={p} value={p}>
-                              {p}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        Plazo (días)
-                      </label>
-                      <Input
-                        type="number"
-                        value={editForm.plazo ?? ""}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            plazo: e.target.value
-                              ? Number(e.target.value)
-                              : null,
-                          }))
-                        }
-                        min={0}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        Restante (días)
-                      </label>
-                      <Input
-                        type="number"
-                        value={editForm.restante ?? ""}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            restante: e.target.value
-                              ? Number(e.target.value)
-                              : null,
-                          }))
-                        }
-                        min={0}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        Deadline (fecha)
-                      </label>
-                      <Input
-                        type="date"
-                        value={(() => {
-                          const iso = editForm.deadline ?? "";
-                          if (!iso) return "";
-                          const d = new Date(iso);
-                          if (isNaN(d.getTime())) return "";
-                          return d.toISOString().slice(0, 10);
-                        })()}
-                        onChange={(e) => {
-                          const prev = editForm.deadline
-                            ? new Date(editForm.deadline)
-                            : new Date();
-                          const time = isNaN(prev.getTime())
-                            ? "00:00"
-                            : prev.toISOString().slice(11, 16);
-                          const iso = e.target.value
-                            ? `${e.target.value}T${time}:00.000Z`
-                            : null;
-                          setEditForm((f) => ({ ...f, deadline: iso }));
-                        }}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        Hora
-                      </label>
-                      <Input
-                        type="time"
-                        value={(() => {
-                          const iso = editForm.deadline ?? "";
-                          if (!iso) return "";
-                          const d = new Date(iso);
-                          if (isNaN(d.getTime())) return "";
-                          return d.toISOString().slice(11, 16);
-                        })()}
-                        onChange={(e) => {
-                          const dateStr = (() => {
-                            const iso = editForm.deadline ?? "";
-                            const d = new Date(iso);
-                            if (isNaN(d.getTime())) return "";
-                            return d.toISOString().slice(0, 10);
-                          })();
-                          const iso =
-                            dateStr && e.target.value
-                              ? `${dateStr}T${e.target.value}:00.000Z`
-                              : editForm.deadline;
-                          setEditForm((f) => ({ ...f, deadline: iso }));
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Informante
-                    </label>
-                    <Input
-                      value={editForm.informante ?? ""}
-                      onChange={(e) =>
-                        setEditForm((f) => ({
-                          ...f,
-                          informante: e.target.value,
-                        }))
-                      }
-                      placeholder="Nombre del informante"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Equipo (códigos separados por coma)
-                    </label>
-                    <Input
-                      value={(editForm.equipo ?? []).join(", ")}
-                      onChange={(e) =>
-                        setEditForm((f) => ({
-                          ...f,
-                          equipo: e.target.value
-                            .split(",")
-                            .map((s) => s.trim())
-                            .filter(Boolean),
-                        }))
-                      }
-                      placeholder="JJp8..., hQycZc..., ..."
-                    />
-                    {editForm.equipo && editForm.equipo.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {editForm.equipo.map((c) => (
-                          <span
-                            key={c}
-                            className="rounded-full bg-muted px-2 py-0.5 text-xs"
-                          >
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+              <Tabs defaultValue="general" className="w-full">
+                <div className="border-b px-6">
+                  <TabsList className="w-full justify-start h-12 bg-transparent p-0">
+                    <TabsTrigger
+                      value="general"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                    >
+                      General
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="detalles"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                    >
+                      Detalles
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="archivos"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                    >
+                      Archivos
+                    </TabsTrigger>
+                  </TabsList>
                 </div>
 
-                {/* Columna derecha */}
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Tarea
-                    </label>
-                    <textarea
-                      className="w-full min-h-[72px] rounded-md border px-3 py-2 text-sm"
-                      value={editForm.tarea ?? ""}
-                      onChange={(e) =>
-                        setEditForm((f) => ({ ...f, tarea: e.target.value }))
-                      }
-                      placeholder="Descripción de la tarea"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">
-                      Resolución
-                    </label>
-                    <textarea
-                      className="w-full min-h-[72px] rounded-md border px-3 py-2 text-sm"
-                      value={editForm.resolucion ?? ""}
-                      onChange={(e) =>
-                        setEditForm((f) => ({
-                          ...f,
-                          resolucion: e.target.value,
-                        }))
-                      }
-                      placeholder="Notas de resolución"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        Resuelto por
-                      </label>
+                <TabsContent value="general" className="p-6 space-y-6 mt-0">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="edit-nombre"
+                        className="text-sm font-medium"
+                      >
+                        Título del ticket
+                      </Label>
                       <Input
-                        value={editForm.resuelto_por ?? ""}
+                        id="edit-nombre"
+                        className="h-10"
+                        value={editForm.nombre ?? ""}
                         onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            resuelto_por: e.target.value,
-                          }))
+                          setEditForm((f) => ({ ...f, nombre: e.target.value }))
                         }
-                        placeholder="Nombre de la persona"
+                        placeholder="Nombre o asunto"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        Revisión
-                      </label>
-                      <Input
-                        value={editForm.revision ?? ""}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            revision: e.target.value,
-                          }))
-                        }
-                        placeholder="Notas de revisión"
-                      />
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="edit-estado"
+                          className="text-sm font-medium"
+                        >
+                          Estado
+                        </Label>
+                        <Select
+                          value={String(editForm.estado ?? "PENDIENTE")}
+                          onValueChange={(v) =>
+                            setEditForm((f) => ({ ...f, estado: v }))
+                          }
+                        >
+                          <SelectTrigger id="edit-estado" className="h-10">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(
+                              [
+                                "PENDIENTE",
+                                "EN_PROGRESO",
+                                "PENDIENTE_DE_ENVIO",
+                                "RESUELTO",
+                              ] as StatusKey[]
+                            ).map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {STATUS_LABEL[s]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="edit-prioridad"
+                          className="text-sm font-medium"
+                        >
+                          Prioridad
+                        </Label>
+                        <Select
+                          value={String(editForm.prioridad ?? "MEDIA")}
+                          onValueChange={(v) =>
+                            setEditForm((f) => ({ ...f, prioridad: v as any }))
+                          }
+                        >
+                          <SelectTrigger id="edit-prioridad" className="h-10">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["BAJA", "MEDIA", "ALTA"].map((p) => (
+                              <SelectItem key={p} value={p}>
+                                {p}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Clock className="h-4 w-4 text-slate-500" />
+                        Plazos y fechas
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-plazo" className="text-sm">
+                            Plazo (días)
+                          </Label>
+                          <Input
+                            id="edit-plazo"
+                            type="number"
+                            className="h-10"
+                            value={editForm.plazo ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                plazo: e.target.value
+                                  ? Number(e.target.value)
+                                  : null,
+                              }))
+                            }
+                            min={0}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-restante" className="text-sm">
+                            Restante (días)
+                          </Label>
+                          <Input
+                            id="edit-restante"
+                            type="number"
+                            className="h-10"
+                            value={editForm.restante ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                restante: e.target.value
+                                  ? Number(e.target.value)
+                                  : null,
+                              }))
+                            }
+                            min={0}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="edit-deadline-date"
+                            className="text-sm"
+                          >
+                            Fecha límite
+                          </Label>
+                          <Input
+                            id="edit-deadline-date"
+                            type="date"
+                            className="h-10"
+                            value={(() => {
+                              const iso = editForm.deadline ?? "";
+                              if (!iso) return "";
+                              const d = new Date(iso);
+                              if (isNaN(d.getTime())) return "";
+                              return d.toISOString().slice(0, 10);
+                            })()}
+                            onChange={(e) => {
+                              const prev = editForm.deadline
+                                ? new Date(editForm.deadline)
+                                : new Date();
+                              const time = isNaN(prev.getTime())
+                                ? "00:00"
+                                : prev.toISOString().slice(11, 16);
+                              const iso = e.target.value
+                                ? `${e.target.value}T${time}:00.000Z`
+                                : null;
+                              setEditForm((f) => ({ ...f, deadline: iso }));
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="edit-deadline-time"
+                            className="text-sm"
+                          >
+                            Hora
+                          </Label>
+                          <Input
+                            id="edit-deadline-time"
+                            type="time"
+                            className="h-10"
+                            value={(() => {
+                              const iso = editForm.deadline ?? "";
+                              if (!iso) return "";
+                              const d = new Date(iso);
+                              if (isNaN(d.getTime())) return "";
+                              return d.toISOString().slice(11, 16);
+                            })()}
+                            onChange={(e) => {
+                              const dateStr = (() => {
+                                const iso = editForm.deadline ?? "";
+                                const d = new Date(iso);
+                                if (isNaN(d.getTime())) return "";
+                                return d.toISOString().slice(0, 10);
+                              })();
+                              const iso =
+                                dateStr && e.target.value
+                                  ? `${dateStr}T${e.target.value}:00.000Z`
+                                  : editForm.deadline;
+                              setEditForm((f) => ({ ...f, deadline: iso }));
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
+                </TabsContent>
 
-                  <div className="space-y-2">
+                <TabsContent value="detalles" className="p-6 space-y-6 mt-0">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <User className="h-4 w-4 text-slate-500" />
+                      Personas involucradas
+                    </div>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-informante" className="text-sm">
+                          Informante
+                        </Label>
+                        <Input
+                          id="edit-informante"
+                          className="h-10"
+                          value={editForm.informante ?? ""}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              informante: e.target.value,
+                            }))
+                          }
+                          placeholder="Nombre del informante"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-resuelto-por" className="text-sm">
+                          Resuelto por
+                        </Label>
+                        <Input
+                          id="edit-resuelto-por"
+                          className="h-10"
+                          value={editForm.resuelto_por ?? ""}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              resuelto_por: e.target.value,
+                            }))
+                          }
+                          placeholder="Nombre de quien resolvió"
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Users className="h-4 w-4 text-slate-500" />
+                        Equipo asignado
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-equipo" className="text-sm">
+                          Códigos de equipo (separados por coma)
+                        </Label>
+                        <Input
+                          id="edit-equipo"
+                          className="h-10"
+                          value={(editForm.equipo ?? []).join(", ")}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              equipo: e.target.value
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            }))
+                          }
+                          placeholder="JJp8..., hQycZc..., ..."
+                        />
+                        {editForm.equipo && editForm.equipo.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {editForm.equipo.map((c) => (
+                              <Badge
+                                key={c}
+                                variant="secondary"
+                                className="gap-1"
+                              >
+                                {c}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditForm((f) => ({
+                                      ...f,
+                                      equipo: f.equipo?.filter((x) => x !== c),
+                                    }))
+                                  }
+                                  className="ml-1 hover:text-slate-900"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <CheckCircle2 className="h-4 w-4 text-slate-500" />
+                        Trabajo y resolución
+                      </div>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-tarea" className="text-sm">
+                            Descripción de la tarea
+                          </Label>
+                          <textarea
+                            id="edit-tarea"
+                            className="w-full min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                            value={editForm.tarea ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                tarea: e.target.value,
+                              }))
+                            }
+                            placeholder="Describe la tarea a realizar..."
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-resolucion" className="text-sm">
+                            Notas de resolución
+                          </Label>
+                          <textarea
+                            id="edit-resolucion"
+                            className="w-full min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                            value={editForm.resolucion ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                resolucion: e.target.value,
+                              }))
+                            }
+                            placeholder="Cómo se resolvió el ticket..."
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-revision" className="text-sm">
+                            Revisión
+                          </Label>
+                          <Input
+                            id="edit-revision"
+                            className="h-10"
+                            value={editForm.revision ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                revision: e.target.value,
+                              }))
+                            }
+                            placeholder="Notas de revisión"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="archivos" className="p-6 space-y-6 mt-0">
+                  <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium">Archivos</label>
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Paperclip className="h-4 w-4 text-slate-500" />
+                        Archivos adjuntos
+                      </div>
                       {editTicket?.codigo && (
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => openFilesFor(editTicket.codigo!)}
                         >
-                          Ver existentes
+                          Ver todos
                         </Button>
                       )}
                     </div>
-                    <div className="space-y-2">
+
+                    {editFilesLoading ? (
+                      <div className="flex items-center justify-center py-8 text-slate-500">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Cargando archivos...
+                      </div>
+                    ) : editExistingFiles.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500">
+                          {editExistingFiles.length} archivo(s) existente(s)
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {editExistingFiles.slice(0, 4).map((f) => (
+                            <div
+                              key={f.id}
+                              className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
+                            >
+                              <div className="flex h-10 w-10 items-center justify-center rounded bg-white">
+                                {iconFor(f.mime_type, f.nombre_archivo)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div
+                                  className="truncate text-sm font-medium"
+                                  title={f.nombre_archivo}
+                                >
+                                  {shortenFileName(f.nombre_archivo, 15)}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {f.tamano_bytes
+                                    ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
+                                    : "—"}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {editExistingFiles.length > 4 && (
+                          <div className="text-xs text-slate-500 text-center pt-2">
+                            +{editExistingFiles.length - 4} más
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-2">
+                          <FileIcon className="h-6 w-6 text-slate-400" />
+                        </div>
+                        <p className="text-sm text-slate-500">
+                          No hay archivos adjuntos
+                        </p>
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">
+                        Adjuntar nuevos archivos
+                      </Label>
                       <input
                         ref={editFileInputRef}
                         type="file"
@@ -1790,61 +1958,64 @@ export default function TicketsPanelCoach({
                           e.currentTarget.value = "";
                         }}
                       />
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => editFileInputRef.current?.click()}
-                        >
-                          Adjuntar archivos
-                        </Button>
-                        {editFiles.length > 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            {editFiles.length} seleccionados
-                          </span>
-                        )}
-                      </div>
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2 bg-transparent"
+                        onClick={() => editFileInputRef.current?.click()}
+                      >
+                        <Paperclip className="h-4 w-4" />
+                        Seleccionar archivos
+                      </Button>
                       {editFiles.length > 0 && (
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          {editFiles.map((f, i) => (
-                            <div
-                              key={`${f.name}-${i}`}
-                              className="rounded border bg-background p-2"
-                            >
+                        <div className="space-y-2">
+                          <div className="text-xs text-slate-500">
+                            {editFiles.length} archivo(s) seleccionado(s)
+                          </div>
+                          <div className="space-y-2">
+                            {editFiles.map((f, i) => (
                               <div
-                                className="text-sm font-medium truncate"
-                                title={f.name}
+                                key={`${f.name}-${i}`}
+                                className="flex items-center gap-3 rounded-lg border bg-white p-3"
                               >
-                                {f.name}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                {f.type || "archivo"} · {f.size} bytes
-                              </div>
-                              <div className="mt-1">
+                                <div className="flex h-10 w-10 items-center justify-center rounded bg-slate-100">
+                                  {iconFor(f.type, f.name)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div
+                                    className="truncate text-sm font-medium"
+                                    title={f.name}
+                                  >
+                                    {f.name}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {Math.ceil(f.size / 1024)} KB
+                                  </div>
+                                </div>
                                 <Button
                                   size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2 text-xs"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
                                   onClick={() =>
                                     setEditFiles((prev) =>
                                       prev.filter((_, idx) => idx !== i)
                                     )
                                   }
                                 >
-                                  Quitar
+                                  <X className="h-4 w-4" />
                                 </Button>
                               </div>
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
                   </div>
-                </div>
-              </div>
+                </TabsContent>
+              </Tabs>
             )}
           </div>
-          <DrawerFooter>
+
+          <DrawerFooter className="border-t">
             <div className="flex items-center justify-end gap-2">
               <DrawerClose asChild>
                 <Button variant="outline">Cancelar</Button>
@@ -1852,7 +2023,6 @@ export default function TicketsPanelCoach({
               <Button
                 onClick={() => {
                   if (!editTicket) return;
-                  // Guardar localmente cambios básicos en la grilla
                   setRows((prev) =>
                     prev.map((r) =>
                       r.id === editTicket.id
@@ -1865,7 +2035,6 @@ export default function TicketsPanelCoach({
                         : r
                     )
                   );
-                  // Persistir detalles extra en memoria local
                   setDetailsById((prev) => ({
                     ...prev,
                     [editTicket.id]: {
@@ -1882,11 +2051,11 @@ export default function TicketsPanelCoach({
                         : [],
                     },
                   }));
-                  toast({ title: "Cambios guardados localmente" });
+                  toast({ title: "Cambios guardados" });
                   setEditOpen(false);
                 }}
               >
-                Guardar
+                Guardar cambios
               </Button>
             </div>
           </DrawerFooter>

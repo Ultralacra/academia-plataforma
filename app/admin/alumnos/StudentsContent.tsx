@@ -44,7 +44,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { cn } from "@/lib/utils";
+import { cn, getSpanishApiError } from "@/lib/utils";
 import Link from "next/link";
 
 function getUniqueCoaches(students: StudentRow[]) {
@@ -116,8 +116,22 @@ export default function StudentsContent() {
   // Crear alumno
   const [openCreate, setOpenCreate] = useState(false);
   const [createNombre, setCreateNombre] = useState("");
-  const [createContrato, setCreateContrato] = useState<File | null>(null);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
   const [creating, setCreating] = useState(false);
+  // Generar una contraseña sugerida al abrir el modal
+  useEffect(() => {
+    if (!openCreate) return;
+    const gen = () => {
+      const chars =
+        "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@$%&*?-";
+      let s = "";
+      for (let i = 0; i < 14; i++)
+        s += chars[Math.floor(Math.random() * chars.length)];
+      return s;
+    };
+    setCreatePassword((prev) => (prev ? prev : gen()));
+  }, [openCreate]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -324,16 +338,25 @@ export default function StudentsContent() {
 
   async function handleCreateStudent() {
     if (!createNombre.trim()) return;
+    if (!createEmail.trim()) {
+      toast({ title: "El email es requerido" });
+      return;
+    }
+    if (!createPassword.trim()) {
+      toast({ title: "La contraseña es requerida" });
+      return;
+    }
     try {
       setCreating(true);
       const created = await createStudent({
-        nombre: createNombre.trim(),
-        contrato: createContrato ?? undefined,
+        name: createNombre.trim(),
+        email: createEmail.trim(),
+        password: createPassword,
       });
       // Insertar al inicio de la lista
       const newRow: StudentRow = {
-        id: created.id,
-        code: created.codigo,
+        id: created.id as any,
+        code: created.codigo ?? null,
         name: created.nombre,
         teamMembers: [],
         state: null,
@@ -348,15 +371,16 @@ export default function StudentsContent() {
       setPage(1);
       toast({
         title: "Alumno creado",
-        description: `${created.codigo} — ${created.nombre}`,
+        description: `${created.codigo ?? ""} ${created.nombre}`.trim(),
       });
       setOpenCreate(false);
       setCreateNombre("");
-      setCreateContrato(null);
+      setCreateEmail("");
+      setCreatePassword("");
       // Mantener filtros actuales; la paginación se recalcula por useMemo
     } catch (e) {
       console.error(e);
-      toast({ title: "Error al crear alumno" });
+      toast({ title: getSpanishApiError(e, "Error al crear alumno") });
     } finally {
       setCreating(false);
     }
@@ -512,15 +536,52 @@ export default function StudentsContent() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">
-                    Contrato (opcional)
-                  </label>
-                  <input
-                    type="file"
-                    onChange={(e) =>
-                      setCreateContrato(e.target.files?.[0] ?? null)
-                    }
+                  <label className="text-xs text-muted-foreground">Email</label>
+                  <Input
+                    type="email"
+                    value={createEmail}
+                    onChange={(e) => setCreateEmail(e.target.value)}
+                    placeholder="user@example.com"
                   />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">
+                    Contraseña
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="text"
+                      value={createPassword}
+                      onChange={(e) => setCreatePassword(e.target.value)}
+                      placeholder="Contraseña segura"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        const chars =
+                          "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789!@$%&*?-";
+                        let s = "";
+                        for (let i = 0; i < 14; i++)
+                          s += chars[Math.floor(Math.random() * chars.length)];
+                        setCreatePassword(s);
+                      }}
+                    >
+                      Generar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(createPassword);
+                          toast({ title: "Contraseña copiada" });
+                        } catch {}
+                      }}
+                    >
+                      Copiar
+                    </Button>
+                  </div>
                 </div>
               </div>
               <DialogFooter>
@@ -529,7 +590,12 @@ export default function StudentsContent() {
                 </Button>
                 <Button
                   onClick={handleCreateStudent}
-                  disabled={creating || !createNombre.trim()}
+                  disabled={
+                    creating ||
+                    !createNombre.trim() ||
+                    !createEmail.trim() ||
+                    !createPassword.trim()
+                  }
                 >
                   {creating ? "Creando…" : "Crear"}
                 </Button>

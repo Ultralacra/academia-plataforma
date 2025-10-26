@@ -1,6 +1,15 @@
 "use client";
 
 import React from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Sparkles } from "lucide-react";
 
 type Sender = "admin" | "alumno" | "coach";
 type Message = {
@@ -75,6 +84,25 @@ export default function CoachChatInline({
     string | number | null
   >(null);
   const [otherTyping, setOtherTyping] = React.useState(false);
+  // Estado del ticket generado por IA
+  const [ticketModalOpen, setTicketModalOpen] = React.useState(false);
+  const [ticketLoading, setTicketLoading] = React.useState(false);
+  const [ticketError, setTicketError] = React.useState<string | null>(null);
+  const [ticketData, setTicketData] = React.useState<{
+    nombre?: string;
+    sugerencia?: string;
+    tipo?: string;
+    descripcion?: string;
+    archivos_cargados?: any[];
+    content?: string;
+    parsed?: {
+      titulo?: string;
+      descripcion?: string;
+      prioridad?: string;
+      categoria?: string;
+      html?: string;
+    };
+  } | null>(null);
 
   const sioRef = React.useRef<any>(null);
   const chatIdRef = React.useRef<string | number | null>(
@@ -163,10 +191,235 @@ export default function CoachChatInline({
   const onScrollContainer = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Umbral pequeño para considerar "pegado al fondo"
-    const threshold = 48; // margen mayor para evitar parpadeos al near-bottom
+    // Considerar "pegado al fondo" solo cuando realmente está al fondo (tolerancia mínima)
+    const threshold = 1; // px de tolerancia para evitar falsos positivos
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottomRef.current = distance <= threshold;
+  }, []);
+
+  // Utilidad: convierte un markdown simple a HTML seguro básico
+  function escapeHtml(s: string) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+  function simpleMarkdownToHtml(md: string): string {
+    try {
+      // Escapar HTML primero
+      let html = escapeHtml(md);
+      // Negritas **texto**
+      html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+      // Quitar separadores '---' de frontmatter si vienen al inicio
+      html = html.replace(/^---\s*\n/, "");
+      // Saltos de línea dobles -> párrafos
+      html = html
+        .split(/\n\n+/)
+        .map((p) => `<p>${p.replace(/\n/g, "<br/>")}</p>`)
+        .join("");
+      return html;
+    } catch {
+      return escapeHtml(md).replace(/\n/g, "<br/>");
+    }
+  }
+  function parseAiContent(md: string): {
+    titulo?: string;
+    descripcion?: string;
+    prioridad?: string;
+    categoria?: string;
+    html?: string;
+  } {
+    try {
+      const clean = md.replace(/^---\s*\n/, "");
+      const out: any = {};
+      const lines = clean.split(/\n/);
+      for (const ln of lines) {
+        const m = ln.match(/^\*\*(.+?):\*\*\s*(.+)$/);
+        if (m) {
+          const key = m[1].trim().toLowerCase();
+          const val = m[2].trim();
+          if (key.startsWith("título") || key.startsWith("titulo"))
+            out.titulo = val;
+          else if (
+            key.startsWith("descripción") ||
+            key.startsWith("descripcion")
+          )
+            out.descripcion = val;
+          else if (key.startsWith("prioridad")) out.prioridad = val;
+          else if (key.startsWith("categor")) out.categoria = val;
+        }
+      }
+      out.html = simpleMarkdownToHtml(md);
+      return out;
+    } catch {
+      return { html: simpleMarkdownToHtml(md) };
+    }
+  }
+
+  async function handleGenerateTicket() {
+    try {
+      const currentId = (chatIdRef.current ?? chatId) as any;
+      try {
+        console.log("[CoachChat] Generar ticket — snapshot", {
+          now: new Date().toISOString(),
+          room: normRoom,
+          role,
+          chatId_state: chatId,
+          chatId_ref: chatIdRef.current,
+          chosenChatId: currentId,
+          lastJoinedChatId: lastJoinedChatIdRef.current,
+          latestRequestedChatId: latestRequestedChatIdRef.current,
+          participants: Array.isArray(joinedParticipantsRef.current)
+            ? joinedParticipantsRef.current.map((p: any) => ({
+                id_chat_participante: p?.id_chat_participante,
+                participante_tipo: p?.participante_tipo,
+                id_equipo: p?.id_equipo,
+                id_cliente: p?.id_cliente,
+                id_admin: p?.id_admin,
+              }))
+            : null,
+        });
+      } catch {}
+      if (currentId == null) {
+        setTicketModalOpen(true);
+        setTicketError("No hay chat activo para generar ticket.");
+        return;
+      }
+      setTicketModalOpen(true);
+      setTicketLoading(true);
+      setTicketError(null);
+      setTicketData(null);
+
+      // Intentar resolver un id "canónico" (numérico) vía join ACK (solo para log)
+      let resolvedId: any = currentId;
+      try {
+        const sio = sioRef.current;
+        if (sio && currentId != null) {
+          const info: any = await new Promise((resolve) => {
+            try {
+              sio.emit("chat.join", { id_chat: currentId }, (ack: any) => {
+                resolve(ack);
+              });
+            } catch {
+              resolve(null);
+            }
+          });
+          const ok = info && info.success !== false;
+          const data = ok ? info.data || {} : {};
+          const cid =
+            data?.id_chat ??
+            data?.id ??
+            lastJoinedChatIdRef.current ??
+            currentId;
+          if (cid != null) {
+            resolvedId = cid;
+          }
+          try {
+            console.log("[CoachChat] Resolver ticket chat_id via join:", {
+              chosenChatId: currentId,
+              ack_success: info?.success,
+              ack_id_chat: data?.id_chat,
+              ack_id: data?.id,
+              resolvedId,
+            });
+          } catch {}
+        }
+      } catch {}
+
+      const baseUrl = "https://v001.vercel.app/v1/ai/compute/chat/";
+
+      let res: Response | null = null;
+      const { getAuthToken } = await import("@/lib/auth");
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const authHeaders = token
+        ? { Authorization: `Bearer ${token}` }
+        : undefined;
+      const sendId = String(currentId).trim();
+      const urlWithParam = `${baseUrl}${encodeURIComponent(sendId)}`;
+      try {
+        console.log("[CoachChat] POST =>", urlWithParam, {
+          sendId,
+          chosenChatId: String(currentId),
+          resolvedId: String(resolvedId),
+        });
+        res = await fetch(urlWithParam, {
+          method: "POST",
+          headers: authHeaders,
+        });
+        console.log("[CoachChat] POST resp status:", res?.status);
+      } catch {}
+      if (!res || !res.ok) {
+        // Fallback: POST sin body, con el chat_id en la URL
+        try {
+          console.log("[CoachChat] POST (fallback) =>", urlWithParam);
+          res = await fetch(urlWithParam, {
+            method: "POST",
+            headers: authHeaders,
+          });
+          console.log("[CoachChat] POST (fallback) resp status:", res?.status);
+        } catch {}
+      }
+      if (!res) throw new Error("Sin respuesta del servidor");
+      const json: any = await res.json().catch(() => null);
+      try {
+        console.log("[CoachChat] AI resp <=", json);
+      } catch {}
+      if (!json || (json.code && Number(json.code) !== 200)) {
+        throw new Error(json?.message || "Error al generar el ticket");
+      }
+      const data = json.data || {};
+      if (typeof data?.content === "string" && data.content.trim()) {
+        const parsed = parseAiContent(data.content);
+        setTicketData({
+          content: data.content,
+          archivos_cargados: Array.isArray(data?.archivos_cargados)
+            ? data.archivos_cargados
+            : [],
+          parsed,
+        });
+      } else {
+        setTicketData({
+          nombre: data?.nombre ? String(data.nombre) : undefined,
+          sugerencia: data?.sugerencia ? String(data.sugerencia) : undefined,
+          tipo: data?.tipo ? String(data.tipo) : undefined,
+          descripcion: data?.descripcion ? String(data.descripcion) : undefined,
+          archivos_cargados: Array.isArray(data?.archivos_cargados)
+            ? data.archivos_cargados
+            : [],
+        });
+      }
+    } catch (e: any) {
+      setTicketError(e?.message || "Error inesperado al generar ticket");
+    } finally {
+      setTicketLoading(false);
+    }
+  }
+
+  // Observa el sentinel del fondo para detectar con precisión si está visible (pegado al fondo)
+  React.useEffect(() => {
+    const root = scrollRef.current;
+    const target = bottomRef.current;
+    if (!root || !target || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (!e) return;
+        // Si el sentinel está prácticamente visible, estamos al fondo
+        pinnedToBottomRef.current =
+          e.isIntersecting && e.intersectionRatio > 0.95;
+      },
+      {
+        root,
+        threshold: [0, 0.01, 0.5, 0.95, 1],
+      }
+    );
+    try {
+      obs.observe(target);
+    } catch {}
+    return () => {
+      try {
+        obs.disconnect();
+      } catch {}
+    };
   }, []);
 
   const normalizeTipo = (v: any): "cliente" | "equipo" | "admin" | "" => {
@@ -1516,181 +1769,328 @@ export default function CoachChatInline({
   }, []);
 
   return (
-    <div className={`flex flex-col w-full min-h-0 ${className || ""}`}>
-      <div className="flex items-center justify-between px-4 py-3 bg-[#075E54] text-white">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="h-10 w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
-            {(title || "C").charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-medium truncate">{title}</div>
-            {subtitle && (
-              <div className="text-xs text-gray-200 truncate">{subtitle}</div>
-            )}
-          </div>
-        </div>
-        <div className="text-xs text-gray-200 flex-shrink-0">
-          {connected ? "en línea" : "desconectado"}
-        </div>
-      </div>
-
-      <div
-        ref={scrollRef}
-        onScroll={onScrollContainer}
-        className="relative flex-1 overflow-y-auto p-4 min-h-0 bg-[#ECE5DD]"
-        style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-          scrollbarGutter: "stable both-edges",
-          overscrollBehavior: "contain",
-          overflowAnchor: "none", // evitar saltos por scroll anchoring
-          overflowY: "scroll", // mantener el espacio del scrollbar estable
-        }}
-      >
-        {isJoining && items.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-sm text-gray-500">Cargando mensajes…</div>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="text-sm text-gray-500 bg-white/60 px-4 py-2 rounded-lg shadow-sm">
-              Sin mensajes aún
+    <>
+      <div className={`flex flex-col w-full min-h-0 ${className || ""}`}>
+        <div className="flex items-center justify-between px-4 py-3 bg-[#075E54] text-white">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+              {(title || "C").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-medium truncate">{title}</div>
+              {subtitle && (
+                <div className="text-xs text-gray-200 truncate">{subtitle}</div>
+              )}
             </div>
           </div>
-        ) : (
-          items.map((m, idx) => {
-            const isMine = mine(m.sender);
-            const prev = idx > 0 ? items[idx - 1] : null;
-            const next = idx + 1 < items.length ? items[idx + 1] : null;
-            const samePrev = prev && prev.sender === m.sender;
-            const sameNext = next && next.sender === m.sender;
-            const newGroup = !samePrev;
-            const endGroup = !sameNext;
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-xs text-gray-200">
+              {connected ? "en línea" : "desconectado"}
+            </span>
+            <button
+              onClick={handleGenerateTicket}
+              disabled={!(chatIdRef.current ?? chatId) || ticketLoading}
+              className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
+              title={
+                chatIdRef.current ?? chatId
+                  ? "Generar ticket de esta conversación"
+                  : "Sin chat activo"
+              }
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Generar ticket
+            </button>
+          </div>
+        </div>
 
-            let radius = "rounded-lg";
-            if (isMine) {
-              if (newGroup && !endGroup) radius = "rounded-lg rounded-br-sm";
-              if (!newGroup && !endGroup)
-                radius =
-                  "rounded-tr-sm rounded-br-sm rounded-tl-lg rounded-bl-lg";
-              if (!newGroup && endGroup) radius = "rounded-lg rounded-tr-sm";
-            } else {
-              if (newGroup && !endGroup) radius = "rounded-lg rounded-bl-sm";
-              if (!newGroup && !endGroup)
-                radius =
-                  "rounded-tl-sm rounded-bl-sm rounded-tr-lg rounded-br-lg";
-              if (!newGroup && endGroup) radius = "rounded-lg rounded-tl-sm";
-            }
+        <div
+          ref={scrollRef}
+          onScroll={onScrollContainer}
+          className="relative flex-1 overflow-y-auto p-4 min-h-0 bg-[#ECE5DD]"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            scrollbarGutter: "stable both-edges",
+            overscrollBehavior: "contain",
+            overflowAnchor: "none", // evitar saltos por scroll anchoring
+            overflowY: "scroll", // mantener el espacio del scrollbar estable
+          }}
+        >
+          {isJoining && items.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-sm text-gray-500">Cargando mensajes…</div>
+            </div>
+          ) : items.length === 0 ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="text-sm text-gray-500 bg-white/60 px-4 py-2 rounded-lg shadow-sm">
+                Sin mensajes aún
+              </div>
+            </div>
+          ) : (
+            items.map((m, idx) => {
+              const isMine = mine(m.sender);
+              const prev = idx > 0 ? items[idx - 1] : null;
+              const next = idx + 1 < items.length ? items[idx + 1] : null;
+              const samePrev = prev && prev.sender === m.sender;
+              const sameNext = next && next.sender === m.sender;
+              const newGroup = !samePrev;
+              const endGroup = !sameNext;
 
-            const wrapperMt = newGroup ? "mt-2" : "mt-0.5";
+              let radius = "rounded-lg";
+              if (isMine) {
+                if (newGroup && !endGroup) radius = "rounded-lg rounded-br-sm";
+                if (!newGroup && !endGroup)
+                  radius =
+                    "rounded-tr-sm rounded-br-sm rounded-tl-lg rounded-bl-lg";
+                if (!newGroup && endGroup) radius = "rounded-lg rounded-tr-sm";
+              } else {
+                if (newGroup && !endGroup) radius = "rounded-lg rounded-bl-sm";
+                if (!newGroup && !endGroup)
+                  radius =
+                    "rounded-tl-sm rounded-bl-sm rounded-tr-lg rounded-br-lg";
+                if (!newGroup && endGroup) radius = "rounded-lg rounded-tl-sm";
+              }
 
-            return (
-              <div
-                key={m.id}
-                className={`flex ${
-                  isMine ? "justify-end" : "justify-start"
-                } ${wrapperMt}`}
-              >
+              const wrapperMt = newGroup ? "mt-2" : "mt-0.5";
+
+              return (
                 <div
-                  className={`w-fit max-w-[75%] px-3 py-2 shadow-sm ${radius} ${
-                    isMine ? "bg-[#DCF8C6]" : "bg-white"
-                  }`}
+                  key={m.id}
+                  className={`flex ${
+                    isMine ? "justify-end" : "justify-start"
+                  } ${wrapperMt}`}
                 >
-                  <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
-                    {m.text}
-                  </div>
                   <div
-                    className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
-                      isMine ? "text-gray-600" : "text-gray-500"
+                    className={`w-fit max-w-[75%] px-3 py-2 shadow-sm ${radius} ${
+                      isMine ? "bg-[#DCF8C6]" : "bg-white"
                     }`}
                   >
-                    <span>{formatTime(m.at)}</span>
-                    {isMine && (
-                      <span
-                        className={`ml-0.5 ${
-                          m.read ? "text-[#53BDEB]" : "text-gray-500"
-                        }`}
-                      >
-                        {m.read ? "✓✓" : m.delivered ? "✓✓" : "✓"}
-                      </span>
-                    )}
+                    <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
+                      {m.text}
+                    </div>
+                    <div
+                      className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
+                        isMine ? "text-gray-600" : "text-gray-500"
+                      }`}
+                    >
+                      <span>{formatTime(m.at)}</span>
+                      {isMine && (
+                        <span
+                          className={`ml-0.5 ${
+                            m.read ? "text-[#53BDEB]" : "text-gray-500"
+                          }`}
+                        >
+                          {m.read ? "✓✓" : m.delivered ? "✓✓" : "✓"}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
+              );
+            })
+          )}
+          {/* Indicador de escritura como overlay absoluto para no alterar el layout */}
+          <div
+            className={`pointer-events-none absolute left-4 bottom-4 transition-opacity duration-150 ${
+              otherTyping ? "opacity-100" : "opacity-0"
+            }`}
+            aria-hidden
+          >
+            <div className="bg-white/95 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex gap-1 items-center">
+                <span
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                ></span>
+                <span
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                ></span>
+                <span
+                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                ></span>
               </div>
-            );
-          })
-        )}
-        {/* Indicador de escritura como overlay absoluto para no alterar el layout */}
-        <div
-          className={`pointer-events-none absolute left-4 bottom-4 transition-opacity duration-150 ${
-            otherTyping ? "opacity-100" : "opacity-0"
-          }`}
-          aria-hidden
-        >
-          <div className="bg-white/95 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex gap-1 items-center">
-              <span
-                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                style={{ animationDelay: "0ms" }}
-              ></span>
-              <span
-                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                style={{ animationDelay: "150ms" }}
-              ></span>
-              <span
-                className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                style={{ animationDelay: "300ms" }}
-              ></span>
             </div>
           </div>
+          <div ref={bottomRef} />
         </div>
-        <div ref={bottomRef} />
-      </div>
 
-      <div className="px-3 py-3 bg-[#F0F0F0] border-t border-gray-200">
-        <div className="flex items-center gap-2">
-          <button className="p-2 text-gray-600 hover:text-gray-800 transition-colors">
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
-            </svg>
-          </button>
-          <input
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              if (e.target.value.trim()) notifyTyping(true);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              } else {
-                notifyTyping(true);
-              }
-            }}
-            placeholder="Escribe un mensaje"
-            className="flex-1 bg-white border border-gray-300 rounded-full px-4 py-2.5 text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors"
-          />
-          <button
-            onClick={send}
-            disabled={!text.trim()}
-            className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        <div className="px-3 py-3 bg-[#F0F0F0] border-t border-gray-200">
+          <div className="flex items-center gap-2">
+            <button className="p-2 text-gray-600 hover:text-gray-800 transition-colors">
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
+              </svg>
+            </button>
+            <input
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                if (e.target.value.trim()) notifyTyping(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                } else {
+                  notifyTyping(true);
+                }
+              }}
+              placeholder="Escribe un mensaje"
+              className="flex-1 bg-white border border-gray-300 rounded-full px-4 py-2.5 text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors"
+            />
+            <button
+              onClick={send}
+              disabled={!text.trim()}
+              className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-              />
-            </svg>
-          </button>
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+      {/* Modal: Ticket generado por IA */}
+      <Dialog open={ticketModalOpen} onOpenChange={setTicketModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-amber-400 text-white">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              Ticket sugerido por IA
+            </DialogTitle>
+            <DialogDescription>
+              Se generó a partir de la conversación actual (chat_id:{" "}
+              {String(chatIdRef.current ?? "—")}).
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Contenedor scrollable para contenido largo del ticket */}
+          <div className="max-h-[60vh] sm:max-h-[70vh] overflow-y-auto pr-1">
+            {ticketLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-transparent" />
+              </div>
+            ) : ticketError ? (
+              <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-rose-700 text-sm">
+                {ticketError}
+              </div>
+            ) : ticketData ? (
+              <div className="space-y-4">
+                {ticketData.parsed?.html && (
+                  <div className="rounded-md border bg-white p-3">
+                    <div className="mb-2 flex items-center gap-1 text-[13px] uppercase text-gray-500">
+                      Resumen IA
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 border border-amber-200">
+                        <Sparkles className="h-3 w-3" /> IA
+                      </span>
+                    </div>
+                    <div
+                      className="prose prose-sm max-w-none text-gray-900 [&_p]:my-1 [&_strong]:font-semibold"
+                      dangerouslySetInnerHTML={{
+                        __html: ticketData.parsed.html,
+                      }}
+                    />
+                    {(ticketData.parsed.titulo ||
+                      ticketData.parsed.prioridad ||
+                      ticketData.parsed.categoria) && (
+                      <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
+                        {ticketData.parsed.titulo && (
+                          <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-gray-800 border">
+                            Título: {ticketData.parsed.titulo}
+                          </span>
+                        )}
+                        {ticketData.parsed.prioridad && (
+                          <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-blue-800 border border-blue-200">
+                            Prioridad: {ticketData.parsed.prioridad}
+                          </span>
+                        )}
+                        {ticketData.parsed.categoria && (
+                          <span className="inline-flex items-center rounded-md bg-violet-100 px-2 py-0.5 text-violet-800 border border-violet-200">
+                            Categoría: {ticketData.parsed.categoria}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="rounded-md border bg-white p-3">
+                  <div className="text-[13px] uppercase text-gray-500">
+                    Nombre
+                  </div>
+                  <div className="text-[15px] font-medium text-gray-900">
+                    {ticketData!.nombre || "—"}
+                  </div>
+                </div>
+                <div className="rounded-md border bg-white p-3">
+                  <div className="text-[13px] uppercase text-gray-500">
+                    Sugerencia
+                  </div>
+                  <div className="text-[15px] text-gray-900 whitespace-pre-wrap">
+                    {ticketData!.sugerencia || "—"}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md border bg-white p-3">
+                    <div className="text-[13px] uppercase text-gray-500">
+                      Tipo
+                    </div>
+                    <div className="text-[15px] font-medium text-gray-900">
+                      {ticketData!.tipo || "—"}
+                    </div>
+                  </div>
+                  <div className="rounded-md border bg-white p-3">
+                    <div className="text-[13px] uppercase text-gray-500">
+                      Archivos
+                    </div>
+                    <div className="text-[15px] text-gray-900">
+                      {ticketData!.archivos_cargados?.length || 0}
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-md border bg-white p-3">
+                  <div className="text-[13px] uppercase text-gray-500">
+                    Descripción
+                  </div>
+                  <div className="text-[15px] text-gray-900 whitespace-pre-wrap">
+                    {ticketData!.descripcion || "—"}
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-gradient-to-r from-amber-100 via-fuchsia-100 to-violet-100 p-3 border text-[13px] text-gray-700">
+                  ✨ Sugerido automáticamente por IA. Revisa y ajusta antes de
+                  crear el ticket definitivo.
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">
+                Sin datos para mostrar.
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <button
+              className="inline-flex items-center justify-center rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+              onClick={() => setTicketModalOpen(false)}
+            >
+              Cerrar
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

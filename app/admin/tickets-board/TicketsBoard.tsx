@@ -1,18 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import type React from "react";
+
+import { useEffect, useMemo, useState, useRef } from "react";
 import { getTickets, type TicketBoardItem } from "./api";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 
 import {
   Search,
-  Calendar as CalendarIcon,
-  File as FileIcon,
+  CalendarIcon,
+  FileIcon,
   FileImage,
   FileVideo,
   FileAudio,
   FileText,
+  RefreshCw,
+  Download,
+  Eye,
+  Paperclip,
+  Clock,
+  Users,
+  CheckCircle2,
+  User,
+  X,
 } from "lucide-react";
 import {
   Dialog,
@@ -21,11 +32,32 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import {
   getTicketFiles,
   getTicketFile,
@@ -46,12 +78,10 @@ const STATUS_LABEL: Record<StatusKey, string> = {
 };
 
 const STATUS_STYLE: Record<StatusKey, string> = {
-  PENDIENTE: "bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-200/50",
-  EN_PROGRESO: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200/50",
-  PENDIENTE_DE_ENVIO:
-    "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200/50",
-  RESUELTO:
-    "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200/50",
+  PENDIENTE: "bg-blue-50 text-blue-700 border-blue-200",
+  EN_PROGRESO: "bg-amber-50 text-amber-700 border-amber-200",
+  PENDIENTE_DE_ENVIO: "bg-sky-50 text-sky-700 border-sky-200",
+  RESUELTO: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
 function coerceStatus(raw?: string | null): StatusKey {
@@ -106,11 +136,9 @@ function mimeFromName(name?: string | null): string | null {
 export default function TicketsBoard() {
   const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
   const [loading, setLoading] = useState(true);
-  // Coaches para filtro
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
-  const [coachFiltro, setCoachFiltro] = useState<string>(""); // código de coach; "" = Todos
-  // Files dialog state
-  const [openFiles, setOpenFiles] = useState<null | string>(null); // ticket code/UUID
+  const [coachFiltro, setCoachFiltro] = useState<string>("");
+  const [openFiles, setOpenFiles] = useState<null | string>(null);
   const [filesLoading, setFilesLoading] = useState(false);
   const [files, setFiles] = useState<
     {
@@ -131,11 +159,38 @@ export default function TicketsBoard() {
     url?: string;
   }>(null);
 
-  // filtros
+  const [selectedTicket, setSelectedTicket] = useState<TicketBoardItem | null>(
+    null
+  );
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  type ExtraDetails = {
+    prioridad?: "BAJA" | "MEDIA" | "ALTA";
+    plazo?: number | null;
+    restante?: number | null;
+    informante?: string;
+    resolucion?: string;
+    resuelto_por?: string;
+    revision?: string;
+    tarea?: string;
+    equipo?: string[];
+  };
+
+  const [editForm, setEditForm] = useState<
+    ExtraDetails & {
+      nombre?: string | null;
+      estado?: StatusKey | string | null;
+      deadline?: string | null;
+    }
+  >({});
+
+  const [editFiles, setEditFiles] = useState<File[]>([]);
+  const editFileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("");
-  // Por defecto: hoy
+
   const today = new Date();
   const y = today.getFullYear();
   const m = String(today.getMonth() + 1).padStart(2, "0");
@@ -145,7 +200,6 @@ export default function TicketsBoard() {
   const [fechaDesde, setFechaDesde] = useState<string>(todayStr);
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
 
-  // Cargar coaches para el select de filtro
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -193,7 +247,6 @@ export default function TicketsBoard() {
   }, [search, fechaDesde, fechaHasta, coachFiltro]);
 
   const estados = useMemo(() => {
-    // Always show all 4 columns in this order
     return [
       "PENDIENTE",
       "EN_PROGRESO",
@@ -221,11 +274,9 @@ export default function TicketsBoard() {
       e.dataTransfer.getData("text/plain");
     if (!id) return;
     const tid = Number(id);
-    // Optimistic update
     setTickets((prev) =>
       prev.map((t) => (t.id === tid ? { ...t, estado: targetEstado } : t))
     );
-    // Persist if we have external code (UUID)
     const tk = tickets.find((t) => t.id === tid);
     const codigo = tk?.codigo ?? null;
     if (!codigo) return;
@@ -323,59 +374,132 @@ export default function TicketsBoard() {
     setBlobCache({});
   }
 
+  function openTicketDetail(ticket: TicketBoardItem) {
+    setSelectedTicket(ticket);
+    setEditForm({
+      nombre: ticket.nombre ?? "",
+      estado: (ticket.estado as any) ?? "PENDIENTE",
+      deadline: ticket.deadline ?? null,
+      prioridad: "MEDIA",
+      plazo: null,
+      restante: null,
+      informante: "",
+      resolucion: "",
+      resuelto_por: "",
+      revision: "",
+      tarea: "",
+      equipo: [],
+    });
+    setEditFiles([]);
+    setDrawerOpen(true);
+    if (ticket.codigo) {
+      loadFilesForTicket(ticket.codigo);
+    }
+  }
+
+  async function loadFilesForTicket(codigo: string) {
+    try {
+      setFilesLoading(true);
+      const list = await getTicketFiles(codigo);
+      setFiles(list);
+    } catch (e) {
+      console.error(e);
+      setFiles([]);
+    } finally {
+      setFilesLoading(false);
+    }
+  }
+
+  async function saveTicketChanges() {
+    if (!selectedTicket?.codigo) return;
+    try {
+      await updateTicket(selectedTicket.codigo, {
+        nombre: editForm.nombre,
+        estado: editForm.estado,
+        deadline: editForm.deadline,
+      });
+      toast({ title: "Ticket actualizado correctamente" });
+      setTickets((prev) =>
+        prev.map((t) =>
+          t.id === selectedTicket.id
+            ? {
+                ...t,
+                nombre: editForm.nombre ?? t.nombre,
+                estado: editForm.estado ?? t.estado,
+                deadline: editForm.deadline ?? t.deadline,
+              }
+            : t
+        )
+      );
+      setDrawerOpen(false);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al actualizar ticket" });
+    }
+  }
+
+  function iconFor(mime: string | null, name?: string) {
+    const m = mime || mimeFromName(name) || "";
+    if (m.startsWith("image/")) return <FileImage className="h-4 w-4" />;
+    if (m.startsWith("video/")) return <FileVideo className="h-4 w-4" />;
+    if (m.startsWith("audio/")) return <FileAudio className="h-4 w-4" />;
+    if (m === "application/pdf") return <FileText className="h-4 w-4" />;
+    return <FileIcon className="h-4 w-4" />;
+  }
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Tickets — Tablero</h1>
-          <p className="text-sm text-neutral-500">
-            Arrastra y suelta tickets entre columnas para cambiar su estado.
+    <div className="space-y-6 p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            Tablero de Tickets
+          </h1>
+          <p className="text-sm text-slate-600">
+            Arrastra y suelta tickets entre columnas para cambiar su estado
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="h-9 w-64 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all"
+              placeholder="Buscar asunto, alumno..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <select
+            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all min-w-[180px]"
+            value={coachFiltro}
+            onChange={(e) => setCoachFiltro(e.target.value)}
+            title="Filtrar por coach/equipo"
+          >
+            <option value="">Todos los coaches</option>
+            {coaches.map((c) => (
+              <option key={c.codigo} value={c.codigo}>
+                {c.nombre}
+                {c.area ? ` · ${c.area}` : ""}
+              </option>
+            ))}
+          </select>
+
           <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                className="pl-9 rounded-xl border px-3 py-2 text-sm"
-                placeholder="Buscar asunto, alumno..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            {/* Filtro por coach/equipo */}
-            <div className="relative">
-              <select
-                className="rounded border px-2 py-2 text-sm min-w-[180px]"
-                value={coachFiltro}
-                onChange={(e) => setCoachFiltro(e.target.value)}
-                title="Filtrar por coach/equipo"
-              >
-                <option value="">Todos los coaches</option>
-                {coaches.map((c) => (
-                  <option key={c.codigo} value={c.codigo}>
-                    {c.nombre}
-                    {c.area ? ` · ${c.area}` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-1">
-              <CalendarIcon className="text-gray-400" />
-              <input
-                type="date"
-                value={fechaDesde}
-                onChange={(e) => setFechaDesde(e.target.value)}
-                className="rounded border px-2 py-1 text-sm"
-              />
-              <input
-                type="date"
-                value={fechaHasta}
-                onChange={(e) => setFechaHasta(e.target.value)}
-                className="rounded border px-2 py-1 text-sm"
-              />
-            </div>
+            <CalendarIcon className="h-4 w-4 text-slate-400" />
+            <input
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => setFechaDesde(e.target.value)}
+              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all"
+            />
+            <span className="text-slate-400">—</span>
+            <input
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => setFechaHasta(e.target.value)}
+              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all"
+            />
           </div>
 
           <Button
@@ -398,14 +522,20 @@ export default function TicketsBoard() {
                 setLoading(false);
               }
             }}
+            variant="outline"
+            size="sm"
+            className="h-9 gap-2"
           >
+            <RefreshCw className="h-4 w-4" />
             Recargar
           </Button>
         </div>
       </div>
 
       {loading ? (
-        <div className="text-sm text-neutral-500">Cargando tickets...</div>
+        <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+          Cargando tickets...
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {estados.map((estado) => {
@@ -415,18 +545,18 @@ export default function TicketsBoard() {
             return (
               <div
                 key={estado}
-                className="min-h-[160px] rounded-md border border-gray-200 bg-white p-3"
+                className="flex min-h-[400px] flex-col rounded-xl border border-slate-200 bg-slate-50/50 p-4"
               >
-                <div className="mb-3 flex items-center justify-between">
+                <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                      className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ${
                         STATUS_STYLE[estado as StatusKey]
                       }`}
                     >
                       {STATUS_LABEL[estado as StatusKey]}
                     </span>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-xs font-medium text-slate-500">
                       {itemsForCol.length}
                     </span>
                   </div>
@@ -435,11 +565,11 @@ export default function TicketsBoard() {
                 <div
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, estado)}
-                  className="space-y-2 min-h-[120px]"
+                  className="flex-1 space-y-3"
                 >
                   {itemsForCol.length === 0 ? (
-                    <div className="flex items-center justify-center h-36 text-sm text-muted-foreground">
-                      No hay tickets en este estado
+                    <div className="flex h-36 items-center justify-center rounded-lg border-2 border-dashed border-slate-200 text-sm text-slate-400">
+                      Sin tickets
                     </div>
                   ) : (
                     itemsForCol.map((t) => (
@@ -447,98 +577,126 @@ export default function TicketsBoard() {
                         key={t.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, t.id)}
-                        className="rounded-md border border-gray-200 bg-white p-3 shadow-sm hover:bg-gray-50 cursor-grab active:cursor-grabbing"
+                        onClick={() => openTicketDetail(t)}
+                        className="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md cursor-pointer"
                       >
-                        <div className="flex items-start gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-medium leading-tight">
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <h3 className="flex-1 text-sm font-medium leading-snug text-slate-900">
                               {t.nombre ?? "Ticket"}
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                              <span>
-                                Creado:{" "}
-                                {t.created_at
-                                  ? new Date(t.created_at).toLocaleDateString()
-                                  : "—"}
-                              </span>
-                              {t.tipo && <span>· {t.tipo}</span>}
-                              {t.deadline && (
-                                <span>
-                                  · Vence:{" "}
-                                  {new Date(t.deadline).toLocaleDateString()}
-                                </span>
-                              )}
-                              {t.codigo && (
-                                <button
-                                  className="underline hover:no-underline"
-                                  onClick={() => openFilesFor(t)}
-                                  type="button"
-                                >
-                                  · Archivos
-                                </button>
-                              )}
-                            </div>
-                            {/* Coaches asignados */}
-                            {Array.isArray((t as any).coaches) &&
-                              (t as any).coaches.length > 0 && (
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {(t as any).coaches
-                                    .slice(0, 4)
-                                    .map((c: any, idx: number) => (
-                                      <span
-                                        key={`${
-                                          c.codigo_equipo ?? c.nombre ?? idx
-                                        }`}
-                                        className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-700"
-                                        title={`${c.nombre ?? "Coach"}${
-                                          c.area ? ` · ${c.area}` : ""
-                                        }${c.puesto ? ` · ${c.puesto}` : ""}`}
-                                      >
-                                        {(c.nombre ?? "Coach").slice(0, 24)}
-                                        {c.area
-                                          ? ` · ${String(c.area).slice(0, 12)}`
-                                          : ""}
-                                      </span>
-                                    ))}
-                                  {((t as any).coaches?.length ?? 0) > 4 && (
-                                    <span className="inline-flex items-center rounded-full bg-neutral-100 px-2 py-0.5 text-[11px] text-neutral-700">
-                                      +{(t as any).coaches.length - 4} más
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            {/* Último estado */}
-                            {(t as any).ultimo_estado?.estatus && (
-                              <div className="mt-1 text-[11px] text-neutral-500">
-                                Último:{" "}
-                                {
-                                  STATUS_LABEL[
-                                    coerceStatus(
-                                      (t as any).ultimo_estado.estatus
-                                    )
-                                  ]
-                                }
-                                {(t as any).ultimo_estado?.fecha && (
-                                  <>
-                                    {" "}
-                                    ·{" "}
-                                    {new Date(
-                                      (t as any).ultimo_estado.fecha
-                                    ).toLocaleString()}
-                                  </>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
+                            </h3>
                             <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                              className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
                                 STATUS_STYLE[coerceStatus(t.estado)]
                               }`}
                             >
                               {STATUS_LABEL[coerceStatus(t.estado)]}
                             </span>
                           </div>
+
+                          <div className="space-y-1.5 text-xs text-slate-600">
+                            <div className="flex items-center gap-1.5">
+                              <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
+                              <span>
+                                {t.created_at
+                                  ? new Date(t.created_at).toLocaleDateString(
+                                      "es-ES",
+                                      {
+                                        day: "numeric",
+                                        month: "short",
+                                        year: "numeric",
+                                      }
+                                    )
+                                  : "—"}
+                              </span>
+                            </div>
+                            {t.tipo && (
+                              <div className="flex items-center gap-1.5">
+                                <div className="h-1 w-1 rounded-full bg-slate-400" />
+                                <span>{t.tipo}</span>
+                              </div>
+                            )}
+                            {t.deadline && (
+                              <div className="flex items-center gap-1.5">
+                                <div className="h-1 w-1 rounded-full bg-slate-400" />
+                                <span>
+                                  Vence:{" "}
+                                  {new Date(t.deadline).toLocaleDateString(
+                                    "es-ES",
+                                    { day: "numeric", month: "short" }
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {t.codigo && (
+                              <button
+                                className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openFilesFor(t);
+                                }}
+                                type="button"
+                              >
+                                <FileIcon className="h-3.5 w-3.5" />
+                                <span className="underline decoration-slate-300 hover:decoration-slate-900">
+                                  Ver archivos
+                                </span>
+                              </button>
+                            )}
+                          </div>
+
+                          {Array.isArray((t as any).coaches) &&
+                            (t as any).coaches.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5">
+                                {(t as any).coaches
+                                  .slice(0, 3)
+                                  .map((c: any, idx: number) => (
+                                    <span
+                                      key={`${
+                                        c.codigo_equipo ?? c.nombre ?? idx
+                                      }`}
+                                      className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-200"
+                                      title={`${c.nombre ?? "Coach"}${
+                                        c.area ? ` · ${c.area}` : ""
+                                      }${c.puesto ? ` · ${c.puesto}` : ""}`}
+                                    >
+                                      {(c.nombre ?? "Coach").slice(0, 20)}
+                                      {c.area
+                                        ? ` · ${String(c.area).slice(0, 10)}`
+                                        : ""}
+                                    </span>
+                                  ))}
+                                {((t as any).coaches?.length ?? 0) > 3 && (
+                                  <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                                    +{(t as any).coaches.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                          {(t as any).ultimo_estado?.estatus && (
+                            <div className="border-t border-slate-100 pt-2 text-xs text-slate-500">
+                              Último:{" "}
+                              {
+                                STATUS_LABEL[
+                                  coerceStatus((t as any).ultimo_estado.estatus)
+                                ]
+                              }
+                              {(t as any).ultimo_estado?.fecha && (
+                                <>
+                                  {" · "}
+                                  {new Date(
+                                    (t as any).ultimo_estado.fecha
+                                  ).toLocaleDateString("es-ES", {
+                                    day: "numeric",
+                                    month: "short",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))
@@ -550,7 +708,6 @@ export default function TicketsBoard() {
         </div>
       )}
 
-      {/* Dialog archivos */}
       <Dialog
         open={!!openFiles}
         onOpenChange={(v) => {
@@ -560,28 +717,31 @@ export default function TicketsBoard() {
           }
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Archivos adjuntos</DialogTitle>
+            <DialogTitle className="text-lg font-semibold">
+              Archivos adjuntos
+            </DialogTitle>
           </DialogHeader>
           {filesLoading ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
+            <div className="flex items-center justify-center py-12 text-sm text-slate-500">
               Cargando archivos…
             </div>
           ) : files.length === 0 ? (
-            <div className="py-6 text-center text-sm text-muted-foreground">
-              Sin archivos
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <FileIcon className="mb-3 h-12 w-12 text-slate-300" />
+              <p className="text-sm text-slate-500">No hay archivos adjuntos</p>
             </div>
           ) : (
             <TooltipProvider>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                   {files.map((f) => (
                     <div
                       key={f.id}
-                      className="group rounded border bg-background p-2"
+                      className="group rounded-lg border border-slate-200 bg-white p-3 transition-all hover:border-slate-300 hover:shadow-sm"
                     >
-                      <div className="mx-auto flex aspect-square w-28 items-center justify-center overflow-hidden rounded bg-muted">
+                      <div className="mx-auto mb-3 flex aspect-square w-full items-center justify-center overflow-hidden rounded-md bg-slate-50">
                         {(() => {
                           const m =
                             f.mime_type || mimeFromName(f.nombre_archivo);
@@ -589,42 +749,42 @@ export default function TicketsBoard() {
                             const thumb = blobCache[f.id];
                             return thumb ? (
                               <img
-                                src={thumb}
+                                src={thumb || "/placeholder.svg"}
                                 alt={f.nombre_archivo}
                                 className="h-full w-full object-cover"
                               />
                             ) : (
-                              <FileImage className="h-8 w-8 text-muted-foreground" />
+                              <FileImage className="h-10 w-10 text-slate-400" />
                             );
                           }
                           if (m === "application/pdf") {
                             return (
-                              <FileText className="h-8 w-8 text-muted-foreground" />
+                              <FileText className="h-10 w-10 text-slate-400" />
                             );
                           }
                           if (m?.startsWith("video/")) {
                             return (
-                              <FileVideo className="h-8 w-8 text-muted-foreground" />
+                              <FileVideo className="h-10 w-10 text-slate-400" />
                             );
                           }
                           if (m?.startsWith("audio/")) {
                             return (
-                              <FileAudio className="h-8 w-8 text-muted-foreground" />
+                              <FileAudio className="h-10 w-10 text-slate-400" />
                             );
                           }
                           return (
-                            <FileIcon className="h-8 w-8 text-muted-foreground" />
+                            <FileIcon className="h-10 w-10 text-slate-400" />
                           );
                         })()}
                       </div>
-                      <div className="mt-2">
+                      <div className="space-y-2">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <div
-                              className="truncate text-sm font-medium"
+                              className="truncate text-sm font-medium text-slate-900"
                               title={f.nombre_archivo}
                             >
-                              {shortenFileName(f.nombre_archivo, 30)}
+                              {shortenFileName(f.nombre_archivo, 24)}
                             </div>
                           </TooltipTrigger>
                           <TooltipContent
@@ -634,25 +794,29 @@ export default function TicketsBoard() {
                             {f.nombre_archivo}
                           </TooltipContent>
                         </Tooltip>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {(f.mime_type || "").split(";")[0]}{" "}
-                          {f.tamano_bytes ? `· ${f.tamano_bytes} bytes` : ""}
+                        <div className="text-xs text-slate-500">
+                          {(f.mime_type || "").split(";")[0].split("/")[1] ||
+                            "archivo"}
+                          {f.tamano_bytes &&
+                            ` · ${Math.round(f.tamano_bytes / 1024)} KB`}
                         </div>
-                        <div className="mt-2 flex gap-2">
+                        <div className="flex gap-2">
                           <Button
                             size="sm"
-                            className="h-7 px-2 text-xs"
+                            className="h-8 flex-1 gap-1.5 text-xs bg-transparent"
                             variant="outline"
                             onClick={() => downloadFile(f.id, f.nombre_archivo)}
                           >
+                            <Download className="h-3.5 w-3.5" />
                             Descargar
                           </Button>
                           <Button
                             size="sm"
-                            className="h-7 px-2 text-xs"
+                            className="h-8 flex-1 gap-1.5 text-xs"
                             variant="secondary"
                             onClick={() => openPreview(f)}
                           >
+                            <Eye className="h-3.5 w-3.5" />
                             Ver
                           </Button>
                         </div>
@@ -666,7 +830,6 @@ export default function TicketsBoard() {
         </DialogContent>
       </Dialog>
 
-      {/* Sub-modal de previsualización */}
       <Dialog
         open={previewOpen}
         onOpenChange={(v) => {
@@ -674,18 +837,18 @@ export default function TicketsBoard() {
           if (!v) setPreviewFile(null);
         }}
       >
-        <DialogContent className="sm:max-w-3xl">
+        <DialogContent className="sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-lg font-semibold">
               {previewFile?.nombre_archivo || "Previsualización"}
             </DialogTitle>
           </DialogHeader>
           {previewLoading ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground">
+            <div className="flex items-center justify-center py-16 text-sm text-slate-500">
               Cargando previsualización…
             </div>
           ) : previewFile?.url ? (
-            <div className="max-h-[70vh] overflow-auto rounded border bg-background p-2">
+            <div className="max-h-[70vh] overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-4">
               {(() => {
                 const m =
                   previewFile?.mime_type ||
@@ -694,9 +857,9 @@ export default function TicketsBoard() {
                 if (m.startsWith("image/")) {
                   return (
                     <img
-                      src={previewFile.url}
+                      src={previewFile.url || "/placeholder.svg"}
                       alt={previewFile.nombre_archivo || "imagen"}
-                      className="mx-auto max-h-[65vh]"
+                      className="mx-auto max-h-[65vh] rounded-md"
                     />
                   );
                 }
@@ -704,7 +867,7 @@ export default function TicketsBoard() {
                   return (
                     <iframe
                       src={previewFile.url}
-                      className="h-[65vh] w-full"
+                      className="h-[65vh] w-full rounded-md"
                       title="PDF"
                     />
                   );
@@ -714,7 +877,7 @@ export default function TicketsBoard() {
                     <video
                       src={previewFile.url}
                       controls
-                      className="mx-auto max-h-[65vh]"
+                      className="mx-auto max-h-[65vh] rounded-md"
                     />
                   );
                 }
@@ -727,26 +890,610 @@ export default function TicketsBoard() {
                   return (
                     <iframe
                       src={previewFile.url}
-                      className="h-[65vh] w-full"
+                      className="h-[65vh] w-full rounded-md bg-white"
                       title="Texto"
                     />
                   );
                 }
                 return (
-                  <div className="py-10 text-center text-sm text-muted-foreground">
-                    No se puede previsualizar este tipo de archivo. Descárgalo
-                    para verlo.
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <FileIcon className="mb-3 h-12 w-12 text-slate-300" />
+                    <p className="text-sm text-slate-500">
+                      No se puede previsualizar este tipo de archivo
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Descárgalo para verlo
+                    </p>
                   </div>
                 );
               })()}
             </div>
           ) : (
-            <div className="py-10 text-center text-sm text-muted-foreground">
-              No hay previsualización disponible.
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <FileIcon className="mb-3 h-12 w-12 text-slate-300" />
+              <p className="text-sm text-slate-500">
+                No hay previsualización disponible
+              </p>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-xl md:max-w-2xl flex flex-col overflow-hidden"
+        >
+          <SheetHeader className="border-b pb-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <SheetTitle className="text-lg">
+                  {editForm.nombre || "Detalle del ticket"}
+                </SheetTitle>
+                <SheetDescription className="mt-1">
+                  {selectedTicket?.codigo && (
+                    <span className="text-xs text-slate-500">
+                      Código: {selectedTicket.codigo}
+                    </span>
+                  )}
+                </SheetDescription>
+              </div>
+              {editForm.estado && (
+                <Badge
+                  variant="outline"
+                  className={`${
+                    STATUS_STYLE[
+                      String(editForm.estado).toUpperCase() as StatusKey
+                    ] || "bg-slate-100 text-slate-700"
+                  }`}
+                >
+                  {STATUS_LABEL[
+                    String(editForm.estado).toUpperCase() as StatusKey
+                  ] || String(editForm.estado)}
+                </Badge>
+              )}
+            </div>
+          </SheetHeader>
+
+          <div className="flex-1 overflow-y-auto">
+            {!selectedTicket ? (
+              <div className="flex items-center justify-center h-full text-sm text-slate-500">
+                Selecciona un ticket
+              </div>
+            ) : (
+              <Tabs defaultValue="general" className="w-full">
+                <div className="border-b px-6">
+                  <TabsList className="w-full justify-start h-12 bg-transparent p-0">
+                    <TabsTrigger
+                      value="general"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                    >
+                      General
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="detalles"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                    >
+                      Detalles
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="archivos"
+                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                    >
+                      Archivos
+                    </TabsTrigger>
+                  </TabsList>
+                </div>
+
+                <TabsContent value="general" className="p-6 space-y-6 mt-0">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="edit-nombre"
+                        className="text-sm font-medium"
+                      >
+                        Título del ticket
+                      </Label>
+                      <Input
+                        id="edit-nombre"
+                        className="h-10"
+                        value={editForm.nombre ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, nombre: e.target.value }))
+                        }
+                        placeholder="Nombre o asunto"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="edit-estado"
+                          className="text-sm font-medium"
+                        >
+                          Estado
+                        </Label>
+                        <Select
+                          value={String(editForm.estado ?? "PENDIENTE")}
+                          onValueChange={(v) =>
+                            setEditForm((f) => ({ ...f, estado: v }))
+                          }
+                        >
+                          <SelectTrigger id="edit-estado" className="h-10">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(
+                              [
+                                "PENDIENTE",
+                                "EN_PROGRESO",
+                                "PENDIENTE_DE_ENVIO",
+                                "RESUELTO",
+                              ] as StatusKey[]
+                            ).map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {STATUS_LABEL[s]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label
+                          htmlFor="edit-prioridad"
+                          className="text-sm font-medium"
+                        >
+                          Prioridad
+                        </Label>
+                        <Select
+                          value={String(editForm.prioridad ?? "MEDIA")}
+                          onValueChange={(v) =>
+                            setEditForm((f) => ({ ...f, prioridad: v as any }))
+                          }
+                        >
+                          <SelectTrigger id="edit-prioridad" className="h-10">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["BAJA", "MEDIA", "ALTA"].map((p) => (
+                              <SelectItem key={p} value={p}>
+                                {p}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Clock className="h-4 w-4 text-slate-500" />
+                        Plazos y fechas
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-plazo" className="text-sm">
+                            Plazo (días)
+                          </Label>
+                          <Input
+                            id="edit-plazo"
+                            type="number"
+                            className="h-10"
+                            value={editForm.plazo ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                plazo: e.target.value
+                                  ? Number(e.target.value)
+                                  : null,
+                              }))
+                            }
+                            min={0}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-restante" className="text-sm">
+                            Restante (días)
+                          </Label>
+                          <Input
+                            id="edit-restante"
+                            type="number"
+                            className="h-10"
+                            value={editForm.restante ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                restante: e.target.value
+                                  ? Number(e.target.value)
+                                  : null,
+                              }))
+                            }
+                            min={0}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="edit-deadline-date"
+                            className="text-sm"
+                          >
+                            Fecha límite
+                          </Label>
+                          <Input
+                            id="edit-deadline-date"
+                            type="date"
+                            className="h-10"
+                            value={(() => {
+                              const iso = editForm.deadline ?? "";
+                              if (!iso) return "";
+                              const d = new Date(iso);
+                              if (isNaN(d.getTime())) return "";
+                              return d.toISOString().slice(0, 10);
+                            })()}
+                            onChange={(e) => {
+                              const prev = editForm.deadline
+                                ? new Date(editForm.deadline)
+                                : new Date();
+                              const time = isNaN(prev.getTime())
+                                ? "00:00"
+                                : prev.toISOString().slice(11, 16);
+                              const iso = e.target.value
+                                ? `${e.target.value}T${time}:00.000Z`
+                                : null;
+                              setEditForm((f) => ({ ...f, deadline: iso }));
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="edit-deadline-time"
+                            className="text-sm"
+                          >
+                            Hora
+                          </Label>
+                          <Input
+                            id="edit-deadline-time"
+                            type="time"
+                            className="h-10"
+                            value={(() => {
+                              const iso = editForm.deadline ?? "";
+                              if (!iso) return "";
+                              const d = new Date(iso);
+                              if (isNaN(d.getTime())) return "";
+                              return d.toISOString().slice(11, 16);
+                            })()}
+                            onChange={(e) => {
+                              const dateStr = (() => {
+                                const iso = editForm.deadline ?? "";
+                                const d = new Date(iso);
+                                if (isNaN(d.getTime())) return "";
+                                return d.toISOString().slice(0, 10);
+                              })();
+                              const iso =
+                                dateStr && e.target.value
+                                  ? `${dateStr}T${e.target.value}:00.000Z`
+                                  : editForm.deadline;
+                              setEditForm((f) => ({ ...f, deadline: iso }));
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="detalles" className="p-6 space-y-6 mt-0">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <User className="h-4 w-4 text-slate-500" />
+                      Personas involucradas
+                    </div>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-informante" className="text-sm">
+                          Informante
+                        </Label>
+                        <Input
+                          id="edit-informante"
+                          className="h-10"
+                          value={editForm.informante ?? ""}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              informante: e.target.value,
+                            }))
+                          }
+                          placeholder="Nombre del informante"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-resuelto-por" className="text-sm">
+                          Resuelto por
+                        </Label>
+                        <Input
+                          id="edit-resuelto-por"
+                          className="h-10"
+                          value={editForm.resuelto_por ?? ""}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              resuelto_por: e.target.value,
+                            }))
+                          }
+                          placeholder="Nombre de quien resolvió"
+                        />
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Users className="h-4 w-4 text-slate-500" />
+                        Equipo asignado
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit-equipo" className="text-sm">
+                          Códigos de equipo (separados por coma)
+                        </Label>
+                        <Input
+                          id="edit-equipo"
+                          className="h-10"
+                          value={(editForm.equipo ?? []).join(", ")}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              equipo: e.target.value
+                                .split(",")
+                                .map((s) => s.trim())
+                                .filter(Boolean),
+                            }))
+                          }
+                          placeholder="JJp8..., hQycZc..., ..."
+                        />
+                        {editForm.equipo && editForm.equipo.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {editForm.equipo.map((c) => (
+                              <Badge
+                                key={c}
+                                variant="secondary"
+                                className="gap-1"
+                              >
+                                {c}
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setEditForm((f) => ({
+                                      ...f,
+                                      equipo: f.equipo?.filter((x) => x !== c),
+                                    }))
+                                  }
+                                  className="ml-1 hover:text-slate-900"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <CheckCircle2 className="h-4 w-4 text-slate-500" />
+                        Trabajo y resolución
+                      </div>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-tarea" className="text-sm">
+                            Descripción de la tarea
+                          </Label>
+                          <textarea
+                            id="edit-tarea"
+                            className="w-full min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                            value={editForm.tarea ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                tarea: e.target.value,
+                              }))
+                            }
+                            placeholder="Describe la tarea a realizar..."
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-resolucion" className="text-sm">
+                            Notas de resolución
+                          </Label>
+                          <textarea
+                            id="edit-resolucion"
+                            className="w-full min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                            value={editForm.resolucion ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                resolucion: e.target.value,
+                              }))
+                            }
+                            placeholder="Cómo se resolvió el ticket..."
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-revision" className="text-sm">
+                            Revisión
+                          </Label>
+                          <Input
+                            id="edit-revision"
+                            className="h-10"
+                            value={editForm.revision ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                revision: e.target.value,
+                              }))
+                            }
+                            placeholder="Notas de revisión"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="archivos" className="p-6 space-y-6 mt-0">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Paperclip className="h-4 w-4 text-slate-500" />
+                        Archivos adjuntos
+                      </div>
+                    </div>
+
+                    {filesLoading ? (
+                      <div className="flex items-center justify-center py-8 text-slate-500">
+                        Cargando archivos...
+                      </div>
+                    ) : files.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500">
+                          {files.length} archivo(s) existente(s)
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {files.slice(0, 4).map((f) => (
+                            <div
+                              key={f.id}
+                              className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
+                            >
+                              <div className="flex h-10 w-10 items-center justify-center rounded bg-white">
+                                {iconFor(f.mime_type, f.nombre_archivo)}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div
+                                  className="truncate text-sm font-medium"
+                                  title={f.nombre_archivo}
+                                >
+                                  {shortenFileName(f.nombre_archivo, 15)}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {f.tamano_bytes
+                                    ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
+                                    : "—"}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {files.length > 4 && (
+                          <div className="text-xs text-slate-500 text-center pt-2">
+                            +{files.length - 4} más
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-2">
+                          <FileIcon className="h-6 w-6 text-slate-400" />
+                        </div>
+                        <p className="text-sm text-slate-500">
+                          No hay archivos adjuntos
+                        </p>
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">
+                        Adjuntar nuevos archivos
+                      </Label>
+                      <input
+                        ref={editFileInputRef}
+                        type="file"
+                        className="hidden"
+                        multiple
+                        onChange={(e) => {
+                          const picked = Array.from(e.target.files ?? []);
+                          if (!picked.length) return;
+                          setEditFiles((prev) =>
+                            [...prev, ...picked].slice(0, 10)
+                          );
+                          e.currentTarget.value = "";
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        className="w-full gap-2 bg-transparent"
+                        onClick={() => editFileInputRef.current?.click()}
+                      >
+                        <Paperclip className="h-4 w-4" />
+                        Seleccionar archivos
+                      </Button>
+                      {editFiles.length > 0 && (
+                        <div className="space-y-2">
+                          <div className="text-xs text-slate-500">
+                            {editFiles.length} archivo(s) seleccionado(s)
+                          </div>
+                          <div className="space-y-2">
+                            {editFiles.map((f, i) => (
+                              <div
+                                key={`${f.name}-${i}`}
+                                className="flex items-center gap-3 rounded-lg border bg-white p-3"
+                              >
+                                <div className="flex h-10 w-10 items-center justify-center rounded bg-slate-100">
+                                  {iconFor(f.type, f.name)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div
+                                    className="truncate text-sm font-medium"
+                                    title={f.name}
+                                  >
+                                    {f.name}
+                                  </div>
+                                  <div className="text-xs text-slate-500">
+                                    {Math.ceil(f.size / 1024)} KB
+                                  </div>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() =>
+                                    setEditFiles((prev) =>
+                                      prev.filter((_, idx) => idx !== i)
+                                    )
+                                  }
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            )}
+          </div>
+
+          <SheetFooter className="border-t pt-4">
+            <div className="flex items-center justify-end gap-2">
+              <SheetClose asChild>
+                <Button variant="outline">Cancelar</Button>
+              </SheetClose>
+              <Button onClick={saveTicketChanges}>Guardar cambios</Button>
+            </div>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

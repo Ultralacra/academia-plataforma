@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/select";
 import { getOpciones } from "../../api";
 import { toast } from "@/components/ui/use-toast";
+import { apiFetch } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
 
 export default function EditOptionModal({
   open,
@@ -66,13 +68,12 @@ export default function EditOptionModal({
     setSaving(true);
     try {
       // Primero obtenemos los datos actuales del cliente para no enviar campos vacíos
-      const getUrl = `https://v001.vercel.app/v1/client/get/clients?page=1&search=${encodeURIComponent(
+      const getUrl = `/client/get/clients?page=1&search=${encodeURIComponent(
         clientCode
       )}`;
       let existing: any = {};
       try {
-        const r = await fetch(getUrl, { cache: "no-store" });
-        const j = await r.json().catch(() => ({}));
+        const j = await apiFetch<any>(getUrl);
         const rows: any[] = Array.isArray(j?.data)
           ? j.data
           : Array.isArray(j?.clients?.data)
@@ -104,10 +105,19 @@ export default function EditOptionModal({
         nicho !== undefined ? String(nicho) : String(existing?.nicho ?? "");
       if (nichoToSend) fd.set("nicho", nichoToSend);
       // El endpoint acepta form-data y ahora también soporta estado
-      const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(
-        clientCode
-      )}`;
-      const res = await fetch(url, { method: "PUT", body: fd });
+      const url = `/client/update/client/${encodeURIComponent(clientCode)}`;
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const res = await fetch(
+        url.startsWith("http")
+          ? url
+          : (process.env.NEXT_PUBLIC_API_HOST ?? "https://v001.vercel.app/v1") +
+              url,
+        {
+          method: "PUT",
+          body: fd,
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }
+      );
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(text || `HTTP ${res.status}`);

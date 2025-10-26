@@ -45,6 +45,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { getSpanishApiError } from "@/lib/utils";
 
 /* =======================
    Helpers
@@ -168,6 +169,8 @@ export default function TeamsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [createNombre, setCreateNombre] = useState("");
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
   // use sentinel value for "none" to avoid empty-string Select.Item error
   const NONE = "__NONE__";
   const [createPuesto, setCreatePuesto] = useState(NONE);
@@ -662,6 +665,26 @@ export default function TeamsPage() {
             </div>
 
             <div>
+              <Label className="text-xs">Email</Label>
+              <Input
+                type="email"
+                value={createEmail}
+                onChange={(e) => setCreateEmail(e.target.value)}
+                placeholder="user@example.com"
+              />
+            </div>
+
+            <div>
+              <Label className="text-xs">Password</Label>
+              <Input
+                type="password"
+                value={createPassword}
+                onChange={(e) => setCreatePassword(e.target.value)}
+                placeholder="ContraseñaSegura123!"
+              />
+            </div>
+
+            <div>
               <Label className="text-xs">Puesto</Label>
               <select
                 className="w-full h-9 rounded-md border px-3 text-sm"
@@ -720,22 +743,38 @@ export default function TeamsPage() {
                     toast({ title: "El nombre es requerido" });
                     return;
                   }
+                  if (!createEmail.trim()) {
+                    toast({ title: "El email es requerido" });
+                    return;
+                  }
+                  if (!createPassword.trim()) {
+                    toast({ title: "La contraseña es requerida" });
+                    return;
+                  }
                   try {
                     setCreating(true);
-                    const payload = {
-                      nombre: createNombre.trim(),
+                    const payload: teamsApi.CreateCoachPayload = {
+                      name: createNombre.trim(),
+                      email: createEmail.trim(),
+                      password: createPassword,
+                      role: "manager",
+                      tipo: "equipo",
                       puesto: createPuesto === NONE ? undefined : createPuesto,
                       area: createArea === NONE ? undefined : createArea,
-                    } as teamsApi.CreateCoachPayload;
+                    };
                     const resp = await teamsApi.createCoach(payload);
                     toast({ title: "Coach creado correctamente" });
                     setCreateOpen(false);
                     setCreateNombre("");
+                    setCreateEmail("");
+                    setCreatePassword("");
                     setCreatePuesto(NONE);
                     setCreateArea(NONE);
                     await fetchData();
                   } catch (err: any) {
-                    toast({ title: err?.message ?? "Error al crear coach" });
+                    toast({
+                      title: getSpanishApiError(err, "Error al crear coach"),
+                    });
                   } finally {
                     setCreating(false);
                   }

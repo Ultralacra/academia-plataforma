@@ -1058,8 +1058,7 @@ export default function ChatRealtime({
     socketio?.autoCreate,
     socketio?.autoJoin,
     socketio?.idCliente,
-    markRead,
-    // Importante: NO dependemos de socketio?.participants para evitar reconexiones por identidad de array.
+    // Importante: NO dependemos de markRead ni de socketio?.participants para evitar reconexiones por cambios de estado (chatId/read).
     listOnConnect,
     showTypingIndicator,
   ]);
@@ -1082,15 +1081,25 @@ export default function ChatRealtime({
       // Backend requiere participante_tipo + id_*; si llega "participants" desde el padre,
       // agregamos también el filtro válido por rol propio para evitar errores.
       const roleFilter: any = {};
-      if (currentRole === "alumno" && socketio?.idCliente != null) {
-        roleFilter.participante_tipo = "cliente";
-        roleFilter.id_cliente = String(socketio.idCliente);
-      } else if (currentRole === "coach" && socketio?.idEquipo != null) {
-        roleFilter.participante_tipo = "equipo";
-        roleFilter.id_equipo = String(socketio.idEquipo);
+      if (currentRole === "alumno") {
+        let idCli = socketio?.idCliente;
+        if (idCli == null && typeof socketio?.tokenId === "string") {
+          const m = String(socketio.tokenId).match(/^cliente:(.+)$/i);
+          if (m) idCli = m[1];
+        }
+        if (idCli != null) {
+          roleFilter.participante_tipo = "cliente";
+          roleFilter.id_cliente = String(idCli);
+        }
+      } else if (currentRole === "coach") {
+        if (socketio?.idEquipo != null) {
+          roleFilter.participante_tipo = "equipo";
+          roleFilter.id_equipo = String(socketio.idEquipo);
+        }
       }
-      const payload = {
-        ...(base?.participants ? roleFilter : {}),
+      let payload: any = {
+        // Siempre incluir el filtro por rol para cumplir con los requisitos del backend
+        ...roleFilter,
         ...base,
         // pedir explícitamente los participantes cuando el backend lo soporte
         include_participants: true,
@@ -1098,6 +1107,19 @@ export default function ChatRealtime({
         includeParticipants: true,
         withParticipants: true,
       } as any;
+      // En modo alumno, sólo forzar cliente si el padre NO pidió listar por equipo explícitamente
+      if (currentRole === "alumno") {
+        const baseAskedEquipo =
+          String(base?.participante_tipo || "").toLowerCase() === "equipo" ||
+          base?.id_equipo != null;
+        if (!baseAskedEquipo && payload) {
+          payload.participante_tipo = "cliente";
+          if (roleFilter?.id_cliente != null && payload.id_cliente == null) {
+            payload.id_cliente = String(roleFilter.id_cliente);
+          }
+          if ("id_equipo" in payload) delete payload.id_equipo;
+        }
+      }
       console.log("[chat.list] payload =>", payload);
       sio.emit("chat.list", payload, (ack: any) => {
         try {
@@ -1194,23 +1216,48 @@ export default function ChatRealtime({
       if (!sio) return;
       const base = (listParamsRef.current || {}) as any;
       const roleFilter: any = {};
-      if (currentRole === "alumno" && socketio?.idCliente != null) {
-        roleFilter.participante_tipo = "cliente";
-        roleFilter.id_cliente = String(socketio.idCliente);
-      } else if (currentRole === "coach" && socketio?.idEquipo != null) {
-        roleFilter.participante_tipo = "equipo";
-        roleFilter.id_equipo = String(socketio.idEquipo);
+      if (currentRole === "alumno") {
+        let idCli = socketio?.idCliente;
+        if (idCli == null && typeof socketio?.tokenId === "string") {
+          const m = String(socketio.tokenId).match(/^cliente:(.+)$/i);
+          if (m) idCli = m[1];
+        }
+        if (idCli != null) {
+          roleFilter.participante_tipo = "cliente";
+          roleFilter.id_cliente = String(idCli);
+        }
+      } else if (currentRole === "coach") {
+        let idEq = socketio?.idEquipo;
+        if (idEq != null) {
+          roleFilter.participante_tipo = "equipo";
+          roleFilter.id_equipo = String(idEq);
+        }
       }
-      const payload = {
-        ...(base?.participants ? roleFilter : {}),
+      let payload: any = {
+        // Siempre incluir el filtro por rol para cumplir con los requisitos del backend
+        ...roleFilter,
         ...base,
         include_participants: true,
         with_participants: true,
         includeParticipants: true,
         withParticipants: true,
       } as any;
+      if (currentRole === "alumno") {
+        const baseAskedEquipo =
+          String(base?.participante_tipo || "").toLowerCase() === "equipo" ||
+          base?.id_equipo != null;
+        if (!baseAskedEquipo && payload) {
+          payload.participante_tipo = "cliente";
+          if (roleFilter?.id_cliente != null && payload.id_cliente == null) {
+            payload.id_cliente = String(roleFilter.id_cliente);
+          }
+          if ("id_equipo" in payload) delete payload.id_equipo;
+        }
+      }
+      console.log("[chat.list/refresh] payload =>", payload);
       sio.emit("chat.list", payload, (ack: any) => {
         try {
+          console.log("[chat.list/refresh] ack <=", ack);
           if (ack && ack.success === false) {
             console.log("[chat.list/refresh] error:", ack.error);
             // Mantener la lista actual del padre
@@ -1787,9 +1834,13 @@ export default function ChatRealtime({
       const payload: any = {};
       if (currentRole === "alumno") {
         payload.participante_tipo = "cliente";
-        if (socketio?.idCliente != null) {
-          payload.id_cliente = String(socketio.idCliente);
+        let idCli = socketio?.idCliente;
+        if (idCli == null && typeof socketio?.tokenId === "string") {
+          const m = String(socketio.tokenId).match(/^cliente:(.+)$/i);
+          if (m) idCli = m[1];
         }
+        if (idCli != null) payload.id_cliente = String(idCli);
+        if ("id_equipo" in payload) delete payload.id_equipo;
       } else if (currentRole === "coach") {
         payload.participante_tipo = "equipo";
         if (socketio?.idEquipo != null) {
@@ -1799,10 +1850,14 @@ export default function ChatRealtime({
         // Sin un rol determinístico, no podemos resolver correctamente
         return null;
       }
+      try {
+        console.log("[chat.list/resolveMyParticipant] payload =>", payload);
+      } catch {}
       return await new Promise((resolve) => {
         try {
           sio.emit("chat.list", payload, (ack: any) => {
             try {
+              console.log("[chat.list/resolveMyParticipant] ack <=", ack);
               const list: any[] = Array.isArray(ack?.data) ? ack.data : [];
               const currentId = chatId != null ? String(chatId) : null;
               const item = currentId
@@ -2374,9 +2429,27 @@ export default function ChatRealtime({
         listPayload.participante_tipo = "equipo";
         listPayload.id_equipo = String(socketio.idEquipo);
       }
-      if (socketio?.idEquipo != null) {
-        listPayload.id_equipo = String(socketio.idEquipo);
-      }
+      // Si los participantes deseados incluyen un equipo, y estamos listando como cliente,
+      // añade id_equipo para acotar mejor la búsqueda (si el backend lo soporta)
+      try {
+        const desiredPartsTmp = Array.isArray(participants)
+          ? participants
+          : Array.isArray(participantsRef.current)
+          ? participantsRef.current
+          : [];
+        const equipoPart = desiredPartsTmp.find(
+          (p: any) =>
+            String((p?.participante_tipo || "").toLowerCase()) === "equipo" &&
+            p?.id_equipo != null
+        );
+        if (
+          equipoPart &&
+          listPayload.participante_tipo === "cliente" &&
+          listPayload.id_cliente != null
+        ) {
+          listPayload.id_equipo = String(equipoPart.id_equipo);
+        }
+      } catch {}
       const list: any[] = await new Promise((resolve) => {
         try {
           if (!listPayload.participante_tipo) return resolve([]);
@@ -2658,7 +2731,13 @@ export default function ChatRealtime({
               try {
                 if (ack && ack.success && ack.data) {
                   const data = ack.data;
-                  const cid = data.id_chat ?? data.id ?? null;
+                  const cid =
+                    data.id_chat ??
+                    data.id ??
+                    data?.chat?.id ??
+                    ack?.id_chat ??
+                    ack?.id ??
+                    null;
                   if (cid != null) setChatId(cid);
                   const parts = data.participants || data.participantes;
                   assignMyParticipantIdFromList(parts);
@@ -2669,27 +2748,95 @@ export default function ChatRealtime({
                     });
                   } catch {}
                   // Unir para obtener my_participante definitivo y mensajes
-                  try {
-                    sio.emit("chat.join", { id_chat: cid }, (ackJoin: any) => {
-                      try {
-                        if (ackJoin && ackJoin.success) {
-                          const dj = ackJoin.data || {};
-                          if (dj.my_participante)
-                            setMyParticipantId(dj.my_participante);
-                          assignMyParticipantIdFromList(
-                            dj.participants || dj.participantes || parts
-                          );
-                          console.log(
-                            "[ensureChatReadyForSend] join tras crear <=",
-                            {
-                              id_chat: cid,
-                              my_participante: dj?.my_participante,
+                  const finalizeWithJoin = (finalChatId: any) => {
+                    try {
+                      sio.emit(
+                        "chat.join",
+                        { id_chat: finalChatId },
+                        (ackJoin: any) => {
+                          try {
+                            if (ackJoin && ackJoin.success) {
+                              const dj = ackJoin.data || {};
+                              if (dj.my_participante)
+                                setMyParticipantId(dj.my_participante);
+                              assignMyParticipantIdFromList(
+                                dj.participants || dj.participantes || parts
+                              );
+                              console.log(
+                                "[ensureChatReadyForSend] join tras crear <=",
+                                {
+                                  id_chat: finalChatId,
+                                  my_participante: dj?.my_participante,
+                                }
+                              );
                             }
-                          );
+                          } catch {}
                         }
-                      } catch {}
-                    });
-                  } catch {}
+                      );
+                    } catch {}
+                  };
+                  if (cid != null) {
+                    finalizeWithJoin(cid);
+                  } else {
+                    // Fallback: si no vino id en el ack, intentar localizar con re-list por participantes
+                    (async () => {
+                      let found: any | null = null;
+                      for (let i = 0; i < 3; i++) {
+                        await new Promise((r) => setTimeout(r, 350));
+                        const fresh: any[] = await new Promise((resolve2) => {
+                          try {
+                            sio.emit(
+                              "chat.list",
+                              {
+                                ...listPayload,
+                                include_participants: true,
+                                with_participants: true,
+                                includeParticipants: true,
+                                withParticipants: true,
+                              },
+                              (ack2: any) => {
+                                resolve2(
+                                  Array.isArray(ack2?.data) ? ack2.data : []
+                                );
+                              }
+                            );
+                          } catch {
+                            resolve2([]);
+                          }
+                        });
+                        const desiredSet2 = buildKeySetFromArray(participants);
+                        let matched2: any | null = null;
+                        let subset2: any | null = null;
+                        for (const it of fresh) {
+                          const parts2 =
+                            it?.participants || it?.participantes || [];
+                          const remote2 = buildKeySetFromArray(parts2);
+                          if (remote2.size === 0) continue;
+                          if (equalKeySets(desiredSet2, remote2)) {
+                            matched2 = it;
+                            break;
+                          }
+                          if (!subset2 && isSubsetSet(desiredSet2, remote2))
+                            subset2 = it;
+                        }
+                        found = matched2 || subset2 || null;
+                        if (found && (found.id_chat || found.id)) break;
+                      }
+                      if (found && (found.id_chat || found.id)) {
+                        const finalId = found.id_chat ?? found.id;
+                        setChatId(finalId);
+                        console.log(
+                          "[ensureChatReadyForSend] CREATE fallback: localizado chatId",
+                          { id_chat: finalId }
+                        );
+                        finalizeWithJoin(finalId);
+                      } else {
+                        console.warn(
+                          "[ensureChatReadyForSend] CREATE fallback: no se pudo localizar el chat recién creado"
+                        );
+                      }
+                    })();
+                  }
                   try {
                     onChatInfo?.({
                       chatId: cid,
@@ -2703,6 +2850,9 @@ export default function ChatRealtime({
                   refreshChatsList();
                   resolve(true);
                 } else {
+                  try {
+                    console.warn("[ensureChatReadyForSend] CREATE fallo", ack);
+                  } catch {}
                   setIsJoining(false);
                   creatingRef.current = false;
                   resolve(false);

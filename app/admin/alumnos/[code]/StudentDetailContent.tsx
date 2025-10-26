@@ -6,6 +6,7 @@ import {
   type StudentItem,
   type CoachMember,
 } from "@/lib/data-service";
+import { apiFetch } from "@/lib/api-config";
 import Header from "./_parts/Header";
 import MetricsStrip from "./_parts/MetricsStrip";
 import PhasesTimeline from "./_parts/PhasesTimeline";
@@ -23,6 +24,7 @@ import {
   type StatusSint,
 } from "./_parts/detail-utils";
 import TicketsPanel from "./_parts/TicketsPanel";
+import ChatPanel from "./_parts/ChatPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
 import { getStudentTickets } from "../api";
 import Link from "next/link";
@@ -57,11 +59,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
       setLoading(true);
       try {
         // Fetch the student directly from the API using the search code
-        const url = `https://v001.vercel.app/v1/client/get/clients?page=1&search=${encodeURIComponent(
+        const url = `/client/get/clients?page=1&search=${encodeURIComponent(
           code
         )}`;
-        const resRaw = await fetch(url, { cache: "no-store" });
-        const json = await resRaw.json().catch(() => ({}));
+        const json = await apiFetch<any>(url);
         const rows: any[] = Array.isArray(json?.data)
           ? json.data
           : Array.isArray(json?.clients?.data)
@@ -156,11 +157,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
   // Polling sencillo para refrescar historial en tiempo real (cada 10s)
   async function fetchPhaseHistory(codeToFetch: string) {
     try {
-      const histUrl = `https://v001.vercel.app/v1/client/get/cliente-etapas/${encodeURIComponent(
+      const histUrl = `/client/get/cliente-etapas/${encodeURIComponent(
         codeToFetch
       )}`;
-      const rh = await fetch(histUrl, { cache: "no-store" });
-      const jh = await rh.json().catch(() => ({}));
+      const jh = await apiFetch<any>(histUrl);
       const rows = Array.isArray(jh?.data) ? jh.data : [];
       setPhaseHistory(
         rows.map((r: any) => ({
@@ -192,11 +192,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
   async function loadCoaches(alumnoCode: string) {
     try {
-      const qUrl = `https://v001.vercel.app/v1/client/get/clients-coaches?alumno=${encodeURIComponent(
+      const qUrl = `/client/get/clients-coaches?alumno=${encodeURIComponent(
         alumnoCode
       )}`;
-      const r = await fetch(qUrl, { cache: "no-store" });
-      const j = await r.json().catch(() => ({}));
+      const j = await apiFetch<any>(qUrl);
       const rows = Array.isArray(j?.data) ? j.data : [];
       const cs = rows.map((r: any) => ({
         name: r.coach_nombre ?? r.name ?? "",
@@ -221,9 +220,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
         codigo_cliente: student.code,
         equipos: codes,
       };
-      await fetch("https://v001.vercel.app/v1/team/associate/team-client", {
+      await apiFetch("/team/associate/team-client", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       // refresh coaches
@@ -250,21 +248,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
         codigo_equipo: coachId,
       };
       console.log("Removing coach - request:", body);
-      const res = await fetch(
-        "https://v001.vercel.app/v1/team/associate/team-client",
-        {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        }
-      );
-      let json: any = null;
-      try {
-        json = await res.json();
-      } catch (e) {
-        console.warn("removeCoach: no JSON in response", e);
-      }
-      console.log("removeCoach response", res.status, json);
+      const json = await apiFetch<any>("/team/associate/team-client", {
+        method: "DELETE",
+        body: JSON.stringify(body),
+      });
+      console.log("removeCoach response", json);
       // refresh coaches
       await loadCoaches(student.code);
     } catch (e) {
@@ -322,6 +310,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
     created_at: string;
   }> | null>(null);
 
+  const [topTab, setTopTab] = useState<"detalle" | "chat">("detalle");
+
   if (loading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -359,119 +349,152 @@ export default function StudentDetailContent({ code }: { code: string }) {
         ticketsCount={ticketsCount}
       />
 
-      <MetricsStrip
-        statusLabel={
-          (student?.state ?? student?.raw?.estado ?? "").replace?.("_", " ") ??
-          student?.state ??
-          student?.raw?.estado ??
-          ""
-        }
-        permanencia={permanencia}
-        lastTaskAt={lastTaskAt}
-        faseActual={faseActual}
-        ingreso={pIngreso}
-        salida={salida}
-        onEdit={(mode) => {
-          setEditMode(mode ?? "all");
-          setEditOpen(true);
-        }}
-      />
-
-      {/* Contrato se moverá a la columna derecha junto a otras tarjetas para evitar espacios en blanco */}
-
-      <EditForm
-        stage={stage}
-        setStage={setStage}
-        statusSint={statusSint}
-        setStatusSint={setStatusSint}
-        pIngreso={pIngreso}
-        setPIngreso={setPIngreso}
-        salida={salida}
-        setSalida={setSalida}
-        lastActivity={lastActivity}
-        setLastActivity={setLastActivity}
-        lastTaskAt={lastTaskAt}
-        setLastTaskAt={setLastTaskAt}
-        pF1={pF1}
-        setPF1={setPF1}
-        pF2={pF2}
-        setPF2={setPF2}
-        pF3={pF3}
-        setPF3={setPF3}
-        pF4={pF4}
-        setPF4={setPF4}
-        pF5={pF5}
-        setPF5={setPF5}
-      />
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-4">
-          <PhasesTimelineAny steps={steps} />
-        </div>
-        <div className="space-y-4">
-          <CoachesCard
-            coaches={coaches}
-            onAssign={(codes) => assignCoaches(codes)}
-            onRemove={(teamCode) => removeCoach(teamCode)}
-          />
-          {/* Contrato card reubicado aquí para llenar la columna lateral */}
-          <div className="rounded-xl border border-gray-200 bg-white p-4">
-            <h3 className="mb-2 text-sm font-medium">Contrato</h3>
-            <ContratoCard
-              code={student.code || code}
-              contratoRaw={student.contrato ?? student.raw?.contrato}
-              onUpdated={async () => {
-                try {
-                  const url = `https://v001.vercel.app/v1/client/get/clients?page=1&search=${encodeURIComponent(
-                    student.code || code
-                  )}`;
-                  const resRaw = await fetch(url, { cache: "no-store" });
-                  const json = await resRaw.json().catch(() => ({}));
-                  const rows: any[] = Array.isArray(json?.data)
-                    ? json.data
-                    : Array.isArray(json?.clients?.data)
-                    ? json.clients.data
-                    : Array.isArray(json?.getClients?.data)
-                    ? json.getClients.data
-                    : [];
-                  const s =
-                    rows
-                      .map((r) => ({
-                        id: r.id,
-                        code: r.codigo ?? r.code ?? null,
-                        name: r.nombre ?? r.name ?? "-",
-                        stage: r.etapa ?? r.stage ?? null,
-                        state: r.estado ?? r.state ?? null,
-                        ingreso: r.ingreso ?? r.joinDate ?? null,
-                        lastActivity:
-                          r.ultima_actividad ?? r.lastActivity ?? null,
-                        teamMembers: Array.isArray(r.teamMembers)
-                          ? r.teamMembers
-                          : r.equipo ?? r.alumnos ?? [],
-                        contrato: r.contrato ?? null,
-                        raw: r,
-                      }))
-                      .find(
-                        (x) =>
-                          (x.code ?? "").toLowerCase() ===
-                          (student.code || code).toLowerCase()
-                      ) ||
-                    rows[0] ||
-                    null;
-                  setStudent(s as any);
-                } catch {}
-              }}
-            />
-          </div>
-          <ActivityFeed lastTaskAt={lastTaskAt} steps={steps} />
-          <PhaseHistory history={phaseHistory} />
-        </div>
+      {/* Tabs superiores: Detalle / Chat a pantalla completa */}
+      <div className="flex items-center gap-2">
+        <TabBtn
+          active={topTab === "detalle"}
+          onClick={() => setTopTab("detalle")}
+        >
+          Detalle
+        </TabBtn>
+        <TabBtn active={topTab === "chat"} onClick={() => setTopTab("chat")}>
+          Chat
+        </TabBtn>
       </div>
 
-      <TicketsPanel
-        student={student}
-        onChangedTickets={(n) => setTicketsCount(n)}
-      />
+      {topTab === "chat" ? (
+        // Chat a altura casi completa de la ventana (ajuste fijo para header y paddings)
+        <div className="mt-2 h-[calc(100vh-180px)]">
+          <ChatPanel
+            code={student.code || code}
+            studentName={student.name}
+            fullHeight
+          />
+        </div>
+      ) : (
+        <>
+          <MetricsStrip
+            statusLabel={
+              (student?.state ?? student?.raw?.estado ?? "").replace?.(
+                "_",
+                " "
+              ) ??
+              student?.state ??
+              student?.raw?.estado ??
+              ""
+            }
+            permanencia={permanencia}
+            lastTaskAt={lastTaskAt}
+            faseActual={faseActual}
+            ingreso={pIngreso}
+            salida={salida}
+            onEdit={(mode) => {
+              setEditMode(mode ?? "all");
+              setEditOpen(true);
+            }}
+          />
+
+          {/* Contrato se moverá a la columna derecha junto a otras tarjetas para evitar espacios en blanco */}
+
+          <EditForm
+            stage={stage}
+            setStage={setStage}
+            statusSint={statusSint}
+            setStatusSint={setStatusSint}
+            pIngreso={pIngreso}
+            setPIngreso={setPIngreso}
+            salida={salida}
+            setSalida={setSalida}
+            lastActivity={lastActivity}
+            setLastActivity={setLastActivity}
+            lastTaskAt={lastTaskAt}
+            setLastTaskAt={setLastTaskAt}
+            pF1={pF1}
+            setPF1={setPF1}
+            pF2={pF2}
+            setPF2={setPF2}
+            pF3={pF3}
+            setPF3={setPF3}
+            pF4={pF4}
+            setPF4={setPF4}
+            pF5={pF5}
+            setPF5={setPF5}
+          />
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="lg:col-span-2 space-y-4">
+              <PhasesTimelineAny steps={steps} />
+            </div>
+            <div className="space-y-4">
+              <CoachesCard
+                coaches={coaches}
+                onAssign={(codes) => assignCoaches(codes)}
+                onRemove={(teamCode) => removeCoach(teamCode)}
+              />
+              {/* Contrato card reubicado aquí para llenar la columna lateral */}
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <h3 className="mb-2 text-sm font-medium">Contrato</h3>
+                <ContratoCard
+                  code={student.code || code}
+                  contratoRaw={student.contrato ?? student.raw?.contrato}
+                  onUpdated={async () => {
+                    try {
+                      const url = `/client/get/clients?page=1&search=${encodeURIComponent(
+                        student.code || code
+                      )}`;
+                      const json = await apiFetch<any>(url);
+                      const rows: any[] = Array.isArray(json?.data)
+                        ? json.data
+                        : Array.isArray(json?.clients?.data)
+                        ? json.clients.data
+                        : Array.isArray(json?.getClients?.data)
+                        ? json.getClients.data
+                        : [];
+                      const s =
+                        rows
+                          .map((r) => ({
+                            id: r.id,
+                            code: r.codigo ?? r.code ?? null,
+                            name: r.nombre ?? r.name ?? "-",
+                            stage: r.etapa ?? r.stage ?? null,
+                            state: r.estado ?? r.state ?? null,
+                            ingreso: r.ingreso ?? r.joinDate ?? null,
+                            lastActivity:
+                              r.ultima_actividad ?? r.lastActivity ?? null,
+                            teamMembers: Array.isArray(r.teamMembers)
+                              ? r.teamMembers
+                              : r.equipo ?? r.alumnos ?? [],
+                            contrato: r.contrato ?? null,
+                            raw: r,
+                          }))
+                          .find(
+                            (x) =>
+                              (x.code ?? "").toLowerCase() ===
+                              (student.code || code).toLowerCase()
+                          ) ||
+                        rows[0] ||
+                        null;
+                      setStudent(s as any);
+                    } catch {}
+                  }}
+                />
+              </div>
+              <ActivityFeed lastTaskAt={lastTaskAt} steps={steps} />
+              <PhaseHistory history={phaseHistory} />
+            </div>
+          </div>
+
+          {/* Tickets (antes estaba dentro de TabsTicketsChat) */}
+          <div className="mt-4">
+            <TicketsPanel
+              student={student}
+              onChangedTickets={setTicketsCount}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Eliminadas Tabs internas para chat; ahora chat es pestaña superior a pantalla completa */}
 
       {editOpen && (
         <EditOptionModal
@@ -486,11 +509,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
           mode={editMode}
           onSaved={async () => {
             // refresh student tras guardar (estado/etapa/nicho)
-            const url = `https://v001.vercel.app/v1/client/get/clients?page=1&search=${encodeURIComponent(
+            const url = `/client/get/clients?page=1&search=${encodeURIComponent(
               code
             )}`;
-            const resRaw = await fetch(url, { cache: "no-store" });
-            const json = await resRaw.json().catch(() => ({}));
+            const json = await apiFetch<any>(url);
             const rows: any[] = Array.isArray(json?.data)
               ? json.data
               : Array.isArray(json?.clients?.data)
@@ -528,15 +550,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
         />
       )}
 
-      {/* Botón flotante para abrir el chat en vista completa (como antes) */}
-      <Link
-        href={`/chat/${encodeURIComponent(student.code || code)}`}
-        className="fixed right-6 bottom-6 z-[12000] inline-flex items-center gap-2 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-lg hover:opacity-95"
-        aria-label="Abrir chat"
-      >
-        <MessageSquare className="h-5 w-5" />
-        Chat
-      </Link>
+      {/* Se eliminó el botón flotante de chat; ahora está en una pestaña */}
 
       <p className="text-center text-xs text-muted-foreground">
         * Vista de demostración: los cambios no se envían al servidor
@@ -584,6 +598,60 @@ function ContratoViewer({ contratoRaw }: { contratoRaw: any }) {
     <div className="text-sm text-muted-foreground break-words">
       {String(contratoRaw)}
     </div>
+  );
+}
+
+function TabsTicketsChat({
+  code,
+  studentName,
+  student,
+  onChangedTickets,
+}: {
+  code: string;
+  studentName?: string | null;
+  student: any;
+  onChangedTickets?: (n: number) => void;
+}) {
+  const [tab, setTab] = useState<"tickets" | "chat">("tickets");
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <TabBtn active={tab === "tickets"} onClick={() => setTab("tickets")}>
+          Tickets
+        </TabBtn>
+        <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>
+          Chat
+        </TabBtn>
+      </div>
+      {tab === "tickets" ? (
+        <TicketsPanel student={student} onChangedTickets={onChangedTickets} />
+      ) : (
+        <ChatPanel code={code} studentName={studentName} />
+      )}
+    </div>
+  );
+}
+
+function TabBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3 py-1 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400 ${
+        active
+          ? "bg-sky-50 text-sky-700 ring-1 ring-sky-100"
+          : "bg-white text-muted-foreground border border-gray-100"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -1,11 +1,8 @@
 "use client";
 
 import { PieCard, BarCard, PieCardSkeleton, BarCardSkeleton } from "./charts";
-import PhaseMetrics from "./phase-metrics";
-import RetentionKPIs from "./retention-kpis";
-import NoTasksKPIs from "./no-tasks-kpis";
-import TransitionsPanel from "./transitions-panel";
-import type { LifecycleItem } from "./phase-faker";
+// Gráficas que dependían de datos sintéticos quedaron en pausa
+// Mostramos placeholders “En proceso de información”.
 import type { ClientItem } from "@/lib/data-service";
 import React from "react";
 import { Button } from "@/components/ui/button";
@@ -15,12 +12,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2 } from "lucide-react";
 
 export default function ChartsSection({
   loading,
   distByState,
   distByStage,
   byJoinDate,
+  // phaseItems y lifecycleItems se ignoran (eran sintéticos)
   phaseItems = [],
   lifecycleItems = [],
   students = [], // <-- DEFAULT
@@ -38,7 +38,7 @@ export default function ChartsSection({
     paso_f4?: string | null;
     paso_f5?: string | null;
   }>;
-  lifecycleItems?: LifecycleItem[];
+  lifecycleItems?: any[];
   students?: ClientItem[]; // <-- NUEVO
   onOpenList: (
     title: string,
@@ -109,31 +109,52 @@ export default function ChartsSection({
         </div>
       )}
 
-      {/* Promedios por fase */}
-      <div className="mt-2">
-        <PhaseMetrics items={phaseItems} />
-      </div>
-
-      {/* Retención / permanencia */}
-      <div className="mt-2">
-        <RetentionKPIs items={lifecycleItems ?? []} />
-      </div>
-
-      {/* Sin tareas (pasa lifecycle + students) */}
-      <div className="mt-2">
-        <NoTasksKPIs
-          items={lifecycleItems ?? []}
-          students={students} // <-- IMPORTANTE
-          onOpenList={onOpenList}
-        />
-      </div>
-
-      {/* Transiciones */}
-      <div className="mt-2">
-        <TransitionsPanel
-          items={lifecycleItems ?? []}
-          onOpenList={onOpenList}
-        />
+      {/* Secciones basadas en datos sintéticos → mantener "gráficas" difuminadas */}
+      <div className="mt-2 grid grid-cols-1 gap-4">
+        {[
+          "Promedios por fase",
+          "Retención / permanencia",
+          "Alumnos sin tareas",
+          "Transiciones de fase",
+        ].map((title) => (
+          <Card key={title}>
+            <CardHeader>
+              <CardTitle>{title}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="relative h-44 overflow-hidden rounded-md">
+                {/* Fondo que sugiere una gráfica */}
+                <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200" />
+                <div
+                  className="absolute inset-0 opacity-30"
+                  style={{
+                    backgroundImage:
+                      "repeating-linear-gradient(90deg, rgba(0,0,0,0.08) 0, rgba(0,0,0,0.08) 1px, transparent 1px, transparent 12px), repeating-linear-gradient(0deg, rgba(0,0,0,0.06) 0, rgba(0,0,0,0.06) 1px, transparent 1px, transparent 12px)",
+                  }}
+                />
+                {/* Barras simuladas */}
+                <div className="absolute bottom-3 left-3 right-3 flex items-end gap-2 opacity-60">
+                  {Array.from({ length: 9 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex-1 bg-blue-400/60 rounded-t"
+                      style={{ height: `${20 + ((i * 7) % 85)}%` }}
+                    />
+                  ))}
+                </div>
+                {/* Capa difuminada */}
+                <div className="absolute inset-0 backdrop-blur-[2px] bg-white/40" />
+                {/* Etiqueta de estado */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> En proceso de
+                    información
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Dialog open={openJson} onOpenChange={setOpenJson}>

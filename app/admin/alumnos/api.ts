@@ -1,6 +1,7 @@
 // app/admin/alumnos/api.ts
 // Módulo API local y autocontenido para la vista de Alumnos.
-// NO depende de lib/api-config ni de data-service.
+// Inyecta el token Bearer en todas las consultas.
+import { getAuthToken } from "@/lib/auth";
 
 export type TeamMember = { name: string; url?: string | null };
 
@@ -25,9 +26,13 @@ export type CoachTeam = {
 };
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const authHeaders: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {};
   const res = await fetch(url, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    headers: { 'Content-Type': 'application/json', ...authHeaders, ...(init?.headers as any) },
     cache: 'no-store',
   });
   if (!res.ok) {
@@ -121,27 +126,41 @@ export async function getAllCoachesFromTeams(): Promise<CoachTeam[]> {
 
 // Crear alumno (multipart/form-data). Campos: nombre (obligatorio), contrato (opcional)
 export async function createStudent(payload: {
-  nombre: string;
-  contrato?: File | null;
-}): Promise<{ id: number; codigo: string; nombre: string }> {
-  // Endpoint actualizado por requerimiento del usuario
-  const url = 'https://v001.vercel.app/v1/client/create/client';
-  const fd = new FormData();
-  fd.set('nombre', payload.nombre);
-  if (payload.contrato) {
-    fd.set('contrato', payload.contrato);
-  }
-  const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store' });
+  name: string;
+  email: string;
+  password: string;
+  // role is always 'user' for alumnos
+  // tipo is always 'cliente' for alumnos
+}): Promise<{ id: number | string; codigo?: string | null; nombre: string }> {
+  // Nuevo endpoint unificado de usuarios
+  const url = 'https://v001.vercel.app/v1/users';
+  const body = {
+    name: payload.name,
+    email: payload.email,
+    password: payload.password,
+    role: 'alumno' as const,
+    tipo: 'cliente' as const,
+  };
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: 'POST',
+    cache: 'no-store',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);
   }
   const json = await res.json().catch(() => ({}));
-  const d = (json?.data ?? {}) as any;
+  const d = (json?.data ?? json ?? {}) as any;
   return {
-    id: Number(d.id),
-    codigo: String(d.codigo ?? ''),
-    nombre: String(d.nombre ?? payload.nombre),
+    id: d.id ?? d.user_id ?? d.codigo ?? payload.email,
+    codigo: d.codigo ?? d.code ?? null,
+    nombre: d.name ?? payload.name,
   };
 }
 
@@ -216,8 +235,8 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   fd.set('tipo', form.tipo);
   if (form.descripcion) fd.set('descripcion', form.descripcion);
   (form.archivos ?? []).forEach((file) => fd.append('archivos', file));
-
-  const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store' });
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);
@@ -347,7 +366,8 @@ export async function uploadClientContract(
   const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
   const fd = new FormData();
   fd.set('contrato', contrato);
-  const res = await fetch(url, { method: 'PUT', body: fd, cache: 'no-store' });
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, { method: 'PUT', body: fd, cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);
@@ -362,7 +382,8 @@ export async function downloadClientContractBlob(clientCode: string): Promise<{
   contentType?: string | null;
 }> {
   const url = `https://v001.vercel.app/v1/client/download/contrato/${encodeURIComponent(clientCode)}`;
-  const res = await fetch(url, { cache: 'no-store' });
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, { cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);

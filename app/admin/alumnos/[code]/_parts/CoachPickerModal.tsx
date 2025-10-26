@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Search } from "lucide-react";
+import { apiFetch } from "@/lib/api-config";
 
 /** Estructura que mostrará el modal */
 export type CoachCandidate = TeamMember & {
@@ -53,11 +54,9 @@ export default function CoachPickerModal({
       setLoading(true);
       try {
         // Llamar al endpoint explícito que devuelve los equipos/coach
-        const res = await fetch(
-          "https://v001.vercel.app/v1/team/get/team?page=1&pageSize=50",
-          { cache: "no-store" }
+        const j = await apiFetch<any>(
+          "/team/get/team?page=1&pageSize=50"
         );
-        const j = await res.json().catch(() => ({}));
         const rows = Array.isArray(j?.data) ? j.data : [];
         if (!alive) return;
         setTeamsRaw(rows);

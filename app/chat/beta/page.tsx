@@ -5,7 +5,8 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { RotateCw, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { RotateCw, Search, X, MessageCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   dataService,
@@ -17,6 +18,33 @@ import {
 const ADMIN_COACH_ID = "hQycZczVb77e9eLwJpxPJ";
 
 type TargetKind = "alumno" | "coach";
+
+const STAGE_COLORS: Record<string, string> = {
+  Prospecto: "bg-blue-50 text-blue-700 border-blue-200",
+  Lead: "bg-purple-50 text-purple-700 border-purple-200",
+  Oportunidad: "bg-amber-50 text-amber-700 border-amber-200",
+  Negociación: "bg-orange-50 text-orange-700 border-orange-200",
+  Cierre: "bg-teal-50 text-teal-700 border-teal-200",
+  Cliente: "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
+
+const STATE_COLORS: Record<string, string> = {
+  Activo: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  Inactivo: "bg-gray-50 text-gray-600 border-gray-200",
+  Pendiente: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  Suspendido: "bg-red-50 text-red-700 border-red-200",
+  Completado: "bg-blue-50 text-blue-700 border-blue-200",
+};
+
+function getStageColor(stage: string | undefined): string {
+  if (!stage) return "bg-gray-50 text-gray-600 border-gray-200";
+  return STAGE_COLORS[stage] || "bg-gray-50 text-gray-600 border-gray-200";
+}
+
+function getStateColor(state: string | undefined): string {
+  if (!state) return "bg-gray-50 text-gray-600 border-gray-200";
+  return STATE_COLORS[state] || "bg-gray-50 text-gray-600 border-gray-200";
+}
 
 export default function AdminChatPage() {
   const { user } = useAuth();
@@ -256,7 +284,7 @@ export default function AdminChatPage() {
       const cid = it?.id_chat ?? it?.id ?? null;
       if (cid == null) return false;
       const key = `chatLastReadById:coach:${String(cid)}`;
-      const lastRead = parseInt(localStorage.getItem(key) || "0");
+      const lastRead = Number.parseInt(localStorage.getItem(key) || "0");
       const lastAtRaw =
         it?.last_message_at ||
         it?.fecha_ultimo_mensaje ||
@@ -348,217 +376,300 @@ export default function AdminChatPage() {
     return t ? t.slice(0, 1).toUpperCase() : "?";
   };
 
+  const clearAllFilters = () => {
+    setSearchText("");
+    setFilterArea(null);
+    setFilterPuesto(null);
+    setFilterStage(null);
+    setFilterState(null);
+  };
+
+  const activeFiltersCount = [
+    searchText,
+    filterArea,
+    filterPuesto,
+    filterStage,
+    filterState,
+  ].filter(Boolean).length;
+
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <DashboardLayout>
-        <div className="p-4 h-full min-h-0">
-          <h1 className="text-lg font-semibold mb-2">Chat Administrador</h1>
-          <div className="grid grid-cols-5 gap-4 h-[80vh]">
-            {/* Sidebar: filtros y catálogos */}
-            <div className="col-span-2 overflow-auto border rounded p-3 bg-white space-y-3">
-              {/* Buscador */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    value={searchText}
-                    onChange={(e) => setSearchText(e.target.value)}
-                    placeholder="Buscar por nombre, código, área, cargo..."
-                    className="w-full border rounded px-3 py-2 text-sm pl-9"
-                  />
-                  <Search className="w-4 h-4 text-gray-500 absolute left-3 top-2.5" />
+        <div className="p-0 h-full min-h-0 bg-[#f0f2f5]">
+          <div className="bg-[#008069] text-white px-6 py-4 shadow-sm">
+            <div className="flex items-center gap-3">
+              <MessageCircle className="w-6 h-6" />
+              <h1 className="text-xl font-medium">Chat Administrador</h1>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-5 gap-0 h-[calc(100vh-120px)]">
+            <div className="col-span-2 overflow-auto bg-white border-r border-gray-200 shadow-sm">
+              <div className="sticky top-0 bg-white z-10 border-b border-gray-100 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      placeholder="Buscar o empezar un chat nuevo"
+                      className="w-full border-0 bg-[#f0f2f5] rounded-lg px-4 py-2.5 text-sm pl-11 focus:outline-none focus:bg-white focus:shadow-sm transition-all"
+                    />
+                  </div>
+                  {activeFiltersCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Limpiar filtros"
+                      onClick={clearAllFilters}
+                      className="shrink-0 h-10 w-10 rounded-full hover:bg-gray-100"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  title="Limpiar filtros"
-                  onClick={() => {
-                    setSearchText("");
-                    setFilterArea(null);
-                    setFilterPuesto(null);
-                    setFilterStage(null);
-                    setFilterState(null);
-                  }}
-                >
-                  ✕
-                </Button>
+
+                {activeFiltersCount > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {filterArea && (
+                      <Badge
+                        variant="secondary"
+                        className="gap-1.5 cursor-pointer hover:bg-gray-200 bg-gray-100 text-gray-700 border-0 rounded-full px-3 py-1"
+                        onClick={() => setFilterArea(null)}
+                      >
+                        {filterArea}
+                        <X className="w-3 h-3" />
+                      </Badge>
+                    )}
+                    {filterPuesto && (
+                      <Badge
+                        variant="secondary"
+                        className="gap-1.5 cursor-pointer hover:bg-gray-200 bg-gray-100 text-gray-700 border-0 rounded-full px-3 py-1"
+                        onClick={() => setFilterPuesto(null)}
+                      >
+                        {filterPuesto}
+                        <X className="w-3 h-3" />
+                      </Badge>
+                    )}
+                    {filterStage && (
+                      <Badge
+                        variant="secondary"
+                        className="gap-1.5 cursor-pointer hover:bg-gray-200 bg-gray-100 text-gray-700 border-0 rounded-full px-3 py-1"
+                        onClick={() => setFilterStage(null)}
+                      >
+                        {filterStage}
+                        <X className="w-3 h-3" />
+                      </Badge>
+                    )}
+                    {filterState && (
+                      <Badge
+                        variant="secondary"
+                        className="gap-1.5 cursor-pointer hover:bg-gray-200 bg-gray-100 text-gray-700 border-0 rounded-full px-3 py-1"
+                        onClick={() => setFilterState(null)}
+                      >
+                        {filterState}
+                        <X className="w-3 h-3" />
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
+                      value={filterArea ?? ""}
+                      onChange={(e) => setFilterArea(e.target.value || null)}
+                    >
+                      <option value="">Todas las áreas</option>
+                      {areaOptions.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
+                      value={filterPuesto ?? ""}
+                      onChange={(e) => setFilterPuesto(e.target.value || null)}
+                    >
+                      <option value="">Todos los cargos</option>
+                      {puestoOptions.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <select
+                      className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
+                      value={filterStage ?? ""}
+                      onChange={(e) => setFilterStage(e.target.value || null)}
+                    >
+                      <option value="">Todas las fases</option>
+                      {stageOptions.map((f) => (
+                        <option key={f} value={f}>
+                          {f}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
+                      value={filterState ?? ""}
+                      onChange={(e) => setFilterState(e.target.value || null)}
+                    >
+                      <option value="">Todos los estatus</option>
+                      {stateOptions.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
 
-              {/* Filtros coach */}
-              <div>
-                <div className="text-xs font-semibold mb-1">Filtros Coach</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    className="border rounded px-2 py-1 text-sm"
-                    value={filterArea ?? ""}
-                    onChange={(e) => setFilterArea(e.target.value || null)}
-                  >
-                    <option value="">Área</option>
-                    {areaOptions.map((a) => (
-                      <option key={a} value={a}>
-                        {a}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="border rounded px-2 py-1 text-sm"
-                    value={filterPuesto ?? ""}
-                    onChange={(e) => setFilterPuesto(e.target.value || null)}
-                  >
-                    <option value="">Cargo</option>
-                    {puestoOptions.map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </select>
+              <div className="px-4 py-3">
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="text-xs font-semibold text-[#008069] uppercase tracking-wide px-2">
+                    Coaches ({filteredCoaches.length})
+                  </div>
+                  <div className="text-xs font-semibold text-[#008069] uppercase tracking-wide px-2">
+                    Alumnos ({filteredStudents.length})
+                  </div>
                 </div>
-              </div>
 
-              {/* Filtros alumno */}
-              <div>
-                <div className="text-xs font-semibold mb-1">Filtros Alumno</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <select
-                    className="border rounded px-2 py-1 text-sm"
-                    value={filterStage ?? ""}
-                    onChange={(e) => setFilterStage(e.target.value || null)}
-                  >
-                    <option value="">Fase</option>
-                    {stageOptions.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="border rounded px-2 py-1 text-sm"
-                    value={filterState ?? ""}
-                    onChange={(e) => setFilterState(e.target.value || null)}
-                  >
-                    <option value="">Estatus</option>
-                    {stateOptions.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Catálogos */}
-              <div className="grid grid-cols-2 gap-3 min-h-0">
-                <div className="min-h-0">
-                  <div className="text-sm font-semibold mb-2">Coaches</div>
-                  <ul className="space-y-1 text-sm max-h-[28vh] overflow-auto pr-1">
-                    {filteredCoaches.map((t) => {
-                      const selected =
-                        String(targetKind) === "coach" &&
-                        String(targetId) === String(t.id);
-                      const subtitle = [t.puesto, t.area]
-                        .filter(Boolean)
-                        .join(" · ");
-                      return (
-                        <li key={String(t.id)}>
-                          <button
-                            className={`w-full text-left rounded hover:bg-gray-50 ${
-                              selected ? "bg-sky-50" : ""
-                            }`}
-                            title={subtitle}
-                            onClick={() => {
-                              setTargetKind("coach");
-                              setTargetId(String(t.id));
-                              setSelectedChatId(null);
-                              setCurrentOpenChatId(null);
-                            }}
-                          >
-                            <div className="flex items-center gap-3 px-2 py-2">
-                              <div className="h-9 w-9 rounded-full bg-neutral-200 text-neutral-700 grid place-items-center font-semibold">
-                                {initialFromText(t.nombre || t.codigo)}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate font-medium">
-                                  {t.nombre}
+                <div className="grid grid-cols-2 gap-3 min-h-0">
+                  <div className="min-h-0">
+                    <ul className="space-y-0 text-sm max-h-[28vh] overflow-auto">
+                      {filteredCoaches.map((t) => {
+                        const selected =
+                          String(targetKind) === "coach" &&
+                          String(targetId) === String(t.id);
+                        const subtitle = [t.puesto, t.area]
+                          .filter(Boolean)
+                          .join(" · ");
+                        return (
+                          <li key={String(t.id)}>
+                            <button
+                              className={`w-full text-left hover:bg-[#f5f6f6] transition-colors ${
+                                selected ? "bg-[#f0f2f5]" : ""
+                              }`}
+                              title={subtitle}
+                              onClick={() => {
+                                setTargetKind("coach");
+                                setTargetId(String(t.id));
+                                setSelectedChatId(null);
+                                setCurrentOpenChatId(null);
+                              }}
+                            >
+                              <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-50">
+                                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#d9fdd3] to-[#25d366] text-[#075e54] grid place-items-center font-semibold text-base shrink-0 shadow-sm">
+                                  {initialFromText(t.nombre || t.codigo)}
                                 </div>
-                                {subtitle && (
-                                  <div className="text-[11px] text-neutral-500 truncate">
-                                    {subtitle}
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-medium text-[15px] text-gray-900">
+                                    {t.nombre}
                                   </div>
-                                )}
-                              </div>
-                            </div>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-                <div className="min-h-0">
-                  <div className="text-sm font-semibold mb-2">Alumnos</div>
-                  <ul className="space-y-1 text-sm max-h-[28vh] overflow-auto pr-1">
-                    {filteredStudents.map((s) => {
-                      const selected =
-                        String(targetKind) === "alumno" &&
-                        String(targetId) === String(s.code ?? s.id);
-                      const subtitle = [s.state, s.stage]
-                        .filter(Boolean)
-                        .join(" · ");
-                      return (
-                        <li key={String(s.id)}>
-                          <button
-                            className={`w-full text-left rounded hover:bg-gray-50 ${
-                              selected ? "bg-sky-50" : ""
-                            }`}
-                            onClick={() => {
-                              setTargetKind("alumno");
-                              setTargetId(String(s.code ?? s.id));
-                              setSelectedChatId(null);
-                              setCurrentOpenChatId(null);
-                            }}
-                            title={subtitle}
-                          >
-                            <div className="flex items-center gap-3 px-2 py-2">
-                              <div className="h-9 w-9 rounded-full bg-emerald-100 text-emerald-700 grid place-items-center font-semibold">
-                                {initialFromText(s.name)}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div className="truncate font-medium">
-                                  {s.name} · {s.code}
+                                  {subtitle && (
+                                    <div className="text-[13px] text-gray-500 truncate mt-0.5">
+                                      {subtitle}
+                                    </div>
+                                  )}
                                 </div>
-                                {subtitle && (
-                                  <div className="text-[11px] text-neutral-500 truncate">
-                                    {subtitle}
-                                  </div>
-                                )}
                               </div>
-                            </div>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                  <div className="min-h-0">
+                    <ul className="space-y-0 text-sm max-h-[28vh] overflow-auto">
+                      {filteredStudents.map((s) => {
+                        const selected =
+                          String(targetKind) === "alumno" &&
+                          String(targetId) === String(s.code ?? s.id);
+                        return (
+                          <li key={String(s.id)}>
+                            <button
+                              className={`w-full text-left hover:bg-[#f5f6f6] transition-colors ${
+                                selected ? "bg-[#f0f2f5]" : ""
+                              }`}
+                              onClick={() => {
+                                setTargetKind("alumno");
+                                setTargetId(String(s.code ?? s.id));
+                                setSelectedChatId(null);
+                                setCurrentOpenChatId(null);
+                              }}
+                            >
+                              <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-50">
+                                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#d9fdd3] to-[#25d366] text-[#075e54] grid place-items-center font-semibold text-base shrink-0 shadow-sm">
+                                  {initialFromText(s.name)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-medium text-[15px] text-gray-900">
+                                    {s.name}
+                                  </div>
+                                  <div className="text-[13px] text-gray-500 truncate">
+                                    {s.code}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1 mt-1.5">
+                                    {s.stage && (
+                                      <Badge
+                                        className={`text-[10px] px-2 py-0 h-4 font-medium border ${getStageColor(
+                                          s.stage
+                                        )}`}
+                                      >
+                                        {s.stage}
+                                      </Badge>
+                                    )}
+                                    {s.state && (
+                                      <Badge
+                                        className={`text-[10px] px-2 py-0 h-4 font-medium border ${getStateColor(
+                                          s.state
+                                        )}`}
+                                      >
+                                        {s.state}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 </div>
               </div>
 
-              {/* Mis conversaciones (admin como equipo) */}
-              <div className="pt-2 border-t">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-semibold">
-                    Mis conversaciones
+              <div className="pt-3 border-t-8 border-[#f0f2f5] mt-3">
+                <div className="flex items-center justify-between px-4 mb-2">
+                  <div className="text-sm font-semibold text-gray-900">
+                    Conversaciones ({adminChats.length})
                   </div>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="icon"
                     title={connected ? "Actualizar" : "Conectando..."}
                     onClick={() => setListSignal((n) => n + 1)}
                     disabled={!connected}
+                    className="h-9 w-9 rounded-full hover:bg-gray-100"
                   >
-                    <RotateCw className="w-4 h-4" />
+                    <RotateCw
+                      className={`w-4 h-4 ${
+                        connected ? "text-[#008069]" : "text-gray-400"
+                      }`}
+                    />
                   </Button>
                 </div>
-                <ul className="space-y-1 text-sm max-h-[24vh] overflow-auto pr-1">
+                <ul className="space-y-0 text-sm max-h-[24vh] overflow-auto">
                   {adminChats.length === 0 && (
-                    <li className="text-xs text-gray-500">
-                      Sin conversaciones
+                    <li className="text-[13px] text-gray-500 text-center py-8">
+                      Sin conversaciones activas
                     </li>
                   )}
                   {adminChats.map((it) => {
@@ -577,7 +688,7 @@ export default function AdminChatPage() {
                     const unread = hasUnreadForItem(it);
                     // Contador persistente de no-leídos por chatId (rol coach)
                     const countKey = `chatUnreadById:coach:${String(id ?? "")}`;
-                    const storedCount = parseInt(
+                    const storedCount = Number.parseInt(
                       (typeof window !== "undefined" &&
                         window.localStorage.getItem(countKey)) ||
                         "0",
@@ -591,11 +702,9 @@ export default function AdminChatPage() {
                     return (
                       <li key={String(id)}>
                         <button
-                          className={`w-full text-left rounded hover:bg-gray-50 ${
-                            (unread || count > 0) && !isOpen
-                              ? "bg-emerald-50"
-                              : ""
-                          }`}
+                          className={`w-full text-left hover:bg-[#f5f6f6] transition-colors ${
+                            (unread || count > 0) && !isOpen ? "bg-white" : ""
+                          } ${isOpen ? "bg-[#f0f2f5]" : ""}`}
                           onClick={() => {
                             // Abrimos el chat existente sin auto-crear
                             setTargetKind(null);
@@ -615,35 +724,47 @@ export default function AdminChatPage() {
                           }}
                           title={String(last || "")}
                         >
-                          <div className="flex items-center gap-3 px-2 py-2">
-                            <div className="h-9 w-9 rounded-full bg-neutral-200 text-neutral-700 grid place-items-center font-semibold">
+                          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-50">
+                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600 grid place-items-center font-semibold text-base shrink-0 shadow-sm">
                               {initialFromText(title)}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-3">
-                                <span className="truncate font-medium">
+                              <div className="flex items-center justify-between gap-3 mb-0.5">
+                                <span
+                                  className={`truncate text-[15px] ${
+                                    (unread || count > 0) && !isOpen
+                                      ? "font-semibold text-gray-900"
+                                      : "font-normal text-gray-900"
+                                  }`}
+                                >
                                   {title}
                                 </span>
-                                <span className="text-[11px] text-neutral-500 flex-shrink-0">
+                                <span className="text-[12px] text-gray-500 flex-shrink-0">
                                   {formatListTime(lastAt)}
                                 </span>
                               </div>
                               {subtitle && (
-                                <div className="text-[11px] text-neutral-500 truncate">
+                                <div className="text-[13px] text-gray-500 truncate">
                                   {subtitle}
                                 </div>
                               )}
                               {last && (
-                                <div className="text-[11px] text-neutral-600 truncate">
-                                  {last}
+                                <div
+                                  className={`text-[13px] truncate mt-0.5 flex items-center gap-2 ${
+                                    (unread || count > 0) && !isOpen
+                                      ? "text-gray-600"
+                                      : "text-gray-500"
+                                  }`}
+                                >
+                                  <span className="truncate">{last}</span>
+                                  {(unread || count > 0) && !isOpen && (
+                                    <span className="min-w-[20px] h-5 rounded-full bg-[#25d366] text-white text-[11px] font-semibold grid place-items-center px-1.5 shrink-0">
+                                      {count > 0 ? count : ""}
+                                    </span>
+                                  )}
                                 </div>
                               )}
                             </div>
-                            {(unread || count > 0) && (
-                              <span className="ml-2 min-w-[18px] h-[18px] rounded-full bg-emerald-500 text-white text-[10px] grid place-items-center px-1">
-                                {count > 0 ? count : "•"}
-                              </span>
-                            )}
                           </div>
                         </button>
                       </li>
@@ -653,15 +774,14 @@ export default function AdminChatPage() {
               </div>
             </div>
 
-            {/* Panel de chat */}
-            <div className="col-span-3 h-full">
+            <div className="col-span-3 h-full bg-[#efeae2]">
               <CoachChatInline
                 room={room}
                 role="coach"
                 title={targetTitle}
                 subtitle={targetSubtitle}
                 variant="card"
-                className="h-[80vh] rounded-lg shadow-sm overflow-hidden"
+                className="h-full shadow-none border-0"
                 precreateOnParticipants
                 socketio={{
                   url: "https://v001.onrender.com",

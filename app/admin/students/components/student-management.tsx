@@ -10,11 +10,7 @@ import ResultsTable from "./ResultsTable";
 import TeamModal, { type CoachMember } from "./TeamModal";
 import StudentsListModal from "./students-list-modal";
 import { uniq, toDateKey } from "./utils/students-utils";
-import {
-  buildPhaseItems,
-  buildLifecycleItems,
-  type LifecycleItem,
-} from "./phase-faker";
+// Eliminamos métricas sintéticas (phase-faker)
 
 export default function StudentManagement() {
   // ============================ Server filters + fetch
@@ -118,7 +114,7 @@ export default function StudentManagement() {
     return filtered.slice(start, start + pageSizeUI);
   }, [filtered, page]);
 
-  // ============================ Distribuciones
+  // ============================ Distribuciones (reales desde API)
   const distByState = useMemo(() => {
     const map = new Map<string, number>();
     filtered.forEach((i) =>
@@ -152,19 +148,9 @@ export default function StudentManagement() {
     );
   }, [filtered]);
 
-  // ============================ Faker: fases + lifecycle
-  const phaseItems = useMemo(() => buildPhaseItems(filtered), [filtered]);
-  const lifecycleItems = useMemo(
-    () => buildLifecycleItems(filtered),
-    [filtered]
-  );
-  const lifecycleByCode = useMemo(() => {
-    const m: Record<string, LifecycleItem> = {};
-    lifecycleItems.forEach((x) => {
-      if (x.code) m[x.code] = x;
-    });
-    return m;
-  }, [lifecycleItems]);
+  // ============================ Sin datos sintéticos
+  const phaseItems: any[] = [];
+  const lifecycleItems: any[] = [];
 
   // ============================ Modal: coaches por alumno
   const [teamOpen, setTeamOpen] = useState(false);
@@ -278,7 +264,6 @@ export default function StudentManagement() {
         onPrev={() => setPage((p) => Math.max(1, p - 1))}
         onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
         onOpenTeam={openTeamForStudent}
-        lifecycleByCode={lifecycleByCode}
       />
 
       <TeamModal

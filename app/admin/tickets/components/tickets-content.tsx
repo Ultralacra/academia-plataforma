@@ -314,7 +314,7 @@ export default function TicketsContent() {
           <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
             <div className="md:col-span-5">
               <Input
-                placeholder="Buscar por asunto, alumno, id externo..."
+                placeholder="Buscar por asunto o alumno..."
                 value={search}
                 onChange={(e: any) => {
                   setPage(1);
@@ -399,14 +399,12 @@ export default function TicketsContent() {
           <table className="min-w-full text-sm">
             <thead className="sticky top-0 z-[1] bg-white">
               <tr className="border-b text-left text-xs uppercase tracking-wide text-gray-600">
-                <th className="px-4 py-2">ID Externo</th>
                 <th className="px-4 py-2">Asunto</th>
                 <th className="px-4 py-2">Alumno</th>
                 <th className="px-4 py-2">Estado</th>
                 <th className="px-4 py-2">Tipo</th>
                 <th className="px-4 py-2">Creación</th>
                 <th className="px-4 py-2">Deadline</th>
-                <th className="px-4 py-2 text-right"># URLs</th>
               </tr>
             </thead>
             <tbody>
@@ -415,9 +413,6 @@ export default function TicketsContent() {
                   key={t.id}
                   className="border-b hover:bg-muted/40 transition-colors"
                 >
-                  <td className="px-4 py-2 font-mono text-xs">
-                    {t.id_externo ?? "-"}
-                  </td>
                   <td className="px-4 py-2">{t.nombre ?? "-"}</td>
                   <td className="px-4 py-2">{t.alumno_nombre ?? "-"}</td>
                   <td className="px-4 py-2">
@@ -426,16 +421,13 @@ export default function TicketsContent() {
                   <td className="px-4 py-2">{(t.tipo ?? "—").toUpperCase()}</td>
                   <td className="px-4 py-2">{fmtDateTime(t.creacion)}</td>
                   <td className="px-4 py-2">{fmtDateTime(t.deadline)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">
-                    {t.equipo_urls?.length ?? 0}
-                  </td>
                 </tr>
               ))}
               {!loading && (pageItems ?? []).length === 0 && (
                 <tr>
                   <td
                     className="px-4 py-6 text-center text-gray-500"
-                    colSpan={8}
+                    colSpan={6}
                   >
                     No hay tickets para los filtros seleccionados.
                   </td>

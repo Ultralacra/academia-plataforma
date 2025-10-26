@@ -1,4 +1,6 @@
 // lib/api-config.ts
+import { getAuthToken } from "./auth";
+
 export const API_HOST =
   process.env.NEXT_PUBLIC_API_HOST ?? "https://v001.vercel.app/v1";
 
@@ -35,9 +37,25 @@ export async function apiFetch<T = unknown>(
   path: string,
   init?: RequestInit
 ): Promise<T> {
+  // Adjuntamos token si existe
+  let authHeaders: Record<string, string> = {};
+  try {
+    const token = typeof window !== "undefined" ? getAuthToken() : null;
+    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
+  } catch {}
+
+  // Evitar forzar Content-Type si el body es FormData (el navegador agrega el boundary correcto)
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  const defaultHeaders: Record<string, string> = isFormData
+    ? { ...authHeaders }
+    : { "Content-Type": "application/json", ...authHeaders };
+
   const res = await fetch(buildUrl(path), {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: {
+      ...defaultHeaders,
+      ...(init?.headers ?? {}),
+    },
     cache: "no-store",
   });
   if (!res.ok) {
