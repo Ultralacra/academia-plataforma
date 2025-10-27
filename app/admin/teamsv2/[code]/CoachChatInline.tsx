@@ -1,6 +1,26 @@
 "use client";
 
 import React from "react";
+import { getAuthToken } from "@/lib/auth";
+import { CHAT_HOST } from "@/lib/api-config";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreVertical, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,8 +45,8 @@ type Message = {
 
 type SocketIOConfig = {
   url?: string;
-  tokenEndpoint?: string;
-  tokenId?: string;
+  /** Token JWT del sistema de auth; si no se pasa, se usará el de auth local */
+  token?: string;
   idEquipo?: string; // para rol coach
   idCliente?: string; // no usado aquí, pero lo dejamos por compatibilidad
   participants?: any[]; // participantes deseados si no hay chatId
@@ -103,6 +123,8 @@ export default function CoachChatInline({
       html?: string;
     };
   } | null>(null);
+
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
 
   const sioRef = React.useRef<any>(null);
   const chatIdRef = React.useRef<string | number | null>(
@@ -554,18 +576,26 @@ export default function CoachChatInline({
     (async () => {
       try {
         const url = socketio?.url || undefined;
-        const tokenEndpoint =
-          socketio?.tokenEndpoint || "https://v001.onrender.com/v1/auth/token";
-        const tokenId = socketio?.tokenId || `${role}:${normRoom}`;
-        const res = await fetch(tokenEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: tokenId }),
-        });
-        const json = await res.json().catch(() => ({}));
-        const token = json?.token as string | undefined;
-        if (!token) throw new Error("No se pudo obtener token de chat");
+        // Obtener token JWT desde el auth local (con override opcional por props), esperando breve si aún no existe
+        const resolveToken = async (): Promise<string | undefined> => {
+          const override = socketio?.token;
+          if (override && typeof override === "string") return override;
+          const deadline = Date.now() + 4000;
+          while (alive && Date.now() < deadline) {
+            const t = getAuthToken();
+            if (t) return t;
+            await new Promise((r) => setTimeout(r, 300));
+          }
+          return getAuthToken() || undefined;
+        };
+        const token = await resolveToken();
+        if (!token) {
+          setConnected(false);
+          onConnectionChange?.(false);
+          return;
+        }
         const { io } = await import("socket.io-client");
+        // Autenticación estricta: solo auth.token (sin query) según requisito del servidor
         const sio = url
           ? io(url, {
               auth: { token },
@@ -596,6 +626,19 @@ export default function CoachChatInline({
           onConnectionChange?.(false);
           try {
             console.log("[CoachChat] desconectado", { room: normRoom, role });
+          } catch {}
+        });
+        sio.on("connect_error", (err: any) => {
+          try {
+            console.error("[CoachChat] connect_error", {
+              message: err?.message || String(err),
+              url: socketio?.url ?? "<default>",
+            });
+          } catch {}
+        });
+        sio.on("error", (err: any) => {
+          try {
+            console.error("[CoachChat] error", err?.message || err);
           } catch {}
         });
 
@@ -889,13 +932,7 @@ export default function CoachChatInline({
       } catch {}
       sioRef.current = null;
     };
-  }, [
-    normRoom,
-    role,
-    socketio?.url,
-    socketio?.tokenEndpoint,
-    socketio?.tokenId,
-  ]);
+  }, [normRoom, role, socketio?.url, socketio?.token]);
 
   React.useEffect(() => {
     const newId = socketio?.chatId ?? null;
@@ -1830,6 +1867,35 @@ export default function CoachChatInline({
     }
   }, []);
 
+  async function handleDeleteChat() {
+    const id = chatIdRef.current ?? chatId;
+    if (id == null) return;
+    try {
+      const token = getAuthToken();
+      const base = (CHAT_HOST || "").replace(/\/$/, "");
+      const url = `${base}/admin/flush-chats/${encodeURIComponent(String(id))}`;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      let res = await fetch(url, { method: "DELETE", headers });
+      if (!res.ok) {
+        res = await fetch(url, { method: "POST", headers });
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Reset UI
+      setItems([]);
+      setChatId(null);
+      chatIdRef.current = null;
+      setConfirmDeleteOpen(false);
+      try {
+        window.dispatchEvent(
+          new CustomEvent("chat:list-refresh", { detail: { reason: "chat-deleted", id_chat: id } })
+        );
+      } catch {}
+    } catch (e) {
+      console.error("[CoachChat] delete chat error", e);
+    }
+  }
+
   return (
     <>
       <div className={`flex flex-col w-full min-h-0 ${className || ""}`}>
@@ -1862,6 +1928,41 @@ export default function CoachChatInline({
               <Sparkles className="h-3.5 w-3.5" />
               Generar ticket
             </button>
+            {/* Menú de acciones (3 puntitos) */}
+            <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                    title="Más acciones"
+                  >
+                    <MoreVertical className="h-4 w-4 text-white" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <AlertDialogTrigger asChild>
+                    <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
+                      <Trash2 className="h-4 w-4 mr-2" /> Eliminar conversación
+                    </DropdownMenuItem>
+                  </AlertDialogTrigger>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Eliminar esta conversación?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Se eliminarán los mensajes del chat {String(chatIdRef.current ?? chatId ?? "")}.
+                    Esta acción no se puede deshacer.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDeleteChat} className="bg-red-600 hover:bg-red-700">
+                    Eliminar
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
 

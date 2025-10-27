@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { getAuthToken } from "@/lib/auth";
 import Spinner from "@/components/ui/spinner";
 import MessageBubble from "@/components/chat/MessageBubble";
 // chat: disable snackbars in-chat — use console.debug for non-intrusive messages
@@ -67,8 +68,8 @@ type Transport = "ws" | "local" | "sse" | "socketio";
 
 type SocketIOChatOptions = {
   url?: string;
-  tokenEndpoint?: string;
-  tokenId?: string;
+  /** Token JWT del sistema de auth; si no se pasa, se usará el de auth local */
+  token?: string;
   participants?: Array<any>;
   idCliente?: number | string;
   idEquipo?: number | string;
@@ -532,20 +533,28 @@ export default function ChatRealtime({
       joinedRef.current = false;
       try {
         const url = socketio?.url || undefined;
-        const tokenEndpoint =
-          socketio?.tokenEndpoint || "https://v001.onrender.com/v1/auth/token";
-        const tokenId = socketio?.tokenId || `${currentRole}:${normRoom}`;
-        // 1) Obtener token
-        const res = await fetch(tokenEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: tokenId }),
-        });
-        const json = await res.json().catch(() => ({}));
-        const token = json?.token as string | undefined;
-        if (!token) throw new Error("No se pudo obtener token de chat");
+        // 1) Obtener token de autenticación de la app (JWT) con espera breve si aún no está listo
+        const resolveToken = async (): Promise<string | undefined> => {
+          const override = (socketio as any)?.token as string | undefined;
+          if (override && typeof override === "string") return override;
+          // Espera hasta 4s en intervalos de 300ms si todavía no hay token (p. ej., hidratación auth)
+          const deadline = Date.now() + 4000;
+          while (alive && Date.now() < deadline) {
+            const t = getAuthToken();
+            if (t) return t;
+            await new Promise((r) => setTimeout(r, 300));
+          }
+          return getAuthToken() || undefined;
+        };
+        const token = await resolveToken();
+        if (!token) {
+          // No conectar sin token; volveremos a intentar en el próximo render/cambio de props
+          setConnected(false);
+          return;
+        }
         // 2) Conectarse via socket.io
         const { io } = await import("socket.io-client");
+        // Autenticación: solo via auth.token (sin query) según políticas del servidor
         const sio = url
           ? io(url, {
               auth: { token },
@@ -567,6 +576,16 @@ export default function ChatRealtime({
         sio.on("disconnect", () => {
           if (!alive) return;
           setConnected(false);
+        });
+        sio.on("connect_error", (err: any) => {
+          try {
+            console.error("[ChatRealtime] connect_error", err?.message || err);
+          } catch {}
+        });
+        sio.on("error", (err: any) => {
+          try {
+            console.error("[ChatRealtime] error", err?.message || err);
+          } catch {}
         });
         // 3) Escuchar mensajes entrantes
         sio.on("chat.message", (msg: any) => {
@@ -1053,8 +1072,7 @@ export default function ChatRealtime({
     normRoom,
     currentRole,
     socketio?.url,
-    socketio?.tokenEndpoint,
-    socketio?.tokenId,
+    socketio?.token,
     socketio?.autoCreate,
     socketio?.autoJoin,
     socketio?.idCliente,
@@ -1083,10 +1101,7 @@ export default function ChatRealtime({
       const roleFilter: any = {};
       if (currentRole === "alumno") {
         let idCli = socketio?.idCliente;
-        if (idCli == null && typeof socketio?.tokenId === "string") {
-          const m = String(socketio.tokenId).match(/^cliente:(.+)$/i);
-          if (m) idCli = m[1];
-        }
+        // Quitar heurística basada en tokenId; ahora el idCliente debe venir explícito
         if (idCli != null) {
           roleFilter.participante_tipo = "cliente";
           roleFilter.id_cliente = String(idCli);
@@ -1218,10 +1233,7 @@ export default function ChatRealtime({
       const roleFilter: any = {};
       if (currentRole === "alumno") {
         let idCli = socketio?.idCliente;
-        if (idCli == null && typeof socketio?.tokenId === "string") {
-          const m = String(socketio.tokenId).match(/^cliente:(.+)$/i);
-          if (m) idCli = m[1];
-        }
+        // Quitar heurística basada en tokenId; ahora el idCliente debe venir explícito
         if (idCli != null) {
           roleFilter.participante_tipo = "cliente";
           roleFilter.id_cliente = String(idCli);
@@ -1835,10 +1847,7 @@ export default function ChatRealtime({
       if (currentRole === "alumno") {
         payload.participante_tipo = "cliente";
         let idCli = socketio?.idCliente;
-        if (idCli == null && typeof socketio?.tokenId === "string") {
-          const m = String(socketio.tokenId).match(/^cliente:(.+)$/i);
-          if (m) idCli = m[1];
-        }
+        // Quitar heurística basada en tokenId; ahora el idCliente debe venir explícito
         if (idCli != null) payload.id_cliente = String(idCli);
         if ("id_equipo" in payload) delete payload.id_equipo;
       } else if (currentRole === "coach") {

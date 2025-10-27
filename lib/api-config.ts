@@ -4,6 +4,15 @@ import { getAuthToken } from "./auth";
 export const API_HOST =
   process.env.NEXT_PUBLIC_API_HOST ?? "https://v001.vercel.app/v1";
 
+// Host del servidor de chat (Socket.IO + endpoints admin). Configurable por env.
+// Fallback: origen de API_HOST sin el path (si API_HOST tiene /v1, toma solo el dominio)
+export const CHAT_HOST = (() => {
+  const env = process.env.NEXT_PUBLIC_CHAT_HOST;
+  if (env && env.trim()) return env.trim();
+  // Fallback oficial: servidor Socket.IO externo (onrender)
+  return "https://v001.onrender.com";
+})();
+
 export const endpoints = {
   team: {
     list: "/team/get/team",

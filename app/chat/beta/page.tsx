@@ -6,13 +6,26 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RotateCw, Search, X, MessageCircle } from "lucide-react";
+import { RotateCw, Search, X, MessageCircle, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   dataService,
   type StudentItem,
   type TeamWithCounts,
 } from "@/lib/data-service";
+import { getAuthToken } from "@/lib/auth";
+import { CHAT_HOST } from "@/lib/api-config";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // ID de coach especial para el administrador (actúa como "equipo")
 const ADMIN_COACH_ID = "hQycZczVb77e9eLwJpxPJ";
@@ -47,6 +60,8 @@ function getStateColor(state: string | undefined): string {
 }
 
 export default function AdminChatPage() {
+  // Base URL del servidor de chat (socket.io + endpoints admin)
+  const SOCKET_URL = (CHAT_HOST || "").replace(/\/$/, "");
   const { user } = useAuth();
   // El admin hablará "como coach" usando ADMIN_COACH_ID
   const room = `admin:${ADMIN_COACH_ID}`;
@@ -83,6 +98,7 @@ export default function AdminChatPage() {
   const [currentOpenChatId, setCurrentOpenChatId] = useState<
     string | number | null
   >(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   // Bump de re-render para reflejar cambios en contadores persistentes (localStorage)
   // Bump para re-render cuando cambian lecturas (misma pestaña o entre pestañas)
   const [readsBump, setReadsBump] = useState<number>(0);
@@ -383,6 +399,39 @@ export default function AdminChatPage() {
     setFilterStage(null);
     setFilterState(null);
   };
+
+  async function handleDeleteCurrentChat() {
+    const id = currentOpenChatId;
+    if (id == null) return;
+    try {
+      // Usar el endpoint del servidor de chat (onrender) para borrar
+      const token = getAuthToken();
+      const base = (SOCKET_URL || CHAT_HOST || "").replace(/\/$/, "");
+      const url = `${base}/admin/flush-chats/${encodeURIComponent(String(id))}`;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      let res = await fetch(url, { method: "DELETE", headers });
+      if (!res.ok) {
+        res = await fetch(url, { method: "POST", headers });
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Resetear selección y refrescar listas
+      setSelectedChatId(null);
+      setCurrentOpenChatId(null);
+      setConfirmDeleteOpen(false);
+      setListSignal((n) => n + 1);
+      try {
+        window.dispatchEvent(
+          new CustomEvent("chat:list-refresh", {
+            detail: { reason: "chat-deleted", id_chat: id },
+          })
+        );
+      } catch {}
+    } catch (err) {
+      console.error("Error al eliminar chat", err);
+      // Mantener modal abierto para que el usuario reintente o cancele
+    }
+  }
 
   const activeFiltersCount = [
     searchText,
@@ -774,7 +823,9 @@ export default function AdminChatPage() {
               </div>
             </div>
 
-            <div className="col-span-3 h-full bg-[#efeae2]">
+            <div className="col-span-3 h-full bg-[#efeae2] relative">
+              {/* Botón borrar chat actual */}
+              {/* Eliminado: botón flotante de borrar; ahora vive dentro del menú de la card (CoachChatInline) */}
               <CoachChatInline
                 room={room}
                 role="coach"
@@ -784,9 +835,7 @@ export default function AdminChatPage() {
                 className="h-full shadow-none border-0"
                 precreateOnParticipants
                 socketio={{
-                  url: "https://v001.onrender.com",
-                  tokenEndpoint: "https://v001.onrender.com/v1/auth/token",
-                  tokenId: `equipo:${String(ADMIN_COACH_ID)}`,
+                  url: SOCKET_URL || undefined,
                   idEquipo: String(ADMIN_COACH_ID),
                   participants: participants,
                   autoCreate: true,
