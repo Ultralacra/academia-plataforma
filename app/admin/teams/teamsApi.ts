@@ -157,6 +157,51 @@ export async function fetchMetrics(
       avgResponseMin: 0,
       avgResolutionMin: 0,
     },
+    // Métricas específicas de ADS (opcionales, provistas por backend)
+    ads: (() => {
+      const src = d.adsMetrics ?? d.ads ?? null;
+      if (!src || typeof src !== 'object') return null;
+      function num(v: any) {
+        const n = Number(
+          typeof v === 'string' ? v.replace(/[,]/g, '.') : v
+        );
+        return Number.isFinite(n) ? n : null;
+      }
+      function bool(v: any) {
+        if (typeof v === 'boolean') return v;
+        if (typeof v === 'number') return v !== 0;
+        if (typeof v === 'string') {
+          const s = v.trim().toLowerCase();
+          return s === '1' || s === 'true' || s === 'sí' || s === 'si';
+        }
+        return null;
+      }
+      return {
+        roas: num(src.roas ?? src.ROAS),
+        inversion: num(src.inversion ?? src.inversion_en_pauta ?? src.ad_spend),
+        facturacion: num(src.facturacion ?? src.revenue),
+        alcance: num(src.alcance ?? src.reach),
+        clics: num(src.clics ?? src.clicks),
+        visitas: num(src.visitas ?? src.visits),
+        pagos_iniciados: num(src.pagos_iniciados ?? src.checkout_starts),
+        efectividad_ads: num(src.efectividad_ads),
+        efectividad_pago_iniciado: num(src.efectividad_pago_iniciado),
+        efectividad_compra: num(src.efectividad_compra),
+        pauta_activa: bool(src.pauta_activa),
+      } as {
+        roas: number | null;
+        inversion: number | null;
+        facturacion: number | null;
+        alcance: number | null;
+        clics: number | null;
+        visitas: number | null;
+        pagos_iniciados: number | null;
+        efectividad_ads: number | null;
+        efectividad_pago_iniciado: number | null;
+        efectividad_compra: number | null;
+        pauta_activa: boolean | null;
+      };
+    })(),
     ticketsPer: { day: perDay, week: perWeek, month: perMonth },
     ticketsSeries: {
       daily,

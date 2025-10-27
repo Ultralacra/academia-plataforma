@@ -19,6 +19,10 @@ import CoachStudentsDistributionChart from "./CoachStudentsDistributionChart";
 import StudentsPhaseDonut from "./StudentsPhaseDonut";
 import SlowestResponseCard from "./SlowestResponseCard";
 import ResolutionAndRateCard from "./ResolutionAndRateCard";
+import AdsKpis from "./AdsKpis";
+import { ADS_STATIC_METRICS } from "./ads-static";
+import AdsStudentsTable from "./AdsStudentsTable";
+import AdsPhaseMetrics from "./AdsPhaseMetrics";
 
 type TicketsSeriesVM = {
   daily: Array<{ date: string; count: number }>;
@@ -92,6 +96,10 @@ export default function TeamsMetricsContent() {
   const [studentsChartMode, setStudentsChartMode] = useState<"estado" | "fase">(
     "estado"
   );
+  const [tab, setTab] = useState<"general" | "ads">("general");
+  const [adsFase3, setAdsFase3] = useState<any[]>([]);
+  const [adsFase4, setAdsFase4] = useState<any[]>([]);
+  const [loadingAdsStudents, setLoadingAdsStudents] = useState(false);
 
   // gating de consulta por fechas
   const bothEmpty = !desde && !hasta; // ahora normalmente será false
@@ -112,6 +120,19 @@ export default function TeamsMetricsContent() {
       avgResponseMin: number;
       avgResolutionMin: number;
     };
+    ads?: {
+      roas: number | null;
+      inversion: number | null;
+      facturacion: number | null;
+      alcance: number | null;
+      clics: number | null;
+      visitas: number | null;
+      pagos_iniciados: number | null;
+      efectividad_ads: number | null;
+      efectividad_pago_iniciado: number | null;
+      efectividad_compra: number | null;
+      pauta_activa: boolean | null;
+    } | null;
     alumnosPorEquipo: { name: string; alumnos: number }[];
     areasCount: { area: string; count: number }[];
     ticketsPer: { day: number; week: number; month: number };
@@ -250,6 +271,97 @@ export default function TeamsMetricsContent() {
     };
   }, []);
 
+  // Al entrar en la pestaña ADS, si no hay coach seleccionado, escoger Johan o primer coach ADS
+  useEffect(() => {
+    if (tab !== "ads") return;
+    if (!coachs.length) return;
+    const isAds = (c: Coach) => /ads/i.test(String(c.area || c.puesto || ""));
+    const isJohan = (c: Coach) => /johan/i.test(String(c.nombre || ""));
+    const preferred = coachs.find(isJohan) || coachs.find(isAds) || null;
+    const current = coachs.find((c) => c.codigo === coach) || null;
+    const currentIsAds = current ? isAds(current) || isJohan(current) : false;
+    if ((!coach || !currentIsAds) && preferred?.codigo) {
+      setCoach(preferred.codigo);
+    }
+  }, [tab, coachs, coach]);
+
+  // Cargar CSVs estáticos de Fase 3 y Fase 4 al entrar a pestaña ADS
+  useEffect(() => {
+    if (tab !== "ads") return;
+    let alive = true;
+    async function fetchCsv(url: string): Promise<string> {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.text();
+    }
+    function parseCSV(text: string): any[] {
+      // CSV robusto con comillas dobles, comas y saltos de línea en campos
+      const rows: string[][] = [];
+      let field = "";
+      let row: string[] = [];
+      let inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (ch === '"') {
+          if (inQuotes && next === '"') {
+            field += '"'; // escape de comillas
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+          continue;
+        }
+        if (!inQuotes && ch === ",") {
+          row.push(field);
+          field = "";
+          continue;
+        }
+        if (!inQuotes && ch === "\n") {
+          row.push(field);
+          rows.push(row);
+          row = [];
+          field = "";
+          continue;
+        }
+        if (!inQuotes && ch === "\r") {
+          continue; // ignorar CR
+        }
+        field += ch;
+      }
+      // último campo
+      row.push(field);
+      rows.push(row);
+      // mapear a objetos por header
+      const header = rows.shift() || [];
+      const out = rows
+        .filter((r) => r.some((c) => (c || "").trim().length > 0))
+        .map((r) => {
+          const obj: Record<string, string> = {};
+          for (let i = 0; i < header.length; i++) {
+            obj[header[i]] = r[i] ?? "";
+          }
+          return obj;
+        });
+      return out;
+    }
+    setLoadingAdsStudents(true);
+    Promise.all([
+      fetchCsv("/data/fase3.csv").then(parseCSV),
+      fetchCsv("/data/fase4.csv").then(parseCSV),
+    ])
+      .then(([f3, f4]) => {
+        if (!alive) return;
+        setAdsFase3(f3);
+        setAdsFase4(f4);
+      })
+      .catch((e) => console.error("Error cargando CSV Ads", e))
+      .finally(() => alive && setLoadingAdsStudents(false));
+    return () => {
+      alive = false;
+    };
+  }, [tab]);
+
   useEffect(() => {
     let alive = true;
 
@@ -273,6 +385,7 @@ export default function TeamsMetricsContent() {
 
         const totals = {
           teams: Number(total?.teams ?? 0) || 0,
+          ads: null,
           studentsTotal: Number(total?.studentsTotal ?? 0) || 0,
           ticketsTotal: Number(total?.ticketsTotal ?? 0) || 0,
           avgResponseMin: Number(total?.avgResponseMin ?? 0) || 0,
@@ -495,6 +608,7 @@ export default function TeamsMetricsContent() {
             fetchedAt: root?.meta?.fetchedAt,
           },
           totals,
+          ads: (teams as any).ads ?? null,
           alumnosPorEquipo,
           areasCount,
           ticketsPer,
@@ -549,6 +663,7 @@ export default function TeamsMetricsContent() {
             avgResponseMin: 0,
             avgResolutionMin: 0,
           },
+          ads: null,
           alumnosPorEquipo: [],
           areasCount: [],
           ticketsPer: { day: 0, week: 0, month: 0 },
@@ -919,6 +1034,13 @@ export default function TeamsMetricsContent() {
 
   return (
     <div className="space-y-6 relative">
+      {/* Tabs para alternar vista general y nuevas métricas */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="ads">Nuevas métricas</TabsTrigger>
+        </TabsList>
+      </Tabs>
       {/* Overlay deshabilitado en favor de skeletons */}
       {false && (
         <LoadingOverlay
@@ -944,21 +1066,33 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      <Filters
-        coaches={coachs.map((c) => ({
+      {(() => {
+        const list = coachs.map((c) => ({
           id: c.id,
           codigo: c.codigo,
           nombre: c.nombre,
           area: c.area ?? null,
-        }))}
-        coach={coach}
-        loadingCoaches={loadingCoachs}
-        onCoach={setCoach}
-        desde={desde}
-        hasta={hasta}
-        onDesde={setDesde}
-        onHasta={setHasta}
-      />
+        }));
+        const onlyAds = list.filter(
+          (c) =>
+            /ads/i.test(String(c.area || "")) ||
+            /johan/i.test(String(c.nombre || ""))
+        );
+        const filtered =
+          tab === "ads" ? (onlyAds.length ? onlyAds : list) : list;
+        return (
+          <Filters
+            coaches={filtered}
+            coach={coach}
+            loadingCoaches={loadingCoachs}
+            onCoach={setCoach}
+            desde={desde}
+            hasta={hasta}
+            onDesde={setDesde}
+            onHasta={setHasta}
+          />
+        );
+      })()}
 
       <div className="flex items-center justify-between gap-3">
         <RangeBadge
@@ -969,17 +1103,19 @@ export default function TeamsMetricsContent() {
         <div className="flex items-center gap-2" />
       </div>
 
-      {!loading && displayVm.ticketsSeries.daily.length === 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          No hay datos para el rango seleccionado (
-          {displayVm.meta?.range?.from ?? "—"} →{" "}
-          {displayVm.meta?.range?.to ?? "—"}). Ajusta las fechas o intenta otro
-          filtro.
-        </div>
-      )}
+      {tab === "general" &&
+        !loading &&
+        displayVm.ticketsSeries.daily.length === 0 && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            No hay datos para el rango seleccionado (
+            {displayVm.meta?.range?.from ?? "—"} →{" "}
+            {displayVm.meta?.range?.to ?? "—"}). Ajusta las fechas o intenta
+            otro filtro.
+          </div>
+        )}
 
-      {/* Donas primero */}
-      {coach && !loading && (
+      {/* Donas primero (solo en General) */}
+      {tab === "general" && coach && !loading && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <StudentsPhaseDonut
             students={coachStudentsEnriched.map((r) => ({
@@ -1016,8 +1152,45 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* Vista agregada cuando NO hay coach: donuts por estado/fase y tipos de ticket */}
-      {!coach && !loading && (
+      {/* KPIs específicos de ADS (sólo para coaches con área ADS). En pestaña ADS se muestran siempre que haya datos y match del coach */}
+      {coach &&
+        !loading &&
+        (() => {
+          const selected = coachs.find((c) => c.codigo === coach);
+          const isAds =
+            /ads/i.test(String(selected?.area || selected?.puesto || "")) ||
+            /johan/i.test(String(selected?.nombre || ""));
+          // En pestaña ADS usamos métricas estáticas, sin depender de rango/backend
+          if (tab !== "ads" && (!isAds || !displayVm.ads)) return null;
+          return (
+            <div className="mt-2">
+              <AdsKpis
+                metrics={
+                  tab === "ads"
+                    ? (ADS_STATIC_METRICS as any)
+                    : (displayVm.ads as any)
+                }
+              />
+            </div>
+          );
+        })()}
+
+      {/* Métricas de fases (F3/F4) en formato KPIs, amigables para coach, sólo en pestaña ADS */}
+      {tab === "ads" && (
+        <AdsPhaseMetrics fase3={adsFase3 as any} fase4={adsFase4 as any} />
+      )}
+
+      {/* Tabla de alumnos para Fase 3/4 (estática), sólo en pestaña ADS */}
+      {tab === "ads" && (
+        <AdsStudentsTable
+          fase3={adsFase3 as any}
+          fase4={adsFase4 as any}
+          loading={loadingAdsStudents}
+        />
+      )}
+
+      {/* Vista agregada cuando NO hay coach: donuts por estado/fase y tipos de ticket (solo General) */}
+      {tab === "general" && !coach && !loading && (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <StudentsPhaseDonut
             students={[]}
@@ -1052,8 +1225,8 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* Fila de KPIs: a la izquierda Promedio+Tasa, a la derecha Ticket más lento */}
-      {!loading && (
+      {/* Fila de KPIs General: a la izquierda Promedio+Tasa, a la derecha Ticket más lento */}
+      {tab === "general" && !loading && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ResolutionAndRateCard
             avgMinutes={displayVm.avgResolutionSummary?.avg_minutes}
@@ -1072,8 +1245,8 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* Grid: izquierda Tickets por alumno, derecha Tickets por periodo (diario) */}
-      {!loading ? (
+      {/* Grid General: izquierda Tickets por alumno, derecha Tickets por periodo (diario) */}
+      {tab === "general" && !loading ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-3">
             <TicketsByStudentBar
@@ -1121,7 +1294,7 @@ export default function TeamsMetricsContent() {
       {/* Gráfico "Distribución de estatus de tickets" eliminado temporalmente a petición */}
 
       {/* Tabla al final */}
-      {coach && !loading && (
+      {tab === "general" && coach && !loading && (
         <StudentsByCoachTable
           coach={coachName || coach}
           loadingFiltered={loading}
@@ -1176,7 +1349,7 @@ export default function TeamsMetricsContent() {
       )}
 
       {/* Tabla global al final cuando NO hay coach */}
-      {!coach && (
+      {tab === "general" && !coach && (
         <StudentsByCoachTable
           coach="Todos"
           loadingFiltered={loading}
