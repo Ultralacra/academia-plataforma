@@ -6,7 +6,7 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Edit } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { toast } from "@/components/ui/toast";
+import { toast } from "@/components/ui/use-toast";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -18,11 +18,9 @@ import {
 import { CoachStudentsModal } from "../coach-students-modal";
 import {
   getCoachByCode,
-  getCoachStudents,
   updateCoach,
   deleteCoach,
   type CoachItem,
-  type CoachStudent,
 } from "../api";
 import { getOptions, type OpcionItem } from "@/app/admin/opciones/api";
 import {
@@ -41,6 +39,8 @@ import { useMemo } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import PersonalMetrics from "../PersonalMetrics";
+import CoachStudentsTable from "../components/CoachStudentsTable";
+import { fetchMetrics } from "@/app/admin/teams/teamsApi";
 
 export default function CoachDetailPage({
   params,
@@ -547,7 +547,7 @@ export default function CoachDetailPage({
           <TabsList>
             <TabsTrigger value="tickets">Tickets</TabsTrigger>
             <TabsTrigger value="metricas">Métricas</TabsTrigger>
-            <TabsTrigger value="detalles">Detalles</TabsTrigger>
+            <TabsTrigger value="alumnos">Alumnos</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
           </TabsList>
 
@@ -576,22 +576,20 @@ export default function CoachDetailPage({
           </TabsContent>
 
           <TabsContent value="metricas" className="mt-0">
-            <div className="h-[calc(100vh-180px)] overflow-auto rounded-lg border bg-white p-4">
-              {loading ? (
-                <div>Cargando...</div>
-              ) : error ? (
-                <div className="text-sm text-red-600">{error}</div>
-              ) : coach ? (
-                <PersonalMetrics
-                  coachCode={coach.codigo}
-                  coachName={coach.nombre}
-                />
-              ) : (
-                <div className="text-sm text-neutral-500">
-                  No se encontró información del coach.
-                </div>
-              )}
-            </div>
+            {loading ? (
+              <div>Cargando...</div>
+            ) : error ? (
+              <div className="text-sm text-red-600">{error}</div>
+            ) : coach ? (
+              <PersonalMetrics
+                coachCode={coach.codigo}
+                coachName={coach.nombre}
+              />
+            ) : (
+              <div className="text-sm text-neutral-500">
+                No se encontró información del coach.
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="chat" className="mt-0">
@@ -860,7 +858,7 @@ export default function CoachDetailPage({
             </div>
           </TabsContent>
 
-          <TabsContent value="detalles" className="mt-0">
+          <TabsContent value="alumnos" className="mt-0">
             {/* Detalles: ocupar pantalla completa con scroll interno */}
             <div className="h-[calc(100vh-180px)] overflow-auto">
               <div className="p-4 bg-white border rounded-lg">
@@ -871,9 +869,7 @@ export default function CoachDetailPage({
                 ) : coach ? (
                   <div className="space-y-4">
                     <div>
-                      <h3 className="text-sm font-medium mb-2">
-                        Alumnos asociados
-                      </h3>
+                      <h3 className="text-sm font-medium mb-2">Alumnos</h3>
                       <CoachStudentsInline coachCode={code} />
                     </div>
                   </div>
@@ -1027,8 +1023,9 @@ export default function CoachDetailPage({
 
 function CoachStudentsInline({ coachCode }: { coachCode: string }) {
   const [loading, setLoading] = useState(false);
-  const [items, setItems] = useState<CoachStudent[]>([]);
+  const [items, setItems] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState<number>(0);
 
   useEffect(() => {
     if (!coachCode) return;
@@ -1037,8 +1034,30 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
       try {
         setLoading(true);
         setError(null);
-        const rows = await getCoachStudents(coachCode);
-        if (!ctrl.signal.aborted) setItems(rows);
+        // Traer toda la data de alumnos desde metrics-v2 (todos los alumnos del coach)
+        const res = await fetchMetrics(undefined, undefined, coachCode);
+        const teams = (res?.data as any)?.teams;
+        const flat: any[] = Array.isArray(teams?.allClientsByCoachFlat)
+          ? teams.allClientsByCoachFlat
+          : [];
+        const detail: any[] = Array.isArray(teams?.clientsByCoachDetail)
+          ? teams.clientsByCoachDetail
+          : [];
+        const rows = (flat.length > 0 ? flat : detail).map((r: any) => ({
+          id: r.id,
+          name: r.nombre,
+          code: r.codigo ?? null,
+          state: r.estado ?? null,
+          stage: r.etapa ?? null,
+          ingreso: r.ingreso ?? null,
+          lastActivity: r.ultima_actividad ?? null,
+          inactividad: r.inactividad ?? null,
+          tickets: r.tickets ?? null,
+        }));
+        if (!ctrl.signal.aborted) {
+          setItems(rows);
+          setTotalCount(rows.length);
+        }
       } catch (e: any) {
         if (e?.name !== "AbortError")
           setError(e?.message ?? "Error al cargar alumnos");
@@ -1050,60 +1069,13 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
   }, [coachCode]);
 
   return (
-    <div className="rounded border border-gray-200 bg-white">
-      <div className="overflow-x-auto max-h-[40vh] overflow-y-auto">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
-              <TableHead className="px-3 py-2 text-left">Nombre</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {loading ? (
-              Array.from({ length: 8 }).map((_, i) => (
-                <TableRow key={`sk-${i}`} className="border-t border-gray-100">
-                  <TableCell colSpan={1} className="px-3 py-2">
-                    <div className="h-4 w-32 animate-pulse rounded bg-neutral-100" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : items.length === 0 ? (
-              <TableRow className="border-t border-gray-100">
-                <TableCell
-                  colSpan={1}
-                  className="px-3 py-2 text-sm text-neutral-500"
-                >
-                  No hay alumnos asociados.
-                </TableCell>
-              </TableRow>
-            ) : (
-              items.map((r) => (
-                <TableRow
-                  key={`${r.id}_${r.id_alumno}`}
-                  className="border-t border-gray-100 hover:bg-gray-50"
-                >
-                  <TableCell className="px-3 py-2 truncate text-gray-900">
-                    {r.id_alumno ? (
-                      <Link
-                        href={`/admin/alumnos/${encodeURIComponent(
-                          String(r.id_alumno)
-                        )}`}
-                        className="text-gray-900 hover:underline"
-                      >
-                        {r.alumno_nombre}
-                      </Link>
-                    ) : (
-                      r.alumno_nombre
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      {error && <div className="p-3 text-sm text-red-600">{error}</div>}
-      <div className="p-3 text-xs text-neutral-500">Total: {items.length}</div>
+    <div className="space-y-2">
+      <CoachStudentsTable rows={items} title="ALUMNOS" />
+      {loading && (
+        <div className="text-sm text-neutral-500">Cargando alumnos…</div>
+      )}
+      {error && <div className="text-sm text-red-600">{error}</div>}
+      <div className="text-xs text-neutral-500">Total: {totalCount}</div>
     </div>
   );
 }
