@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import Link from "next/link";
 
 type Row = {
   id: number | string;
@@ -92,7 +93,18 @@ export default function CoachStudentsTable({
                     className="border-t border-gray-100 hover:bg-gray-50"
                   >
                     <td className="px-3 py-2 text-gray-900 truncate">
-                      {r.name || r.code || "—"}
+                      {r.code ? (
+                        <Link
+                          href={`/admin/alumnos/${encodeURIComponent(
+                            String(r.code)
+                          )}`}
+                          className="hover:underline"
+                        >
+                          {r.name || r.code}
+                        </Link>
+                      ) : (
+                        r.name || r.code || "—"
+                      )}
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-neutral-700 truncate max-w-[160px]">
                       {r.code ?? "—"}
@@ -107,7 +119,9 @@ export default function CoachStudentsTable({
                       {r.ingreso ? fmt.format(new Date(r.ingreso)) : "—"}
                     </td>
                     <td className="px-3 py-2 text-neutral-700">
-                      {r.lastActivity ? fmt.format(new Date(r.lastActivity)) : "—"}
+                      {r.lastActivity
+                        ? fmt.format(new Date(r.lastActivity))
+                        : "—"}
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {r.inactividad == null || isNaN(Number(r.inactividad))
