@@ -1026,6 +1026,10 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
   const [items, setItems] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number>(0);
+  const [search, setSearch] = useState<string>("");
+  const [stateFilter, setStateFilter] = useState<string>("");
+  const [stageFilter, setStageFilter] = useState<string>("");
+  const [progress, setProgress] = useState<number>(0);
 
   useEffect(() => {
     if (!coachCode) return;
@@ -1034,6 +1038,7 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
       try {
         setLoading(true);
         setError(null);
+        setProgress(0);
         // Traer toda la data de alumnos desde metrics-v2 (todos los alumnos del coach)
         const res = await fetchMetrics(undefined, undefined, coachCode);
         const teams = (res?.data as any)?.teams;
@@ -1068,14 +1073,119 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
     return () => ctrl.abort();
   }, [coachCode]);
 
+  // Progreso simulado durante carga
+  useEffect(() => {
+    if (!loading) {
+      setProgress((p) => (p < 95 ? 100 : 100));
+      const t = setTimeout(() => setProgress(0), 400);
+      return () => clearTimeout(t);
+    }
+    setProgress(5);
+    const iv = setInterval(() => {
+      setProgress((p) => Math.min(90, p + 8));
+    }, 180);
+    return () => clearInterval(iv);
+  }, [loading]);
+
+  const statesOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of items) {
+      const v = (r.state ?? "").toString().trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const stagesOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of items) {
+      const v = (r.stage ?? "").toString().trim();
+      if (v) set.add(v);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const filteredRows = useMemo(() => {
+    const q = (search || "").trim().toLowerCase();
+    const st = (stateFilter || "").trim().toLowerCase();
+    const ph = (stageFilter || "").trim().toLowerCase();
+    return items.filter((r) => {
+      const name = (r.name || "").toString().toLowerCase();
+      const code = (r.code || "").toString().toLowerCase();
+      const rs = (r.state || "").toString().toLowerCase();
+      const rg = (r.stage || "").toString().toLowerCase();
+      const okSearch = !q || name.includes(q) || code.includes(q);
+      const okState = !st || (rs && rs === st);
+      const okStage = !ph || (rg && rg === ph);
+      return okSearch && okState && okStage;
+    });
+  }, [items, search, stateFilter, stageFilter]);
+
   return (
     <div className="space-y-2">
-      <CoachStudentsTable rows={items} title="ALUMNOS" />
-      {loading && (
-        <div className="text-sm text-neutral-500">Cargando alumnos…</div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar por nombre o código"
+          className="h-9 px-3 rounded-md border text-sm"
+        />
+        <select
+          className="h-9 px-2 rounded-md border text-sm"
+          value={stateFilter}
+          onChange={(e) => setStateFilter(e.target.value)}
+        >
+          <option value="">Estado: Todos</option>
+          {statesOptions.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <select
+          className="h-9 px-2 rounded-md border text-sm"
+          value={stageFilter}
+          onChange={(e) => setStageFilter(e.target.value)}
+        >
+          <option value="">Fase: Todas</option>
+          {stagesOptions.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        {(search || stateFilter || stageFilter) && (
+          <button
+            className="h-9 px-3 rounded-md border text-sm bg-neutral-50"
+            onClick={() => {
+              setSearch("");
+              setStateFilter("");
+              setStageFilter("");
+            }}
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="relative h-2 w-full max-w-xl overflow-hidden rounded-full bg-neutral-200">
+            <div
+              className="h-full bg-blue-600 transition-all"
+              style={{ width: `${Math.round(progress)}%` }}
+            />
+          </div>
+          <div className="mt-2 text-sm text-neutral-600">
+            Cargando alumnos… {Math.round(progress)}%
+          </div>
+        </div>
+      ) : (
+        <CoachStudentsTable rows={filteredRows} title="ALUMNOS" />
       )}
       {error && <div className="text-sm text-red-600">{error}</div>}
-      <div className="text-xs text-neutral-500">Total: {totalCount}</div>
+      <div className="text-xs text-neutral-500">
+        Total: {totalCount} • Mostrando: {filteredRows.length}
+      </div>
     </div>
   );
 }

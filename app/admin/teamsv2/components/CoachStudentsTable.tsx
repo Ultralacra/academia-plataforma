@@ -15,6 +15,99 @@ type Row = {
   inactividad?: number | null;
 };
 
+function badgeForState(value?: string | null) {
+  const raw = String(value || "");
+  const v = raw
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase()
+    .trim();
+  if (!v)
+    return {
+      className: "rounded-md bg-gray-100 text-gray-500 px-2 py-0.5 text-xs",
+      label: "—",
+    } as const;
+  // Map similar a ResultsTable (students)
+  if (v.includes("INACTIVO POR PAGO"))
+    return {
+      className: "rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.includes("INACTIVO"))
+    return {
+      className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.includes("PAUS"))
+    return {
+      className: "rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.includes("PROGRESO"))
+    return {
+      className: "rounded-md bg-violet-100 text-violet-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.includes("ACTIVO"))
+    return {
+      className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  return {
+    className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+    label: raw,
+  } as const;
+}
+
+function badgeForStage(value?: string | null) {
+  const raw = String(value || "");
+  const v = raw
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase()
+    .trim();
+  if (!v)
+    return {
+      className: "rounded-md bg-gray-100 text-gray-500 px-2 py-0.5 text-xs",
+      label: "—",
+    } as const;
+  if (v.includes("ONBOARD"))
+    return {
+      className: "rounded-md bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.startsWith("F1"))
+    return {
+      className:
+        "rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.startsWith("F2"))
+    return {
+      className: "rounded-md bg-lime-100 text-lime-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.startsWith("F3"))
+    return {
+      className: "rounded-md bg-cyan-100 text-cyan-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.startsWith("F4"))
+    return {
+      className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  if (v.startsWith("F5"))
+    return {
+      className: "rounded-md bg-purple-100 text-purple-800 px-2 py-0.5 text-xs",
+      label: raw,
+    } as const;
+  return {
+    className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+    label: raw,
+  } as const;
+}
+
 export default function CoachStudentsTable({
   rows,
   title = "ALUMNOS DEL COACH",
@@ -24,34 +117,6 @@ export default function CoachStudentsTable({
 }) {
   const fmt = useMemo(() => new Intl.DateTimeFormat("es-ES"), []);
   const data = Array.isArray(rows) ? rows : [];
-
-  const badgeFor = (value?: string | null) => {
-    const v = String(value || "").toLowerCase();
-    if (!v) return { className: "hidden", label: "" } as const;
-    if (v.includes("activo"))
-      return {
-        className:
-          "rounded-md border-emerald-200 bg-emerald-50 text-emerald-700 px-2 py-0.5 text-xs",
-        label: value as string,
-      } as const;
-    if (v.includes("paus"))
-      return {
-        className:
-          "rounded-md border-amber-200 bg-amber-50 text-amber-700 px-2 py-0.5 text-xs",
-        label: value as string,
-      } as const;
-    if (v.includes("inac") || v.includes("baja"))
-      return {
-        className:
-          "rounded-md border-rose-200 bg-rose-50 text-rose-700 px-2 py-0.5 text-xs",
-        label: value as string,
-      } as const;
-    return {
-      className:
-        "rounded-md border-neutral-200 bg-neutral-50 text-neutral-700 px-2 py-0.5 text-xs",
-      label: value as string,
-    } as const;
-  };
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
@@ -85,8 +150,8 @@ export default function CoachStudentsTable({
               </tr>
             ) : (
               data.map((r) => {
-                const st = badgeFor(r.state);
-                const ph = badgeFor(r.stage);
+                const st = badgeForState(r.state);
+                const ph = badgeForStage(r.stage);
                 return (
                   <tr
                     key={`${r.id}`}

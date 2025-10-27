@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import CircularProgress from "@/components/ui/CircularProgress";
 import { fetchMetrics } from "@/app/admin/teams/teamsApi";
 import StudentsPhaseDonut from "./components/StudentsPhaseDonut";
 import CoachStudentsDistributionChart from "./components/CoachStudentsDistributionChart";
@@ -33,6 +34,7 @@ export default function PersonalMetrics({
   const [hasta, setHasta] = useState<string>(currentMonthRange().today);
   const [loading, setLoading] = useState(false);
   const [vm, setVm] = useState<any | null>(null);
+  const [progress, setProgress] = useState<number>(0);
 
   useEffect(() => {
     let active = true;
@@ -40,6 +42,7 @@ export default function PersonalMetrics({
       if (!coachCode) return;
       try {
         setLoading(true);
+        setProgress(0);
         const res = await fetchMetrics(desde, hasta, coachCode);
         if (!active) return;
         setVm((res?.data as any)?.teams ?? null);
@@ -54,6 +57,24 @@ export default function PersonalMetrics({
       active = false;
     };
   }, [coachCode, desde, hasta]);
+
+  // Simulación de progreso mientras carga (0→90%) y finalizar en 100%
+  useEffect(() => {
+    if (!loading) {
+      // completar a 100 y resetear luego de un breve tiempo
+      setProgress((p) => (p < 95 ? 100 : 100));
+      const t = setTimeout(() => setProgress(0), 500);
+      return () => clearTimeout(t);
+    }
+    setProgress(5);
+    const iv = setInterval(() => {
+      setProgress((p) => {
+        const next = p + Math.random() * 7 + 3; // 3..10
+        return Math.min(90, next);
+      });
+    }, 200);
+    return () => clearInterval(iv);
+  }, [loading]);
 
   const students = useMemo(() => {
     const arr = (vm?.clientsByCoachDetail || []) as any[];
@@ -156,7 +177,14 @@ export default function PersonalMetrics({
       </div>
 
       {loading && (
-        <div className="text-sm text-neutral-500">Cargando métricas…</div>
+        <div className="relative">
+          <div className="flex items-center justify-center py-16">
+            <CircularProgress value={progress} />
+          </div>
+          <div className="text-center text-sm text-neutral-500">
+            Cargando métricas… {Math.round(progress)}%
+          </div>
+        </div>
       )}
 
       {!loading && (

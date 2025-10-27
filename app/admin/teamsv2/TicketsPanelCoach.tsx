@@ -1218,7 +1218,12 @@ export default function TicketsPanelCoach({
           </div>
         )}
 
-        <div className="mt-6 flex items-center justify-between rounded-lg border bg-white px-4 py-3">
+        {/* Pagination moved out of scroll area */}
+      </div>
+
+      {/* Footer pagination (fixed at bottom of panel) */}
+      <div className="border-t bg-white px-6 py-3 shrink-0">
+        <div className="flex items-center justify-between">
           <div className="text-sm text-slate-600">
             Página {page} · {total} tickets en total
           </div>
