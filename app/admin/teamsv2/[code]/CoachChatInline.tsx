@@ -1874,7 +1874,9 @@ export default function CoachChatInline({
       const token = getAuthToken();
       const base = (CHAT_HOST || "").replace(/\/$/, "");
       const url = `${base}/admin/flush-chats/${encodeURIComponent(String(id))}`;
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       let res = await fetch(url, { method: "DELETE", headers });
       if (!res.ok) {
@@ -1888,7 +1890,9 @@ export default function CoachChatInline({
       setConfirmDeleteOpen(false);
       try {
         window.dispatchEvent(
-          new CustomEvent("chat:list-refresh", { detail: { reason: "chat-deleted", id_chat: id } })
+          new CustomEvent("chat:list-refresh", {
+            detail: { reason: "chat-deleted", id_chat: id },
+          })
         );
       } catch {}
     } catch (e) {
@@ -1929,7 +1933,10 @@ export default function CoachChatInline({
               Generar ticket
             </button>
             {/* Menú de acciones (3 puntitos) */}
-            <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+            <AlertDialog
+              open={confirmDeleteOpen}
+              onOpenChange={setConfirmDeleteOpen}
+            >
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -1949,15 +1956,21 @@ export default function CoachChatInline({
               </DropdownMenu>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>¿Eliminar esta conversación?</AlertDialogTitle>
+                  <AlertDialogTitle>
+                    ¿Eliminar esta conversación?
+                  </AlertDialogTitle>
                   <AlertDialogDescription>
-                    Se eliminarán los mensajes del chat {String(chatIdRef.current ?? chatId ?? "")}.
-                    Esta acción no se puede deshacer.
+                    Se eliminarán los mensajes del chat{" "}
+                    {String(chatIdRef.current ?? chatId ?? "")}. Esta acción no
+                    se puede deshacer.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleDeleteChat} className="bg-red-600 hover:bg-red-700">
+                  <AlertDialogAction
+                    onClick={handleDeleteChat}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
                     Eliminar
                   </AlertDialogAction>
                 </AlertDialogFooter>

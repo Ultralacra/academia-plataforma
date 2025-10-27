@@ -408,7 +408,9 @@ export default function AdminChatPage() {
       const token = getAuthToken();
       const base = (SOCKET_URL || CHAT_HOST || "").replace(/\/$/, "");
       const url = `${base}/admin/flush-chats/${encodeURIComponent(String(id))}`;
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
       if (token) headers["Authorization"] = `Bearer ${token}`;
       let res = await fetch(url, { method: "DELETE", headers });
       if (!res.ok) {
