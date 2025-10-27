@@ -11,7 +11,6 @@ import Header from "./_parts/Header";
 import MetricsStrip from "./_parts/MetricsStrip";
 import PhasesTimeline from "./_parts/PhasesTimeline";
 import PhaseHistory from "./_parts/PhaseHistory";
-import EditForm from "./_parts/EditForm";
 import CoachesCard from "./_parts/CoachesCard";
 import ActivityFeed from "./_parts/ActivityFeed";
 import {
@@ -388,6 +387,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
             faseActual={faseActual}
             ingreso={pIngreso}
             salida={salida}
+            coachCount={(coaches || []).length}
+            coachNames={
+              (coaches || []).map((c) => c.name).filter(Boolean) as string[]
+            }
+            onJumpToCoaches={() => {
+              if (typeof window === "undefined") return;
+              const el = document.getElementById("coaches-card");
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
             onEdit={(mode) => {
               setEditMode(mode ?? "all");
               setEditOpen(true);
@@ -396,42 +404,30 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
           {/* Contrato se moverá a la columna derecha junto a otras tarjetas para evitar espacios en blanco */}
 
-          <EditForm
-            stage={stage}
-            setStage={setStage}
-            statusSint={statusSint}
-            setStatusSint={setStatusSint}
-            pIngreso={pIngreso}
-            setPIngreso={setPIngreso}
-            salida={salida}
-            setSalida={setSalida}
-            lastActivity={lastActivity}
-            setLastActivity={setLastActivity}
-            lastTaskAt={lastTaskAt}
-            setLastTaskAt={setLastTaskAt}
-            pF1={pF1}
-            setPF1={setPF1}
-            pF2={pF2}
-            setPF2={setPF2}
-            pF3={pF3}
-            setPF3={setPF3}
-            pF4={pF4}
-            setPF4={setPF4}
-            pF5={pF5}
-            setPF5={setPF5}
-          />
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="lg:col-span-2 space-y-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Columna principal: progreso, actividad y tickets */}
+            <div className="lg:col-span-8 space-y-4">
               <PhasesTimelineAny steps={steps} />
+              <ActivityFeed lastTaskAt={lastTaskAt} steps={steps} />
+              <PhaseHistory history={phaseHistory} />
+              {/* Mover tickets aquí para aprovechar el espacio disponible */}
+              <div id="tickets">
+                <TicketsPanel
+                  student={student}
+                  onChangedTickets={setTicketsCount}
+                />
+              </div>
             </div>
-            <div className="space-y-4">
-              <CoachesCard
-                coaches={coaches}
-                onAssign={(codes) => assignCoaches(codes)}
-                onRemove={(teamCode) => removeCoach(teamCode)}
-              />
-              {/* Contrato card reubicado aquí para llenar la columna lateral */}
+            {/* Columna lateral: equipo y contrato (sticky) */}
+            <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24 self-start">
+              <div id="coaches-card">
+                <CoachesCard
+                  coaches={coaches}
+                  onAssign={(codes) => assignCoaches(codes)}
+                  onRemove={(teamCode) => removeCoach(teamCode)}
+                />
+              </div>
+              {/* Contrato card */}
               <div className="rounded-xl border border-gray-200 bg-white p-4">
                 <h3 className="mb-2 text-sm font-medium">Contrato</h3>
                 <ContratoCard
@@ -479,17 +475,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   }}
                 />
               </div>
-              <ActivityFeed lastTaskAt={lastTaskAt} steps={steps} />
-              <PhaseHistory history={phaseHistory} />
             </div>
-          </div>
-
-          {/* Tickets (antes estaba dentro de TabsTicketsChat) */}
-          <div className="mt-4">
-            <TicketsPanel
-              student={student}
-              onChangedTickets={setTicketsCount}
-            />
           </div>
         </>
       )}

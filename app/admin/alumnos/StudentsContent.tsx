@@ -496,7 +496,7 @@ export default function StudentsContent() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
             <Input
               className="pl-10 h-10 rounded-xl bg-white border border-gray-200"
-              placeholder="Buscar por nombre, código o estado..."
+              placeholder="Buscar por nombre o estado..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -732,7 +732,6 @@ export default function StudentsContent() {
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
               <tr>
-                <th className="px-3 py-2 text-left font-medium">Código</th>
                 <th className="px-3 py-2 text-left font-medium">Nombre</th>
                 <th className="px-3 py-2 text-left font-medium">Estado</th>
                 <th className="px-3 py-2 text-left font-medium">Etapa</th>
@@ -752,7 +751,7 @@ export default function StudentsContent() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="px-3 py-4 text-center text-gray-500"
                   >
                     Cargando alumnos…
@@ -761,7 +760,7 @@ export default function StudentsContent() {
               ) : pageItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="px-3 py-4 text-center text-gray-500"
                   >
                     No se encontraron estudiantes
@@ -773,9 +772,6 @@ export default function StudentsContent() {
                     key={student.id}
                     className="border-t border-gray-100 hover:bg-gray-50"
                   >
-                    <td className="px-3 py-2 text-gray-700">
-                      {student.code ?? "—"}
-                    </td>
                     <td className="px-3 py-2 font-medium text-gray-900">
                       {student.code ? (
                         <Link

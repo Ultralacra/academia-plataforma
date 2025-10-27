@@ -1,7 +1,7 @@
 "use client";
 
-import { Calendar, Clock, TrendingUp, Target } from "lucide-react";
-import { fmtES } from "./detail-utils";
+import { Calendar, Clock, TrendingUp, Target, Users } from "lucide-react";
+import { fmtES, getOptionBadgeClass } from "./detail-utils";
 
 export default function MetricsStrip({
   statusLabel,
@@ -11,6 +11,9 @@ export default function MetricsStrip({
   ingreso,
   salida,
   onEdit,
+  coachCount,
+  coachNames,
+  onJumpToCoaches,
 }: {
   statusLabel: string;
   permanencia: number;
@@ -19,6 +22,9 @@ export default function MetricsStrip({
   ingreso?: string | null;
   salida?: string | null;
   onEdit?: (mode?: "estado" | "etapa" | "nicho" | "all") => void;
+  coachCount?: number;
+  coachNames?: string[];
+  onJumpToCoaches?: () => void;
 }) {
   const items: Array<{
     icon: React.ReactNode;
@@ -27,6 +33,8 @@ export default function MetricsStrip({
     sub: string;
     editable?: boolean;
     mode?: "estado" | "etapa" | "nicho" | "all";
+    renderAsBadge?: "estado" | "etapa";
+    ctaLabel?: string;
   }> = [
     {
       icon: <TrendingUp className="h-4 w-4" />,
@@ -35,6 +43,7 @@ export default function MetricsStrip({
       sub: "",
       editable: true,
       mode: "estado",
+      renderAsBadge: "estado",
     },
     {
       icon: <Calendar className="h-4 w-4" />,
@@ -55,6 +64,19 @@ export default function MetricsStrip({
       sub: "",
       editable: true,
       mode: "etapa",
+      renderAsBadge: "etapa",
+    },
+    {
+      icon: <Users className="h-4 w-4" />,
+      label: "Equipo asignado",
+      value: String(coachCount ?? 0),
+      sub:
+        coachNames && coachNames.length > 0
+          ? `${coachNames.slice(0, 2).join(", ")}${
+              coachNames.length > 2 ? ` +${coachNames.length - 2} más` : ""
+            }`
+          : "Sin asignar",
+      ctaLabel: onJumpToCoaches ? "Gestionar" : undefined,
     },
   ];
 
@@ -100,7 +122,27 @@ export default function MetricsStrip({
                 </button>
               )}
               <div className="mt-2 text-2xl font-semibold tracking-tight">
-                {it.value || "—"}
+                {it.renderAsBadge === "estado" && it.value ? (
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getOptionBadgeClass(
+                      "estado",
+                      it.value
+                    )}`}
+                  >
+                    {it.value}
+                  </span>
+                ) : it.renderAsBadge === "etapa" && it.value ? (
+                  <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${getOptionBadgeClass(
+                      "etapa",
+                      it.value
+                    )}`}
+                  >
+                    {it.value}
+                  </span>
+                ) : (
+                  it.value || "—"
+                )}
               </div>
               {it.sub && (
                 <div className="mt-1 text-xs text-muted-foreground">
@@ -108,6 +150,14 @@ export default function MetricsStrip({
                 </div>
               )}
             </div>
+            {!it.editable && it.ctaLabel && onJumpToCoaches && (
+              <button
+                onClick={onJumpToCoaches}
+                className="ml-2 inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                {it.ctaLabel}
+              </button>
+            )}
           </div>
           {/* Subtle hover effect */}
           <div className="absolute inset-0 -z-10 bg-gradient-to-br from-primary/0 to-primary/0 opacity-0 transition-opacity group-hover:from-primary/5 group-hover:to-primary/0 group-hover:opacity-100" />

@@ -40,8 +40,8 @@ export default function CoachesCard({
   const list = coaches;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-      <div className="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3">
+    <div className="overflow-hidden rounded-xl border border-blue-100 bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-blue-100 bg-blue-50/70 px-4 py-3">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Equipo asignado</h3>
@@ -77,11 +77,11 @@ export default function CoachesCard({
         {list.map((c, idx) => (
           <div
             key={`${c.name}-${idx}`}
-            className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50"
+            className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-blue-50/40"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
               {/* Avatar */}
-              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 text-sm font-medium text-blue-700 ring-1 ring-black/5 dark:from-blue-950/30 dark:to-indigo-950/30 dark:text-blue-400 dark:ring-white/10">
+              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 text-sm font-medium text-blue-700 ring-1 ring-blue-200">
                 {(c.name ?? "?")[0]}
               </div>
               <div className="min-w-0 flex-1">
@@ -104,7 +104,7 @@ export default function CoachesCard({
                           <span className="ml-0">
                             <span className="">
                               <Badge
-                                variant="muted"
+                                variant="secondary"
                                 className="h-5 text-[11px]"
                               >
                                 {c.puesto}
@@ -114,7 +114,7 @@ export default function CoachesCard({
                         </span>
                       ) : null}
                       {c.area ? (
-                        <Badge variant="muted" className="h-5 text-[11px]">
+                        <Badge variant="secondary" className="h-5 text-[11px]">
                           {c.area}
                         </Badge>
                       ) : null}
@@ -142,7 +142,7 @@ export default function CoachesCard({
                   setConfirmTarget({ id: coachId, name: c.name });
                   setConfirmOpen(true);
                 }}
-                className="flex-none rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:opacity-90"
+                className="flex-none rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
               >
                 Desvincular
               </button>
