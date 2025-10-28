@@ -2,6 +2,7 @@
 // Módulo API local y autocontenido para la vista de Alumnos.
 // Inyecta el token Bearer en todas las consultas.
 import { getAuthToken } from "@/lib/auth";
+import { apiFetch } from "@/lib/api-config";
 
 export type TeamMember = { name: string; url?: string | null };
 
@@ -348,6 +349,31 @@ export async function getTicketFile(fileId: string): Promise<{
   };
 }
 
+// 10) Subir archivos a un ticket (form-data, key: 'archivos' = files[])
+export async function uploadTicketFiles(ticketId: string, files: File[], urls?: string[]): Promise<any> {
+  // Use apiFetch so buildUrl + auth headers are applied consistently
+  const fd = new FormData();
+  (files || []).forEach((f) => fd.append('archivos', f));
+  if (urls && urls.length > 0) {
+    // Enviar como un solo campo 'urls' en formato JSON para soportar múltiples URLs
+    // Ej.: ["https://...","https://..."]
+    fd.set('urls', JSON.stringify(urls));
+  }
+  return await apiFetch<any>(`/ticket/create/archivo/${encodeURIComponent(ticketId)}`, {
+    method: 'POST',
+    body: fd,
+  });
+}
+
+// 11) Eliminar archivo de ticket (asumimos endpoint DELETE)
+// Nota: el endpoint real puede variar; se asume DELETE /v1/ticket/delete/archivo/{fileId}
+export async function deleteTicketFile(fileId: string): Promise<any> {
+  // Use apiFetch to ensure correct host and auth headers
+  return await apiFetch<any>(`/ticket/delete/archivo/${encodeURIComponent(fileId)}`, {
+    method: 'DELETE',
+  });
+}
+
 // 9) Actualizar cliente (etapa / estado / nicho)
 export async function updateClient(clientCode: string, payload: Record<string, any>): Promise<any> {
   const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
@@ -356,6 +382,67 @@ export async function updateClient(clientCode: string, payload: Record<string, a
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+}
+
+// 12) Historial de tareas del cliente
+export type ClienteTareaHist = {
+  id: number | string;
+  codigo_cliente?: string | null;
+  descripcion?: string | null;
+  created_at: string;
+};
+
+export async function getClienteTareas(alumnoCode: string): Promise<ClienteTareaHist[]> {
+  const url = `https://v001.vercel.app/v1/client/get/cliente-tareas/${encodeURIComponent(alumnoCode)}`;
+  const json = await fetchJson<any>(url);
+  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+  return rows.map((r) => ({
+    id: r.id ?? r.tarea_id ?? `${alumnoCode}-${r.created_at ?? ''}`,
+    codigo_cliente: r.codigo_cliente ?? r.alumno ?? null,
+    descripcion: r.descripcion ?? r.tarea ?? null,
+    created_at: r.created_at ?? r.fecha ?? r.updated_at ?? new Date().toISOString(),
+  }));
+}
+
+// 13) Historial de estatus del cliente
+export type ClienteEstatusHist = {
+  id: number | string;
+  codigo_cliente?: string | null;
+  estado_id: string;
+  created_at: string;
+};
+
+export async function getClienteEstatus(alumnoCode: string): Promise<ClienteEstatusHist[]> {
+  const url = `https://v001.vercel.app/v1/client/get/cliente-estatus/${encodeURIComponent(alumnoCode)}`;
+  const json = await fetchJson<any>(url);
+  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+  return rows.map((r) => ({
+    id: r.id ?? r.estatus_id ?? `${alumnoCode}-${r.created_at ?? ''}`,
+    codigo_cliente: r.codigo_cliente ?? r.alumno ?? null,
+    // El API devuelve 'estatus_id' (MEMBRESIA, PAUSADO, etc). Priorizar ese campo.
+    estado_id: String(r.estatus_id ?? r.estado_id ?? r.estado ?? r.status ?? ''),
+    created_at: r.created_at ?? r.fecha ?? r.updated_at ?? new Date().toISOString(),
+  }));
+}
+
+// 14) Actualizar última tarea del cliente (form-data: ultima_tarea ISO)
+export async function updateClientLastTask(clientCode: string, isoDate: string): Promise<any> {
+  const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
+  const fd = new FormData();
+  // Se espera una fecha en formato ISO (UTC)
+  fd.set('ultima_tarea', isoDate);
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: 'PUT',
+    body: fd,
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  return await res.json().catch(() => ({}));
 }
 
 // Subir contrato (multipart/form-data) para un cliente

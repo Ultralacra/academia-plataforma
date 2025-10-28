@@ -3,7 +3,7 @@
 import type React from "react";
 
 import { useEffect, useMemo, useState, useRef } from "react";
-import { getTickets, type TicketBoardItem } from "./api";
+import { getTickets, type TicketBoardItem, reassignTicket } from "./api";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 
@@ -32,6 +32,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import Spinner from "@/components/ui/spinner";
+import {
   Sheet,
   SheetContent,
   SheetHeader,
@@ -40,16 +51,9 @@ import {
   SheetFooter,
   SheetClose,
 } from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+// Select removed for Estado/Prioridad (fields will be hidden)
 import {
   Tooltip,
   TooltipContent,
@@ -62,6 +66,8 @@ import {
   getTicketFiles,
   getTicketFile,
   updateTicket,
+  uploadTicketFiles,
+  deleteTicketFile,
 } from "@/app/admin/alumnos/api";
 import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
 
@@ -169,9 +175,7 @@ export default function TicketsBoard() {
     plazo?: number | null;
     restante?: number | null;
     informante?: string;
-    resolucion?: string;
     resuelto_por?: string;
-    revision?: string;
     tarea?: string;
     equipo?: string[];
   };
@@ -186,6 +190,25 @@ export default function TicketsBoard() {
 
   const [editFiles, setEditFiles] = useState<File[]>([]);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+  // Audio recording and URL states
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [audioUrls, setAudioUrls] = useState<string[]>([]);
+  const [newAudioUrl, setNewAudioUrl] = useState<string>("");
+  const [fileToDelete, setFileToDelete] = useState<null | {
+    id: string;
+    nombre_archivo: string;
+  }>(null);
+  const [deletingFile, setDeletingFile] = useState(false);
+  // Reasignar ticket
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignCoach, setReassignCoach] = useState<string>("");
+  const [reassignConfirmOpen, setReassignConfirmOpen] = useState(false);
+  const [reassignLoading, setReassignLoading] = useState(false);
 
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("");
@@ -374,6 +397,92 @@ export default function TicketsBoard() {
     setBlobCache({});
   }
 
+  // Recording helpers
+  async function startRecording() {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        toast({ title: "Tu navegador no soporta grabación de audio" });
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const mr = new MediaRecorder(stream);
+      const chunks: BlobPart[] = [];
+      let recordedType = "";
+      mr.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size) {
+          chunks.push(ev.data);
+          // ev.data is a Blob
+          try {
+            recordedType = (ev.data as Blob).type || recordedType;
+          } catch {}
+        }
+      };
+      mr.onstop = () => {
+        const blob = new Blob(chunks, { type: recordedType || "audio/webm" });
+        setRecordedBlob(blob);
+        const url = URL.createObjectURL(blob);
+        setRecordedUrl(url);
+        // stop tracks
+        try {
+          mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        } catch {}
+        mediaStreamRef.current = null;
+        mediaRecorderRef.current = null;
+      };
+      mediaRecorderRef.current = mr;
+      mr.start();
+      setIsRecording(true);
+      toast({ title: "Grabación iniciada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error iniciando grabación" });
+    }
+  }
+
+  function stopRecording() {
+    try {
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
+        mediaRecorderRef.current.stop();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    setIsRecording(false);
+    toast({ title: "Grabación finalizada" });
+  }
+
+  function addRecordedToFiles() {
+    if (!recordedBlob) return;
+    const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
+    const file = new File([recordedBlob], `grabacion-${Date.now()}.${ext}`, {
+      type: recordedBlob.type || "audio/webm",
+    });
+    setEditFiles((prev) => [...prev, file]);
+    // cleanup preview URL
+    if (recordedUrl) {
+      URL.revokeObjectURL(recordedUrl);
+      setRecordedUrl(null);
+    }
+    setRecordedBlob(null);
+    toast({ title: "Grabación añadida a archivos" });
+  }
+
+  function addAudioUrl() {
+    const v = (newAudioUrl || "").trim();
+    if (!v) return;
+    setAudioUrls((prev) => [v, ...prev]);
+    setNewAudioUrl("");
+    toast({ title: "URL de audio guardada localmente" });
+  }
+
+  function removeAudioUrl(idx: number) {
+    setAudioUrls((prev) => prev.filter((_, i) => i !== idx));
+  }
+
   function openTicketDetail(ticket: TicketBoardItem) {
     setSelectedTicket(ticket);
     setEditForm({
@@ -383,12 +492,12 @@ export default function TicketsBoard() {
       prioridad: "MEDIA",
       plazo: null,
       restante: null,
-      informante: "",
-      resolucion: "",
-      resuelto_por: "",
-      revision: "",
-      tarea: "",
+      // informante viene desde la API (si existe) — mostrarlo en disabled
+      informante: ticket.informante_nombre ?? ticket.informante ?? "",
+      // resuelto_por_nombre viene desde la API: mostrarlo en el formulario (solo lectura)
+      resuelto_por: ticket.resuelto_por_nombre ?? ticket.resuelto_por ?? "",
       equipo: [],
+      tarea: "",
     });
     setEditFiles([]);
     setDrawerOpen(true);
@@ -410,14 +519,33 @@ export default function TicketsBoard() {
     }
   }
 
+  async function confirmDeleteFile() {
+    if (!fileToDelete) return;
+    try {
+      setDeletingFile(true);
+      await deleteTicketFile(fileToDelete.id);
+      toast({ title: "Archivo eliminado" });
+      if (selectedTicket?.codigo)
+        await loadFilesForTicket(selectedTicket.codigo);
+      setFileToDelete(null);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error eliminando archivo" });
+    } finally {
+      setDeletingFile(false);
+    }
+  }
+
   async function saveTicketChanges() {
     if (!selectedTicket?.codigo) return;
     try {
       await updateTicket(selectedTicket.codigo, {
         nombre: editForm.nombre,
-        estado: editForm.estado,
-        deadline: editForm.deadline,
-      });
+        // ensure we only send a string or undefined
+        estado:
+          typeof editForm.estado === "string" ? editForm.estado : undefined,
+        deadline: editForm.deadline ?? undefined,
+      } as any);
       toast({ title: "Ticket actualizado correctamente" });
       setTickets((prev) =>
         prev.map((t) =>
@@ -484,23 +612,6 @@ export default function TicketsBoard() {
               </option>
             ))}
           </select>
-
-          <div className="flex items-center gap-2">
-            <CalendarIcon className="h-4 w-4 text-slate-400" />
-            <input
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => setFechaDesde(e.target.value)}
-              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all"
-            />
-            <span className="text-slate-400">—</span>
-            <input
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => setFechaHasta(e.target.value)}
-              className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all"
-            />
-          </div>
 
           <Button
             onClick={async () => {
@@ -803,21 +914,21 @@ export default function TicketsBoard() {
                         <div className="flex gap-2">
                           <Button
                             size="sm"
-                            className="h-8 flex-1 gap-1.5 text-xs bg-transparent"
-                            variant="outline"
+                            variant="ghost"
+                            className="h-8 w-8 p-0"
                             onClick={() => downloadFile(f.id, f.nombre_archivo)}
+                            aria-label={`Descargar ${f.nombre_archivo}`}
                           >
-                            <Download className="h-3.5 w-3.5" />
-                            Descargar
+                            <Download className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
-                            className="h-8 flex-1 gap-1.5 text-xs"
-                            variant="secondary"
+                            variant="ghost"
+                            className="h-8 w-8 p-0"
                             onClick={() => openPreview(f)}
+                            aria-label={`Ver ${f.nombre_archivo}`}
                           >
-                            <Eye className="h-3.5 w-3.5" />
-                            Ver
+                            <Eye className="h-4 w-4" />
                           </Button>
                         </div>
                       </div>
@@ -919,6 +1030,45 @@ export default function TicketsBoard() {
         </DialogContent>
       </Dialog>
 
+      {/* Confirmación antes de eliminar archivo */}
+      <Dialog
+        open={!!fileToDelete}
+        onOpenChange={(v) => {
+          if (!v) setFileToDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Confirmar eliminación
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-slate-700">
+              ¿Estás seguro que quieres eliminar el archivo{" "}
+              <strong>{fileToDelete?.nombre_archivo}</strong>? Esta acción no se
+              puede deshacer.
+            </p>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setFileToDelete(null)}
+              disabled={deletingFile}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteFile}
+              disabled={deletingFile}
+            >
+              {deletingFile ? "Eliminando..." : "Eliminar archivo"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent
           side="right"
@@ -938,20 +1088,21 @@ export default function TicketsBoard() {
                   )}
                 </SheetDescription>
               </div>
-              {editForm.estado && (
-                <Badge
+              <div className="shrink-0">
+                <Button
+                  size="sm"
                   variant="outline"
-                  className={`${
-                    STATUS_STYLE[
-                      String(editForm.estado).toUpperCase() as StatusKey
-                    ] || "bg-slate-100 text-slate-700"
-                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!selectedTicket?.codigo) return;
+                    setReassignCoach("");
+                    setReassignOpen(true);
+                  }}
+                  disabled={!selectedTicket?.codigo}
                 >
-                  {STATUS_LABEL[
-                    String(editForm.estado).toUpperCase() as StatusKey
-                  ] || String(editForm.estado)}
-                </Badge>
-              )}
+                  Reasignar ticket
+                </Button>
+              </div>
             </div>
           </SheetHeader>
 
@@ -961,481 +1112,266 @@ export default function TicketsBoard() {
                 Selecciona un ticket
               </div>
             ) : (
-              <Tabs defaultValue="general" className="w-full">
-                <div className="border-b px-6">
-                  <TabsList className="w-full justify-start h-12 bg-transparent p-0">
-                    <TabsTrigger
-                      value="general"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
-                    >
-                      General
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="detalles"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
-                    >
-                      Detalles
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="archivos"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
-                    >
-                      Archivos
-                    </TabsTrigger>
-                  </TabsList>
+              <div className="p-6 space-y-6">
+                {/* Título */}
+                <div className="space-y-2">
+                  <Label htmlFor="edit-nombre" className="text-sm font-medium">
+                    Título del ticket
+                  </Label>
+                  <Input
+                    id="edit-nombre"
+                    className="h-10"
+                    value={editForm.nombre ?? ""}
+                    onChange={(e) =>
+                      setEditForm((f) => ({ ...f, nombre: e.target.value }))
+                    }
+                    placeholder="Nombre o asunto"
+                  />
                 </div>
 
-                <TabsContent value="general" className="p-6 space-y-6 mt-0">
+                {/* Personas involucradas */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <User className="h-4 w-4 text-slate-500" />
+                    Personas involucradas
+                  </div>
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label
-                        htmlFor="edit-nombre"
-                        className="text-sm font-medium"
-                      >
-                        Título del ticket
+                      <Label htmlFor="edit-informante" className="text-sm">
+                        Informante
                       </Label>
                       <Input
-                        id="edit-nombre"
-                        className="h-10"
-                        value={editForm.nombre ?? ""}
+                        id="edit-informante"
+                        className="h-10 bg-slate-50 cursor-not-allowed"
+                        value={editForm.informante ?? ""}
                         onChange={(e) =>
-                          setEditForm((f) => ({ ...f, nombre: e.target.value }))
+                          setEditForm((f) => ({
+                            ...f,
+                            informante: e.target.value,
+                          }))
                         }
-                        placeholder="Nombre o asunto"
+                        placeholder="Nombre del informante"
+                        disabled
                       />
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="edit-estado"
-                          className="text-sm font-medium"
-                        >
-                          Estado
-                        </Label>
-                        <Select
-                          value={String(editForm.estado ?? "PENDIENTE")}
-                          onValueChange={(v) =>
-                            setEditForm((f) => ({ ...f, estado: v }))
-                          }
-                        >
-                          <SelectTrigger id="edit-estado" className="h-10">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(
-                              [
-                                "PENDIENTE",
-                                "EN_PROGRESO",
-                                "PENDIENTE_DE_ENVIO",
-                                "RESUELTO",
-                              ] as StatusKey[]
-                            ).map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {STATUS_LABEL[s]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="edit-prioridad"
-                          className="text-sm font-medium"
-                        >
-                          Prioridad
-                        </Label>
-                        <Select
-                          value={String(editForm.prioridad ?? "MEDIA")}
-                          onValueChange={(v) =>
-                            setEditForm((f) => ({ ...f, prioridad: v as any }))
-                          }
-                        >
-                          <SelectTrigger id="edit-prioridad" className="h-10">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {["BAJA", "MEDIA", "ALTA"].map((p) => (
-                              <SelectItem key={p} value={p}>
-                                {p}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Clock className="h-4 w-4 text-slate-500" />
-                        Plazos y fechas
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-plazo" className="text-sm">
-                            Plazo (días)
-                          </Label>
-                          <Input
-                            id="edit-plazo"
-                            type="number"
-                            className="h-10"
-                            value={editForm.plazo ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                plazo: e.target.value
-                                  ? Number(e.target.value)
-                                  : null,
-                              }))
-                            }
-                            min={0}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-restante" className="text-sm">
-                            Restante (días)
-                          </Label>
-                          <Input
-                            id="edit-restante"
-                            type="number"
-                            className="h-10"
-                            value={editForm.restante ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                restante: e.target.value
-                                  ? Number(e.target.value)
-                                  : null,
-                              }))
-                            }
-                            min={0}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="edit-deadline-date"
-                            className="text-sm"
-                          >
-                            Fecha límite
-                          </Label>
-                          <Input
-                            id="edit-deadline-date"
-                            type="date"
-                            className="h-10"
-                            value={(() => {
-                              const iso = editForm.deadline ?? "";
-                              if (!iso) return "";
-                              const d = new Date(iso);
-                              if (isNaN(d.getTime())) return "";
-                              return d.toISOString().slice(0, 10);
-                            })()}
-                            onChange={(e) => {
-                              const prev = editForm.deadline
-                                ? new Date(editForm.deadline)
-                                : new Date();
-                              const time = isNaN(prev.getTime())
-                                ? "00:00"
-                                : prev.toISOString().slice(11, 16);
-                              const iso = e.target.value
-                                ? `${e.target.value}T${time}:00.000Z`
-                                : null;
-                              setEditForm((f) => ({ ...f, deadline: iso }));
-                            }}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="edit-deadline-time"
-                            className="text-sm"
-                          >
-                            Hora
-                          </Label>
-                          <Input
-                            id="edit-deadline-time"
-                            type="time"
-                            className="h-10"
-                            value={(() => {
-                              const iso = editForm.deadline ?? "";
-                              if (!iso) return "";
-                              const d = new Date(iso);
-                              if (isNaN(d.getTime())) return "";
-                              return d.toISOString().slice(11, 16);
-                            })()}
-                            onChange={(e) => {
-                              const dateStr = (() => {
-                                const iso = editForm.deadline ?? "";
-                                const d = new Date(iso);
-                                if (isNaN(d.getTime())) return "";
-                                return d.toISOString().slice(0, 10);
-                              })();
-                              const iso =
-                                dateStr && e.target.value
-                                  ? `${dateStr}T${e.target.value}:00.000Z`
-                                  : editForm.deadline;
-                              setEditForm((f) => ({ ...f, deadline: iso }));
-                            }}
-                          />
-                        </div>
-                      </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-resuelto-por" className="text-sm">
+                        Resuelto por
+                      </Label>
+                      <Input
+                        id="edit-resuelto-por"
+                        className="h-10 bg-slate-50 cursor-not-allowed"
+                        value={editForm.resuelto_por ?? ""}
+                        placeholder="Nombre de quien resolvió"
+                        disabled
+                      />
                     </div>
                   </div>
-                </TabsContent>
+                </div>
 
-                <TabsContent value="detalles" className="p-6 space-y-6 mt-0">
-                  <div className="space-y-4">
+                {/* Se eliminó la sección 'Equipo asignado' según solicitud */}
+
+                {/* 'Trabajo y resolución' eliminado del modal según solicitud del usuario */}
+                <Separator />
+
+                {/* Archivos (adjuntos + upload + recorder) */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-medium">
-                      <User className="h-4 w-4 text-slate-500" />
-                      Personas involucradas
-                    </div>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-informante" className="text-sm">
-                          Informante
-                        </Label>
-                        <Input
-                          id="edit-informante"
-                          className="h-10"
-                          value={editForm.informante ?? ""}
-                          onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              informante: e.target.value,
-                            }))
-                          }
-                          placeholder="Nombre del informante"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-resuelto-por" className="text-sm">
-                          Resuelto por
-                        </Label>
-                        <Input
-                          id="edit-resuelto-por"
-                          className="h-10"
-                          value={editForm.resuelto_por ?? ""}
-                          onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              resuelto_por: e.target.value,
-                            }))
-                          }
-                          placeholder="Nombre de quien resolvió"
-                        />
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Users className="h-4 w-4 text-slate-500" />
-                        Equipo asignado
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-equipo" className="text-sm">
-                          Códigos de equipo (separados por coma)
-                        </Label>
-                        <Input
-                          id="edit-equipo"
-                          className="h-10"
-                          value={(editForm.equipo ?? []).join(", ")}
-                          onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              equipo: e.target.value
-                                .split(",")
-                                .map((s) => s.trim())
-                                .filter(Boolean),
-                            }))
-                          }
-                          placeholder="JJp8..., hQycZc..., ..."
-                        />
-                        {editForm.equipo && editForm.equipo.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {editForm.equipo.map((c) => (
-                              <Badge
-                                key={c}
-                                variant="secondary"
-                                className="gap-1"
-                              >
-                                {c}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setEditForm((f) => ({
-                                      ...f,
-                                      equipo: f.equipo?.filter((x) => x !== c),
-                                    }))
-                                  }
-                                  className="ml-1 hover:text-slate-900"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <CheckCircle2 className="h-4 w-4 text-slate-500" />
-                        Trabajo y resolución
-                      </div>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-tarea" className="text-sm">
-                            Descripción de la tarea
-                          </Label>
-                          <textarea
-                            id="edit-tarea"
-                            className="w-full min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
-                            value={editForm.tarea ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                tarea: e.target.value,
-                              }))
-                            }
-                            placeholder="Describe la tarea a realizar..."
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-resolucion" className="text-sm">
-                            Notas de resolución
-                          </Label>
-                          <textarea
-                            id="edit-resolucion"
-                            className="w-full min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
-                            value={editForm.resolucion ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                resolucion: e.target.value,
-                              }))
-                            }
-                            placeholder="Cómo se resolvió el ticket..."
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-revision" className="text-sm">
-                            Revisión
-                          </Label>
-                          <Input
-                            id="edit-revision"
-                            className="h-10"
-                            value={editForm.revision ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                revision: e.target.value,
-                              }))
-                            }
-                            placeholder="Notas de revisión"
-                          />
-                        </div>
-                      </div>
+                      <Paperclip className="h-4 w-4 text-slate-500" />
+                      Archivos adjuntos
                     </div>
                   </div>
-                </TabsContent>
 
-                <TabsContent value="archivos" className="p-6 space-y-6 mt-0">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Paperclip className="h-4 w-4 text-slate-500" />
-                        Archivos adjuntos
-                      </div>
+                  {filesLoading ? (
+                    <div className="flex items-center justify-center py-8 text-slate-500">
+                      Cargando archivos...
                     </div>
-
-                    {filesLoading ? (
-                      <div className="flex items-center justify-center py-8 text-slate-500">
-                        Cargando archivos...
+                  ) : files.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="text-xs text-slate-500">
+                        {files.length} archivo(s) existente(s)
                       </div>
-                    ) : files.length > 0 ? (
-                      <div className="space-y-2">
-                        <div className="text-xs text-slate-500">
-                          {files.length} archivo(s) existente(s)
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {files.slice(0, 4).map((f) => (
-                            <div
-                              key={f.id}
-                              className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
-                            >
-                              <div className="flex h-10 w-10 items-center justify-center rounded bg-white">
-                                {iconFor(f.mime_type, f.nombre_archivo)}
+                      <div className="grid grid-cols-2 gap-2">
+                        {files.slice(0, 8).map((f) => (
+                          <div
+                            key={f.id}
+                            className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
+                          >
+                            <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-white">
+                              {iconFor(f.mime_type, f.nombre_archivo)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div
+                                className="truncate text-sm font-medium"
+                                title={f.nombre_archivo}
+                              >
+                                {shortenFileName(f.nombre_archivo, 15)}
                               </div>
-                              <div className="min-w-0 flex-1">
-                                <div
-                                  className="truncate text-sm font-medium"
-                                  title={f.nombre_archivo}
-                                >
-                                  {shortenFileName(f.nombre_archivo, 15)}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {f.tamano_bytes
-                                    ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
-                                    : "—"}
-                                </div>
+                              <div className="text-xs text-slate-500">
+                                {f.tamano_bytes
+                                  ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
+                                  : "—"}
                               </div>
                             </div>
-                          ))}
+                            <div className="flex gap-2 items-center">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={() =>
+                                  downloadFile(f.id, f.nombre_archivo)
+                                }
+                                aria-label={`Descargar ${f.nombre_archivo}`}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={() => openPreview(f)}
+                                aria-label={`Ver ${f.nombre_archivo}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={() =>
+                                  setFileToDelete({
+                                    id: f.id,
+                                    nombre_archivo: f.nombre_archivo,
+                                  })
+                                }
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {files.length > 4 && (
+                        <div className="text-xs text-slate-500 text-center pt-2">
+                          +{files.length - 4} más
                         </div>
-                        {files.length > 4 && (
-                          <div className="text-xs text-slate-500 text-center pt-2">
-                            +{files.length - 4} más
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-2">
+                        <FileIcon className="h-6 w-6 text-slate-400" />
+                      </div>
+                      <p className="text-sm text-slate-500">
+                        No hay archivos adjuntos
+                      </p>
+                    </div>
+                  )}
+
+                  <Separator />
+
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium">
+                      Adjuntar nuevos archivos
+                    </Label>
+                    <input
+                      ref={editFileInputRef}
+                      type="file"
+                      className="hidden"
+                      multiple
+                      onChange={(e) => {
+                        const picked = Array.from(e.target.files ?? []);
+                        if (!picked.length) return;
+                        setEditFiles((prev) =>
+                          [...prev, ...picked].slice(0, 10)
+                        );
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2 bg-transparent"
+                      onClick={() => editFileInputRef.current?.click()}
+                    >
+                      <Paperclip className="h-4 w-4" /> Seleccionar archivos
+                    </Button>
+
+                    {/* Grabador de audio y URLs */}
+                    <div className="space-y-3 pt-3">
+                      <Label className="text-sm font-medium">
+                        Grabar audio
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant={isRecording ? "destructive" : "outline"}
+                          onClick={() => {
+                            if (isRecording) stopRecording();
+                            else startRecording();
+                          }}
+                        >
+                          {isRecording ? "Detener" : "Grabar"}
+                        </Button>
+                        {isRecording && (
+                          <div className="voice-visualizer" aria-hidden>
+                            <span className="bar" />
+                            <span className="bar" />
+                            <span className="bar" />
+                            <span className="bar" />
+                            <span className="bar" />
+                          </div>
+                        )}
+                        {recordedUrl && (
+                          <audio src={recordedUrl} controls className="h-8" />
+                        )}
+                        {recordedBlob && (
+                          <Button size="sm" onClick={addRecordedToFiles}>
+                            Añadir grabación a archivos
+                          </Button>
+                        )}
+                      </div>
+                      <div className="pt-2">
+                        <Label className="text-sm font-medium">
+                          Agregar URL de audio (no se enviará todavía)
+                        </Label>
+                        <div className="flex items-center gap-2 pt-2">
+                          <Input
+                            placeholder="https://..."
+                            value={newAudioUrl}
+                            onChange={(e) => setNewAudioUrl(e.target.value)}
+                          />
+                          <Button size="sm" onClick={addAudioUrl}>
+                            Agregar URL
+                          </Button>
+                        </div>
+                        {audioUrls.length > 0 && (
+                          <div className="space-y-2 pt-2">
+                            {audioUrls.map((u, idx) => (
+                              <div
+                                key={u + idx}
+                                className="flex items-center gap-2"
+                              >
+                                <audio src={u} controls className="h-8" />
+                                <div className="text-xs text-slate-500 truncate">
+                                  {u}
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => removeAudioUrl(idx)}
+                                >
+                                  Eliminar
+                                </Button>
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-2">
-                          <FileIcon className="h-6 w-6 text-slate-400" />
-                        </div>
-                        <p className="text-sm text-slate-500">
-                          No hay archivos adjuntos
-                        </p>
-                      </div>
-                    )}
+                    </div>
 
-                    <Separator />
-
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">
-                        Adjuntar nuevos archivos
-                      </Label>
-                      <input
-                        ref={editFileInputRef}
-                        type="file"
-                        className="hidden"
-                        multiple
-                        onChange={(e) => {
-                          const picked = Array.from(e.target.files ?? []);
-                          if (!picked.length) return;
-                          setEditFiles((prev) =>
-                            [...prev, ...picked].slice(0, 10)
-                          );
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                      <Button
-                        variant="outline"
-                        className="w-full gap-2 bg-transparent"
-                        onClick={() => editFileInputRef.current?.click()}
-                      >
-                        <Paperclip className="h-4 w-4" />
-                        Seleccionar archivos
-                      </Button>
-                      {editFiles.length > 0 && (
+                    {editFiles.length > 0 && (
+                      <>
                         <div className="space-y-2">
                           <div className="text-xs text-slate-500">
                             {editFiles.length} archivo(s) seleccionado(s)
@@ -1446,7 +1382,7 @@ export default function TicketsBoard() {
                                 key={`${f.name}-${i}`}
                                 className="flex items-center gap-3 rounded-lg border bg-white p-3"
                               >
-                                <div className="flex h-10 w-10 items-center justify-center rounded bg-slate-100">
+                                <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-slate-100">
                                   {iconFor(f.type, f.name)}
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -1476,11 +1412,44 @@ export default function TicketsBoard() {
                             ))}
                           </div>
                         </div>
-                      )}
-                    </div>
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            onClick={async () => {
+                              if (!selectedTicket?.codigo) return;
+                              setUploadingFiles(true);
+                              try {
+                                await uploadTicketFiles(
+                                  selectedTicket.codigo,
+                                  editFiles
+                                );
+                                toast({ title: "Archivos subidos" });
+                                setEditFiles([]);
+                                await loadFilesForTicket(selectedTicket.codigo);
+                              } catch (e) {
+                                console.error(e);
+                                toast({ title: "Error subiendo archivos" });
+                              } finally {
+                                setUploadingFiles(false);
+                              }
+                            }}
+                          >
+                            {uploadingFiles ? "Subiendo..." : "Subir archivos"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setEditFiles([])}
+                          >
+                            Limpiar
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </div>
-                </TabsContent>
-              </Tabs>
+                </div>
+              </div>
             )}
           </div>
 
@@ -1494,6 +1463,115 @@ export default function TicketsBoard() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Modal: Reasignar ticket */}
+      <Dialog open={reassignOpen} onOpenChange={setReassignOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Reasignar ticket
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label className="text-sm">Selecciona el coach/equipo</Label>
+            <select
+              className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+              value={reassignCoach}
+              onChange={(e) => setReassignCoach(e.target.value)}
+            >
+              <option value="">— Elegir —</option>
+              {coaches.map((c) => (
+                <option key={c.codigo} value={c.codigo}>
+                  {c.nombre}
+                  {c.area ? ` · ${c.area}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setReassignOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                // Cierra el selector para evitar stacking y luego abre confirmación
+                setReassignOpen(false);
+                setTimeout(() => setReassignConfirmOpen(true), 0);
+              }}
+              disabled={!reassignCoach}
+            >
+              Continuar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmación: reasignar */}
+      <AlertDialog
+        open={reassignConfirmOpen}
+        onOpenChange={setReassignConfirmOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar reasignación</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const coach = coaches.find((c) => c.codigo === reassignCoach);
+                const name =
+                  coach?.nombre || reassignCoach || "el coach seleccionado";
+                return `¿Deseas reasignar el ticket al coach ${name}?`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={reassignLoading}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!selectedTicket?.codigo || !reassignCoach) return;
+                setReassignLoading(true);
+                try {
+                  await reassignTicket(selectedTicket.codigo, reassignCoach);
+                  const coach = coaches.find((c) => c.codigo === reassignCoach);
+                  toast({
+                    title: `Ticket reasignado a ${
+                      coach?.nombre || reassignCoach
+                    }`,
+                  });
+                  setReassignConfirmOpen(false);
+                  setReassignOpen(false);
+                  // refrescar lista de tickets (rápido)
+                  try {
+                    setLoading(true);
+                    const res = await getTickets({
+                      page: 1,
+                      pageSize: 500,
+                      search,
+                      fechaDesde,
+                      fechaHasta,
+                      coach: coachFiltro || undefined,
+                    });
+                    setTickets(res.items ?? []);
+                  } catch (err) {
+                    // noop
+                  }
+                  setLoading(false);
+                } catch (e) {
+                  console.error(e);
+                  toast({ title: "Error al reasignar ticket" });
+                } finally {
+                  setReassignLoading(false);
+                  setReassignCoach("");
+                }
+              }}
+              disabled={reassignLoading}
+            >
+              {reassignLoading ? "Reasignando..." : "Confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

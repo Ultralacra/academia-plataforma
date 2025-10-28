@@ -11,6 +11,8 @@ export type ChatAttachment = {
   mime: string;
   size: number;
   data_base64: string;
+  url?: string;
+  created_at?: string;
 };
 
 export type ChatMessage = {
@@ -81,7 +83,10 @@ export default function MessageBubble({
         {msg.attachments && msg.attachments.length > 0 && (
           <div className="mt-1 grid grid-cols-2 gap-2">
             {msg.attachments.map((a) => {
-              const url = `data:${a.mime};base64,${a.data_base64}`;
+              const dataUrl = a.data_base64
+                ? `data:${a.mime};base64,${a.data_base64}`
+                : "";
+              const url = a.url || dataUrl;
               const selected = selectedAttachmentIds.has(a.id);
               const commonWrapCls = `relative group rounded-md overflow-hidden ${
                 selectMode && selected ? "ring-2 ring-sky-500" : ""

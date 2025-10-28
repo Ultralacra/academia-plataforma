@@ -25,7 +25,7 @@ export default function CoachesCard({
 }: {
   coaches?: Coach[];
   peopleIndex?: Person[];
-  onChangeMember?: (idx: number, next: Person) => void;
+  onChangeMember?: (idx: number, next: any) => void;
   onAssign?: (codes: string[]) => void;
   onRemove?: (coachId: string | number | null) => void;
 }) {
@@ -184,19 +184,21 @@ export default function CoachesCard({
       <CoachPickerModal
         open={open}
         onOpenChange={setOpen}
-        onPick={(p: any) => {
-          if (currentIndex != null)
-            onChangeMember(currentIndex, {
-              name: p.name,
-              puesto: p.puesto ?? null,
-              area: p.area ?? null,
-              url: p.url ?? null,
-            });
+        onPick={(p: CoachCandidate) => {
+          // Para compatibilidad: si se soporta selección rápida, aplicar cambio directo
+          if (currentIndex != null) onChangeMember(currentIndex, p);
         }}
         onConfirm={(selected) => {
-          // selected: CoachCandidate[] -> extraer códigos de equipo
-          const codes = selected.map((s) => s.teamCode).filter(Boolean);
-          onAssign(codes as string[]);
+          // Si venimos de "Cambiar", aplicamos la lógica de reemplazo (desvincular -> asignar)
+          if (currentIndex != null) {
+            const first =
+              selected && selected.length > 0 ? selected[0] : undefined;
+            if (first) onChangeMember(currentIndex, first);
+          } else {
+            // Asignación múltiple cuando no hay índice actual (no hay coach o botón Asignar)
+            const codes = selected.map((s) => s.teamCode).filter(Boolean);
+            onAssign(codes as string[]);
+          }
         }}
       />
     </div>

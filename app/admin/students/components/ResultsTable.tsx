@@ -9,7 +9,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -28,7 +27,37 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateSmart } from "./utils/students-utils";
 import type { ClientItem } from "@/lib/data-service";
-// Nota: eliminamos estado sintético; solo mostramos datos reales del API
+// removed synthetic lifecycle types/usage
+
+const colorByState = (v?: string | null) => {
+  // Pastel: fondo 100, borde 200, texto 700
+  const s = (v || "").toUpperCase();
+  if (s === "COMPLETADO")
+    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+  if (s === "ABANDONO")
+    return "bg-rose-100 text-rose-700 border border-rose-200";
+  if (s === "PAUSA")
+    return "bg-amber-100 text-amber-700 border border-amber-200";
+  if (s === "ACTIVO" || s === "EN CURSO")
+    return "bg-blue-100 text-blue-700 border border-blue-200";
+  return "bg-slate-100 text-slate-700 border border-slate-200";
+};
+
+const colorByStage = (v?: string | null) => {
+  // Pastel alineado con PhaseMetrics (violet, blue, emerald, amber, rose)
+  const s = (v || "").toUpperCase();
+  if (s.startsWith("F1"))
+    return "bg-violet-100 text-violet-700 border border-violet-200";
+  if (s.startsWith("F2"))
+    return "bg-blue-100 text-blue-700 border border-blue-200";
+  if (s.startsWith("F3"))
+    return "bg-emerald-100 text-emerald-700 border border-emerald-200";
+  if (s.startsWith("F4"))
+    return "bg-amber-100 text-amber-700 border border-amber-200";
+  if (s.startsWith("F5"))
+    return "bg-rose-100 text-rose-700 border border-rose-200";
+  return "bg-slate-100 text-slate-700 border border-slate-200";
+};
 
 export default function ResultsTable({
   loading,
@@ -100,6 +129,7 @@ export default function ResultsTable({
                     <TableHead>Tickets</TableHead>
                     <TableHead>Últ. actividad</TableHead>
                     <TableHead>Inactividad (d)</TableHead>
+                    {/* columnas sintéticas eliminadas */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -109,20 +139,7 @@ export default function ResultsTable({
                         key={c.id}
                         className={idx % 2 ? "bg-muted/30" : ""}
                       >
-                        <TableCell>
-                          {c.code ? (
-                            <Link
-                              href={`/admin/alumnos/${encodeURIComponent(
-                                String(c.code)
-                              )}`}
-                              className="text-gray-900 hover:underline"
-                            >
-                              {c.name}
-                            </Link>
-                          ) : (
-                            c.name
-                          )}
-                        </TableCell>
+                        <TableCell className="font-medium">{c.name}</TableCell>
 
                         <TableCell>
                           <Button
@@ -137,58 +154,22 @@ export default function ResultsTable({
                         </TableCell>
 
                         <TableCell>
-                          {(() => {
-                            const v = (c.state || "").toUpperCase();
-                            const classes = v.includes("INACTIVO")
-                              ? "bg-rose-100 text-rose-800"
-                              : v.includes("ACTIVO")
-                              ? "bg-sky-100 text-sky-800"
-                              : v.includes("PROCESO")
-                              ? "bg-violet-100 text-violet-800"
-                              : v.includes("PAUSA")
-                              ? "bg-amber-100 text-amber-800"
-                              : v
-                              ? "bg-gray-100 text-gray-700"
-                              : "bg-gray-100 text-gray-500";
-                            return c.state ? (
-                              <span
-                                className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
-                              >
-                                {c.state}
-                              </span>
-                            ) : (
-                              "—"
-                            );
-                          })()}
+                          {c.state ? (
+                            <Badge className={`${colorByState(c.state)}`}>
+                              {c.state}
+                            </Badge>
+                          ) : (
+                            "—"
+                          )}
                         </TableCell>
                         <TableCell>
-                          {(() => {
-                            const v = (c.stage || "").toUpperCase();
-                            const classes = v.includes("ONBOARD")
-                              ? "bg-indigo-100 text-indigo-800"
-                              : v.includes("F1")
-                              ? "bg-emerald-100 text-emerald-800"
-                              : v.includes("F2")
-                              ? "bg-lime-100 text-lime-800"
-                              : v.includes("F3")
-                              ? "bg-cyan-100 text-cyan-800"
-                              : v.includes("F4")
-                              ? "bg-sky-100 text-sky-800"
-                              : v.includes("F5")
-                              ? "bg-purple-100 text-purple-800"
-                              : v
-                              ? "bg-gray-100 text-gray-700"
-                              : "bg-gray-100 text-gray-500";
-                            return c.stage ? (
-                              <span
-                                className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
-                              >
-                                {c.stage}
-                              </span>
-                            ) : (
-                              "—"
-                            );
-                          })()}
+                          {c.stage ? (
+                            <Badge className={`${colorByStage(c.stage)}`}>
+                              {c.stage}
+                            </Badge>
+                          ) : (
+                            "—"
+                          )}
                         </TableCell>
                         <TableCell>{formatDateSmart(c.joinDate)}</TableCell>
                         <TableCell>{c.ticketsCount ?? 0}</TableCell>

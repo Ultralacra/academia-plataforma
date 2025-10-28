@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import Spinner from "@/components/ui/spinner";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -81,7 +82,7 @@ function NotificationsBadge() {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
 
   // Botón interno que accede al contexto del Sidebar ya dentro del Provider
   const MenuToggleButton = () => {
@@ -127,28 +128,39 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     Salir
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Se cerrará tu sesión actual. Necesitarás iniciar sesión
-                      otra vez para continuar.
+                {/* Hacer el diálogo más compacto y centrado */}
+                <AlertDialogContent className="sm:max-w-sm p-4">
+                  <AlertDialogHeader className="text-center">
+                    <AlertDialogTitle className="text-base">
+                      Cerrar sesión
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-sm">
+                      ¿Estás seguro? Saldrás de tu cuenta y volverás a la
+                      pantalla de inicio de sesión.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancelar</AlertDialogCancel>
                     <AlertDialogAction
                       onClick={logout}
+                      disabled={isLoading}
                       className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
-                      Confirmar
+                      <div className="flex items-center gap-2">
+                        {isLoading ? (
+                          <Spinner size={16} thickness={2} />
+                        ) : (
+                          <LogOut className="h-4 w-4" />
+                        )}
+                        <span>{isLoading ? "Saliendo..." : "Confirmar"}</span>
+                      </div>
                     </AlertDialogAction>
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
             </div>
           </header>
-          <div className="flex-1 p-6 overflow-y-auto min-h-0 flex flex-col">
+          <div className="flex-1 p-6 overflow-x-hidden overflow-y-auto min-h-0 flex flex-col">
             {children}
           </div>
         </main>

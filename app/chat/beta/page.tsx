@@ -6,7 +6,8 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RotateCw, Search, X, MessageCircle, Trash2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RotateCw, Search, X, MessageCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   dataService,
@@ -15,17 +16,6 @@ import {
 } from "@/lib/data-service";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 
 // ID de coach especial para el administrador (actúa como "equipo")
 const ADMIN_COACH_ID = "hQycZczVb77e9eLwJpxPJ";
@@ -102,6 +92,11 @@ export default function AdminChatPage() {
   // Bump de re-render para reflejar cambios en contadores persistentes (localStorage)
   // Bump para re-render cuando cambian lecturas (misma pestaña o entre pestañas)
   const [readsBump, setReadsBump] = useState<number>(0);
+
+  const [contactTab, setContactTab] = useState<
+    "coaches" | "students" | "conversations"
+  >("coaches");
+  const [filterTab, setFilterTab] = useState<"general" | "advanced">("general");
 
   // Cargar catálogos
   useEffect(() => {
@@ -446,17 +441,17 @@ export default function AdminChatPage() {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <DashboardLayout>
-        <div className="p-0 h-full min-h-0 bg-[#f0f2f5]">
-          <div className="bg-[#008069] text-white px-6 py-4 shadow-sm">
+        <div className="flex flex-col h-screen bg-[#f0f2f5]">
+          <div className="bg-[#008069] text-white px-6 py-4 shadow-sm flex-shrink-0">
             <div className="flex items-center gap-3">
               <MessageCircle className="w-6 h-6" />
               <h1 className="text-xl font-medium">Chat Administrador</h1>
             </div>
           </div>
 
-          <div className="grid grid-cols-5 gap-0 h-[calc(100vh-120px)]">
-            <div className="col-span-2 overflow-auto bg-white border-r border-gray-200 shadow-sm">
-              <div className="sticky top-0 bg-white z-10 border-b border-gray-100 p-4 space-y-3">
+          <div className="flex flex-1 min-h-0">
+            <div className="w-1/4 flex flex-col bg-white border-r border-gray-200 shadow-sm">
+              <div className="flex-shrink-0 bg-white z-10 border-b border-gray-100 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
                     <Search className="w-4 h-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
@@ -525,75 +520,110 @@ export default function AdminChatPage() {
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
-                      value={filterArea ?? ""}
-                      onChange={(e) => setFilterArea(e.target.value || null)}
-                    >
-                      <option value="">Todas las áreas</option>
-                      {areaOptions.map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
-                      value={filterPuesto ?? ""}
-                      onChange={(e) => setFilterPuesto(e.target.value || null)}
-                    >
-                      <option value="">Todos los cargos</option>
-                      {puestoOptions.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
-                      value={filterStage ?? ""}
-                      onChange={(e) => setFilterStage(e.target.value || null)}
-                    >
-                      <option value="">Todas las fases</option>
-                      {stageOptions.map((f) => (
-                        <option key={f} value={f}>
-                          {f}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
-                      value={filterState ?? ""}
-                      onChange={(e) => setFilterState(e.target.value || null)}
-                    >
-                      <option value="">Todos los estatus</option>
-                      {stateOptions.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <Tabs
+                  value={filterTab}
+                  onValueChange={(v) => setFilterTab(v as any)}
+                  className="w-full"
+                >
+                  <TabsList className="grid w-full grid-cols-2 bg-[#f0f2f5]">
+                    <TabsTrigger value="general" className="text-xs">
+                      Filtros Básicos
+                    </TabsTrigger>
+                    <TabsTrigger value="advanced" className="text-xs">
+                      Filtros Avanzados
+                    </TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="general" className="mt-3 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
+                        value={filterArea ?? ""}
+                        onChange={(e) => setFilterArea(e.target.value || null)}
+                      >
+                        <option value="">Todas las áreas</option>
+                        {areaOptions.map((a) => (
+                          <option key={a} value={a}>
+                            {a}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
+                        value={filterPuesto ?? ""}
+                        onChange={(e) =>
+                          setFilterPuesto(e.target.value || null)
+                        }
+                      >
+                        <option value="">Todos los cargos</option>
+                        {puestoOptions.map((p) => (
+                          <option key={p} value={p}>
+                            {p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="advanced" className="mt-3 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
+                        value={filterStage ?? ""}
+                        onChange={(e) => setFilterStage(e.target.value || null)}
+                      >
+                        <option value="">Todas las fases</option>
+                        {stageOptions.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        className="border-0 bg-[#f0f2f5] rounded-lg px-3 py-2 text-xs focus:outline-none focus:bg-white focus:shadow-sm transition-all text-gray-700"
+                        value={filterState ?? ""}
+                        onChange={(e) => setFilterState(e.target.value || null)}
+                      >
+                        <option value="">Todos los estatus</option>
+                        {stateOptions.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </div>
 
-              <div className="px-4 py-3">
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="text-xs font-semibold text-[#008069] uppercase tracking-wide px-2">
-                    Coaches ({filteredCoaches.length})
-                  </div>
-                  <div className="text-xs font-semibold text-[#008069] uppercase tracking-wide px-2">
-                    Alumnos ({filteredStudents.length})
-                  </div>
-                </div>
+              <div className="flex-1 min-h-0 flex flex-col px-4 py-3">
+                <Tabs
+                  value={contactTab}
+                  onValueChange={(v) => setContactTab(v as any)}
+                  className="flex flex-col h-full"
+                >
+                  <TabsList className="grid w-full grid-cols-3 bg-[#f0f2f5] mb-3 flex-shrink-0">
+                    <TabsTrigger value="coaches" className="text-xs">
+                      Coaches
+                    </TabsTrigger>
+                    <TabsTrigger value="students" className="text-xs">
+                      Alumnos
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="conversations"
+                      className="text-xs relative"
+                    >
+                      Chats
+                      {adminChats.length > 0 && (
+                        <span className="ml-1.5 min-w-[18px] h-[18px] rounded-full bg-[#25d366] text-white text-[10px] font-semibold grid place-items-center px-1">
+                          {adminChats.length}
+                        </span>
+                      )}
+                    </TabsTrigger>
+                  </TabsList>
 
-                <div className="grid grid-cols-2 gap-3 min-h-0">
-                  <div className="min-h-0">
-                    <ul className="space-y-0 text-sm max-h-[28vh] overflow-auto">
+                  <TabsContent value="coaches" className="flex-1 min-h-0 mt-0">
+                    <ul className="space-y-0 text-sm h-full overflow-auto">
                       {filteredCoaches.map((t) => {
                         const selected =
                           String(targetKind) === "coach" &&
@@ -616,7 +646,7 @@ export default function AdminChatPage() {
                               }}
                             >
                               <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-50">
-                                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#d9fdd3] to-[#25d366] text-[#075e54] grid place-items-center font-semibold text-base shrink-0 shadow-sm">
+                                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#d9fdd3] to-[#25d366] text-[#075e54] grid place-items-center font-semibold text-sm shrink-0">
                                   {initialFromText(t.nombre || t.codigo)}
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -635,9 +665,10 @@ export default function AdminChatPage() {
                         );
                       })}
                     </ul>
-                  </div>
-                  <div className="min-h-0">
-                    <ul className="space-y-0 text-sm max-h-[28vh] overflow-auto">
+                  </TabsContent>
+
+                  <TabsContent value="students" className="flex-1 min-h-0 mt-0">
+                    <ul className="space-y-0 text-sm h-full overflow-auto">
                       {filteredStudents.map((s) => {
                         const selected =
                           String(targetKind) === "alumno" &&
@@ -656,15 +687,12 @@ export default function AdminChatPage() {
                               }}
                             >
                               <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-50">
-                                <div className="h-12 w-12 rounded-full bg-gradient-to-br from-[#d9fdd3] to-[#25d366] text-[#075e54] grid place-items-center font-semibold text-base shrink-0 shadow-sm">
+                                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#d9fdd3] to-[#25d366] text-[#075e54] grid place-items-center font-semibold text-sm shrink-0">
                                   {initialFromText(s.name)}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div className="truncate font-medium text-[15px] text-gray-900">
                                     {s.name}
-                                  </div>
-                                  <div className="text-[13px] text-gray-500 truncate">
-                                    {s.code}
                                   </div>
                                   <div className="flex flex-wrap gap-1 mt-1.5">
                                     {s.stage && (
@@ -693,141 +721,148 @@ export default function AdminChatPage() {
                         );
                       })}
                     </ul>
-                  </div>
-                </div>
-              </div>
+                  </TabsContent>
 
-              <div className="pt-3 border-t-8 border-[#f0f2f5] mt-3">
-                <div className="flex items-center justify-between px-4 mb-2">
-                  <div className="text-sm font-semibold text-gray-900">
-                    Conversaciones ({adminChats.length})
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title={connected ? "Actualizar" : "Conectando..."}
-                    onClick={() => setListSignal((n) => n + 1)}
-                    disabled={!connected}
-                    className="h-9 w-9 rounded-full hover:bg-gray-100"
+                  <TabsContent
+                    value="conversations"
+                    className="flex-1 min-h-0 mt-0 flex flex-col"
                   >
-                    <RotateCw
-                      className={`w-4 h-4 ${
-                        connected ? "text-[#008069]" : "text-gray-400"
-                      }`}
-                    />
-                  </Button>
-                </div>
-                <ul className="space-y-0 text-sm max-h-[24vh] overflow-auto">
-                  {adminChats.length === 0 && (
-                    <li className="text-[13px] text-gray-500 text-center py-8">
-                      Sin conversaciones activas
-                    </li>
-                  )}
-                  {adminChats.map((it) => {
-                    const id = it?.id_chat ?? it?.id;
-                    const { title, subtitle } = labelForChatItem(it);
-                    const lastObj =
-                      it?.last_message ?? it?.ultimo_mensaje ?? null;
-                    const last = (
-                      lastObj?.contenido ??
-                      lastObj?.text ??
-                      it?.last?.text ??
-                      ""
-                    ).toString();
-                    // Dependemos de readsBump para re-render al cambiar lecturas
-                    const _rb = readsBump; // eslint-disable-line @typescript-eslint/no-unused-vars
-                    const unread = hasUnreadForItem(it);
-                    // Contador persistente de no-leídos por chatId (rol coach)
-                    const countKey = `chatUnreadById:coach:${String(id ?? "")}`;
-                    const storedCount = Number.parseInt(
-                      (typeof window !== "undefined" &&
-                        window.localStorage.getItem(countKey)) ||
-                        "0",
-                      10
-                    );
-                    const count = isNaN(storedCount) ? 0 : storedCount;
-                    const isOpen =
-                      id != null &&
-                      String(currentOpenChatId ?? "") === String(id);
-                    const lastAt = getItemTimestamp(it);
-                    return (
-                      <li key={String(id)}>
-                        <button
-                          className={`w-full text-left hover:bg-[#f5f6f6] transition-colors ${
-                            (unread || count > 0) && !isOpen ? "bg-white" : ""
-                          } ${isOpen ? "bg-[#f0f2f5]" : ""}`}
-                          onClick={() => {
-                            // Abrimos el chat existente sin auto-crear
-                            setTargetKind(null);
-                            setTargetId(null);
-                            setTargetTitle(title);
-                            setTargetSubtitle(subtitle);
-                            setSelectedChatId(id);
-                            setCurrentOpenChatId(id ?? null);
-                            // Reiniciar contador persistente de este chat al abrir
-                            if (id != null) {
-                              try {
-                                const k = `chatUnreadById:coach:${String(id)}`;
-                                localStorage.setItem(k, "0");
-                              } catch {}
-                              setReadsBump((n) => n + 1);
-                            }
-                          }}
-                          title={String(last || "")}
-                        >
-                          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-50">
-                            <div className="h-12 w-12 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600 grid place-items-center font-semibold text-base shrink-0 shadow-sm">
-                              {initialFromText(title)}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between gap-3 mb-0.5">
-                                <span
-                                  className={`truncate text-[15px] ${
-                                    (unread || count > 0) && !isOpen
-                                      ? "font-semibold text-gray-900"
-                                      : "font-normal text-gray-900"
-                                  }`}
-                                >
-                                  {title}
-                                </span>
-                                <span className="text-[12px] text-gray-500 flex-shrink-0">
-                                  {formatListTime(lastAt)}
-                                </span>
-                              </div>
-                              {subtitle && (
-                                <div className="text-[13px] text-gray-500 truncate">
-                                  {subtitle}
+                    <div className="flex items-center justify-between mb-2 flex-shrink-0">
+                      <div className="text-sm font-semibold text-gray-900">
+                        Conversaciones activas
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={connected ? "Actualizar" : "Conectando..."}
+                        onClick={() => setListSignal((n) => n + 1)}
+                        disabled={!connected}
+                        className="h-9 w-9 rounded-full hover:bg-gray-100"
+                      >
+                        <RotateCw
+                          className={`w-4 h-4 ${
+                            connected ? "text-[#008069]" : "text-gray-400"
+                          }`}
+                        />
+                      </Button>
+                    </div>
+                    <ul className="space-y-0 text-sm flex-1 overflow-auto">
+                      {adminChats.length === 0 && (
+                        <li className="text-[13px] text-gray-500 text-center py-8">
+                          Sin conversaciones activas
+                        </li>
+                      )}
+                      {adminChats.map((it) => {
+                        const id = it?.id_chat ?? it?.id;
+                        const { title, subtitle } = labelForChatItem(it);
+                        const lastObj =
+                          it?.last_message ?? it?.ultimo_mensaje ?? null;
+                        const last = (
+                          lastObj?.contenido ??
+                          lastObj?.text ??
+                          it?.last?.text ??
+                          ""
+                        ).toString();
+                        // Dependemos de readsBump para re-render al cambiar lecturas
+                        const _rb = readsBump; // eslint-disable-line @typescript-eslint/no-unused-vars
+                        const unread = hasUnreadForItem(it);
+                        // Contador persistente de no-leídos por chatId (rol coach)
+                        const countKey = `chatUnreadById:coach:${String(
+                          id ?? ""
+                        )}`;
+                        const storedCount = Number.parseInt(
+                          (typeof window !== "undefined" &&
+                            window.localStorage.getItem(countKey)) ||
+                            "0",
+                          10
+                        );
+                        const count = isNaN(storedCount) ? 0 : storedCount;
+                        const isOpen =
+                          id != null &&
+                          String(currentOpenChatId ?? "") === String(id);
+                        const lastAt = getItemTimestamp(it);
+                        return (
+                          <li key={String(id)}>
+                            <button
+                              className={`w-full text-left hover:bg-[#f5f6f6] transition-colors ${
+                                (unread || count > 0) && !isOpen
+                                  ? "bg-white"
+                                  : ""
+                              } ${isOpen ? "bg-[#f0f2f5]" : ""}`}
+                              onClick={() => {
+                                // Abrimos el chat existente sin auto-crear
+                                setTargetKind(null);
+                                setTargetId(null);
+                                setTargetTitle(title);
+                                setTargetSubtitle(subtitle);
+                                setSelectedChatId(id);
+                                setCurrentOpenChatId(id ?? null);
+                                // Reiniciar contador persistente de este chat al abrir
+                                if (id != null) {
+                                  try {
+                                    const k = `chatUnreadById:coach:${String(
+                                      id
+                                    )}`;
+                                    localStorage.setItem(k, "0");
+                                  } catch {}
+                                  setReadsBump((n) => n + 1);
+                                }
+                              }}
+                              title={String(last || "")}
+                            >
+                              <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-50">
+                                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-gray-100 to-gray-200 text-gray-600 grid place-items-center font-semibold text-sm shrink-0">
+                                  {initialFromText(title)}
                                 </div>
-                              )}
-                              {last && (
-                                <div
-                                  className={`text-[13px] truncate mt-0.5 flex items-center gap-2 ${
-                                    (unread || count > 0) && !isOpen
-                                      ? "text-gray-600"
-                                      : "text-gray-500"
-                                  }`}
-                                >
-                                  <span className="truncate">{last}</span>
-                                  {(unread || count > 0) && !isOpen && (
-                                    <span className="min-w-[20px] h-5 rounded-full bg-[#25d366] text-white text-[11px] font-semibold grid place-items-center px-1.5 shrink-0">
-                                      {count > 0 ? count : ""}
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-3 mb-0.5">
+                                    <span
+                                      className={`truncate text-[15px] ${
+                                        (unread || count > 0) && !isOpen
+                                          ? "font-semibold text-gray-900"
+                                          : "font-normal text-gray-900"
+                                      }`}
+                                    >
+                                      {title}
                                     </span>
+                                    <span className="text-[12px] text-gray-500 flex-shrink-0">
+                                      {formatListTime(lastAt)}
+                                    </span>
+                                  </div>
+                                  {subtitle && (
+                                    <div className="text-[13px] text-gray-500 truncate">
+                                      {subtitle}
+                                    </div>
+                                  )}
+                                  {last && (
+                                    <div
+                                      className={`text-[13px] truncate mt-0.5 flex items-center gap-2 ${
+                                        (unread || count > 0) && !isOpen
+                                          ? "text-gray-600"
+                                          : "text-gray-500"
+                                      }`}
+                                    >
+                                      <span className="truncate">{last}</span>
+                                      {count > 0 && !isOpen && (
+                                        <span className="min-w-[16px] h-4 rounded-full bg-[#25d366] text-white text-[10px] font-semibold grid place-items-center px-1 shrink-0">
+                                          {count > 99 ? "99+" : count}
+                                        </span>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                              </div>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </TabsContent>
+                </Tabs>
               </div>
             </div>
 
-            <div className="col-span-3 h-full bg-[#efeae2] relative">
-              {/* Botón borrar chat actual */}
-              {/* Eliminado: botón flotante de borrar; ahora vive dentro del menú de la card (CoachChatInline) */}
+            <div className="flex-1 bg-[#efeae2] relative">
               <CoachChatInline
                 room={room}
                 role="coach"
@@ -845,7 +880,6 @@ export default function AdminChatPage() {
                   chatId: selectedChatId ?? undefined,
                 }}
                 onConnectionChange={setConnected}
-                // Listado de mis chats (como equipo ADMIN_COACH_ID)
                 requestListSignal={listSignal}
                 listParams={{
                   participante_tipo: "equipo",
@@ -856,17 +890,12 @@ export default function AdminChatPage() {
                 }
                 onChatInfo={(info) => {
                   setCurrentOpenChatId(info?.chatId ?? null);
-                  // Limpiar contador al unirse/abrir el chat
                   if (info?.chatId != null) {
                     try {
                       const k = `chatUnreadById:coach:${String(info.chatId)}`;
                       localStorage.setItem(k, "0");
                     } catch {}
                     setReadsBump((n) => n + 1);
-                  }
-                  // Si abrimos por chatId y ya unimos, limpiar selección explícita para permitir crear con target
-                  if (info?.chatId != null && selectedChatId != null) {
-                    // mantener chat abierto; al elegir contacto se sobreescribe
                   }
                 }}
               />

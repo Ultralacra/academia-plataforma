@@ -136,11 +136,13 @@ function PhaseCard({
 /* ───────── componente principal ───────── */
 export default function PhaseMetrics({
   items,
+  loading = false,
   fallback = { f1: 7, f2: 10, f3: 8, f4: 9, f5: 5 },
   minSamplesToShowReal = 3,
   maxDaysCap = 30, // para escalar la barra; ajusta según tus plazos típicos
 }: {
   items: PhaseDatum[];
+  loading?: boolean;
   fallback?: { f1: number; f2: number; f3: number; f4: number; f5: number };
   minSamplesToShowReal?: number;
   maxDaysCap?: number;
@@ -198,25 +200,36 @@ export default function PhaseMetrics({
         </div>
       </CardHeader>
       <CardContent className="pt-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          {(Object.keys(PHASE_LABEL) as PhaseKey[]).map((k, idx) => (
-            <PhaseCard
-              key={k}
-              title={`Tiempo promedio en ${PHASE_LABEL[k]}`}
-              avgDays={values[k]}
-              samples={calc.samples[k]}
-              demo={calc.useDemo}
-              palette={PALETTE[idx]}
-              caption={
-                calc.useDemo
-                  ? undefined
-                  : `Basado en ${calc.samples[k]} estudiante${
-                      calc.samples[k] === 1 ? "" : "s"
-                    }`
-              }
-            />
-          ))}
-        </div>
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[130px] rounded-xl border bg-muted animate-pulse"
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            {(Object.keys(PHASE_LABEL) as PhaseKey[]).map((k, idx) => (
+              <PhaseCard
+                key={k}
+                title={`Tiempo promedio en ${PHASE_LABEL[k]}`}
+                avgDays={values[k]}
+                samples={calc.samples[k]}
+                demo={calc.useDemo}
+                palette={PALETTE[idx]}
+                caption={
+                  calc.useDemo
+                    ? undefined
+                    : `Basado en ${calc.samples[k]} estudiante${
+                        calc.samples[k] === 1 ? "" : "s"
+                      }`
+                }
+              />
+            ))}
+          </div>
+        )}
 
         {/* leyenda chica */}
         <div className="mt-3 text-[11px] text-muted-foreground">

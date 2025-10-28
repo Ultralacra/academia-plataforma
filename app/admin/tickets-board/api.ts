@@ -23,6 +23,11 @@ export type TicketBoardItem = {
     estatus?: string | null;
     fecha?: string | null;
   } | null;
+  // nuevos campos devueltos por la API
+  resuelto_por?: string | null;
+  resuelto_por_nombre?: string | null;
+  informante?: string | null;
+  informante_nombre?: string | null;
 };
 
 export type TicketBoardResponse = {
@@ -96,6 +101,10 @@ export async function getTickets(opts: {
           fecha: r.ultimo_estado.fecha ?? r.ultimo_estado.created_at ?? null,
         }
       : null,
+      resuelto_por: r.resuelto_por ?? null,
+      resuelto_por_nombre: r.resuelto_por_nombre ?? null,
+      informante: r.informante ?? null,
+      informante_nombre: r.informante_nombre ?? null,
   }));
 
   return {
@@ -106,3 +115,20 @@ export async function getTickets(opts: {
     totalPages: json.totalPages ?? 1,
   } as const;
 }
+
+  // Reasignar ticket a un coach/equipo
+  // PUT /v1/ticket/reassign/ticket/:idticket
+  // Body: { "codigo_equipo": "equipo" }
+  export async function reassignTicket(
+    ticketId: string,
+    codigoEquipo: string
+  ) {
+    if (!ticketId) throw new Error("ticketId requerido");
+    if (!codigoEquipo) throw new Error("codigoEquipo requerido");
+    const path = `/ticket/reassign/ticket/${encodeURIComponent(ticketId)}`;
+    return apiFetch<any>(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ codigo_equipo: codigoEquipo }),
+    });
+  }

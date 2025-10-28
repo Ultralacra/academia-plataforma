@@ -67,43 +67,30 @@ export default function EditOptionModal({
     if (!clientCode) return;
     setSaving(true);
     try {
-      // Primero obtenemos los datos actuales del cliente para no enviar campos vacíos
-      const getUrl = `/client/get/clients?page=1&search=${encodeURIComponent(
-        clientCode
-      )}`;
-      let existing: any = {};
-      try {
-        const j = await apiFetch<any>(getUrl);
-        const rows: any[] = Array.isArray(j?.data)
-          ? j.data
-          : Array.isArray(j?.clients?.data)
-          ? j.clients.data
-          : Array.isArray(j?.getClients?.data)
-          ? j.getClients.data
-          : [];
-        existing = rows[0] || {};
-      } catch (e) {
-        existing = {};
-      }
-
       const fd = new FormData();
-      // Siempre enviar nombre (nuevo o existente)
-      const nombreToSend = String(existing?.nombre ?? existing?.name ?? "");
-      if (nombreToSend) fd.set("nombre", nombreToSend);
-      // Para etapa/nicho/estado, enviar el valor nuevo si fue seleccionado, sino enviar el existente para no borrarlo.
-      const estadoToSend =
-        estado !== undefined
-          ? String(estado)
-          : String(existing?.estado ?? existing?.state ?? "");
-      if (estadoToSend) fd.set("estado", estadoToSend);
-      const etapaToSend =
-        etapa !== undefined
-          ? String(etapa)
-          : String(existing?.etapa ?? existing?.stage ?? "");
-      if (etapaToSend) fd.set("etapa", etapaToSend);
-      const nichoToSend =
-        nicho !== undefined ? String(nicho) : String(existing?.nicho ?? "");
-      if (nichoToSend) fd.set("nicho", nichoToSend);
+      // Solo enviar en form-data lo que se quiera editar (campo cambiado)
+      // No enviar nombre ni valores existentes.
+      const wantsEstado =
+        (mode === "estado" || mode === "all") &&
+        typeof estado !== "undefined" &&
+        estado !== current?.estado;
+      const wantsEtapa =
+        (mode === "etapa" || mode === "all") &&
+        typeof etapa !== "undefined" &&
+        etapa !== current?.etapa;
+      // Pedido explícito: no enviar nicho por ahora.
+
+      if (wantsEstado && estado) fd.set("estado", String(estado));
+      if (wantsEtapa && etapa) fd.set("etapa", String(etapa));
+
+      if ([...fd.keys()].length === 0) {
+        toast({
+          title: "Sin cambios",
+          description: "No hay nada para guardar",
+        });
+        setSaving(false);
+        return;
+      }
       // El endpoint acepta form-data y ahora también soporta estado
       const url = `/client/update/client/${encodeURIComponent(clientCode)}`;
       const token = typeof window !== "undefined" ? getAuthToken() : null;

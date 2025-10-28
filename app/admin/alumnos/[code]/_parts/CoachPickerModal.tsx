@@ -54,9 +54,7 @@ export default function CoachPickerModal({
       setLoading(true);
       try {
         // Llamar al endpoint explícito que devuelve los equipos/coach
-        const j = await apiFetch<any>(
-          "/team/get/team?page=1&pageSize=50"
-        );
+        const j = await apiFetch<any>("/team/get/team?page=1&pageSize=50");
         const rows = Array.isArray(j?.data) ? j.data : [];
         if (!alive) return;
         setTeamsRaw(rows);
@@ -101,7 +99,7 @@ export default function CoachPickerModal({
         <DialogHeader>
           <DialogTitle>Seleccionar integrante</DialogTitle>
           <DialogDescription>
-            Busca y elige un miembro de equipo. (Cambios solo en demo/local)
+            Busca y elige un miembro del equipo.
           </DialogDescription>
         </DialogHeader>
 

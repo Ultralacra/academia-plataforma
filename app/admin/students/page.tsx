@@ -7,6 +7,7 @@ import StudentManagement from "./components/student-management";
 function StudentsPage() {
   return (
     <DashboardLayout>
+      {/* Logger desactivado para evitar consultas extra de metrics v2 */}
       <StudentManagement />
     </DashboardLayout>
   );

@@ -12,7 +12,6 @@ import MetricsStrip from "./_parts/MetricsStrip";
 import PhasesTimeline from "./_parts/PhasesTimeline";
 import PhaseHistory from "./_parts/PhaseHistory";
 import CoachesCard from "./_parts/CoachesCard";
-import ActivityFeed from "./_parts/ActivityFeed";
 import {
   buildPhasesFor,
   buildLifecycleFor,
@@ -30,7 +29,13 @@ import Link from "next/link";
 import { MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
-import { uploadClientContract, downloadClientContractBlob } from "../api";
+import {
+  uploadClientContract,
+  downloadClientContractBlob,
+  getClienteEstatus,
+  getClienteTareas,
+  updateClientLastTask,
+} from "../api";
 import {
   Select,
   SelectContent,
@@ -128,6 +133,19 @@ export default function StudentDetailContent({ code }: { code: string }) {
           } catch (e) {
             setPhaseHistory(null);
           }
+
+          // Cargar historial de estatus y tareas
+          try {
+            const [eh, th] = await Promise.all([
+              getClienteEstatus(s.code),
+              getClienteTareas(s.code),
+            ]);
+            setStatusHistory(eh);
+            setTasksHistory(th);
+          } catch (e) {
+            setStatusHistory(null);
+            setTasksHistory(null);
+          }
         }
 
         if (s) {
@@ -192,6 +210,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
     const id = setInterval(async () => {
       try {
         await fetchPhaseHistory(student.code);
+        try {
+          const [eh, th] = await Promise.all([
+            getClienteEstatus(student.code),
+            getClienteTareas(student.code),
+          ]);
+          if (!mounted) return;
+          setStatusHistory(eh);
+          setTasksHistory(th);
+        } catch {}
       } catch (e) {
         /* ignore */
       }
@@ -274,6 +301,55 @@ export default function StudentDetailContent({ code }: { code: string }) {
     }
   }
 
+  // Cambiar un coach: desvincular el coach actual (si existe) y asignar el nuevo seleccionado.
+  async function changeCoach(idx: number, candidate: any) {
+    if (!student?.code) return;
+    try {
+      setLoading(true);
+      const existing = (coaches || [])[idx];
+      // Si existe relación previa, intentamos eliminarla primero.
+      const existingCoachId =
+        (existing as any)?.coachId ??
+        (existing as any)?.id ??
+        (existing as any)?.id_relacion ??
+        null;
+      if (existingCoachId) {
+        try {
+          await removeCoach(existingCoachId);
+        } catch (e) {
+          console.error("Error removing existing coach during change", e);
+        }
+      }
+
+      // Asignar el nuevo coach por teamCode (prioritario) o por teamId como fallback.
+      const code =
+        candidate?.teamCode ??
+        (candidate?.teamId ? String(candidate.teamId) : null);
+      if (code) {
+        try {
+          await assignCoaches([code]);
+          toast({ title: "Coach actualizado" });
+        } catch (e) {
+          console.error("Error assigning new coach during change", e);
+          toast({ title: "Error asignando coach" });
+        }
+      } else {
+        toast({
+          title: "No se pudo asignar coach",
+          description: "El candidato no tiene código de equipo",
+        });
+      }
+
+      // Asegurar refresco final
+      await loadCoaches(student.code);
+    } catch (e) {
+      console.error("Error cambiando coach", e);
+      toast({ title: "Error cambiando coach" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const today = useMemo(() => new Date(isoDay(new Date())), []);
   const permanencia = useMemo(() => {
     if (!pIngreso) return 0;
@@ -319,6 +395,18 @@ export default function StudentDetailContent({ code }: { code: string }) {
     id: number;
     codigo_cliente: string;
     etapa_id: string;
+    created_at: string;
+  }> | null>(null);
+  const [statusHistory, setStatusHistory] = useState<Array<{
+    id: number | string;
+    codigo_cliente?: string | null;
+    estado_id: string;
+    created_at: string;
+  }> | null>(null);
+  const [tasksHistory, setTasksHistory] = useState<Array<{
+    id: number | string;
+    codigo_cliente?: string | null;
+    descripcion?: string | null;
     created_at: string;
   }> | null>(null);
 
@@ -410,6 +498,21 @@ export default function StudentDetailContent({ code }: { code: string }) {
             faseActual={faseActual}
             ingreso={pIngreso}
             salida={salida}
+            onSaveLastTask={async (localValue) => {
+              try {
+                const iso = new Date(localValue).toISOString();
+                await updateClientLastTask(student.code || code, iso);
+                setLastTaskAt(iso);
+                try {
+                  const th = await getClienteTareas(student.code || code);
+                  setTasksHistory(th);
+                } catch {}
+                toast({ title: "Última tarea actualizada" });
+              } catch (e) {
+                console.error(e);
+                toast({ title: "No se pudo actualizar la última tarea" });
+              }
+            }}
             coachCount={(coaches || []).length}
             coachNames={
               (coaches || []).map((c) => c.name).filter(Boolean) as string[]
@@ -431,8 +534,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
             {/* Columna principal: progreso, actividad y tickets */}
             <div className="lg:col-span-8 space-y-4">
               <PhasesTimelineAny steps={steps} />
-              <ActivityFeed lastTaskAt={lastTaskAt} steps={steps} />
-              <PhaseHistory history={phaseHistory} />
+              <PhaseHistory
+                history={phaseHistory}
+                statusHistory={statusHistory}
+                tasksHistory={tasksHistory}
+              />
               {/* Mover tickets aquí para aprovechar el espacio disponible */}
               <div id="tickets">
                 <TicketsPanel
@@ -448,6 +554,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   coaches={coaches}
                   onAssign={(codes) => assignCoaches(codes)}
                   onRemove={(teamCode) => removeCoach(teamCode)}
+                  onChangeMember={(idx, candidate) =>
+                    changeCoach(idx, candidate)
+                  }
                 />
               </div>
               {/* Contrato card */}
@@ -555,6 +664,19 @@ export default function StudentDetailContent({ code }: { code: string }) {
               rows[0] ||
               null;
             setStudent(s as any);
+            // refrescar historiales inmediatamente
+            try {
+              const targetCode = (s as any)?.code || code;
+              await fetchPhaseHistory(targetCode);
+              try {
+                const [eh, th] = await Promise.all([
+                  getClienteEstatus(targetCode),
+                  getClienteTareas(targetCode),
+                ]);
+                setStatusHistory(eh);
+                setTasksHistory(th);
+              } catch {}
+            } catch {}
           }}
         />
       )}

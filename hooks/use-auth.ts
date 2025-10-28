@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { authService, type AuthState } from "@/lib/auth"
+import { toast } from "@/hooks/use-toast"
 
 export function useAuth() {
   const [authState, setAuthState] = useState<AuthState>({
@@ -64,9 +65,21 @@ export function useAuth() {
   }
 
   const logout = (): void => {
-    authService.logout()
-    setAuthState({ user: null, isAuthenticated: false })
-    router.push("/")
+    // Show a short toast + loading while we clear session and redirect
+    setIsLoading(true)
+    const t = toast({ title: "Cerrando sesión", description: "Saliendo..." })
+    try {
+      authService.logout()
+      setAuthState({ user: null, isAuthenticated: false })
+      router.push("/login")
+      // Actualizar toast a confirmación
+  t.update({ id: t.id, title: "Sesión cerrada", description: "Has salido correctamente" })
+    } catch (e) {
+  t.update({ id: t.id, title: "Error", description: "No se pudo cerrar sesión" })
+    } finally {
+      // Pequeño retraso para que el usuario vea el cambio antes de quitar loader
+      setTimeout(() => setIsLoading(false), 300)
+    }
   }
 
   return {

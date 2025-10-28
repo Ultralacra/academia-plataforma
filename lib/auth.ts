@@ -128,7 +128,14 @@ class AuthService {
   }
 
   logout(): void {
-    this.setAuthState({ user: null, isAuthenticated: false, token: null });
+    // Remove stored auth state completely when logging out
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem(this.storageKey);
+      } catch (error) {
+        console.error("Error removing auth state:", error);
+      }
+    }
   }
 
   hasRole(role: UserRole): boolean {

@@ -4,13 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import { dataService, type ClientItem } from "@/lib/data-service";
 import { Separator } from "@/components/ui/separator";
 import ApiFilters from "./ApiFilters";
-import ClientFilters from "./ClientFilters";
 import ChartsSection from "./ChartsSection";
 import ResultsTable from "./ResultsTable";
 import TeamModal, { type CoachMember } from "./TeamModal";
 import StudentsListModal from "./students-list-modal";
 import { uniq, toDateKey } from "./utils/students-utils";
-// Eliminamos métricas sintéticas (phase-faker)
+import {
+  buildPhaseItems,
+  buildLifecycleItems,
+  type LifecycleItem,
+} from "./phase-faker";
 
 export default function StudentManagement() {
   // ============================ Server filters + fetch
@@ -114,7 +117,7 @@ export default function StudentManagement() {
     return filtered.slice(start, start + pageSizeUI);
   }, [filtered, page]);
 
-  // ============================ Distribuciones (reales desde API)
+  // ============================ Distribuciones
   const distByState = useMemo(() => {
     const map = new Map<string, number>();
     filtered.forEach((i) =>
@@ -148,9 +151,19 @@ export default function StudentManagement() {
     );
   }, [filtered]);
 
-  // ============================ Sin datos sintéticos
-  const phaseItems: any[] = [];
-  const lifecycleItems: any[] = [];
+  // ============================ Faker: fases + lifecycle
+  const phaseItems = useMemo(() => buildPhaseItems(filtered), [filtered]);
+  const lifecycleItems = useMemo(
+    () => buildLifecycleItems(filtered),
+    [filtered]
+  );
+  const lifecycleByCode = useMemo(() => {
+    const m: Record<string, LifecycleItem> = {};
+    lifecycleItems.forEach((x) => {
+      if (x.code) m[x.code] = x;
+    });
+    return m;
+  }, [lifecycleItems]);
 
   // ============================ Modal: coaches por alumno
   const [teamOpen, setTeamOpen] = useState(false);
@@ -226,9 +239,9 @@ export default function StudentManagement() {
         </div>
       </div>
 
-      <ApiFilters search={search} setSearch={setSearch} />
-
-      <ClientFilters
+      <ApiFilters
+        search={search}
+        setSearch={setSearch}
         stateOptions={stateOptions}
         stageOptions={stageOptions}
         statesFilter={statesFilter}

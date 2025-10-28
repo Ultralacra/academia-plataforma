@@ -49,7 +49,13 @@ function Stat({
   );
 }
 
-export default function RetentionKPIs({ items }: { items: LifecycleItem[] }) {
+export default function RetentionKPIs({
+  items,
+  loading = false,
+}: {
+  items: LifecycleItem[];
+  loading?: boolean;
+}) {
   const completed = items.filter((x) => x.status_sint === "COMPLETADO").length;
   const abandons = items.filter((x) => x.status_sint === "ABANDONO").length;
   const denom = completed + abandons;
@@ -68,43 +74,47 @@ export default function RetentionKPIs({ items }: { items: LifecycleItem[] }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Stat
-            icon={<Trophy className="h-4 w-4" />}
-            title="Completados"
-            value={completed}
-            subtitle="Casos de éxito"
-            accent="emerald"
-          />
-          <Stat
-            icon={<DoorOpen className="h-4 w-4" />}
-            title="Abandonos"
-            value={abandons}
-            subtitle="Salidas antes de completar"
-            accent="rose"
-          />
-          <Stat
-            icon={<Target className="h-4 w-4" />}
-            title="Retención"
-            value={`${retention}%`}
-            subtitle="Completados / (Comp. + Aband.)"
-            accent="sky"
-          >
-            <div className="mt-3 h-2 w-full rounded-full bg-sky-100">
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
               <div
-                className="h-2 rounded-full bg-sky-500 transition-all"
-                style={{ width: `${Math.min(100, Math.max(0, retention))}%` }}
+                key={i}
+                className="h-[110px] rounded-2xl border bg-muted animate-pulse"
               />
-            </div>
-          </Stat>
-          <Stat
-            icon={<CalendarClock className="h-4 w-4" />}
-            title="Permanencia prom."
-            value={`${avgStay || 0} d`}
-            subtitle="Días en el programa"
-            accent="amber"
-          />
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <Stat
+              icon={<Trophy className="h-4 w-4" />}
+              title="Completados"
+              value={completed}
+              subtitle="Casos de éxito"
+              accent="emerald"
+            />
+            <Stat
+              icon={<DoorOpen className="h-4 w-4" />}
+              title="Abandonos"
+              value={abandons}
+              subtitle="Salidas antes de completar"
+              accent="rose"
+            />
+            <Stat
+              icon={<Target className="h-4 w-4" />}
+              title="Retención"
+              value={`${retention}%`}
+              subtitle="Completados / (Comp. + Aband.)"
+              accent="sky"
+            />
+            <Stat
+              icon={<CalendarClock className="h-4 w-4" />}
+              title="Permanencia prom."
+              value={`${avgStay || 0} d`}
+              subtitle="Días en el programa"
+              accent="amber"
+            />
+          </div>
+        )}
       </CardContent>
     </Card>
   );

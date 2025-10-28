@@ -93,6 +93,7 @@ export type CoachTicket = {
   alumno_nombre: string | null;
   created_at: string | null;
   deadline: string | null;
+  ultimo_estado?: { estatus?: string; fecha?: string } | string | null;
   estado: "PENDIENTE" | "EN_PROGRESO" | "PENDIENTE_DE_ENVIO" | "RESUELTO" | string;
 };
 
@@ -142,6 +143,7 @@ export async function getCoachTickets(params: {
     alumno_nombre: r.alumno_nombre ?? null,
     created_at: r.created_at ?? null,
     deadline: r.deadline ?? null,
+  ultimo_estado: r.ultimo_estado ?? null,
     estado: normalizeEstado(r.estado),
   }));
   return {

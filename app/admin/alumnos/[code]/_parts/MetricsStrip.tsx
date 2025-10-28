@@ -11,6 +11,7 @@ export default function MetricsStrip({
   ingreso,
   salida,
   onEdit,
+  onSaveLastTask,
   coachCount,
   coachNames,
   onJumpToCoaches,
@@ -22,10 +23,23 @@ export default function MetricsStrip({
   ingreso?: string | null;
   salida?: string | null;
   onEdit?: (mode?: "estado" | "etapa" | "nicho" | "all") => void;
+  onSaveLastTask?: (isoLocal: string) => void | Promise<void>;
   coachCount?: number;
   coachNames?: string[];
   onJumpToCoaches?: () => void;
 }) {
+  function isoToLocalInput(v?: string | null) {
+    if (!v) return "";
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return "";
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mi = String(d.getMinutes()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  }
+
   const items: Array<{
     icon: React.ReactNode;
     label: string;
@@ -144,6 +158,34 @@ export default function MetricsStrip({
                   it.value || "—"
                 )}
               </div>
+              {/* Campo para establecer última tarea */}
+              {onSaveLastTask && it.label === "Última tarea" && (
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] items-center">
+                  <input
+                    type="datetime-local"
+                    defaultValue={isoToLocalInput(lastTaskAt)}
+                    className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
+                    onChange={(e) => {
+                      // almacenar provisionalmente en el elemento para el botón
+                      (e.currentTarget as any)._pending = e.currentTarget.value;
+                    }}
+                  />
+                  <button
+                    onClick={(ev) => {
+                      const inputEl =
+                        (ev.currentTarget.parentElement?.querySelector(
+                          'input[type="datetime-local"]'
+                        ) as HTMLInputElement) || null;
+                      const v = (inputEl as any)?._pending || inputEl?.value;
+                      if (!v) return;
+                      Promise.resolve(onSaveLastTask(v)).catch(() => {});
+                    }}
+                    className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              )}
               {it.sub && (
                 <div className="mt-1 text-xs text-muted-foreground">
                   {it.sub}

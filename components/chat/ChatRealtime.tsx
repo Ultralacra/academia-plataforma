@@ -48,6 +48,8 @@ type Attachment = {
   mime: string;
   size: number;
   data_base64: string;
+  url?: string;
+  created_at?: string;
 };
 
 type Message = {
@@ -247,6 +249,33 @@ export default function ChatRealtime({
   const outboxRef = React.useRef<
     Array<{ clientId: string; text: string; at: number; pid?: any }>
   >([]);
+
+  // Mapea el campo archivo/archivos del backend al arreglo de adjuntos del UI
+  function mapArchivoToAttachments(src: any): Attachment[] | undefined {
+    try {
+      const one = src?.archivo ?? src?.Archivo ?? null;
+      const many = src?.archivos ?? src?.Archivos ?? null;
+      const list = Array.isArray(many) ? many : one ? [one] : [];
+      const atts: Attachment[] = [];
+      for (const it of list) {
+        if (!it) continue;
+        atts.push({
+          id: String(
+            it?.id_archivo ?? it?.id ?? `${Date.now()}-${Math.random()}`
+          ),
+          name: String(it?.nombre_archivo ?? it?.nombre ?? "archivo"),
+          mime: String(it?.mime_type ?? it?.mime ?? "application/octet-stream"),
+          size: Number(it?.tamano_bytes ?? it?.size ?? 0),
+          data_base64: String(it?.contenido_base64 ?? ""),
+          url: it?.url ?? undefined,
+          created_at: it?.created_at ?? it?.fecha_creacion ?? undefined,
+        });
+      }
+      return atts.length ? atts : undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   // Normalización de tipo de participante proveniente del backend
   function normalizeTipo(raw: any): "cliente" | "equipo" | "admin" | "" {
@@ -547,6 +576,21 @@ export default function ChatRealtime({
           return getAuthToken() || undefined;
         };
         const token = await resolveToken();
+        try {
+          const defaultOrigin =
+            typeof window !== "undefined" && window.location?.origin
+              ? window.location.origin
+              : "<current-origin>";
+          const base = url || defaultOrigin;
+          const endpoint = `${base.replace(/\/$/, "")}/socket.io`;
+          console.log("[ChatRealtime] socket url (base):", url ?? "<default>");
+          console.log("[ChatRealtime] connect endpoint:", endpoint);
+          console.log(
+            "[ChatRealtime] token override (prop):",
+            (socketio as any)?.token ?? null
+          );
+          console.log("[ChatRealtime] auth token used:", token);
+        } catch {}
         if (!token) {
           // No conectar sin token; volveremos a intentar en el próximo render/cambio de props
           setConnected(false);
@@ -721,6 +765,8 @@ export default function ChatRealtime({
               read: false,
               srcParticipantId: msg?.id_chat_participante_emisor,
             };
+            const mappedAtts = mapArchivoToAttachments(msg);
+            if (mappedAtts) (newMsg as any).attachments = mappedAtts;
             setItems((prev) => {
               // Intentar reconciliar con mensaje optimista (mío) para evitar duplicados
               if (sender === currentRole) {
@@ -1431,6 +1477,7 @@ export default function ChatRealtime({
                 delivered: true,
                 read: !!m?.leido,
                 srcParticipantId: m?.id_chat_participante_emisor,
+                attachments: mapArchivoToAttachments(m),
               };
             });
             setItems(mapped);
@@ -1527,6 +1574,7 @@ export default function ChatRealtime({
                     delivered: true,
                     read: !!m?.leido,
                     srcParticipantId: m?.id_chat_participante_emisor,
+                    attachments: mapArchivoToAttachments(m),
                   };
                 });
                 setItems(mapped);
@@ -1658,6 +1706,7 @@ export default function ChatRealtime({
                 delivered: true,
                 read: !!m?.leido,
                 srcParticipantId: m?.id_chat_participante_emisor,
+                attachments: mapArchivoToAttachments(m),
               };
             });
             setItems(mapped);
@@ -2599,6 +2648,7 @@ export default function ChatRealtime({
                   delivered: true,
                   read: !!m?.leido,
                   srcParticipantId: m?.id_chat_participante_emisor,
+                  attachments: mapArchivoToAttachments(m),
                 };
               });
               setItems(mapped);
@@ -2696,6 +2746,7 @@ export default function ChatRealtime({
                       delivered: true,
                       read: !!m?.leido,
                       srcParticipantId: m?.id_chat_participante_emisor,
+                      attachments: mapArchivoToAttachments(m),
                     };
                   });
                   setItems(mapped);
@@ -3070,10 +3121,10 @@ export default function ChatRealtime({
     <>
       <div
         className={`${containerBase} ${className ?? ""}`}
-        style={useFullscreen ? { height: "100dvh" } : undefined}
+        style={useFullscreen ? { height: "100%" } : undefined}
       >
         <div
-          className="sticky top-0 z-10 flex items-center justify-between px-3 sm:px-4 py-3 bg-[#075e54] text-white shadow"
+          className="sticky top-0 z-10 flex-shrink-0 flex items-center justify-between px-3 sm:px-4 py-3 bg-[#075e54] text-white shadow"
           style={{
             paddingTop: useFullscreen
               ? "max(env(safe-area-inset-top), 12px)"
@@ -3313,7 +3364,7 @@ export default function ChatRealtime({
         </div>
 
         <div
-          className="sticky bottom-0 z-10 p-2 bg-[#f0f0f0] border-t border-gray-200"
+          className="p-2 bg-[#f0f0f0] border-t border-gray-200 flex-shrink-0"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)" }}
         >
           {showTypingIndicator && otherTyping && (

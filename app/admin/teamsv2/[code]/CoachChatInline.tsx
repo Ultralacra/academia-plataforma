@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Trash2 } from "lucide-react";
+import { MoreVertical, Trash2, Paperclip, Mic, Square } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,8 +30,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Sparkles } from "lucide-react";
+import { apiFetch } from "@/lib/api-config";
 
 type Sender = "admin" | "alumno" | "coach";
+type Attachment = {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+  data_base64: string;
+  url?: string;
+  created_at?: string;
+};
 type Message = {
   id: string;
   room: string;
@@ -41,6 +51,7 @@ type Message = {
   delivered?: boolean;
   read?: boolean;
   srcParticipantId?: string | number | null;
+  attachments?: Attachment[];
 };
 
 type SocketIOConfig = {
@@ -125,6 +136,27 @@ export default function CoachChatInline({
   } | null>(null);
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  // Progreso de subida
+  const [uploadState, setUploadState] = React.useState<{
+    active: boolean;
+    total: number;
+    done: number;
+    current?: string;
+  }>({ active: false, total: 0, done: 0 });
+  // Grabación de audio
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = React.useRef<BlobPart[]>([]);
+  const [recording, setRecording] = React.useState(false);
+  const [attachments, setAttachments] = React.useState<
+    { file: File; preview?: string }[]
+  >([]);
+  // Vista previa de adjuntos
+  const [previewAttachment, setPreviewAttachment] =
+    React.useState<Attachment | null>(null);
+  const [previewOpen, setPreviewOpen] = React.useState(false);
 
   const sioRef = React.useRef<any>(null);
   const chatIdRef = React.useRef<string | number | null>(
@@ -204,32 +236,24 @@ export default function CoachChatInline({
   }, [connected, precreateOnParticipants, socketio?.participants]);
 
   React.useEffect(() => {
+    // Solo hacer scroll si estamos pegados al fondo
+    if (!pinnedToBottomRef.current) return;
+
     requestAnimationFrame(() => {
       try {
-        const currentChat = chatIdRef.current ?? chatId;
         const sc = scrollRef.current;
         const br = bottomRef.current;
-        // Si aún no hemos auto-scrolleado este chat, forzar ir al fondo una vez
-        if (
-          currentChat != null &&
-          autoScrolledChatRef.current !== currentChat
-        ) {
-          if (sc && br) {
-            br.scrollIntoView({ behavior: "auto", block: "end" });
-            // También fijar manualmente por robustez
-            sc.scrollTop = sc.scrollHeight;
-            pinnedToBottomRef.current = true;
+        if (sc && br) {
+          // Usar scrollIntoView solo si realmente necesitamos scroll
+          const isAtBottom =
+            sc.scrollHeight - sc.scrollTop - sc.clientHeight < 50;
+          if (!isAtBottom) {
+            br.scrollIntoView({ behavior: "smooth", block: "end" });
           }
-          autoScrolledChatRef.current = currentChat;
-          return;
-        }
-        // Comportamiento normal: si estamos "pegados" al fondo, mantenernos abajo
-        if (pinnedToBottomRef.current) {
-          br?.scrollIntoView({ behavior: "auto", block: "end" });
         }
       } catch {}
     });
-  }, [items.length, chatId]);
+  }, [items.length]);
 
   // Scroll síncrono antes de pintar cuando llegan los primeros mensajes
   React.useLayoutEffect(() => {
@@ -237,17 +261,18 @@ export default function CoachChatInline({
       const currentChat = chatIdRef.current ?? chatId;
       if (currentChat == null) return;
       if (autoScrolledChatRef.current === currentChat) return;
+
       const sc = scrollRef.current;
       const br = bottomRef.current;
       if (sc && br) {
-        br.scrollIntoView({ behavior: "auto", block: "end" });
+        // Forzar scroll inmediato sin animación para el primer render
         sc.scrollTop = sc.scrollHeight;
         pinnedToBottomRef.current = true;
         autoScrolledChatRef.current = currentChat;
       }
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.length]);
+  }, [chatId, items.length]);
 
   // Cuando cambia de chat, permitir nuevo auto-scroll inicial
   React.useEffect(() => {
@@ -275,8 +300,7 @@ export default function CoachChatInline({
   const onScrollContainer = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Considerar "pegado al fondo" solo cuando realmente está al fondo (tolerancia mínima)
-    const threshold = 1; // px de tolerancia para evitar falsos positivos
+    const threshold = 50; // px de tolerancia
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottomRef.current = distance <= threshold;
   }, []);
@@ -336,6 +360,31 @@ export default function CoachChatInline({
       return { html: simpleMarkdownToHtml(md) };
     }
   }
+
+  // Helpers de adjuntos
+  const getAttachmentUrl = React.useCallback((a: Attachment): string => {
+    if (a?.url) return a.url;
+    if (a?.data_base64) return `data:${a.mime};base64,${a.data_base64}`;
+    return "";
+  }, []);
+  const formatBytes = (bytes?: number): string => {
+    try {
+      const b = typeof bytes === "number" && isFinite(bytes) ? bytes : 0;
+      if (b < 1024) return `${b} B`;
+      const kb = b / 1024;
+      if (kb < 1024) return `${kb.toFixed(1)} KB`;
+      const mb = kb / 1024;
+      if (mb < 1024) return `${mb.toFixed(1)} MB`;
+      const gb = mb / 1024;
+      return `${gb.toFixed(1)} GB`;
+    } catch {
+      return String(bytes ?? "-");
+    }
+  };
+  const openPreview = (a: Attachment) => {
+    setPreviewAttachment(a);
+    setPreviewOpen(true);
+  };
 
   async function handleGenerateTicket() {
     try {
@@ -476,6 +525,117 @@ export default function CoachChatInline({
     }
   }
 
+  // Subida de archivos al chat actual mediante FormData
+  async function uploadFiles(selected: FileList | File[]) {
+    try {
+      setUploadError(null);
+      if (!selected || ("length" in selected && selected.length === 0)) return;
+
+      // Asegurar que exista chatId
+      if (chatIdRef.current == null) {
+        const ok = await ensureChatReadyForSend();
+        if (!ok || chatIdRef.current == null) {
+          setUploadError("No hay chat activo para subir archivos.");
+          return;
+        }
+      }
+
+      const id = String(chatIdRef.current);
+      setUploading(true);
+      const arr = Array.from(selected as FileList | File[]);
+      setUploadState({
+        active: true,
+        total: arr.length,
+        done: 0,
+        current: undefined,
+      });
+
+      // Subir uno por uno para simplificar y evitar errores si el backend espera un único "file"
+      for (const file of arr) {
+        const fd = new FormData();
+        fd.append("file", file, file.name);
+        try {
+          setUploadState((s) => ({ ...s, current: file.name }));
+          // Usa apiFetch para heredar API_HOST y el token automáticamente
+          // Nuevo endpoint: /v1/ai/upload-file/{chatId}
+          await apiFetch(`/ai/upload-file/${encodeURIComponent(id)}`, {
+            method: "POST",
+            body: fd,
+          });
+          // El backend debería emitir un nuevo mensaje por socket; si no, podemos forzar un refresh de lista
+          try {
+            const evt = new CustomEvent("chat:list-refresh", {
+              detail: { reason: "file-upload", id_chat: id },
+            });
+            window.dispatchEvent(evt);
+          } catch {}
+          setUploadState((s) => ({
+            ...s,
+            done: Math.min(s.total, s.done + 1),
+          }));
+        } catch (e: any) {
+          console.error("[CoachChat] upload file error", e);
+          setUploadError(e?.message || "Error al subir archivo");
+          setUploadState((s) => ({
+            ...s,
+            done: Math.min(s.total, s.done + 1),
+          }));
+        }
+      }
+    } finally {
+      setUploading(false);
+      setUploadState((s) => ({ ...s, active: false, current: undefined }));
+    }
+  }
+
+  const addPendingAttachments = (files: FileList | File[]) => {
+    const arr = Array.from(files as FileList | File[]);
+    if (!arr.length) return;
+    const mapped = arr.map((f) => ({
+      file: f,
+      preview:
+        f.type.startsWith("image/") || f.type.startsWith("video/")
+          ? URL.createObjectURL(f)
+          : undefined,
+    }));
+    setAttachments((prev) => [...prev, ...mapped]);
+  };
+
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const files = e.target.files;
+      if (files && files.length > 0) {
+        addPendingAttachments(files);
+      }
+    } finally {
+      try {
+        if (e.target) e.target.value = "";
+      } catch {}
+    }
+  };
+
+  const removeAttachment = (idx: number) => {
+    setAttachments((prev) => {
+      const next = [...prev];
+      const [rm] = next.splice(idx, 1);
+      try {
+        if (rm?.preview) URL.revokeObjectURL(rm.preview);
+      } catch {}
+      return next;
+    });
+  };
+
+  const clearAttachments = () => {
+    setAttachments((prev) => {
+      for (const a of prev) {
+        try {
+          if (a.preview) URL.revokeObjectURL(a.preview);
+        } catch {}
+      }
+      return [];
+    });
+  };
+
   // Observa el sentinel del fondo para detectar con precisión si está visible (pegado al fondo)
   React.useEffect(() => {
     const root = scrollRef.current;
@@ -549,6 +709,33 @@ export default function CoachChatInline({
     return s;
   };
 
+  // Mapear archivo/archivos del backend a adjuntos del UI
+  function mapArchivoToAttachments(src: any): Attachment[] | undefined {
+    try {
+      const one = src?.archivo ?? src?.Archivo ?? null;
+      const many = src?.archivos ?? src?.Archivos ?? null;
+      const list = Array.isArray(many) ? many : one ? [one] : [];
+      const atts: Attachment[] = [];
+      for (const it of list) {
+        if (!it) continue;
+        atts.push({
+          id: String(
+            it?.id_archivo ?? it?.id ?? `${Date.now()}-${Math.random()}`
+          ),
+          name: String(it?.nombre_archivo ?? it?.nombre ?? "archivo"),
+          mime: String(it?.mime_type ?? it?.mime ?? "application/octet-stream"),
+          size: Number(it?.tamano_bytes ?? it?.size ?? 0),
+          data_base64: String(it?.contenido_base64 ?? ""),
+          url: it?.url ?? undefined,
+          created_at: it?.created_at ?? it?.fecha_creacion ?? undefined,
+        });
+      }
+      return atts.length ? atts : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   const markRead = React.useCallback(() => {
     try {
       if (chatId == null) return;
@@ -589,6 +776,11 @@ export default function CoachChatInline({
           return getAuthToken() || undefined;
         };
         const token = await resolveToken();
+        try {
+          // Mostrar token en consola para poder copiarlo y usarlo al conectar
+          // Nota: esto imprime el token en la consola del navegador (devtools)
+          console.log("[CoachChat] auth token:", token);
+        } catch {}
         if (!token) {
           setConnected(false);
           onConnectionChange?.(false);
@@ -782,6 +974,8 @@ export default function CoachChatInline({
               read: false,
               srcParticipantId: getEmitter(msg),
             };
+            const atts = mapArchivoToAttachments(msg);
+            if (atts && atts.length) newMsg.attachments = atts;
             setItems((prev) => {
               if (sender === role) {
                 const next = [...prev];
@@ -1041,6 +1235,7 @@ export default function CoachChatInline({
               delivered: true,
               read: !!m?.leido,
               srcParticipantId: getEmitter(m),
+              attachments: mapArchivoToAttachments(m),
             };
           });
           setItems(mapped);
@@ -1664,7 +1859,8 @@ export default function CoachChatInline({
 
   async function send() {
     const val = text.trim();
-    if (!val) return;
+    const hasAttachments = attachments.length > 0;
+    if (!val && !hasAttachments) return;
     setText("");
     try {
       const sio = sioRef.current;
@@ -1686,30 +1882,10 @@ export default function CoachChatInline({
           return;
         }
       }
-      let effectivePid: any = myParticipantId;
-      if (effectivePid == null) {
-        const parts = Array.isArray(joinedParticipantsRef.current)
-          ? joinedParticipantsRef.current
-          : [];
-        if (role === "coach") {
-          const mine = parts.find(
-            (p: any) =>
-              normalizeTipo(p?.participante_tipo) === "equipo" &&
-              (!socketio?.idEquipo ||
-                String(p?.id_equipo) === String(socketio?.idEquipo))
-          );
-          if (mine?.id_chat_participante != null)
-            effectivePid = mine.id_chat_participante;
-        }
-      }
-      if (effectivePid == null) {
-        console.log("[CoachChat] send(): esperando my_participante…");
-        for (let i = 0; i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 120));
-          if (myParticipantId != null) {
-            effectivePid = myParticipantId;
-            break;
-          }
+      // 1) Enviar primero el mensaje de texto (si hay)
+      if (val) {
+        let effectivePid: any = myParticipantId;
+        if (effectivePid == null) {
           const parts = Array.isArray(joinedParticipantsRef.current)
             ? joinedParticipantsRef.current
             : [];
@@ -1720,101 +1896,135 @@ export default function CoachChatInline({
                 (!socketio?.idEquipo ||
                   String(p?.id_equipo) === String(socketio?.idEquipo))
             );
-            if (mine?.id_chat_participante != null) {
+            if (mine?.id_chat_participante != null)
               effectivePid = mine.id_chat_participante;
+          }
+        }
+        if (effectivePid == null) {
+          console.log("[CoachChat] send(): esperando my_participante…");
+          for (let i = 0; i < 30; i++) {
+            await new Promise((r) => setTimeout(r, 120));
+            if (myParticipantId != null) {
+              effectivePid = myParticipantId;
               break;
+            }
+            const parts = Array.isArray(joinedParticipantsRef.current)
+              ? joinedParticipantsRef.current
+              : [];
+            if (role === "coach") {
+              const mine = parts.find(
+                (p: any) =>
+                  normalizeTipo(p?.participante_tipo) === "equipo" &&
+                  (!socketio?.idEquipo ||
+                    String(p?.id_equipo) === String(socketio?.idEquipo))
+              );
+              if (mine?.id_chat_participante != null) {
+                effectivePid = mine.id_chat_participante;
+                break;
+              }
             }
           }
         }
-      }
-      console.log("[CoachChat] send(): preparado para enviar", {
-        id_chat: chatIdRef.current,
-        pid: effectivePid,
-        text: val,
-      });
-      const clientId = `${Date.now()}-${Math.random()
-        .toString(36)
-        .slice(2, 8)}`;
-      const optimistic: Message = {
-        id: clientId,
-        room: normRoom,
-        sender: role,
-        text: val,
-        at: new Date().toISOString(),
-        delivered: false,
-        read: false,
-        srcParticipantId: effectivePid ?? undefined,
-      };
-      setItems((prev) => [...prev, optimistic]);
-      seenRef.current.add(clientId);
-      outboxRef.current.push({
-        clientId,
-        text: val,
-        at: Date.now(),
-        pid: effectivePid,
-      });
-
-      if (chatIdRef.current == null || effectivePid == null) {
-        console.error("[CoachChat] send(): NO ENVÍA — faltan datos", {
+        console.log("[CoachChat] send(): preparado para enviar", {
           id_chat: chatIdRef.current,
           pid: effectivePid,
+          text: val,
         });
-        return;
-      }
-      sio.emit(
-        "chat.message.send",
-        {
-          id_chat: chatIdRef.current,
-          id_chat_participante_emisor: effectivePid,
-          contenido: val,
-          client_session: clientSessionRef.current,
-        },
-        (ack: any) => {
-          try {
-            console.log("[CoachChat] chat.message.send ACK <=", {
-              success: ack?.success,
-              id_mensaje: ack?.data?.id_mensaje ?? ack?.data?.id,
-            });
-            setItems((prev) => {
-              const next = [...prev];
-              const serverId = ack?.data?.id_mensaje ?? ack?.data?.id;
-              const serverIdStr = serverId ? String(serverId) : null;
-              const optimisticIdx = next.findIndex((m) => m.id === clientId);
-              if (serverIdStr) {
-                const existingIdx = next.findIndex(
-                  (m) => String(m.id) === serverIdStr
-                );
-                if (existingIdx >= 0) {
-                  if (optimisticIdx >= 0) next.splice(optimisticIdx, 1);
-                  next[existingIdx] = {
-                    ...next[existingIdx],
+        const clientId = `${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+        const optimistic: Message = {
+          id: clientId,
+          room: normRoom,
+          sender: role,
+          text: val,
+          at: new Date().toISOString(),
+          delivered: false,
+          read: false,
+          srcParticipantId: effectivePid ?? undefined,
+        };
+        setItems((prev) => [...prev, optimistic]);
+        seenRef.current.add(clientId);
+        outboxRef.current.push({
+          clientId,
+          text: val,
+          at: Date.now(),
+          pid: effectivePid,
+        });
+
+        if (chatIdRef.current == null || effectivePid == null) {
+          console.error("[CoachChat] send(): NO ENVÍA — faltan datos", {
+            id_chat: chatIdRef.current,
+            pid: effectivePid,
+          });
+          return;
+        }
+        sio.emit(
+          "chat.message.send",
+          {
+            id_chat: chatIdRef.current,
+            id_chat_participante_emisor: effectivePid,
+            contenido: val,
+            client_session: clientSessionRef.current,
+          },
+          (ack: any) => {
+            try {
+              console.log("[CoachChat] chat.message.send ACK <=", {
+                success: ack?.success,
+                id_mensaje: ack?.data?.id_mensaje ?? ack?.data?.id,
+              });
+              setItems((prev) => {
+                const next = [...prev];
+                const serverId = ack?.data?.id_mensaje ?? ack?.data?.id;
+                const serverIdStr = serverId ? String(serverId) : null;
+                const optimisticIdx = next.findIndex((m) => m.id === clientId);
+                if (serverIdStr) {
+                  const existingIdx = next.findIndex(
+                    (m) => String(m.id) === serverIdStr
+                  );
+                  if (existingIdx >= 0) {
+                    if (optimisticIdx >= 0) next.splice(optimisticIdx, 1);
+                    next[existingIdx] = {
+                      ...next[existingIdx],
+                      delivered: !(ack && ack.success === false),
+                    };
+                    seenRef.current.add(serverIdStr);
+                    return next;
+                  }
+                }
+                if (optimisticIdx >= 0) {
+                  next[optimisticIdx] = {
+                    ...next[optimisticIdx],
+                    id: serverIdStr ?? next[optimisticIdx].id,
                     delivered: !(ack && ack.success === false),
                   };
-                  seenRef.current.add(serverIdStr);
-                  return next;
+                  if (serverIdStr) seenRef.current.add(serverIdStr);
                 }
-              }
-              if (optimisticIdx >= 0) {
-                next[optimisticIdx] = {
-                  ...next[optimisticIdx],
-                  id: serverIdStr ?? next[optimisticIdx].id,
-                  delivered: !(ack && ack.success === false),
-                };
-                if (serverIdStr) seenRef.current.add(serverIdStr);
-              }
-              return next;
-            });
-            try {
-              emitTyping(false);
-              if (typingRef.current.timer) {
-                clearTimeout(typingRef.current.timer);
-                typingRef.current.on = false;
-              }
+                return next;
+              });
+              try {
+                emitTyping(false);
+                if (typingRef.current.timer) {
+                  clearTimeout(typingRef.current.timer);
+                  typingRef.current.on = false;
+                }
+              } catch {}
             } catch {}
-          } catch {}
+          }
+        );
+        markRead();
+      }
+
+      // 2) Enviar adjuntos después del mensaje
+      if (hasAttachments) {
+        setUploadError(null);
+        try {
+          await uploadFiles(attachments.map((a) => a.file));
+          clearAttachments();
+        } catch (e: any) {
+          setUploadError(e?.message || "Error al subir adjuntos");
         }
-      );
-      markRead();
+      }
     } catch {}
   }
 
@@ -1987,8 +2197,7 @@ export default function CoachChatInline({
             backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
             scrollbarGutter: "stable both-edges",
             overscrollBehavior: "contain",
-            overflowAnchor: "none", // evitar saltos por scroll anchoring
-            overflowY: "scroll", // mantener el espacio del scrollbar estable
+            overflowY: "scroll",
           }}
         >
           {isJoining && items.length === 0 ? (
@@ -2043,6 +2252,49 @@ export default function CoachChatInline({
                     <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
                       {m.text}
                     </div>
+                    {Array.isArray(m.attachments) &&
+                      m.attachments.length > 0 && (
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                          {m.attachments.map((a) => {
+                            const url = getAttachmentUrl(a);
+                            const isImg = (a.mime || "").startsWith("image/");
+                            const isVideo = (a.mime || "").startsWith("video/");
+                            const isAudio = (a.mime || "").startsWith("audio/");
+                            return (
+                              <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => openPreview(a)}
+                                className="relative rounded-md overflow-hidden bg-white/60 text-left"
+                                title={a.name}
+                              >
+                                {isImg ? (
+                                  <img
+                                    src={url || "/placeholder.svg"}
+                                    alt={a.name}
+                                    className="max-h-40 w-full object-cover"
+                                  />
+                                ) : isVideo ? (
+                                  <div className="aspect-video w-full max-h-40">
+                                    <video
+                                      src={url}
+                                      className="h-full w-full"
+                                    />
+                                  </div>
+                                ) : isAudio ? (
+                                  <div className="p-2">
+                                    <audio src={url} className="w-full" />
+                                  </div>
+                                ) : (
+                                  <div className="p-2 text-xs break-all underline">
+                                    {a.name}
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     <div
                       className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
                         isMine ? "text-gray-600" : "text-gray-500"
@@ -2091,13 +2343,182 @@ export default function CoachChatInline({
           <div ref={bottomRef} />
         </div>
 
-        <div className="px-3 py-3 bg-[#F0F0F0] border-t border-gray-200">
+        <div
+          className="px-3 py-3 bg-[#F0F0F0] border-t border-gray-200"
+          onDragOver={(e) => {
+            try {
+              if (e.dataTransfer?.types?.includes("Files")) {
+                e.preventDefault();
+              }
+            } catch {}
+          }}
+          onDrop={(e) => {
+            try {
+              if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+                e.preventDefault();
+                addPendingAttachments(e.dataTransfer.files);
+              }
+            } catch {}
+          }}
+        >
           <div className="flex items-center gap-2">
-            <button className="p-2 text-gray-600 hover:text-gray-800 transition-colors">
-              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" />
-              </svg>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFilesSelected}
+              className="hidden"
+              // Permitimos todos los tipos; el backend decidirá cómo manejarlos
+              accept="*/*"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title={uploading ? "Subiendo archivos…" : "Adjuntar archivos"}
+              className="p-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50"
+            >
+              <Paperclip className="w-5 h-5" />
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                // Toggle grabación de audio
+                if (recording) {
+                  try {
+                    mediaRecorderRef.current?.stop();
+                  } catch {}
+                  setRecording(false);
+                } else {
+                  (async () => {
+                    try {
+                      if (
+                        typeof navigator === "undefined" ||
+                        !navigator.mediaDevices?.getUserMedia
+                      ) {
+                        setUploadError(
+                          "Grabación no soportada en este navegador."
+                        );
+                        return;
+                      }
+                      const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                      });
+                      recordedChunksRef.current = [];
+                      const mimes = [
+                        "audio/webm;codecs=opus",
+                        "audio/webm",
+                        "audio/ogg;codecs=opus",
+                        "audio/ogg",
+                      ];
+                      let mimeType: string | undefined = undefined;
+                      for (const c of mimes) {
+                        if (
+                          (window as any).MediaRecorder?.isTypeSupported?.(c)
+                        ) {
+                          mimeType = c;
+                          break;
+                        }
+                      }
+                      const mr = new MediaRecorder(
+                        stream,
+                        mimeType ? { mimeType } : undefined
+                      );
+                      mediaRecorderRef.current = mr;
+                      mr.ondataavailable = (ev) => {
+                        if (ev.data && ev.data.size > 0)
+                          recordedChunksRef.current.push(ev.data);
+                      };
+                      mr.onstop = () => {
+                        try {
+                          const blob = new Blob(recordedChunksRef.current, {
+                            type: mr.mimeType || "audio/webm",
+                          });
+                          const ts = new Date();
+                          const pad = (n: number) => String(n).padStart(2, "0");
+                          const fname = `grabacion-${ts.getFullYear()}${pad(
+                            ts.getMonth() + 1
+                          )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
+                            ts.getMinutes()
+                          )}${pad(ts.getSeconds())}.webm`;
+                          const file = new File([blob], fname, {
+                            type: blob.type || "audio/webm",
+                          });
+                          addPendingAttachments([file] as any);
+                        } catch {
+                          setUploadError(
+                            "No se pudo procesar el audio grabado."
+                          );
+                        }
+                        try {
+                          stream.getTracks().forEach((t) => t.stop());
+                        } catch {}
+                      };
+                      mr.start();
+                      setRecording(true);
+                    } catch (err: any) {
+                      setUploadError(
+                        err?.message || "No se pudo iniciar la grabación"
+                      );
+                    }
+                  })();
+                }
+              }}
+              title={recording ? "Detener grabación" : "Grabar audio"}
+              className={`p-2 rounded-md transition-colors ${
+                recording
+                  ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              {recording ? (
+                <Square className="w-4 h-4" />
+              ) : (
+                <Mic className="w-5 h-5" />
+              )}
+            </button>
+            {attachments.length > 0 && (
+              <div className="flex-1 overflow-x-auto">
+                <div className="flex items-center gap-2">
+                  {attachments.map((a, i) => (
+                    <div
+                      key={i}
+                      className="group relative flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs text-gray-700"
+                    >
+                      {a.preview ? (
+                        // Pequeña miniatura si es imagen/video
+                        a.file.type.startsWith("image/") ? (
+                          <img
+                            src={a.preview}
+                            alt={a.file.name}
+                            className="h-6 w-6 rounded object-cover"
+                          />
+                        ) : (
+                          <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
+                            {a.file.type.startsWith("video/") ? "VID" : "FILE"}
+                          </div>
+                        )
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
+                          FILE
+                        </div>
+                      )}
+                      <div className="max-w-[160px] truncate">
+                        {a.file.name}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(i)}
+                        className="ml-1 rounded px-1 text-gray-500 hover:text-gray-800"
+                        title="Quitar adjunto"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <input
               value={text}
               onChange={(e) => {
@@ -2117,7 +2538,7 @@ export default function CoachChatInline({
             />
             <button
               onClick={send}
-              disabled={!text.trim()}
+              disabled={uploading || (!text.trim() && attachments.length === 0)}
               className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors"
             >
               <svg
@@ -2135,8 +2556,109 @@ export default function CoachChatInline({
               </svg>
             </button>
           </div>
+          {uploadError && (
+            <div className="mt-2 text-xs text-rose-600">{uploadError}</div>
+          )}
+          {(uploading || uploadState.active) && (
+            <div className="mt-1 text-[11px] text-gray-700 flex items-center gap-2">
+              <span className="inline-block h-3 w-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+              <span>
+                Subiendo archivos {uploadState.done}/{uploadState.total}
+                {uploadState.current ? ` — ${uploadState.current}` : ""}
+              </span>
+            </div>
+          )}
         </div>
       </div>
+      {/* Modal: Vista previa de adjuntos */}
+      <Dialog
+        open={previewOpen}
+        onOpenChange={(o) => {
+          setPreviewOpen(o);
+          if (!o) setPreviewAttachment(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              {previewAttachment?.name || "Vista previa"}
+            </DialogTitle>
+            <DialogDescription>
+              {previewAttachment?.mime || ""}
+              {typeof previewAttachment?.size === "number" && (
+                <> · {formatBytes(previewAttachment?.size)}</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-1">
+            {previewAttachment
+              ? (() => {
+                  const a = previewAttachment;
+                  const url = getAttachmentUrl(a);
+                  const mime = (a.mime || "").toLowerCase();
+                  if (mime.startsWith("image/")) {
+                    return (
+                      <img
+                        src={url || "/placeholder.svg"}
+                        alt={a.name}
+                        className="max-h-[60vh] w-full object-contain rounded-md"
+                      />
+                    );
+                  }
+                  if (mime.startsWith("video/")) {
+                    return (
+                      <video
+                        src={url}
+                        controls
+                        className="max-h-[60vh] w-full rounded-md"
+                      />
+                    );
+                  }
+                  if (mime.startsWith("audio/")) {
+                    return <audio src={url} controls className="w-full" />;
+                  }
+                  if (mime === "application/pdf") {
+                    return (
+                      <iframe
+                        src={url}
+                        className="w-full h-[60vh] rounded-md bg-white"
+                      />
+                    );
+                  }
+                  return (
+                    <div className="p-4 rounded-md border bg-gray-50 text-sm">
+                      No hay vista previa disponible. Puedes descargar el
+                      archivo.
+                    </div>
+                  );
+                })()
+              : null}
+          </div>
+          <DialogFooter>
+            {previewAttachment && (
+              <div className="flex items-center gap-2">
+                <a
+                  href={getAttachmentUrl(previewAttachment)}
+                  download={previewAttachment.name}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-md bg-[#128C7E] text-white px-3 py-2 text-sm hover:bg-[#0f6e64]"
+                >
+                  Descargar
+                </a>
+                <a
+                  href={getAttachmentUrl(previewAttachment)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+                >
+                  Abrir en pestaña
+                </a>
+              </div>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Modal: Ticket generado por IA */}
       <Dialog open={ticketModalOpen} onOpenChange={setTicketModalOpen}>
         <DialogContent className="sm:max-w-lg">

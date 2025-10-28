@@ -10,6 +10,7 @@ import {
   getStudentTickets,
   getTicketFile,
   getTicketFiles,
+  deleteTicketFile,
   updateTicket,
 } from "../../api";
 import { Button } from "@/components/ui/button";
@@ -27,13 +28,11 @@ import {
   FileArchive,
   Calendar,
   Clock,
-  CheckCircle2,
   Upload,
   X,
   Download,
   Eye,
   User,
-  Users,
   Paperclip,
 } from "lucide-react";
 import {
@@ -42,7 +41,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -57,7 +55,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +63,6 @@ import { useAuth } from "@/hooks/use-auth";
 import {
   Drawer,
   DrawerContent,
-  DrawerDescription,
   DrawerFooter,
   DrawerHeader,
   DrawerTitle,
@@ -160,24 +156,9 @@ export default function TicketsPanel({
   const [status, setStatus] = useState<string>("ALL");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
-  const [openCreate, setOpenCreate] = useState(false);
   const [tipos, setTipos] = useState<
     { id: string; key: string; value: string }[]
   >([]);
-  const [createNombre, setCreateNombre] = useState("");
-  const [createTipo, setCreateTipo] = useState("");
-  const [createDescripcion, setCreateDescripcion] = useState("");
-  const [linkInput, setLinkInput] = useState("");
-  const [links, setLinks] = useState<string[]>([]);
-  const [createFiles, setCreateFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<
-    { url: string; type: string; name: string; size: number }[]
-  >([]);
-  const [creating, setCreating] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const mediaRecorderRef = useRef<any>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [estadoOpts, setEstadoOpts] = useState<
     { key: string; value: string }[]
   >([]);
@@ -193,6 +174,11 @@ export default function TicketsPanel({
       created_at: string | null;
     }[]
   >([]);
+  const [fileToDelete, setFileToDelete] = useState<null | {
+    id: string;
+    nombre_archivo: string;
+  }>(null);
+  const [deletingFile, setDeletingFile] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFile, setPreviewFile] = useState<null | {
@@ -202,29 +188,28 @@ export default function TicketsPanel({
     url?: string;
   }>(null);
   const [blobCache, setBlobCache] = useState<Record<string, string>>({});
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [selectedTicket, setSelectedTicket] = useState<StudentTicket | null>(
     null
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editForm, setEditForm] = useState({
-    nombre: "",
-    estado: "",
-    prioridad: "",
-    plazo: null as number | null,
-    restante: null as number | null,
-    deadline: "",
-    deadlineTime: "",
-    tipo: "",
-    descripcion: "",
-    resolucion: "",
-    informante: "",
-    resuelto_por: "",
-    equipo: [] as string[],
-    tarea: "",
-    revision: "",
-  });
+
+  // New state variables for ticket creation
+  const [openCreate, setOpenCreate] = useState(false);
+  const [createFiles, setCreateFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<
+    { url: string; type: string | undefined; name: string; size: number }[]
+  >([]);
+  const [createNombre, setCreateNombre] = useState("");
+  const [createTipo, setCreateTipo] = useState("");
+  const [createDescripcion, setCreateDescripcion] = useState("");
+  const [links, setLinks] = useState<string[]>([]);
+  const [linkInput, setLinkInput] = useState("");
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<any>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -629,6 +614,30 @@ export default function TicketsPanel({
     }
   }
 
+  async function confirmDeleteFile() {
+    if (!fileToDelete) return;
+    try {
+      setDeletingFile(true);
+      await deleteTicketFile(fileToDelete.id);
+      toast({
+        title: "Archivo eliminado",
+        description: fileToDelete.nombre_archivo,
+      });
+      // refresh files list
+      if (openFiles) await openFilesFor(openFiles);
+      setFileToDelete(null);
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Error al eliminar",
+        description: String(e ?? ""),
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingFile(false);
+    }
+  }
+
   function clearPreviewCache() {
     Object.values(blobCache).forEach((u) => URL.revokeObjectURL(u));
     setBlobCache({});
@@ -636,81 +645,7 @@ export default function TicketsPanel({
 
   function openTicketDetail(ticket: StudentTicket) {
     setSelectedTicket(ticket);
-    setEditForm({
-      nombre: ticket.nombre || "",
-      estado: ticket.estado || "",
-      prioridad: (ticket as any).prioridad || "MEDIA",
-      plazo: (ticket as any).plazo || null,
-      restante: (ticket as any).restante || null,
-      deadline: ticket.deadline
-        ? new Date(ticket.deadline).toISOString().split("T")[0]
-        : "",
-      deadlineTime: ticket.deadline
-        ? new Date(ticket.deadline).toISOString().split("T")[1].slice(0, 5)
-        : "",
-      tipo: ticket.tipo || "",
-      descripcion: (ticket as any).descripcion || "",
-      resolucion: (ticket as any).resolucion || "",
-      informante: (ticket as any).informante || "",
-      resuelto_por: (ticket as any).resuelto_por || "",
-      equipo: (ticket as any).equipo || [],
-      tarea: (ticket as any).tarea || "",
-      revision: (ticket as any).revision || "",
-    });
     setDrawerOpen(true);
-  }
-
-  async function handleSaveTicket() {
-    if (!selectedTicket || isStudent) return;
-    try {
-      const codigo = selectedTicket.codigo;
-      if (!codigo) throw new Error("No se encontró el código UUID del ticket");
-
-      const deadlineISO =
-        editForm.deadline && editForm.deadlineTime
-          ? `${editForm.deadline}T${editForm.deadlineTime}:00`
-          : editForm.deadline
-          ? `${editForm.deadline}T00:00:00`
-          : undefined;
-
-      await updateTicket(codigo, {
-        nombre: editForm.nombre,
-        estado: editForm.estado,
-        prioridad: editForm.prioridad,
-        plazo: editForm.plazo ?? undefined,
-        restante: editForm.restante ?? undefined,
-        deadline: deadlineISO,
-        tipo: editForm.tipo,
-        descripcion: editForm.descripcion,
-        resolucion: editForm.resolucion,
-        informante: editForm.informante,
-        resuelto_por: editForm.resuelto_por,
-        equipo: editForm.equipo,
-        tarea: editForm.tarea,
-        revision: editForm.revision,
-      });
-
-      const fetched = await getStudentTickets(student.code || "");
-      setAll(
-        fetched
-          .map((t) => ({ ...t }))
-          .sort((a, b) => (a.creacion > b.creacion ? -1 : 1))
-      );
-      setAllFull(fetched);
-
-      setDrawerOpen(false);
-      toast({
-        title: "Ticket actualizado",
-        description: "Los cambios se guardaron exitosamente.",
-      });
-    } catch (e) {
-      console.error(e);
-      toast({
-        title: "Error al actualizar",
-        description: "No se pudieron guardar los cambios.",
-        variant: "destructive",
-      });
-    }
   }
 
   return (
@@ -748,247 +683,13 @@ export default function TicketsPanel({
                   Tickets del alumno
                 </h3>
               </div>
-              <Dialog
-                open={!isStudent && openCreate}
-                onOpenChange={setOpenCreate}
+              {/*   <Button
+                onClick={() => setOpenCreate(true)}
+                className="flex items-center gap-2"
               >
-                <DialogTrigger asChild>
-                  <span>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="gap-2"
-                      disabled={isStudent}
-                      title={
-                        isStudent
-                          ? "Los alumnos no pueden crear tickets desde este panel"
-                          : undefined
-                      }
-                    >
-                      <Plus className="h-4 w-4" />
-                      Nuevo ticket
-                    </Button>
-                  </span>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Crear nuevo ticket</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="nombre">Nombre del ticket</Label>
-                      <Input
-                        id="nombre"
-                        value={createNombre}
-                        onChange={(e) => setCreateNombre(e.target.value)}
-                        placeholder="Asunto del ticket"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="tipo">Tipo</Label>
-                      <Select value={createTipo} onValueChange={setCreateTipo}>
-                        <SelectTrigger id="tipo">
-                          <SelectValue placeholder="Selecciona tipo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {tipos.map((t) => (
-                            <SelectItem key={t.id} value={t.key}>
-                              {t.value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="descripcion">Descripción</Label>
-                      <Textarea
-                        id="descripcion"
-                        value={createDescripcion}
-                        onChange={(e) => setCreateDescripcion(e.target.value)}
-                        placeholder="Detalles del ticket..."
-                        rows={4}
-                      />
-                    </div>
-
-                    {/* Links section */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>Enlaces</Label>
-                        <span className="text-xs text-slate-500">
-                          {links.length}/10
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="https://..."
-                          value={linkInput}
-                          onChange={(e) => setLinkInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              addLink();
-                            }
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={addLink}
-                        >
-                          Agregar
-                        </Button>
-                      </div>
-                      {links.length > 0 && (
-                        <div className="space-y-1 max-h-32 overflow-auto">
-                          {links.map((u, i) => (
-                            <div
-                              key={`${u}-${i}`}
-                              className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
-                            >
-                              <a
-                                href={u}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex-1 truncate text-sm text-blue-600 hover:underline"
-                              >
-                                {u}
-                              </a>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() =>
-                                  setLinks((prev) =>
-                                    prev.filter((x) => x !== u)
-                                  )
-                                }
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Files section */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label>Archivos</Label>
-                        <span className="text-xs text-slate-500">
-                          {createFiles.length}/10
-                        </span>
-                      </div>
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        className="hidden"
-                        multiple
-                        onChange={onFileInputChange}
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => fileInputRef.current?.click()}
-                        >
-                          <Upload className="mr-2 h-4 w-4" />
-                          Elegir archivos
-                        </Button>
-                        {!isRecording ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={startRecording}
-                          >
-                            Grabar audio
-                          </Button>
-                        ) : (
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            onClick={stopRecording}
-                          >
-                            Detener
-                          </Button>
-                        )}
-                      </div>
-                      {audioPreviewUrl && (
-                        <audio
-                          src={audioPreviewUrl}
-                          controls
-                          className="w-full"
-                        />
-                      )}
-                      {createFiles.length > 0 && (
-                        <div className="space-y-2 max-h-48 overflow-auto">
-                          {previews.map((p, idx) => (
-                            <div
-                              key={`${p.name}-${idx}`}
-                              className="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3"
-                            >
-                              {p.type.startsWith("image/") ? (
-                                <img
-                                  src={p.url || "/placeholder.svg"}
-                                  alt={p.name}
-                                  className="h-12 w-12 rounded object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-200 text-xs font-medium text-slate-600">
-                                  {p.name.split(".").pop()?.toUpperCase() ||
-                                    "FILE"}
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <div className="truncate text-sm font-medium">
-                                  {shortenFileName(p.name)}
-                                </div>
-                                <div className="text-xs text-slate-500">
-                                  {Math.ceil(p.size / 1024)} KB
-                                </div>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeFileAt(idx)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setOpenCreate(false)}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button
-                      onClick={handleCreateSubmit}
-                      disabled={
-                        isStudent ||
-                        creating ||
-                        !createNombre.trim() ||
-                        !createTipo.trim()
-                      }
-                    >
-                      {creating && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      Crear ticket
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+                <Plus className="h-4 w-4" />
+                Nuevo ticket
+              </Button> */}
             </div>
 
             {/* Status filters */}
@@ -1064,43 +765,6 @@ export default function TicketsPanel({
                   <div
                     key={col}
                     className="min-h-[200px] rounded-lg border border-slate-200 bg-slate-50/50 p-4"
-                    onDragOver={(e) => {
-                      if (isStudent) return;
-                      e.preventDefault();
-                    }}
-                    onDrop={async (e) => {
-                      e.preventDefault();
-                      if (isStudent) {
-                        toast({
-                          title: "Acción no permitida",
-                          description:
-                            "Los alumnos no pueden cambiar el estado de los tickets.",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      const ticketId = e.dataTransfer.getData("text/plain");
-                      if (!ticketId) return;
-                      setAll((prev) =>
-                        prev.map((t) =>
-                          String(t.id) === String(ticketId)
-                            ? { ...t, estado: col }
-                            : t
-                        )
-                      );
-                      try {
-                        await handleChangeEstado(ticketId, col);
-                      } catch (err) {
-                        const refreshed = await getStudentTickets(
-                          student.code || ""
-                        );
-                        setAll(
-                          refreshed
-                            .slice()
-                            .sort((a, b) => (a.creacion > b.creacion ? -1 : 1))
-                        );
-                      }
-                    }}
                   >
                     <div className="mb-4 flex items-center justify-between">
                       <Badge
@@ -1118,17 +782,6 @@ export default function TicketsPanel({
                       {itemsForCol.map((t) => (
                         <div
                           key={t.id}
-                          draggable={!isStudent}
-                          onDragStart={(e) => {
-                            if (isStudent) return;
-                            try {
-                              e.dataTransfer.setData(
-                                "text/plain",
-                                String(t.id)
-                              );
-                            } catch {}
-                            e.dataTransfer.effectAllowed = "move";
-                          }}
                           onClick={() => openTicketDetail(t)}
                           className="group cursor-pointer rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:border-slate-300"
                         >
@@ -1158,7 +811,7 @@ export default function TicketsPanel({
                             </div>
                             <div className="flex items-center justify-between">
                               <button
-                                className="text-xs text-blue-600 hover:underline"
+                                className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openFilesFor(
@@ -1169,7 +822,10 @@ export default function TicketsPanel({
                                 }}
                                 type="button"
                               >
-                                Ver archivos
+                                <FileIcon className="h-3.5 w-3.5" />
+                                <span className="underline decoration-slate-300 hover:decoration-slate-900">
+                                  Ver archivos
+                                </span>
                               </button>
                             </div>
                           </div>
@@ -1192,13 +848,17 @@ export default function TicketsPanel({
                 <DrawerTitle className="text-lg font-semibold text-slate-900">
                   {selectedTicket?.nombre || "Detalle del ticket"}
                 </DrawerTitle>
-                <DrawerDescription className="mt-1">
-                  {selectedTicket?.tipo && (
-                    <Badge variant="outline" className="mt-2">
-                      {selectedTicket.tipo}
-                    </Badge>
-                  )}
-                </DrawerDescription>
+                {selectedTicket?.creacion && (
+                  <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                    <Calendar className="h-4 w-4" />
+                    <span>Creado el {fmtDate(selectedTicket.creacion)}</span>
+                  </div>
+                )}
+                {selectedTicket?.tipo && (
+                  <Badge variant="outline" className="mt-2">
+                    {selectedTicket.tipo}
+                  </Badge>
+                )}
               </div>
               {selectedTicket && (
                 <Badge
@@ -1213,425 +873,86 @@ export default function TicketsPanel({
             </div>
           </DrawerHeader>
 
-          <div className="flex-1 overflow-y-auto">
-            <Tabs defaultValue="general" className="w-full">
-              <div className="border-b px-6">
-                <TabsList className="w-full justify-start h-12 bg-transparent p-0">
-                  <TabsTrigger
-                    value="general"
-                    className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
-                  >
-                    General
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="detalles"
-                    className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
-                  >
-                    Detalles
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="archivos"
-                    className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
-                  >
-                    Archivos
-                  </TabsTrigger>
-                </TabsList>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-slate-500">
+                    Título del ticket
+                  </Label>
+                  <p className="text-base text-slate-900">
+                    {selectedTicket?.nombre || "—"}
+                  </p>
+                </div>
               </div>
 
-              <TabsContent value="general" className="p-6 space-y-6 mt-0">
+              <Separator />
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <User className="h-4 w-4 text-slate-500" />
+                  Personas involucradas
+                </div>
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label
-                      htmlFor="edit-nombre"
-                      className="text-sm font-medium"
-                    >
-                      Título del ticket
+                    <Label className="text-sm text-slate-500">Informante</Label>
+                    <p className="text-base text-slate-900">
+                      {(selectedTicket as any)?.informante || "—"}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm text-slate-500">
+                      Resuelto por
                     </Label>
-                    <Input
-                      id="edit-nombre"
-                      className="h-10"
-                      value={editForm.nombre}
-                      onChange={(e) =>
-                        setEditForm({ ...editForm, nombre: e.target.value })
-                      }
-                      disabled={isStudent}
-                      placeholder="Nombre o asunto"
-                    />
+                    <p className="text-base text-slate-900">
+                      {(selectedTicket as any)?.resuelto_por || "—"}
+                    </p>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="edit-estado"
-                        className="text-sm font-medium"
-                      >
-                        Estado
-                      </Label>
-                      <Select
-                        value={editForm.estado}
-                        onValueChange={(v) =>
-                          setEditForm({ ...editForm, estado: v })
-                        }
-                        disabled={isStudent}
-                      >
-                        <SelectTrigger id="edit-estado" className="h-10">
-                          <SelectValue placeholder="Seleccionar estado" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {estadoOpts.map((opt) => (
-                            <SelectItem key={opt.key} value={opt.key}>
-                              {opt.value}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="edit-prioridad"
-                        className="text-sm font-medium"
-                      >
-                        Prioridad
-                      </Label>
-                      <Select
-                        value={editForm.prioridad}
-                        onValueChange={(v) =>
-                          setEditForm({ ...editForm, prioridad: v })
-                        }
-                        disabled={isStudent}
-                      >
-                        <SelectTrigger id="edit-prioridad" className="h-10">
-                          <SelectValue placeholder="Seleccionar prioridad" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="BAJA">Baja</SelectItem>
-                          <SelectItem value="MEDIA">Media</SelectItem>
-                          <SelectItem value="ALTA">Alta</SelectItem>
-                          <SelectItem value="URGENTE">Urgente</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Clock className="h-4 w-4 text-slate-500" />
-                      Plazos y fechas
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-plazo" className="text-sm">
-                          Plazo (días)
-                        </Label>
-                        <Input
-                          id="edit-plazo"
-                          type="number"
-                          className="h-10"
-                          value={editForm.plazo ?? ""}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              plazo: e.target.value
-                                ? Number(e.target.value)
-                                : null,
-                            })
-                          }
-                          disabled={isStudent}
-                          min={0}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-restante" className="text-sm">
-                          Restante (días)
-                        </Label>
-                        <Input
-                          id="edit-restante"
-                          type="number"
-                          className="h-10"
-                          value={editForm.restante ?? ""}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              restante: e.target.value
-                                ? Number(e.target.value)
-                                : null,
-                            })
-                          }
-                          disabled={isStudent}
-                          min={0}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-deadline" className="text-sm">
-                          Fecha límite
-                        </Label>
-                        <Input
-                          id="edit-deadline"
-                          type="date"
-                          className="h-10"
-                          value={editForm.deadline}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              deadline: e.target.value,
-                            })
-                          }
-                          disabled={isStudent}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-deadline-time" className="text-sm">
-                          Hora
-                        </Label>
-                        <Input
-                          id="edit-deadline-time"
-                          type="time"
-                          className="h-10"
-                          value={editForm.deadlineTime}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              deadlineTime: e.target.value,
-                            })
-                          }
-                          disabled={isStudent}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {selectedTicket?.creacion && (
-                    <div className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        <span>
-                          Creado el {fmtDate(selectedTicket.creacion)}
-                        </span>
-                      </div>
-                    </div>
-                  )}
                 </div>
-              </TabsContent>
+              </div>
 
-              <TabsContent value="detalles" className="p-6 space-y-6 mt-0">
-                <div className="space-y-4">
+              <Separator />
+
+              {/* Files section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-medium">
-                    <User className="h-4 w-4 text-slate-500" />
-                    Personas involucradas
+                    <Paperclip className="h-4 w-4 text-slate-500" />
+                    Archivos adjuntos
                   </div>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-informante" className="text-sm">
-                        Informante
-                      </Label>
-                      <Input
-                        id="edit-informante"
-                        className="h-10"
-                        value={editForm.informante}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            informante: e.target.value,
-                          })
-                        }
-                        disabled={isStudent}
-                        placeholder="Nombre del informante"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-resuelto-por" className="text-sm">
-                        Resuelto por
-                      </Label>
-                      <Input
-                        id="edit-resuelto-por"
-                        className="h-10"
-                        value={editForm.resuelto_por}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            resuelto_por: e.target.value,
-                          })
-                        }
-                        disabled={isStudent}
-                        placeholder="Nombre de quien resolvió"
-                      />
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Users className="h-4 w-4 text-slate-500" />
-                      Equipo asignado
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-equipo" className="text-sm">
-                        Códigos de equipo (separados por coma)
-                      </Label>
-                      <Input
-                        id="edit-equipo"
-                        className="h-10"
-                        value={editForm.equipo.join(", ")}
-                        onChange={(e) =>
-                          setEditForm({
-                            ...editForm,
-                            equipo: e.target.value
-                              .split(",")
-                              .map((s) => s.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        disabled={isStudent}
-                        placeholder="JJp8..., hQycZc..., ..."
-                      />
-                      {editForm.equipo.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {editForm.equipo.map((c) => (
-                            <Badge
-                              key={c}
-                              variant="secondary"
-                              className="gap-1"
-                            >
-                              {c}
-                              {!isStudent && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setEditForm({
-                                      ...editForm,
-                                      equipo: editForm.equipo.filter(
-                                        (x) => x !== c
-                                      ),
-                                    })
-                                  }
-                                  className="ml-1 hover:text-slate-900"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              )}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <CheckCircle2 className="h-4 w-4 text-slate-500" />
-                      Trabajo y resolución
-                    </div>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-tarea" className="text-sm">
-                          Descripción de la tarea
-                        </Label>
-                        <Textarea
-                          id="edit-tarea"
-                          value={editForm.tarea}
-                          onChange={(e) =>
-                            setEditForm({ ...editForm, tarea: e.target.value })
-                          }
-                          rows={4}
-                          disabled={isStudent}
-                          placeholder="Describe la tarea a realizar..."
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-resolucion" className="text-sm">
-                          Notas de resolución
-                        </Label>
-                        <Textarea
-                          id="edit-resolucion"
-                          value={editForm.resolucion}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              resolucion: e.target.value,
-                            })
-                          }
-                          rows={4}
-                          disabled={isStudent}
-                          placeholder="Cómo se resolvió el ticket..."
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-revision" className="text-sm">
-                          Revisión
-                        </Label>
-                        <Input
-                          id="edit-revision"
-                          className="h-10"
-                          value={editForm.revision}
-                          onChange={(e) =>
-                            setEditForm({
-                              ...editForm,
-                              revision: e.target.value,
-                            })
-                          }
-                          disabled={isStudent}
-                          placeholder="Notas de revisión"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="archivos" className="p-6 space-y-6 mt-0">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Paperclip className="h-4 w-4 text-slate-500" />
-                      Archivos adjuntos
-                    </div>
-                    {selectedTicket && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          openFilesFor(
-                            (selectedTicket as any).codigo ||
-                              (selectedTicket as any).id_externo ||
-                              selectedTicket.id
-                          )
-                        }
-                      >
-                        Ver todos
-                      </Button>
-                    )}
-                  </div>
-
                   {selectedTicket && (
-                    <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
-                      <p>
-                        Haz clic en "Ver todos" para gestionar los archivos
-                        adjuntos a este ticket.
-                      </p>
-                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        openFilesFor(
+                          (selectedTicket as any).codigo ||
+                            (selectedTicket as any).id_externo ||
+                            selectedTicket.id
+                        )
+                      }
+                    >
+                      Ver todos
+                    </Button>
                   )}
                 </div>
-              </TabsContent>
-            </Tabs>
+
+                {selectedTicket && (
+                  <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+                    <p>
+                      Haz clic en "Ver todos" para ver los archivos adjuntos a
+                      este ticket.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <DrawerFooter className="border-t">
             <div className="flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setDrawerOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSaveTicket} disabled={isStudent}>
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Guardar cambios
+                Cerrar
               </Button>
             </div>
           </DrawerFooter>
@@ -1709,23 +1030,41 @@ export default function TicketsPanel({
                           ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
                           : ""}
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center">
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="flex-1 bg-transparent"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
                           onClick={() => downloadFile(f.id, f.nombre_archivo)}
+                          aria-label={`Descargar ${f.nombre_archivo}`}
                         >
-                          <Download className="h-3 w-3" />
+                          <Download className="h-4 w-4" />
                         </Button>
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="flex-1 bg-transparent"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
                           onClick={() => openPreview(f)}
+                          aria-label={`Ver ${f.nombre_archivo}`}
                         >
-                          <Eye className="h-3 w-3" />
+                          <Eye className="h-4 w-4" />
                         </Button>
+                        {!isStudent && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 text-red-600"
+                            onClick={() =>
+                              setFileToDelete({
+                                id: f.id,
+                                nombre_archivo: f.nombre_archivo,
+                              })
+                            }
+                            aria-label={`Eliminar ${f.nombre_archivo}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1733,6 +1072,36 @@ export default function TicketsPanel({
               </div>
             </TooltipProvider>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm delete file dialog */}
+      <Dialog
+        open={!!fileToDelete}
+        onOpenChange={(v) => {
+          if (!v) setFileToDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar archivo</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-sm text-slate-600">
+            ¿Deseas eliminar el archivo "{fileToDelete?.nombre_archivo}"? Esta
+            acción no se puede deshacer.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFileToDelete(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmDeleteFile}
+              disabled={deletingFile}
+              className="ml-2"
+            >
+              {deletingFile ? "Eliminando..." : "Eliminar"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1816,6 +1185,161 @@ export default function TicketsPanel({
               No hay previsualización disponible.
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create ticket dialog */}
+      <Dialog open={openCreate} onOpenChange={setOpenCreate}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Crear nuevo ticket</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Asunto</Label>
+              <Input
+                value={createNombre}
+                onChange={(e) => setCreateNombre(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select value={createTipo} onValueChange={setCreateTipo}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tipos.map((t) => (
+                    <SelectItem key={t.id} value={t.key}>
+                      {t.value}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción</Label>
+              <Textarea
+                value={createDescripcion}
+                onChange={(e) => setCreateDescripcion(e.target.value)}
+                placeholder="Detalles del problema..."
+                rows={5}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Enlaces</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={linkInput}
+                  onChange={(e) => setLinkInput(e.target.value)}
+                  placeholder="Añadir enlace..."
+                />
+                <Button
+                  variant="outline"
+                  onClick={addLink}
+                  disabled={links.length >= 10}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {links.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {links.map((link, i) => (
+                    <Badge
+                      key={i}
+                      variant="outline"
+                      className="pr-2 cursor-pointer"
+                      onClick={() =>
+                        setLinks((l) => l.filter((_, idx) => idx !== i))
+                      }
+                    >
+                      {link.length > 40 ? link.substring(0, 37) + "..." : link}{" "}
+                      <X className="h-3 w-3 ml-1" />
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Archivos adjuntos</Label>
+              <div className="flex flex-wrap gap-2">
+                {previews.map((p, i) => (
+                  <div
+                    key={i}
+                    className="relative h-20 w-20 rounded-md border overflow-hidden group"
+                  >
+                    <img
+                      src={p.url || "/placeholder.svg"}
+                      alt={p.name}
+                      className="h-full w-full object-cover"
+                    />
+                    <button
+                      onClick={() => removeFileAt(i)}
+                      className="absolute top-1 right-1 bg-black bg-opacity-50 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="h-3 w-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+                {createFiles.length < 10 && (
+                  <label className="flex items-center justify-center h-20 w-20 rounded-md border border-dashed cursor-pointer bg-slate-50 hover:bg-slate-100">
+                    <Upload className="h-6 w-6 text-slate-400" />
+                    <Input
+                      type="file"
+                      className="hidden"
+                      onChange={onFileInputChange}
+                      multiple
+                    />
+                  </label>
+                )}
+              </div>
+              {createFiles.length >= 10 && (
+                <p className="text-xs text-red-500">
+                  Máximo 10 archivos adjuntos permitidos.
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Grabación de audio</Label>
+              <div className="flex items-center gap-3">
+                {isRecording ? (
+                  <Button
+                    onClick={stopRecording}
+                    variant="destructive"
+                    className="flex items-center gap-1"
+                  >
+                    <Loader2 className="h-4 w-4 animate-spin" /> Detener
+                    grabación
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={startRecording}
+                    className="flex items-center gap-1"
+                  >
+                    <Clock className="h-4 w-4" /> Grabar audio
+                  </Button>
+                )}
+                {audioPreviewUrl && (
+                  <audio
+                    controls
+                    src={audioPreviewUrl}
+                    className="h-10 w-auto"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpenCreate(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleCreateSubmit}
+              disabled={creating || !createNombre.trim() || !createTipo.trim()}
+            >
+              {creating ? "Creando..." : "Crear ticket"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

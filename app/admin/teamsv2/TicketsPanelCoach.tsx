@@ -60,6 +60,8 @@ import {
   getTicketFile,
   getOpciones,
   createTicket,
+  deleteTicketFile,
+  uploadTicketFiles,
 } from "@/app/admin/alumnos/api";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -235,6 +237,11 @@ export default function TicketsPanelCoach({
       created_at: string | null;
     }[]
   >([]);
+  const [fileToDelete, setFileToDelete] = useState<null | {
+    id: string;
+    nombre_archivo: string;
+  }>(null);
+  const [deletingFile, setDeletingFile] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFile, setPreviewFile] = useState<null | {
@@ -270,6 +277,9 @@ export default function TicketsPanelCoach({
     { url: string; type: string; name: string; size: number }[]
   >([]);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [editLinkInput, setEditLinkInput] = useState("");
+  const [editLinks, setEditLinks] = useState<string[]>([]);
+  const [uploadingEditFiles, setUploadingEditFiles] = useState(false);
   const [detailsById, setDetailsById] = useState<
     Record<string | number, ExtraDetails>
   >({});
@@ -355,6 +365,134 @@ export default function TicketsPanelCoach({
     };
   }, [createFiles]);
 
+  {
+    /* Enlaces para adjuntar como URLs */
+  }
+  <div className="space-y-2 pt-2">
+    <Label className="text-sm font-medium">Enlaces</Label>
+    <div className="flex gap-2">
+      <div className="relative flex-1">
+        <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <Input
+          className="h-10 pl-9"
+          placeholder="https://..."
+          value={editLinkInput}
+          onChange={(e) => setEditLinkInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const raw = editLinkInput.trim();
+              if (!raw) return;
+              const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+              try {
+                new URL(url);
+                setEditLinks((prev) =>
+                  Array.from(new Set([...prev, url])).slice(0, 10)
+                );
+                setEditLinkInput("");
+              } catch {}
+            }
+          }}
+        />
+      </div>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          const raw = editLinkInput.trim();
+          if (!raw) return;
+          const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+          try {
+            new URL(url);
+            setEditLinks((prev) =>
+              Array.from(new Set([...prev, url])).slice(0, 10)
+            );
+            setEditLinkInput("");
+          } catch {}
+        }}
+      >
+        Agregar
+      </Button>
+    </div>
+    {editLinks.length > 0 && (
+      <div className="space-y-2">
+        {editLinks.map((u, i) => (
+          <div
+            key={`${u}-${i}`}
+            className="flex items-center gap-2 rounded-lg border bg-slate-50 px-3 py-2"
+          >
+            <LinkIcon className="h-4 w-4 shrink-0 text-slate-400" />
+            <a
+              href={u}
+              target="_blank"
+              rel="noreferrer"
+              className="min-w-0 flex-1 truncate text-sm text-blue-600 hover:underline"
+            >
+              {u}
+            </a>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() =>
+                setEditLinks((prev) => prev.filter((x) => x !== u))
+              }
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ))}
+      </div>
+    )}
+
+    <div className="mt-2 flex gap-2">
+      <Button
+        size="sm"
+        className="flex-1"
+        onClick={async () => {
+          if (!editTicket?.codigo) return;
+          if (editFiles.length === 0 && editLinks.length === 0) {
+            toast({ title: "No hay archivos ni enlaces para subir" });
+            return;
+          }
+          setUploadingEditFiles(true);
+          try {
+            await uploadTicketFiles(editTicket.codigo, editFiles, editLinks);
+            toast({ title: "Archivos/URLs subidos" });
+            setEditFiles([]);
+            setEditLinks([]);
+            // refrescar la lista de archivos existentes
+            const list = await getTicketFiles(editTicket.codigo);
+            setEditExistingFiles(list);
+            // si el modal de archivos global está abierto para este ticket, refrescar
+            if (openFiles === editTicket.codigo) {
+              setFiles(list);
+            }
+          } catch (e) {
+            console.error(e);
+            toast({ title: "Error subiendo archivos/URLs" });
+          } finally {
+            setUploadingEditFiles(false);
+          }
+        }}
+        disabled={uploadingEditFiles}
+      >
+        {uploadingEditFiles ? "Subiendo..." : "Subir archivos/URLs"}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => {
+          setEditFiles([]);
+          setEditLinks([]);
+          setEditLinkInput("");
+        }}
+      >
+        Limpiar
+      </Button>
+    </div>
+  </div>;
   function normalize(s?: string | null) {
     const str = (s ?? "").toString();
     return str
@@ -692,8 +830,38 @@ export default function TicketsPanelCoach({
     setBlobCache({});
   }
 
+  async function confirmDeleteFile() {
+    if (!fileToDelete) return;
+    try {
+      setDeletingFile(true);
+      await deleteTicketFile(fileToDelete.id);
+      toast({
+        title: "Archivo eliminado",
+        description: fileToDelete.nombre_archivo,
+      });
+      // Refrescar listas en ambos contextos (modal global y pestaña de edición)
+      if (openFiles) await openFilesFor(openFiles);
+      if (editOpen && editTicket?.codigo) {
+        try {
+          const list = await getTicketFiles(editTicket.codigo);
+          setEditExistingFiles(list);
+        } catch {}
+      }
+      setFileToDelete(null);
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Error al eliminar archivo",
+        description: String(e ?? ""),
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingFile(false);
+    }
+  }
+
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-white">
+    <div className="h-full flex flex-col overflow-auto bg-white">
       <div className="border-b bg-white px-6 py-4 shrink-0">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div className="flex items-center gap-3">
@@ -1187,25 +1355,40 @@ export default function TicketsPanelCoach({
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                         </div>
-                        <div className="space-y-1.5 text-xs text-slate-500">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="h-3.5 w-3.5" />
-                            {fmtDate(t.created_at)}
-                          </div>
+                        <div className="space-y-2 text-xs text-slate-600">
                           {t.alumno_nombre && (
-                            <div className="flex items-center gap-1.5">
-                              <User className="h-3.5 w-3.5" />
-                              {t.alumno_nombre}
+                            <div
+                              className="flex items-center gap-1.5 truncate"
+                              title={t.alumno_nombre || undefined}
+                            >
+                              <User className="h-3.5 w-3.5 text-slate-400" />
+                              <span className="truncate">
+                                {t.alumno_nombre}
+                              </span>
                             </div>
                           )}
+                          <div className="flex flex-wrap gap-1.5">
+                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                              <Calendar className="h-3 w-3 text-slate-400" />
+                              {fmtDate(t.created_at)}
+                            </span>
+                            {t.deadline && (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
+                                <Clock className="h-3 w-3" />
+                                {fmtDate(t.deadline)}
+                              </span>
+                            )}
+                          </div>
                           {t.codigo && (
                             <button
-                              className="flex items-center gap-1.5 text-blue-600 hover:underline"
+                              className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
                               onClick={() => openFilesFor(t.codigo)}
                               type="button"
                             >
-                              <Paperclip className="h-3.5 w-3.5" />
-                              Ver archivos
+                              <FileIcon className="h-3.5 w-3.5" />
+                              <span className="underline decoration-slate-300 hover:decoration-slate-900">
+                                Ver archivos
+                              </span>
                             </button>
                           )}
                         </div>
@@ -1340,23 +1523,38 @@ export default function TicketsPanelCoach({
                         ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
                         : "—"}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-8 flex-1 gap-1.5 bg-transparent"
+                        variant="ghost"
+                        className="h-8 w-8 p-0"
                         onClick={() => downloadFile(f.id, f.nombre_archivo)}
+                        aria-label={`Descargar ${f.nombre_archivo}`}
                       >
-                        <Download className="h-3.5 w-3.5" />
-                        Descargar
+                        <Download className="h-4 w-4" />
                       </Button>
                       <Button
                         size="sm"
-                        variant="secondary"
+                        variant="ghost"
                         className="h-8 w-8 p-0"
                         onClick={() => openPreview(f)}
+                        aria-label={`Ver ${f.nombre_archivo}`}
                       >
-                        <Eye className="h-3.5 w-3.5" />
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 w-8 p-0 text-red-600"
+                        onClick={() =>
+                          setFileToDelete({
+                            id: f.id,
+                            nombre_archivo: f.nombre_archivo,
+                          })
+                        }
+                        aria-label={`Eliminar ${f.nombre_archivo}`}
+                      >
+                        <X className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -1448,6 +1646,36 @@ export default function TicketsPanelCoach({
         </DialogContent>
       </Dialog>
 
+      {/* Confirm delete file dialog */}
+      <Dialog
+        open={!!fileToDelete}
+        onOpenChange={(v) => {
+          if (!v) setFileToDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar archivo</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-sm text-slate-600">
+            ¿Deseas eliminar el archivo "{fileToDelete?.nombre_archivo}"? Esta
+            acción no se puede deshacer.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFileToDelete(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmDeleteFile}
+              disabled={deletingFile}
+              className="ml-2"
+            >
+              {deletingFile ? "Eliminando..." : "Eliminar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Drawer open={editOpen} onOpenChange={setEditOpen} direction="right">
         <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-xl md:max-w-2xl flex flex-col">
           <DrawerHeader className="border-b">
@@ -1531,184 +1759,40 @@ export default function TicketsPanelCoach({
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="edit-estado"
-                          className="text-sm font-medium"
-                        >
-                          Estado
-                        </Label>
-                        <Select
-                          value={String(editForm.estado ?? "PENDIENTE")}
-                          onValueChange={(v) =>
-                            setEditForm((f) => ({ ...f, estado: v }))
-                          }
-                        >
-                          <SelectTrigger id="edit-estado" className="h-10">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {(
-                              [
-                                "PENDIENTE",
-                                "EN_PROGRESO",
-                                "PENDIENTE_DE_ENVIO",
-                                "RESUELTO",
-                              ] as StatusKey[]
-                            ).map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {STATUS_LABEL[s]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label
-                          htmlFor="edit-prioridad"
-                          className="text-sm font-medium"
-                        >
-                          Prioridad
-                        </Label>
-                        <Select
-                          value={String(editForm.prioridad ?? "MEDIA")}
-                          onValueChange={(v) =>
-                            setEditForm((f) => ({ ...f, prioridad: v as any }))
-                          }
-                        >
-                          <SelectTrigger id="edit-prioridad" className="h-10">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {["BAJA", "MEDIA", "ALTA"].map((p) => (
-                              <SelectItem key={p} value={p}>
-                                {p}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
                     <Separator />
 
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Clock className="h-4 w-4 text-slate-500" />
-                        Plazos y fechas
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-plazo" className="text-sm">
-                            Plazo (días)
-                          </Label>
-                          <Input
-                            id="edit-plazo"
-                            type="number"
-                            className="h-10"
-                            value={editForm.plazo ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                plazo: e.target.value
-                                  ? Number(e.target.value)
-                                  : null,
-                              }))
-                            }
-                            min={0}
-                          />
+                    {/* Resumen del ticket (sin Último estado ni Código, en lista vertical) */}
+                    {editTicket && (
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <User className="h-4 w-4 text-slate-400" />
+                          <span className="text-slate-500 min-w-[90px]">
+                            Alumno
+                          </span>
+                          <span className="truncate">
+                            {editTicket.alumno_nombre || "—"}
+                          </span>
                         </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-restante" className="text-sm">
-                            Restante (días)
-                          </Label>
-                          <Input
-                            id="edit-restante"
-                            type="number"
-                            className="h-10"
-                            value={editForm.restante ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                restante: e.target.value
-                                  ? Number(e.target.value)
-                                  : null,
-                              }))
-                            }
-                            min={0}
-                          />
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Calendar className="h-4 w-4 text-slate-400" />
+                          <span className="text-slate-500 min-w-[90px]">
+                            Creación
+                          </span>
+                          <span className="truncate">
+                            {fmtDate(editTicket.created_at)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <Clock className="h-4 w-4 text-slate-400" />
+                          <span className="text-slate-500 min-w-[90px]">
+                            Deadline
+                          </span>
+                          <span className="truncate">
+                            {fmtDate(editForm.deadline ?? editTicket.deadline)}
+                          </span>
                         </div>
                       </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="edit-deadline-date"
-                            className="text-sm"
-                          >
-                            Fecha límite
-                          </Label>
-                          <Input
-                            id="edit-deadline-date"
-                            type="date"
-                            className="h-10"
-                            value={(() => {
-                              const iso = editForm.deadline ?? "";
-                              if (!iso) return "";
-                              const d = new Date(iso);
-                              if (isNaN(d.getTime())) return "";
-                              return d.toISOString().slice(0, 10);
-                            })()}
-                            onChange={(e) => {
-                              const prev = editForm.deadline
-                                ? new Date(editForm.deadline)
-                                : new Date();
-                              const time = isNaN(prev.getTime())
-                                ? "00:00"
-                                : prev.toISOString().slice(11, 16);
-                              const iso = e.target.value
-                                ? `${e.target.value}T${time}:00.000Z`
-                                : null;
-                              setEditForm((f) => ({ ...f, deadline: iso }));
-                            }}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="edit-deadline-time"
-                            className="text-sm"
-                          >
-                            Hora
-                          </Label>
-                          <Input
-                            id="edit-deadline-time"
-                            type="time"
-                            className="h-10"
-                            value={(() => {
-                              const iso = editForm.deadline ?? "";
-                              if (!iso) return "";
-                              const d = new Date(iso);
-                              if (isNaN(d.getTime())) return "";
-                              return d.toISOString().slice(11, 16);
-                            })()}
-                            onChange={(e) => {
-                              const dateStr = (() => {
-                                const iso = editForm.deadline ?? "";
-                                const d = new Date(iso);
-                                if (isNaN(d.getTime())) return "";
-                                return d.toISOString().slice(0, 10);
-                              })();
-                              const iso =
-                                dateStr && e.target.value
-                                  ? `${dateStr}T${e.target.value}:00.000Z`
-                                  : editForm.deadline;
-                              setEditForm((f) => ({ ...f, deadline: iso }));
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </TabsContent>
 
@@ -1733,6 +1817,7 @@ export default function TicketsPanelCoach({
                               informante: e.target.value,
                             }))
                           }
+                          disabled
                           placeholder="Nombre del informante"
                         />
                       </div>
@@ -1750,126 +1835,14 @@ export default function TicketsPanelCoach({
                               resuelto_por: e.target.value,
                             }))
                           }
+                          disabled
                           placeholder="Nombre de quien resolvió"
                         />
                       </div>
                     </div>
 
                     <Separator />
-
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Users className="h-4 w-4 text-slate-500" />
-                        Equipo asignado
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-equipo" className="text-sm">
-                          Códigos de equipo (separados por coma)
-                        </Label>
-                        <Input
-                          id="edit-equipo"
-                          className="h-10"
-                          value={(editForm.equipo ?? []).join(", ")}
-                          onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              equipo: e.target.value
-                                .split(",")
-                                .map((s) => s.trim())
-                                .filter(Boolean),
-                            }))
-                          }
-                          placeholder="JJp8..., hQycZc..., ..."
-                        />
-                        {editForm.equipo && editForm.equipo.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {editForm.equipo.map((c) => (
-                              <Badge
-                                key={c}
-                                variant="secondary"
-                                className="gap-1"
-                              >
-                                {c}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setEditForm((f) => ({
-                                      ...f,
-                                      equipo: f.equipo?.filter((x) => x !== c),
-                                    }))
-                                  }
-                                  className="ml-1 hover:text-slate-900"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <CheckCircle2 className="h-4 w-4 text-slate-500" />
-                        Trabajo y resolución
-                      </div>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-tarea" className="text-sm">
-                            Descripción de la tarea
-                          </Label>
-                          <textarea
-                            id="edit-tarea"
-                            className="w-full min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
-                            value={editForm.tarea ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                tarea: e.target.value,
-                              }))
-                            }
-                            placeholder="Describe la tarea a realizar..."
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-resolucion" className="text-sm">
-                            Notas de resolución
-                          </Label>
-                          <textarea
-                            id="edit-resolucion"
-                            className="w-full min-h-[100px] rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
-                            value={editForm.resolucion ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                resolucion: e.target.value,
-                              }))
-                            }
-                            placeholder="Cómo se resolvió el ticket..."
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-revision" className="text-sm">
-                            Revisión
-                          </Label>
-                          <Input
-                            id="edit-revision"
-                            className="h-10"
-                            value={editForm.revision ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                revision: e.target.value,
-                              }))
-                            }
-                            placeholder="Notas de revisión"
-                          />
-                        </div>
-                      </div>
-                    </div>
+                    {/* Equipo asignado y Trabajo/Resolución removidos para unificar el patrón */}
                   </div>
                 </TabsContent>
 
@@ -1901,8 +1874,8 @@ export default function TicketsPanelCoach({
                         <div className="text-xs text-slate-500">
                           {editExistingFiles.length} archivo(s) existente(s)
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {editExistingFiles.slice(0, 4).map((f) => (
+                        <div className="space-y-2">
+                          {editExistingFiles.map((f) => (
                             <div
                               key={f.id}
                               className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
@@ -1915,13 +1888,38 @@ export default function TicketsPanelCoach({
                                   className="truncate text-sm font-medium"
                                   title={f.nombre_archivo}
                                 >
-                                  {shortenFileName(f.nombre_archivo, 15)}
+                                  {shortenFileName(f.nombre_archivo, 30)}
                                 </div>
                                 <div className="text-xs text-slate-500">
                                   {f.tamano_bytes
                                     ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
                                     : "—"}
                                 </div>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => openPreview(f)}
+                                  aria-label={`Ver ${f.nombre_archivo}`}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0 text-red-600"
+                                  onClick={() =>
+                                    setFileToDelete({
+                                      id: f.id,
+                                      nombre_archivo: f.nombre_archivo,
+                                    })
+                                  }
+                                  aria-label={`Eliminar ${f.nombre_archivo}`}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
                           ))}
@@ -2013,6 +2011,160 @@ export default function TicketsPanelCoach({
                           </div>
                         </div>
                       )}
+
+                      {/* Enlaces para adjuntar como URLs */}
+                      <div className="space-y-2 pt-2">
+                        <Label className="text-sm font-medium">Enlaces</Label>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <Input
+                              className="h-10 pl-9"
+                              placeholder="https://..."
+                              value={editLinkInput}
+                              onChange={(e) => setEditLinkInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  const raw = editLinkInput.trim();
+                                  if (!raw) return;
+                                  const url = /^https?:\/\//i.test(raw)
+                                    ? raw
+                                    : `https://${raw}`;
+                                  try {
+                                    new URL(url);
+                                    setEditLinks((prev) =>
+                                      Array.from(new Set([...prev, url])).slice(
+                                        0,
+                                        10
+                                      )
+                                    );
+                                    setEditLinkInput("");
+                                  } catch {}
+                                }
+                              }}
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              const raw = editLinkInput.trim();
+                              if (!raw) return;
+                              const url = /^https?:\/\//i.test(raw)
+                                ? raw
+                                : `https://${raw}`;
+                              try {
+                                new URL(url);
+                                setEditLinks((prev) =>
+                                  Array.from(new Set([...prev, url])).slice(
+                                    0,
+                                    10
+                                  )
+                                );
+                                setEditLinkInput("");
+                              } catch {}
+                            }}
+                          >
+                            Agregar
+                          </Button>
+                        </div>
+                        {editLinks.length > 0 && (
+                          <div className="space-y-2">
+                            {editLinks.map((u, i) => (
+                              <div
+                                key={`${u}-${i}`}
+                                className="flex items-center gap-2 rounded-lg border bg-slate-50 px-3 py-2"
+                              >
+                                <LinkIcon className="h-4 w-4 shrink-0 text-slate-400" />
+                                <a
+                                  href={u}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="min-w-0 flex-1 truncate text-sm text-blue-600 hover:underline"
+                                >
+                                  {u}
+                                </a>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0"
+                                  onClick={() =>
+                                    setEditLinks((prev) =>
+                                      prev.filter((x) => x !== u)
+                                    )
+                                  }
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="mt-2 flex gap-2">
+                          <Button
+                            size="sm"
+                            className="flex-1"
+                            onClick={async () => {
+                              if (!editTicket?.codigo) return;
+                              if (
+                                editFiles.length === 0 &&
+                                editLinks.length === 0
+                              ) {
+                                toast({
+                                  title:
+                                    "No hay archivos ni enlaces para subir",
+                                });
+                                return;
+                              }
+                              setUploadingEditFiles(true);
+                              try {
+                                await uploadTicketFiles(
+                                  editTicket.codigo,
+                                  editFiles,
+                                  editLinks
+                                );
+                                toast({ title: "Archivos/URLs subidos" });
+                                setEditFiles([]);
+                                setEditLinks([]);
+                                // refrescar la lista de archivos existentes
+                                const list = await getTicketFiles(
+                                  editTicket.codigo
+                                );
+                                setEditExistingFiles(list);
+                                if (openFiles === editTicket.codigo) {
+                                  setFiles(list);
+                                }
+                              } catch (e) {
+                                console.error(e);
+                                toast({
+                                  title: "Error subiendo archivos/URLs",
+                                });
+                              } finally {
+                                setUploadingEditFiles(false);
+                              }
+                            }}
+                            disabled={uploadingEditFiles}
+                          >
+                            {uploadingEditFiles
+                              ? "Subiendo..."
+                              : "Subir archivos/URLs"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => {
+                              setEditFiles([]);
+                              setEditLinks([]);
+                              setEditLinkInput("");
+                            }}
+                          >
+                            Limpiar
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </TabsContent>

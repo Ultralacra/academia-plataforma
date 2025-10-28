@@ -118,20 +118,7 @@ export function LoginForm() {
             </Button>
           </form>
 
-          {/* Credenciales de prueba (solo Admin) con fondo degradado conservado */}
-          <div className="mt-6 p-4 rounded-lg border bg-gradient-to-br from-slate-50 to-amber-50">
-            <p className="text-sm font-medium mb-2 text-slate-800">
-              Usuario de prueba:
-            </p>
-            <div className="text-xs space-y-1 text-slate-700">
-              <p>
-                <strong>Admin:</strong> admin@academy.com
-              </p>
-              <p>
-                <strong>Contraseña:</strong> password123
-              </p>
-            </div>
-          </div>
+          {/* Eliminadas credenciales de prueba para producción */}
         </CardContent>
       </Card>
     </div>

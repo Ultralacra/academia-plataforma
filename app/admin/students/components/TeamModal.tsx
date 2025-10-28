@@ -73,14 +73,15 @@ export default function TeamModal({
                       <div className="flex items-center gap-2">
                         <span className="font-medium truncate">{m.name}</span>
                         {m.puesto ? (
-                          <Badge variant="muted" className="h-5 text-[11px]">
+                          <Badge
+                            variant="secondary"
+                            className="h-5 text-[11px]"
+                          >
                             {m.puesto}
                           </Badge>
                         ) : null}
                         {m.area ? (
-                          <Badge variant="muted" className="h-5 text-[11px]">
-                            {m.area}
-                          </Badge>
+                          <Badge className="h-5 text-[11px]">{m.area}</Badge>
                         ) : null}
                       </div>
                       {m.url ? (
