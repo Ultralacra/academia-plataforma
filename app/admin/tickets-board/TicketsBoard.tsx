@@ -484,6 +484,29 @@ export default function TicketsBoard() {
   }
 
   function openTicketDetail(ticket: TicketBoardItem) {
+    // Resolver nombres legibles para informante y resuelto_por cuando la API
+    // entrega solo IDs. Preferimos los campos *_nombre y, si faltan, buscamos
+    // coincidencias en alumno/coaches.
+    const resolvePersonName = (code?: string | null, name?: string | null) => {
+      const c = (code ?? "").trim();
+      if (name && name.trim()) return String(name);
+      if (!c) return "";
+      try {
+        // Si coincide con el alumno, usar alumno_nombre
+        if ((ticket as any)?.id_alumno && (ticket as any)?.id_alumno === c) {
+          return (ticket as any)?.alumno_nombre || c;
+        }
+        // Si coincide con un coach/equipo, usar su nombre
+        const coachesArr = (ticket as any)?.coaches;
+        if (Array.isArray(coachesArr)) {
+          const found = coachesArr.find((co: any) => co?.codigo_equipo === c);
+          if (found?.nombre) return String(found.nombre);
+        }
+      } catch {}
+      // Fallback: devolver el código si no se puede resolver
+      return c;
+    };
+
     setSelectedTicket(ticket);
     setEditForm({
       nombre: ticket.nombre ?? "",
@@ -492,10 +515,15 @@ export default function TicketsBoard() {
       prioridad: "MEDIA",
       plazo: null,
       restante: null,
-      // informante viene desde la API (si existe) — mostrarlo en disabled
-      informante: ticket.informante_nombre ?? ticket.informante ?? "",
-      // resuelto_por_nombre viene desde la API: mostrarlo en el formulario (solo lectura)
-      resuelto_por: ticket.resuelto_por_nombre ?? ticket.resuelto_por ?? "",
+      // Mostrar SIEMPRE nombres cuando sea posible
+      informante: resolvePersonName(
+        (ticket as any)?.informante,
+        (ticket as any)?.informante_nombre
+      ),
+      resuelto_por: resolvePersonName(
+        (ticket as any)?.resuelto_por,
+        (ticket as any)?.resuelto_por_nombre
+      ),
       equipo: [],
       tarea: "",
     });

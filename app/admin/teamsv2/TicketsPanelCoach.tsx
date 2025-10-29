@@ -53,6 +53,7 @@ import {
   type CoachStudent,
   getCoachByCode,
   type CoachItem,
+  getCoaches,
 } from "./api";
 import {
   updateTicket,
@@ -205,6 +206,7 @@ export default function TicketsPanelCoach({
   const [selectedAlumno, setSelectedAlumno] = useState<string>("");
   const [studentQuery, setStudentQuery] = useState("");
   const [coachArea, setCoachArea] = useState<string | null>(null);
+  const [allCoaches, setAllCoaches] = useState<CoachItem[]>([]);
   const [createDescripcion, setCreateDescripcion] = useState("");
   const [linkInput, setLinkInput] = useState("");
   const [links, setLinks] = useState<string[]>([]);
@@ -343,6 +345,11 @@ export default function TicketsPanelCoach({
           try {
             const coach: CoachItem | null = await getCoachByCode(coachCode);
             if (alive) setCoachArea(coach?.area ?? null);
+          } catch {}
+          // Cargar lista de coaches para poder resolver nombres humanos por código
+          try {
+            const coaches = await getCoaches({ page: 1, pageSize: 10000 });
+            if (alive) setAllCoaches(coaches);
           } catch {}
         }
       } catch {}
@@ -1331,6 +1338,33 @@ export default function TicketsPanelCoach({
                             onClick={() => {
                               setEditTicket(t);
                               const saved = detailsById[t.id] || {};
+                              // Resolver nombres humanos para informante/resuelto_por cuando tengamos códigos
+                              const resolvePersonName = (
+                                code?: string | null
+                              ): string => {
+                                const c = (code ?? "").trim();
+                                if (!c) return "";
+                                // Si coincide con el alumno del ticket, usar nombre de alumno
+                                if (c && c === (t.id_alumno ?? "")) {
+                                  return t.alumno_nombre || c;
+                                }
+                                // Buscar en lista de alumnos de este coach
+                                const s = coachStudents.find(
+                                  (st) =>
+                                    (st.alumno || "").toLowerCase() ===
+                                    c.toLowerCase()
+                                );
+                                if (s) return s.nombre || c;
+                                // Buscar en lista de coaches globales por código
+                                const coach = allCoaches.find(
+                                  (co) =>
+                                    (co.codigo || "").toLowerCase() ===
+                                    c.toLowerCase()
+                                );
+                                if (coach) return coach.nombre || c;
+                                // Devolver el valor original si no se puede resolver
+                                return c;
+                              };
                               setEditForm({
                                 nombre: t.nombre ?? "",
                                 estado: (t.estado as any) ?? "PENDIENTE",
@@ -1338,9 +1372,12 @@ export default function TicketsPanelCoach({
                                 prioridad: (saved.prioridad ?? "MEDIA") as any,
                                 plazo: saved.plazo ?? null,
                                 restante: saved.restante ?? null,
-                                informante: saved.informante ?? "",
+                                // Mostrar SIEMPRE nombres cuando sea posible
+                                informante:
+                                  resolvePersonName(saved.informante) ?? "",
                                 resolucion: saved.resolucion ?? "",
-                                resuelto_por: saved.resuelto_por ?? "",
+                                resuelto_por:
+                                  resolvePersonName(saved.resuelto_por) ?? "",
                                 revision: saved.revision ?? "",
                                 tarea: saved.tarea ?? "",
                                 equipo: Array.isArray(saved.equipo)
