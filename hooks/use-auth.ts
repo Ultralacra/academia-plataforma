@@ -49,7 +49,8 @@ export function useAuth() {
           router.push("/admin/students")
           break
         case "coach":
-          router.push("/coach")
+          // Ruta existente y útil para coaches
+          router.push("/admin/teamsv2")
           break
         case "student":
           router.push("/student")

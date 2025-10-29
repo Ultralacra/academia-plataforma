@@ -168,7 +168,13 @@ export default function CoachChatInline({
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const pinnedToBottomRef = React.useRef<boolean>(true);
   const outboxRef = React.useRef<
-    { clientId: string; text: string; at: number; pid?: any }[]
+    {
+      clientId: string;
+      text?: string; // puede ser vacío si es solo adjunto
+      at: number;
+      pid?: any;
+      files?: { name: string; size: number; type?: string }[]; // para adjuntos optimistas
+    }[]
   >([]);
   const typingRef = React.useRef<{ on: boolean; timer: any }>({
     on: false,
@@ -180,6 +186,8 @@ export default function CoachChatInline({
   const latestRequestedChatIdRef = React.useRef<any>(socketio?.chatId ?? null);
   const joinInFlightRef = React.useRef<boolean>(false);
   const lastJoinedChatIdRef = React.useRef<any>(null);
+  // Para loguear mensajes una sola vez al entrar a un chat
+  const lastLoggedChatIdRef = React.useRef<any>(null);
   // Controla auto-scroll inicial por chatId para evitar quedar "a la mitad"
   const autoScrolledChatRef = React.useRef<string | number | null>(null);
   const participantsRef = React.useRef<any[] | undefined>(
@@ -281,6 +289,31 @@ export default function CoachChatInline({
     pinnedToBottomRef.current = true;
   }, [chatId]);
 
+  // Log: al entrar (abrir) una conversación, imprimir sus mensajes en consola una sola vez
+  React.useEffect(() => {
+    try {
+      const cid = chatIdRef.current ?? chatId;
+      if (cid == null) return;
+      // Evitar repetir logs del mismo chat
+      if (String(lastLoggedChatIdRef.current ?? "") === String(cid)) return;
+      // Esperar a que termine el join inicial y tener el snapshot actual (aunque sea 0 mensajes)
+      if (isJoining) return;
+      const snapshot = items || [];
+      console.groupCollapsed(
+        `[CoachChat] JSON mensajes (UI) del chat ${String(cid)} — ${
+          snapshot.length
+        } items`
+      );
+      try {
+        console.log(JSON.stringify(snapshot, null, 2));
+      } catch {
+        console.log(snapshot);
+      }
+      console.groupEnd();
+      lastLoggedChatIdRef.current = cid;
+    } catch {}
+  }, [chatId, isJoining, items]);
+
   // Cuando termina el join inicial, aseguremos salto al fondo si hay mensajes
   React.useEffect(() => {
     if (!isJoining) {
@@ -315,7 +348,7 @@ export default function CoachChatInline({
       let html = escapeHtml(md);
       // Negritas **texto**
       html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-      // Quitar separadores '---' de frontmatter si vienen al inicio
+      // Quitar separadores '---' de frontmatter si вони al inicio
       html = html.replace(/^---\s*\n/, "");
       // Saltos de línea dobles -> párrafos
       html = html
@@ -556,6 +589,40 @@ export default function CoachChatInline({
         fd.append("file", file, file.name);
         try {
           setUploadState((s) => ({ ...s, current: file.name }));
+          // Optimista: insertar mensaje local con este adjunto
+          try {
+            const clientId = `${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 8)}`;
+            const optimisticAttachment: Attachment = {
+              id: clientId,
+              name: file.name,
+              mime: file.type || "application/octet-stream",
+              size: file.size,
+              data_base64: "",
+              url: URL.createObjectURL(file),
+            };
+            const optimisticMsg: Message = {
+              id: clientId,
+              room: normRoom,
+              sender: role,
+              text: "",
+              at: new Date().toISOString(),
+              delivered: false,
+              read: false,
+              srcParticipantId: myParticipantIdRef.current ?? undefined,
+              attachments: [optimisticAttachment],
+            };
+            setItems((prev) => [...prev, optimisticMsg]);
+            seenRef.current.add(clientId);
+            outboxRef.current.push({
+              clientId,
+              text: "",
+              at: Date.now(),
+              pid: myParticipantIdRef.current,
+              files: [{ name: file.name, size: file.size, type: file.type }],
+            });
+          } catch {}
           // Usa apiFetch para heredar API_HOST y el token automáticamente
           // Nuevo endpoint: /v1/ai/upload-file/{chatId}
           await apiFetch(`/ai/upload-file/${encodeURIComponent(id)}`, {
@@ -845,6 +912,10 @@ export default function CoachChatInline({
                 emisor: getEmitter(msg),
                 currentChatId,
               });
+              // Log completo del JSON del mensaje recibido
+              try {
+                console.log("[CoachChat] chat.message RAW <=", msg);
+              } catch {}
             } catch {}
             // Si el mensaje es de otro chat (o no hay chat unido aún), avisa para refrescar y sumar no leídos
             if (
@@ -979,6 +1050,7 @@ export default function CoachChatInline({
             setItems((prev) => {
               if (sender === role) {
                 const next = [...prev];
+                // 1) Intentar emparejar por texto (como antes)
                 for (let i = next.length - 1; i >= 0; i--) {
                   const mm = next[i];
                   if (mm.sender !== role) continue;
@@ -993,6 +1065,57 @@ export default function CoachChatInline({
                   if (mm.delivered === false || near) {
                     next[i] = { ...newMsg, read: mm.read || false };
                     return next;
+                  }
+                }
+                // 2) Intentar emparejar por adjuntos (mensaje optimista de archivos)
+                if (
+                  Array.isArray(newMsg.attachments) &&
+                  newMsg.attachments.length > 0
+                ) {
+                  for (let i = next.length - 1; i >= 0; i--) {
+                    const mm = next[i];
+                    if (mm.sender !== role) continue;
+                    if (
+                      !Array.isArray(mm.attachments) ||
+                      mm.attachments.length === 0
+                    )
+                      continue;
+                    // Coincidencia por cantidad y nombres/tamaños aproximados
+                    const sameCount =
+                      (mm.attachments?.length || 0) ===
+                      (newMsg.attachments?.length || 0);
+                    if (!sameCount) continue;
+                    const namesA = (mm.attachments || []).map((a) =>
+                      (a.name || "").toLowerCase().trim()
+                    );
+                    const namesB = (newMsg.attachments || []).map((a) =>
+                      (a.name || "").toLowerCase().trim()
+                    );
+                    const sizesA = (mm.attachments || []).map(
+                      (a) => a.size || 0
+                    );
+                    const sizesB = (newMsg.attachments || []).map(
+                      (a) => a.size || 0
+                    );
+                    const namesMatch = namesA.every(
+                      (n, idx) => n === namesB[idx]
+                    );
+                    const sizesNear = sizesA.every(
+                      (s, idx) => Math.abs(s - (sizesB[idx] || 0)) < 2048 // ~2KB tolerancia
+                    );
+                    const tNew = Date.parse(newMsg.at || "");
+                    const tOld = Date.parse(mm.at || "");
+                    const near =
+                      !isNaN(tNew) &&
+                      !isNaN(tOld) &&
+                      Math.abs(tNew - tOld) < 15000; // adjuntos pueden tardar más
+                    if (
+                      (mm.delivered === false || near) &&
+                      (namesMatch || sizesNear)
+                    ) {
+                      next[i] = { ...newMsg, read: mm.read || false };
+                      return next;
+                    }
                   }
                 }
               }
@@ -1203,6 +1326,15 @@ export default function CoachChatInline({
             : Array.isArray((data as any).mensajes)
             ? (data as any).mensajes
             : [];
+          try {
+            console.groupCollapsed(
+              `[CoachChat] RAW mensajes del join (id_chat: ${String(cid)}) — ${
+                msgsSrc.length
+              } items`
+            );
+            console.log(JSON.stringify(msgsSrc, null, 2));
+            console.groupEnd();
+          } catch {}
           const myPidLocal =
             data?.my_participante ?? myParticipantIdRef.current;
           const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -1575,6 +1707,15 @@ export default function CoachChatInline({
                       : Array.isArray((data as any).mensajes)
                       ? (data as any).mensajes
                       : [];
+                    try {
+                      console.groupCollapsed(
+                        `[CoachChat] RAW mensajes del join (match) — ${
+                          (msgsSrc || []).length
+                        } items`
+                      );
+                      console.log(JSON.stringify(msgsSrc, null, 2));
+                      console.groupEnd();
+                    } catch {}
                     const myPidLocal2 =
                       data?.my_participante ?? myParticipantIdRef.current;
                     const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -1612,6 +1753,7 @@ export default function CoachChatInline({
                         delivered: true,
                         read: !!m?.leido,
                         srcParticipantId: getEmitter(m),
+                        attachments: mapArchivoToAttachments(m),
                       };
                     });
                     setItems(mapped);
@@ -2260,6 +2402,28 @@ export default function CoachChatInline({
                             const isImg = (a.mime || "").startsWith("image/");
                             const isVideo = (a.mime || "").startsWith("video/");
                             const isAudio = (a.mime || "").startsWith("audio/");
+
+                            if (isAudio) {
+                              return (
+                                <div
+                                  key={a.id}
+                                  className="col-span-2 rounded-md overflow-hidden bg-white/60 p-2"
+                                  title={a.name}
+                                >
+                                  <audio
+                                    src={url}
+                                    controls
+                                    className="w-full"
+                                    preload="metadata"
+                                  />
+                                  <div className="text-[10px] text-gray-500 mt-1 truncate">
+                                    {a.name}
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Para imágenes, videos y otros archivos, mantener el comportamiento original
                             return (
                               <button
                                 key={a.id}
@@ -2280,10 +2444,6 @@ export default function CoachChatInline({
                                       src={url}
                                       className="h-full w-full"
                                     />
-                                  </div>
-                                ) : isAudio ? (
-                                  <div className="p-2">
-                                    <audio src={url} className="w-full" />
                                   </div>
                                 ) : (
                                   <div className="p-2 text-xs break-all underline">
@@ -2489,7 +2649,7 @@ export default function CoachChatInline({
                         // Pequeña miniatura si es imagen/video
                         a.file.type.startsWith("image/") ? (
                           <img
-                            src={a.preview}
+                            src={a.preview || "/placeholder.svg"}
                             alt={a.file.name}
                             className="h-6 w-6 rounded object-cover"
                           />
@@ -2539,7 +2699,7 @@ export default function CoachChatInline({
             <button
               onClick={send}
               disabled={uploading || (!text.trim() && attachments.length === 0)}
-              className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors"
+              className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#0f6e64] transition-colors"
             >
               <svg
                 className="w-5 h-5"

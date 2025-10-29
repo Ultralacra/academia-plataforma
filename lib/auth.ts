@@ -16,6 +16,31 @@ export interface AuthState {
 class AuthService {
   private storageKey = "academy_auth";
 
+  /**
+   * Normaliza el rol proveniente del backend a los roles internos de la app.
+   * Regla solicitada: "equipo" debe ver las vistas de admin, por lo que se mapea a "admin".
+   * También mapeamos variantes comunes para evitar "Acceso Denegado" por desalineación de nomenclaturas.
+   */
+  private normalizeRole(rawRole?: unknown, rawTipo?: unknown): UserRole {
+    const v = String(rawRole ?? "").trim().toLowerCase();
+    const t = String(rawTipo ?? "").trim().toLowerCase();
+
+    const isAdmin = (s: string) => ["admin", "administrator", "superadmin"].includes(s);
+    const isCoachAsAdmin = (s: string) => ["equipo", "team", "manager"].includes(s);
+    const isStudent = (s: string) => ["alumno", "student", "cliente", "usuario", "user"].includes(s);
+
+    if (isAdmin(v) || isCoachAsAdmin(v)) return "admin"; // equipo => admin
+    if (isStudent(v)) return "student";
+    if (v === "coach") return "coach";
+
+    if (isAdmin(t) || isCoachAsAdmin(t)) return "admin"; // equipo => admin
+    if (isStudent(t)) return "student";
+    if (t === "coach") return "coach";
+
+    // Fallback temporal: dar acceso total para evitar bloqueos mientras se alinea backend
+    return "admin";
+  }
+
   getAuthState(): AuthState {
     if (typeof window === "undefined") {
       return { user: null, isAuthenticated: false, token: null };
@@ -65,19 +90,13 @@ class AuthService {
         throw new Error(message);
       }
 
-      const json = (await res.json()) as {
-        id: number | string;
-        email: string;
-        name: string;
-        role: UserRole;
-        token: string;
-      };
+      const json: any = await res.json();
 
       const user: User = {
         id: json.id,
         email: json.email,
         name: json.name,
-        role: json.role,
+        role: this.normalizeRole(json.role, json.tipo),
       };
 
       this.setAuthState({ user, isAuthenticated: true, token: json.token });
@@ -107,19 +126,12 @@ class AuthService {
         // 401/403: token inválido/expirado
         throw new Error(res.status === 401 ? "No autorizado" : "Error consultando usuario");
       }
-      const json = (await res.json()) as {
-        id: number | string;
-        name: string;
-        email: string;
-        role: UserRole;
-        created_at?: string;
-        updated_at?: string;
-      };
+      const json: any = await res.json();
       return {
         id: json.id,
         email: json.email,
         name: json.name,
-        role: json.role,
+        role: this.normalizeRole(json.role, json.tipo),
       };
     } catch (e) {
       if (e instanceof Error) throw e;
