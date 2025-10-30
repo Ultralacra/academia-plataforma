@@ -1542,7 +1542,9 @@ export default function CoachChatInline({
                 read: !!m?.leido,
                 srcParticipantId: getEmitter(m),
                 attachments: mapArchivoToAttachments(m),
-                uiKey: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+                uiKey: String(
+                  m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                ),
               } as Message;
               (msg as any).__senderById = !!ev.byId;
               (msg as any).__senderReason = ev.reason;
