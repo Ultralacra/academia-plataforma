@@ -179,6 +179,100 @@ export default function AdminChatPage() {
       );
   }, [students, searchText, filterStage, filterState]);
 
+  // Helpers para indicadores de no-leídos en pestañas "Coaches" y "Alumnos"
+  function chatHasEquipoPair(it: any, a: string, b: string): boolean {
+    try {
+      const parts = it?.participants || it?.participantes || [];
+      const set = new Set<string>();
+      for (const p of parts) {
+        const tipo = String(p?.participante_tipo || "").toLowerCase();
+        if (tipo === "equipo" && p?.id_equipo)
+          set.add(String(p.id_equipo).toLowerCase());
+      }
+      return (
+        set.has(String(a).toLowerCase()) && set.has(String(b).toLowerCase())
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  function chatHasClienteEquipoPair(
+    it: any,
+    clienteId: string,
+    equipoId: string
+  ): boolean {
+    try {
+      const parts = it?.participants || it?.participantes || [];
+      let okCliente = false;
+      let okEquipo = false;
+      for (const p of parts) {
+        const tipo = String(p?.participante_tipo || "").toLowerCase();
+        if (tipo === "cliente" && p?.id_cliente != null) {
+          if (String(p.id_cliente) === String(clienteId)) okCliente = true;
+        }
+        if (tipo === "equipo" && p?.id_equipo != null) {
+          if (String(p.id_equipo) === String(equipoId)) okEquipo = true;
+        }
+      }
+      return okCliente && okEquipo;
+    } catch {
+      return false;
+    }
+  }
+
+  function getUnreadCountByChatIdLocal(chatId: any): number {
+    try {
+      const key = `chatUnreadById:coach:${String(chatId)}`;
+      const raw =
+        (typeof window !== "undefined" && localStorage.getItem(key)) || "0";
+      const n = parseInt(raw, 10);
+      return isNaN(n) ? 0 : n;
+    } catch {
+      return 0;
+    }
+  }
+
+  function unreadForCoachTarget(target: TeamWithCounts): number {
+    try {
+      // Buscar chat por id_equipo = ADMIN_COACH_ID y el otro equipo = target.id o target.codigo
+      const match = (adminChats || []).find(
+        (it) =>
+          chatHasEquipoPair(
+            it,
+            String(ADMIN_COACH_ID),
+            // Aceptar coincidencia por id o por código
+            String(target.id)
+          ) ||
+          chatHasEquipoPair(it, String(ADMIN_COACH_ID), String(target.codigo))
+      );
+      if (!match) return 0;
+      const id = match?.id_chat ?? match?.id;
+      if (id == null) return 0;
+      return getUnreadCountByChatIdLocal(id);
+    } catch {
+      return 0;
+    }
+  }
+
+  function unreadForStudentTarget(target: StudentItem): number {
+    try {
+      const match = (adminChats || []).find((it) =>
+        chatHasClienteEquipoPair(
+          it,
+          String(target.code ?? target.id),
+          String(ADMIN_COACH_ID)
+        )
+      );
+      if (!match) return 0;
+      const id = match?.id_chat ?? match?.id;
+      if (id == null) return 0;
+      return getUnreadCountByChatIdLocal(id);
+    } catch {
+      return 0;
+    }
+  }
+
   // Construir participants e ids en función del target
   const participants = useMemo(() => {
     if (!targetKind || !targetId) return undefined;
@@ -441,7 +535,7 @@ export default function AdminChatPage() {
   return (
     <ProtectedRoute allowedRoles={["admin"]}>
       <DashboardLayout>
-        <div className="flex flex-col h-screen bg-[#f0f2f5]">
+        <div className="flex flex-col h-screen overflow-hidden bg-[#f0f2f5]">
           <div className="bg-[#008069] text-white px-6 py-4 shadow-sm flex-shrink-0">
             <div className="flex items-center gap-3">
               <MessageCircle className="w-6 h-6" />
@@ -449,8 +543,8 @@ export default function AdminChatPage() {
             </div>
           </div>
 
-          <div className="flex flex-1 min-h-0">
-            <div className="w-1/4 flex flex-col bg-white border-r border-gray-200 shadow-sm">
+          <div className="flex flex-1 min-h-0 overflow-hidden">
+            <div className="w-1/4 flex flex-col min-h-0 bg-white border-r border-gray-200 shadow-sm">
               <div className="flex-shrink-0 bg-white z-10 border-b border-gray-100 p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <div className="relative flex-1">
@@ -628,6 +722,8 @@ export default function AdminChatPage() {
                         const selected =
                           String(targetKind) === "coach" &&
                           String(targetId) === String(t.id);
+                        const _rb = readsBump; // re-render en bumps
+                        const unread = unreadForCoachTarget(t);
                         const subtitle = [t.puesto, t.area]
                           .filter(Boolean)
                           .join(" · ");
@@ -635,7 +731,11 @@ export default function AdminChatPage() {
                           <li key={String(t.id)}>
                             <button
                               className={`w-full text-left hover:bg-[#f5f6f6] transition-colors ${
-                                selected ? "bg-[#f0f2f5]" : ""
+                                selected
+                                  ? "bg-[#f0f2f5]"
+                                  : unread > 0
+                                  ? "bg-emerald-50"
+                                  : ""
                               }`}
                               title={subtitle}
                               onClick={() => {
@@ -643,6 +743,30 @@ export default function AdminChatPage() {
                                 setTargetId(String(t.id));
                                 setSelectedChatId(null);
                                 setCurrentOpenChatId(null);
+                                // Si existe chat con este coach, limpiar contador
+                                try {
+                                  const match = (adminChats || []).find(
+                                    (it) =>
+                                      chatHasEquipoPair(
+                                        it,
+                                        String(ADMIN_COACH_ID),
+                                        String(t.id)
+                                      ) ||
+                                      chatHasEquipoPair(
+                                        it,
+                                        String(ADMIN_COACH_ID),
+                                        String(t.codigo)
+                                      )
+                                  );
+                                  const id = match?.id_chat ?? match?.id;
+                                  if (id != null) {
+                                    const k = `chatUnreadById:coach:${String(
+                                      id
+                                    )}`;
+                                    localStorage.setItem(k, "0");
+                                    setReadsBump((n) => n + 1);
+                                  }
+                                } catch {}
                               }}
                             >
                               <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-50">
@@ -659,6 +783,11 @@ export default function AdminChatPage() {
                                     </div>
                                   )}
                                 </div>
+                                {unread > 0 && (
+                                  <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-[#25d366] text-white text-[10px] font-semibold grid place-items-center px-1">
+                                    {unread > 99 ? "99+" : unread}
+                                  </span>
+                                )}
                               </div>
                             </button>
                           </li>
@@ -673,17 +802,41 @@ export default function AdminChatPage() {
                         const selected =
                           String(targetKind) === "alumno" &&
                           String(targetId) === String(s.code ?? s.id);
+                        const _rb = readsBump; // re-render en bumps
+                        const unread = unreadForStudentTarget(s);
                         return (
                           <li key={String(s.id)}>
                             <button
                               className={`w-full text-left hover:bg-[#f5f6f6] transition-colors ${
-                                selected ? "bg-[#f0f2f5]" : ""
+                                selected
+                                  ? "bg-[#f0f2f5]"
+                                  : unread > 0
+                                  ? "bg-emerald-50"
+                                  : ""
                               }`}
                               onClick={() => {
                                 setTargetKind("alumno");
                                 setTargetId(String(s.code ?? s.id));
                                 setSelectedChatId(null);
                                 setCurrentOpenChatId(null);
+                                // Si existe chat con este alumno, limpiar contador
+                                try {
+                                  const match = (adminChats || []).find((it) =>
+                                    chatHasClienteEquipoPair(
+                                      it,
+                                      String(s.code ?? s.id),
+                                      String(ADMIN_COACH_ID)
+                                    )
+                                  );
+                                  const id = match?.id_chat ?? match?.id;
+                                  if (id != null) {
+                                    const k = `chatUnreadById:coach:${String(
+                                      id
+                                    )}`;
+                                    localStorage.setItem(k, "0");
+                                    setReadsBump((n) => n + 1);
+                                  }
+                                } catch {}
                               }}
                             >
                               <div className="flex items-center gap-3 px-3 py-3 border-b border-gray-50">
@@ -715,6 +868,11 @@ export default function AdminChatPage() {
                                     )}
                                   </div>
                                 </div>
+                                {unread > 0 && (
+                                  <span className="ml-auto min-w-[18px] h-[18px] rounded-full bg-[#25d366] text-white text-[10px] font-semibold grid place-items-center px-1">
+                                    {unread > 99 ? "99+" : unread}
+                                  </span>
+                                )}
                               </div>
                             </button>
                           </li>
@@ -862,14 +1020,14 @@ export default function AdminChatPage() {
               </div>
             </div>
 
-            <div className="flex-1 bg-[#efeae2] relative">
+            <div className="flex-1 bg-[#efeae2] relative flex flex-col min-h-0 overflow-hidden">
               <CoachChatInline
                 room={room}
                 role="coach"
                 title={targetTitle}
                 subtitle={targetSubtitle}
                 variant="card"
-                className="h-full shadow-none border-0"
+                className="h-full min-h-0 shadow-none border-0"
                 precreateOnParticipants
                 socketio={{
                   url: SOCKET_URL || undefined,

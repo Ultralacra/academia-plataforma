@@ -123,8 +123,23 @@ class AuthService {
         },
       });
       if (!res.ok) {
-        // 401/403: token inválido/expirado
-        throw new Error(res.status === 401 ? "No autorizado" : "Error consultando usuario");
+        // 401: token inválido/expirado -> limpiar sesión y enviar a login
+        if (res.status === 401) {
+          try {
+            this.logout();
+          } catch {}
+          if (typeof window !== "undefined") {
+            try {
+              const here = window.location?.pathname || "";
+              if (!here.startsWith("/login")) {
+                window.location.replace("/login");
+              }
+            } catch {}
+          }
+          throw new Error("No autorizado");
+        }
+        // En 403 no redirigimos; devolvemos error genérico
+        throw new Error("Error consultando usuario");
       }
       const json: any = await res.json();
       return {

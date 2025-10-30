@@ -1,8 +1,29 @@
 "use client";
-
 import React from "react";
+import AudioBubble from "@/app/admin/teamsv2/[code]/AudioBubble";
+import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
+import { TicketGenerationModal } from "./TicketGenerationModal";
+import {
+  Sender,
+  Attachment,
+  Message,
+  SocketIOConfig,
+  TicketData,
+} from "./chat-types";
+import {
+  simpleMarkdownToHtml,
+  parseAiContent,
+  formatBytes as formatBytesUtil,
+} from "./chat-utils";
+import { getAttachmentUrl } from "./chat-attachments";
+import {
+  recordRecentUpload,
+  hasRecentUploadMatch,
+  hasRecentUploadLoose,
+} from "./chat-recent-upload";
+import { getEmitter, normalizeDateStr, normalizeTipo } from "./chat-core";
 import { getAuthToken } from "@/lib/auth";
-import { CHAT_HOST } from "@/lib/api-config";
+import { CHAT_HOST, apiFetch } from "@/lib/api-config";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +41,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Trash2, Paperclip, Mic, Square } from "lucide-react";
+import {
+  MoreVertical,
+  Trash2,
+  Paperclip,
+  Mic,
+  Square,
+  Sparkles,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,42 +57,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sparkles } from "lucide-react";
-import { apiFetch } from "@/lib/api-config";
 
-type Sender = "admin" | "alumno" | "coach";
-type Attachment = {
-  id: string;
-  name: string;
-  mime: string;
-  size: number;
-  data_base64: string;
-  url?: string;
-  created_at?: string;
-};
-type Message = {
-  id: string;
-  room: string;
-  sender: Sender;
-  text: string;
-  at: string; // ISO
-  delivered?: boolean;
-  read?: boolean;
-  srcParticipantId?: string | number | null;
-  attachments?: Attachment[];
-};
+// Tipos movidos a ./chat-types
 
-type SocketIOConfig = {
-  url?: string;
-  /** Token JWT del sistema de auth; si no se pasa, se usará el de auth local */
-  token?: string;
-  idEquipo?: string; // para rol coach
-  idCliente?: string; // no usado aquí, pero lo dejamos por compatibilidad
-  participants?: any[]; // participantes deseados si no hay chatId
-  autoCreate?: boolean; // default: false (crear al enviar)
-  autoJoin?: boolean; // default: true si chatId
-  chatId?: string | number;
-};
+// Debug control: activa logs solo si localStorage.chatDebug === '1'
+function chatDebug(): boolean {
+  try {
+    return (
+      typeof window !== "undefined" && localStorage.getItem("chatDebug") === "1"
+    );
+  } catch {
+    return false;
+  }
+}
+function dbg(...args: any[]) {
+  // no-op (se deshabilitan logs en consola en este archivo)
+}
+
+// Pistas de subida movidas a ./chat-recent-upload
+
+// Config movida a ./chat-types
 
 export default function CoachChatInline({
   room,
@@ -106,6 +118,24 @@ export default function CoachChatInline({
 
   const [connected, setConnected] = React.useState(false);
   const [items, setItems] = React.useState<Message[]>([]);
+  const itemsRef = React.useRef<Message[]>([]);
+  React.useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+  // Debug opcional: imprimir un resumen solo si chatDebug=1
+  React.useEffect(() => {
+    if (!chatDebug()) return;
+    try {
+      const summary = items.map((m) => ({
+        id: m.id,
+        sender: m.sender,
+        textLen: (m.text || "").length,
+        at: m.at,
+        attCount: Array.isArray(m.attachments) ? m.attachments.length : 0,
+      }));
+      dbg("[CoachChat] items updated =>", summary);
+    } catch {}
+  }, [items]);
   const [text, setText] = React.useState("");
   const [isJoining, setIsJoining] = React.useState(false);
   const [chatId, setChatId] = React.useState<string | number | null>(
@@ -150,6 +180,9 @@ export default function CoachChatInline({
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
   const recordedChunksRef = React.useRef<BlobPart[]>([]);
   const [recording, setRecording] = React.useState(false);
+  const [recordStartAt, setRecordStartAt] = React.useState<number | null>(null);
+  const recordTimerRef = React.useRef<any>(null);
+  const [recordTick, setRecordTick] = React.useState<number>(0);
   const [attachments, setAttachments] = React.useState<
     { file: File; preview?: string }[]
   >([]);
@@ -167,14 +200,10 @@ export default function CoachChatInline({
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const pinnedToBottomRef = React.useRef<boolean>(true);
+  const [newMessagesCount, setNewMessagesCount] = React.useState<number>(0);
+  const lastRealtimeAtRef = React.useRef<number>(Date.now());
   const outboxRef = React.useRef<
-    {
-      clientId: string;
-      text?: string; // puede ser vacío si es solo adjunto
-      at: number;
-      pid?: any;
-      files?: { name: string; size: number; type?: string }[]; // para adjuntos optimistas
-    }[]
+    { clientId: string; text: string; at: number; pid?: any }[]
   >([]);
   const typingRef = React.useRef<{ on: boolean; timer: any }>({
     on: false,
@@ -186,8 +215,6 @@ export default function CoachChatInline({
   const latestRequestedChatIdRef = React.useRef<any>(socketio?.chatId ?? null);
   const joinInFlightRef = React.useRef<boolean>(false);
   const lastJoinedChatIdRef = React.useRef<any>(null);
-  // Para loguear mensajes una sola vez al entrar a un chat
-  const lastLoggedChatIdRef = React.useRef<any>(null);
   // Controla auto-scroll inicial por chatId para evitar quedar "a la mitad"
   const autoScrolledChatRef = React.useRef<string | number | null>(null);
   const participantsRef = React.useRef<any[] | undefined>(
@@ -243,25 +270,39 @@ export default function CoachChatInline({
     })();
   }, [connected, precreateOnParticipants, socketio?.participants]);
 
+  const getDistanceFromBottom = React.useCallback((): number => {
+    try {
+      const sc = scrollRef.current;
+      if (!sc) return Number.POSITIVE_INFINITY;
+      return sc.scrollHeight - sc.scrollTop - sc.clientHeight;
+    } catch {
+      return Number.POSITIVE_INFINITY;
+    }
+  }, []);
+
   React.useEffect(() => {
-    // Solo hacer scroll si estamos pegados al fondo
-    if (!pinnedToBottomRef.current) return;
+    // Mantenernos abajo si:
+    // - estamos pegados al fondo (pinnedToBottom), o
+    // - estamos cerca del fondo (<120px), o
+    // - el último mensaje es mío (para no perder el contexto al enviar)
+    const distance = getDistanceFromBottom();
+    const last = items.length > 0 ? items[items.length - 1] : null;
+    const lastIsMine = last ? mine(last.sender) : false;
+    const shouldStick =
+      pinnedToBottomRef.current || distance < 120 || lastIsMine;
+    if (!shouldStick) return;
 
     requestAnimationFrame(() => {
       try {
         const sc = scrollRef.current;
         const br = bottomRef.current;
-        if (sc && br) {
-          // Usar scrollIntoView solo si realmente necesitamos scroll
-          const isAtBottom =
-            sc.scrollHeight - sc.scrollTop - sc.clientHeight < 50;
-          if (!isAtBottom) {
-            br.scrollIntoView({ behavior: "smooth", block: "end" });
-          }
-        }
+        if (!sc) return;
+        // Forzar al fondo de forma inmediata para evitar parpadeos
+        sc.scrollTop = sc.scrollHeight;
+        if (br) br.scrollIntoView({ behavior: "auto", block: "end" });
       } catch {}
     });
-  }, [items.length]);
+  }, [items.length, getDistanceFromBottom]);
 
   // Scroll síncrono antes de pintar cuando llegan los primeros mensajes
   React.useLayoutEffect(() => {
@@ -287,32 +328,8 @@ export default function CoachChatInline({
     autoScrolledChatRef.current = null;
     // Al cambiar de chat, asumimos que deseamos iniciar abajo
     pinnedToBottomRef.current = true;
+    setNewMessagesCount(0);
   }, [chatId]);
-
-  // Log: al entrar (abrir) una conversación, imprimir sus mensajes en consola una sola vez
-  React.useEffect(() => {
-    try {
-      const cid = chatIdRef.current ?? chatId;
-      if (cid == null) return;
-      // Evitar repetir logs del mismo chat
-      if (String(lastLoggedChatIdRef.current ?? "") === String(cid)) return;
-      // Esperar a que termine el join inicial y tener el snapshot actual (aunque sea 0 mensajes)
-      if (isJoining) return;
-      const snapshot = items || [];
-      console.groupCollapsed(
-        `[CoachChat] JSON mensajes (UI) del chat ${String(cid)} — ${
-          snapshot.length
-        } items`
-      );
-      try {
-        console.log(JSON.stringify(snapshot, null, 2));
-      } catch {
-        console.log(snapshot);
-      }
-      console.groupEnd();
-      lastLoggedChatIdRef.current = cid;
-    } catch {}
-  }, [chatId, isJoining, items]);
 
   // Cuando termina el join inicial, aseguremos salto al fondo si hay mensajes
   React.useEffect(() => {
@@ -325,6 +342,7 @@ export default function CoachChatInline({
             br.scrollIntoView({ behavior: "auto", block: "end" });
             sc.scrollTop = sc.scrollHeight;
             pinnedToBottomRef.current = true;
+            setNewMessagesCount(0);
           }
         } catch {}
       });
@@ -333,116 +351,33 @@ export default function CoachChatInline({
   const onScrollContainer = React.useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const threshold = 50; // px de tolerancia
+    const threshold = 120; // más tolerante con pequeños offsets
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     pinnedToBottomRef.current = distance <= threshold;
+    if (pinnedToBottomRef.current) {
+      setNewMessagesCount(0);
+    }
   }, []);
 
-  // Utilidad: convierte un markdown simple a HTML seguro básico
-  function escapeHtml(s: string) {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  }
-  function simpleMarkdownToHtml(md: string): string {
-    try {
-      // Escapar HTML primero
-      let html = escapeHtml(md);
-      // Negritas **texto**
-      html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-      // Quitar separadores '---' de frontmatter si вони al inicio
-      html = html.replace(/^---\s*\n/, "");
-      // Saltos de línea dobles -> párrafos
-      html = html
-        .split(/\n\n+/)
-        .map((p) => `<p>${p.replace(/\n/g, "<br/>")}</p>`)
-        .join("");
-      return html;
-    } catch {
-      return escapeHtml(md).replace(/\n/g, "<br/>");
-    }
-  }
-  function parseAiContent(md: string): {
-    titulo?: string;
-    descripcion?: string;
-    prioridad?: string;
-    categoria?: string;
-    html?: string;
-  } {
-    try {
-      const clean = md.replace(/^---\s*\n/, "");
-      const out: any = {};
-      const lines = clean.split(/\n/);
-      for (const ln of lines) {
-        const m = ln.match(/^\*\*(.+?):\*\*\s*(.+)$/);
-        if (m) {
-          const key = m[1].trim().toLowerCase();
-          const val = m[2].trim();
-          if (key.startsWith("título") || key.startsWith("titulo"))
-            out.titulo = val;
-          else if (
-            key.startsWith("descripción") ||
-            key.startsWith("descripcion")
-          )
-            out.descripcion = val;
-          else if (key.startsWith("prioridad")) out.prioridad = val;
-          else if (key.startsWith("categor")) out.categoria = val;
-        }
-      }
-      out.html = simpleMarkdownToHtml(md);
-      return out;
-    } catch {
-      return { html: simpleMarkdownToHtml(md) };
-    }
-  }
+  // Markdown y parseo movidos a ./chat-utils
 
-  // Helpers de adjuntos
-  const getAttachmentUrl = React.useCallback((a: Attachment): string => {
-    if (a?.url) return a.url;
-    if (a?.data_base64) return `data:${a.mime};base64,${a.data_base64}`;
-    return "";
-  }, []);
-  const formatBytes = (bytes?: number): string => {
-    try {
-      const b = typeof bytes === "number" && isFinite(bytes) ? bytes : 0;
-      if (b < 1024) return `${b} B`;
-      const kb = b / 1024;
-      if (kb < 1024) return `${kb.toFixed(1)} KB`;
-      const mb = kb / 1024;
-      if (mb < 1024) return `${mb.toFixed(1)} MB`;
-      const gb = mb / 1024;
-      return `${gb.toFixed(1)} GB`;
-    } catch {
-      return String(bytes ?? "-");
-    }
-  };
+  // Helpers de adjuntos y formato movidos a ./chat-attachments y ./chat-utils
+  const formatBytes = (bytes?: number) => formatBytesUtil(bytes);
+  const getAttachmentUrlCb = React.useCallback(
+    (a: Attachment) => getAttachmentUrl(a),
+    []
+  );
   const openPreview = (a: Attachment) => {
     setPreviewAttachment(a);
     setPreviewOpen(true);
   };
 
+  // Componente AudioBubble extraído a './AudioBubble'
+
   async function handleGenerateTicket() {
     try {
       const currentId = (chatIdRef.current ?? chatId) as any;
-      try {
-        console.log("[CoachChat] Generar ticket — snapshot", {
-          now: new Date().toISOString(),
-          room: normRoom,
-          role,
-          chatId_state: chatId,
-          chatId_ref: chatIdRef.current,
-          chosenChatId: currentId,
-          lastJoinedChatId: lastJoinedChatIdRef.current,
-          latestRequestedChatId: latestRequestedChatIdRef.current,
-          participants: Array.isArray(joinedParticipantsRef.current)
-            ? joinedParticipantsRef.current.map((p: any) => ({
-                id_chat_participante: p?.id_chat_participante,
-                participante_tipo: p?.participante_tipo,
-                id_equipo: p?.id_equipo,
-                id_cliente: p?.id_cliente,
-                id_admin: p?.id_admin,
-              }))
-            : null,
-        });
-      } catch {}
+      // logging eliminado
       if (currentId == null) {
         setTicketModalOpen(true);
         setTicketError("No hay chat activo para generar ticket.");
@@ -477,15 +412,7 @@ export default function CoachChatInline({
           if (cid != null) {
             resolvedId = cid;
           }
-          try {
-            console.log("[CoachChat] Resolver ticket chat_id via join:", {
-              chosenChatId: currentId,
-              ack_success: info?.success,
-              ack_id_chat: data?.id_chat,
-              ack_id: data?.id,
-              resolvedId,
-            });
-          } catch {}
+          // logging eliminado
         }
       } catch {}
 
@@ -499,34 +426,23 @@ export default function CoachChatInline({
         : undefined;
       const sendId = String(currentId).trim();
       const urlWithParam = `${baseUrl}${encodeURIComponent(sendId)}`;
-      try {
-        console.log("[CoachChat] POST =>", urlWithParam, {
-          sendId,
-          chosenChatId: String(currentId),
-          resolvedId: String(resolvedId),
-        });
+      // logging eliminado
+      res = await fetch(urlWithParam, {
+        method: "POST",
+        headers: authHeaders,
+      });
+
+      if (!res || !res.ok) {
+        // Fallback: POST sin body, con el chat_id en la URL
+
         res = await fetch(urlWithParam, {
           method: "POST",
           headers: authHeaders,
         });
-        console.log("[CoachChat] POST resp status:", res?.status);
-      } catch {}
-      if (!res || !res.ok) {
-        // Fallback: POST sin body, con el chat_id en la URL
-        try {
-          console.log("[CoachChat] POST (fallback) =>", urlWithParam);
-          res = await fetch(urlWithParam, {
-            method: "POST",
-            headers: authHeaders,
-          });
-          console.log("[CoachChat] POST (fallback) resp status:", res?.status);
-        } catch {}
       }
       if (!res) throw new Error("Sin respuesta del servidor");
       const json: any = await res.json().catch(() => null);
-      try {
-        console.log("[CoachChat] AI resp <=", json);
-      } catch {}
+
       if (!json || (json.code && Number(json.code) !== 200)) {
         throw new Error(json?.message || "Error al generar el ticket");
       }
@@ -589,47 +505,77 @@ export default function CoachChatInline({
         fd.append("file", file, file.name);
         try {
           setUploadState((s) => ({ ...s, current: file.name }));
-          // Optimista: insertar mensaje local con este adjunto
+          // 1) Insertar mensaje optimista en la UI
+          const optimisticId = `${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`;
+          const optimisticAttachment = {
+            id: `${optimisticId}-att`,
+            name: file.name,
+            mime: file.type || "application/octet-stream",
+            size: file.size,
+            data_base64: "",
+            url: URL.createObjectURL(file),
+          } as Attachment;
+          const optimisticMsg: Message = {
+            id: optimisticId,
+            room: normRoom,
+            sender: role,
+            text: "",
+            at: new Date().toISOString(),
+            delivered: false,
+            read: false,
+            srcParticipantId: myParticipantIdRef.current ?? undefined,
+            attachments: [optimisticAttachment],
+            uiKey: optimisticId,
+          };
+          setItems((prev) => [...prev, optimisticMsg]);
+          // Registrar pista local para poder reconocer este adjunto tras recargar
           try {
-            const clientId = `${Date.now()}-${Math.random()
-              .toString(36)
-              .slice(2, 8)}`;
-            const optimisticAttachment: Attachment = {
-              id: clientId,
-              name: file.name,
-              mime: file.type || "application/octet-stream",
-              size: file.size,
-              data_base64: "",
-              url: URL.createObjectURL(file),
-            };
-            const optimisticMsg: Message = {
-              id: clientId,
-              room: normRoom,
-              sender: role,
-              text: "",
-              at: new Date().toISOString(),
-              delivered: false,
-              read: false,
-              srcParticipantId: myParticipantIdRef.current ?? undefined,
-              attachments: [optimisticAttachment],
-            };
-            setItems((prev) => [...prev, optimisticMsg]);
-            seenRef.current.add(clientId);
-            outboxRef.current.push({
-              clientId,
-              text: "",
-              at: Date.now(),
-              pid: myParticipantIdRef.current,
-              files: [{ name: file.name, size: file.size, type: file.type }],
-            });
+            recordRecentUpload(role, id, file);
           } catch {}
-          // Usa apiFetch para heredar API_HOST y el token automáticamente
-          // Nuevo endpoint: /v1/ai/upload-file/{chatId}
-          await apiFetch(`/ai/upload-file/${encodeURIComponent(id)}`, {
-            method: "POST",
-            body: fd,
-          });
-          // El backend debería emitir un nuevo mensaje por socket; si no, podemos forzar un refresh de lista
+
+          // 2) Subir al servidor (intenta primero en CHAT_HOST, luego en API_HOST)
+          const token = getAuthToken();
+          const headers: Record<string, string> = token
+            ? { Authorization: `Bearer ${token}` }
+            : {};
+          let ok = false;
+          // try CHAT_HOST
+          try {
+            const base = (CHAT_HOST || "").replace(/\/$/, "");
+            const url = `${base}/ai/upload-file/${encodeURIComponent(id)}`;
+            const res = await fetch(url, { method: "POST", headers, body: fd });
+            ok = res.ok;
+          } catch {}
+          // fallback to API_HOST
+          if (!ok) {
+            try {
+              const base2 = (
+                process.env.NEXT_PUBLIC_API_HOST || "https://v001.vercel.app/v1"
+              ).replace(/\/$/, "");
+              const url2 = `${base2}/ai/upload-file/${encodeURIComponent(id)}`;
+              const h2: Record<string, string> = {
+                ...headers,
+                // no fijamos Content-Type explícito para FormData
+              };
+              const res2 = await fetch(url2, {
+                method: "POST",
+                headers: h2,
+                body: fd,
+              });
+              ok = res2.ok;
+            } catch {}
+          }
+
+          // 3) Marcar optimista como entregado o mostrar error
+          setItems((prev) =>
+            prev.map((m) =>
+              m.id === optimisticId ? { ...m, delivered: ok } : m
+            )
+          );
+
+          // 4) Disparar refresh de listas y confiar en el evento socket del servidor
           try {
             const evt = new CustomEvent("chat:list-refresh", {
               detail: { reason: "file-upload", id_chat: id },
@@ -641,7 +587,7 @@ export default function CoachChatInline({
             done: Math.min(s.total, s.done + 1),
           }));
         } catch (e: any) {
-          console.error("[CoachChat] upload file error", e);
+          // logging eliminado
           setUploadError(e?.message || "Error al subir archivo");
           setUploadState((s) => ({
             ...s,
@@ -661,7 +607,9 @@ export default function CoachChatInline({
     const mapped = arr.map((f) => ({
       file: f,
       preview:
-        f.type.startsWith("image/") || f.type.startsWith("video/")
+        f.type.startsWith("image/") ||
+        f.type.startsWith("video/") ||
+        f.type.startsWith("audio/")
           ? URL.createObjectURL(f)
           : undefined,
     }));
@@ -714,9 +662,8 @@ export default function CoachChatInline({
       (entries) => {
         const e = entries[0];
         if (!e) return;
-        // Si el sentinel está prácticamente visible, estamos al fondo
-        pinnedToBottomRef.current =
-          e.isIntersecting && e.intersectionRatio > 0.95;
+        // Consideramos "pegado" con que el sentinel sea visible (más permisivo)
+        pinnedToBottomRef.current = !!e.isIntersecting;
       },
       {
         root,
@@ -765,16 +712,303 @@ export default function CoachChatInline({
   const joinedParticipantsRef = React.useRef<any[] | null>(null);
   const joinDataRef = React.useRef<any | null>(null);
 
-  const getEmitter = (obj: any) =>
-    obj?.id_chat_participante_emisor ?? obj?.emisor ?? obj?.id_emisor ?? null;
+  // getEmitter/normalizeDateStr movidos a ./chat-core
 
-  const normalizeDateStr = (v: any): string | undefined => {
-    if (!v) return undefined;
-    const s = String(v);
-    if (s.includes("T")) return s;
-    if (s.includes(" ")) return s.replace(" ", "T");
-    return s;
-  };
+  // Determinación consistente del lado del mensaje: preferir emisor/id cuando está disponible.
+  // Solo usar heurísticas (tipo de participante o pistas recientes de subida) si faltan IDs.
+  type SenderEval = { sender: Sender; byId: boolean; reason: string };
+
+  const evalSenderForMapping = React.useCallback(
+    (
+      m: any,
+      cid: any,
+      ctx?: "realtime" | "user" | "join" | "poll"
+    ): SenderEval => {
+      try {
+        const myPid = myParticipantIdRef.current;
+        const emitter = getEmitter(m);
+        const senderIsById =
+          myPid != null && emitter != null && String(emitter) === String(myPid);
+        const senderIsBySession =
+          !!m?.client_session &&
+          String(m.client_session) === String(clientSessionRef.current);
+        const atts = mapArchivoToAttachments(m);
+        const senderIsByRecent =
+          hasRecentUploadMatch(role, cid, atts) ||
+          hasRecentUploadLoose(role, cid, atts);
+        // Outbox heuristic: el texto + timestamp comparable con envíos locales
+        let senderIsByOutbox = false;
+        try {
+          const txt = String(m?.contenido ?? m?.texto ?? "").trim();
+          const tMsg = Date.parse(
+            String(normalizeDateStr(m?.fecha_envio) || "")
+          );
+          for (let i = outboxRef.current.length - 1; i >= 0; i--) {
+            const ob = outboxRef.current[i];
+            if ((ob.text || "").trim() !== txt) continue;
+            const near = !isNaN(tMsg) && Math.abs(tMsg - (ob.at || 0)) < 12000;
+            const nearNow = Math.abs(Date.now() - (ob.at || 0)) < 12000;
+            if (near || nearNow) {
+              senderIsByOutbox = true;
+              break;
+            }
+          }
+        } catch {}
+
+        // Tipo de participante cuando aplique
+        const tipoNorm = normalizeTipo(
+          m?.participante_tipo ||
+            getTipoByParticipantId(m?.id_chat_participante_emisor)
+        );
+        const senderIsByTipo = tipoNorm === "cliente";
+
+        // Priorizar identificación por id (emitter) cuando esté disponible.
+        let final: Sender;
+        let reason = "unknown";
+        if (senderIsById) {
+          reason = "byId";
+          const isMine = true;
+          if (role === "alumno") final = isMine ? "alumno" : "coach";
+          else if (role === "coach") final = isMine ? "coach" : "alumno";
+          else final = isMine ? role : "alumno";
+        } else {
+          // Usar heurísticas ordenadas: session -> outbox -> recent -> tipo
+          if (senderIsBySession) reason = "bySession";
+          else if (senderIsByOutbox) reason = "byOutbox";
+          else if (senderIsByRecent) reason = "byRecentUpload";
+          else if (senderIsByTipo) reason = "byParticipantType";
+          else reason = "fallback-other";
+
+          if (role === "alumno") {
+            final =
+              senderIsBySession ||
+              senderIsByOutbox ||
+              senderIsByRecent ||
+              senderIsByTipo
+                ? "alumno"
+                : "coach";
+          } else if (role === "coach") {
+            final =
+              senderIsBySession || senderIsByOutbox || senderIsByRecent
+                ? "coach"
+                : "alumno";
+          } else {
+            final =
+              senderIsBySession || senderIsByOutbox || senderIsByRecent
+                ? role
+                : "alumno";
+          }
+        }
+        if (chatDebug() && (ctx === "realtime" || ctx === "user")) {
+          dbg("[CoachChat] evalSenderForMapping", {
+            cid,
+            emitter,
+            myPid,
+            role,
+            ctx,
+            reason,
+            senderIsById,
+            senderIsBySession,
+            senderIsByOutbox,
+            senderIsByRecent,
+            senderIsByTipo,
+            final,
+          });
+        }
+        return { sender: final, byId: senderIsById, reason };
+      } catch {
+        const fallback: Sender =
+          role === "alumno" ? "coach" : role === "coach" ? "alumno" : "alumno";
+        return { sender: fallback, byId: false, reason: "error-fallback" };
+      }
+    },
+    [role]
+  );
+
+  // Construir un mensaje desde un payload genérico (incluyendo eventos de archivo)
+  const buildMessageFromPayload = React.useCallback(
+    (obj: any, ctx?: "realtime" | "user" | "join" | "poll"): Message | null => {
+      try {
+        const currentChatId = chatIdRef.current ?? chatId;
+        const cid = obj?.id_chat ?? obj?.chatId ?? currentChatId;
+        if (cid == null) return null;
+        const atts = mapArchivoToAttachments(obj) || [];
+        const txt = String(obj?.contenido ?? obj?.texto ?? "").trim();
+        if (!txt && atts.length === 0) return null;
+        const id = String(
+          obj?.id_mensaje ?? obj?.id ?? `${Date.now()}-${Math.random()}`
+        );
+        // Unificar determinación de remitente (isMine) utilizando
+        // la función centralizada evalSenderForMapping para evitar
+        // desincronías entre join/realtime/pushIncomingMessage.
+        const evalR = evalSenderForMapping(obj, cid, ctx);
+        const sender: Sender = evalR.sender;
+        const msg: Message = {
+          id,
+          room: normRoom,
+          sender,
+          text: txt,
+          at: String(
+            normalizeDateStr(obj?.fecha_envio) || new Date().toISOString()
+          ),
+          delivered: true,
+          read: false,
+          srcParticipantId: getEmitter(obj),
+          attachments: atts,
+          uiKey: id,
+        };
+        (msg as any).__senderById = !!evalR.byId;
+        (msg as any).__senderReason = evalR.reason;
+        return msg;
+      } catch {
+        return null;
+      }
+    },
+    [role, normRoom, chatId]
+  );
+
+  const pushIncomingMessage = React.useCallback((msg: Message) => {
+    // Asegurar clave de UI estable
+    if (!msg.uiKey) msg.uiKey = msg.id;
+    setItems((prev) => {
+      // dedupe por id
+      if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
+      const next = [...prev];
+      // dedupe por cercanía temporal + contenido
+      for (let i = next.length - 1; i >= 0; i--) {
+        const m = next[i];
+        const t1 = Date.parse(m.at || "");
+        const t2 = Date.parse(msg.at || "");
+        const near = !isNaN(t1) && !isNaN(t2) && Math.abs(t1 - t2) < 8000;
+        const sameSender = (m.sender || "") === (msg.sender || "");
+        const sameText = (m.text || "").trim() === (msg.text || "").trim();
+        const attKey = (arr?: Attachment[]) =>
+          (arr || [])
+            .map((a) => `${a.name}:${a.size}:${a.mime}`)
+            .sort()
+            .join("|");
+        const attKeySoft = (arr?: Attachment[]) => {
+          const list = arr || [];
+          const cat = (m?: string) => (m || "").split("/")[0];
+          const count = list.length;
+          const sizeSum = list.reduce((s, a) => s + (a?.size || 0), 0);
+          const cats = Array.from(new Set(list.map((a) => cat(a?.mime))))
+            .sort()
+            .join(",");
+          return `${count}|${sizeSum}|${cats}`;
+        };
+        const sameAtts = attKey(m.attachments) === attKey(msg.attachments);
+        const softAtts =
+          attKeySoft(m.attachments) === attKeySoft(msg.attachments);
+        if (near && sameSender && sameText && sameAtts) {
+          // fusionar como delivered
+          const byId = (msg as any).__senderById === true;
+          const preserveSender = !byId && m.sender && m.sender !== msg.sender;
+          next[i] = {
+            ...msg,
+            sender: preserveSender ? m.sender : msg.sender,
+            read: m.read || msg.read,
+          } as Message;
+          return next;
+        }
+        // Fallback para multimedia renombrado por el servidor (nombre distinto):
+        if (near && sameSender && sameText && softAtts) {
+          const byId = (msg as any).__senderById === true;
+          const preserveSender = !byId && m.sender && m.sender !== msg.sender;
+          next[i] = {
+            ...msg,
+            sender: preserveSender ? m.sender : msg.sender,
+            read: m.read || msg.read,
+          } as Message;
+          return next;
+        }
+      }
+      return [...next, msg];
+    });
+    try {
+      seenRef.current.add(String(msg.id));
+    } catch {}
+  }, []);
+
+  // Reconciliar mensajes mapeados desde servidor con los existentes en UI,
+  // preservando el lado previo salvo que el nuevo venga respaldado "byId".
+  const reconcilePreserveSender = React.useCallback(
+    (mapped: Message[]): Message[] => {
+      try {
+        const prev = itemsRef.current || [];
+        if (!prev.length) return mapped;
+        const prevById = new Map<string, Message>(
+          prev.map((p) => [String(p.id), p])
+        );
+        return mapped.map((m) => {
+          const old = prevById.get(String(m.id));
+          if (old && old.sender !== m.sender) {
+            const byId = (m as any).__senderById === true;
+            if (!byId) {
+              return { ...m, sender: old.sender } as Message;
+            }
+          }
+          return m;
+        });
+      } catch {
+        return mapped;
+      }
+    },
+    []
+  );
+
+  // Unir mensajes del servidor con optimistas locales para que no desaparezcan tras un refresh
+  const mergePreservingOptimistics = React.useCallback(
+    (serverMapped: Message[]): Message[] => {
+      try {
+        const prev = itemsRef.current || [];
+        if (!prev.length) return serverMapped;
+        const now = Date.now();
+        const toTs = (iso?: string) => {
+          const t = Date.parse(String(iso || ""));
+          return isNaN(t) ? 0 : t;
+        };
+        const softKey = (m: Message) => {
+          const txt = (m.text || "").trim();
+          const list = m.attachments || [];
+          const cat = (mm?: string) => (mm || "").split("/")[0];
+          const count = list.length;
+          const sizeSum = list.reduce((s, a) => s + (a?.size || 0), 0);
+          const cats = Array.from(new Set(list.map((a) => cat(a?.mime))))
+            .sort()
+            .join(",");
+          return `${txt}|${count}|${sizeSum}|${cats}`;
+        };
+        const serverBySoft = new Map<string, Message>();
+        for (const m of serverMapped) serverBySoft.set(softKey(m), m);
+
+        const optimistic = prev.filter((m) => {
+          const isMine = (m.sender || "").toLowerCase() === role.toLowerCase();
+          const isOptimistic = m.delivered === false;
+          const recent = now - toTs(m.at) < 15000; // 15s ventana
+          return isMine && isOptimistic && recent;
+        });
+        const merged = [...serverMapped];
+        for (const om of optimistic) {
+          const key = softKey(om);
+          const srv = serverBySoft.get(key);
+          // Si el servidor aún no refleja este mensaje, mantenemos el optimista
+          if (!srv) {
+            // Evitar duplicar por id
+            if (!merged.some((x) => String(x.id) === String(om.id))) {
+              merged.push(om);
+            }
+          }
+        }
+        // Orden cronológico por fecha
+        merged.sort((a, b) => toTs(a.at) - toTs(b.at));
+        return merged;
+      } catch {
+        return serverMapped;
+      }
+    },
+    [role]
+  );
 
   // Mapear archivo/archivos del backend a adjuntos del UI
   function mapArchivoToAttachments(src: any): Attachment[] | undefined {
@@ -843,11 +1077,8 @@ export default function CoachChatInline({
           return getAuthToken() || undefined;
         };
         const token = await resolveToken();
-        try {
-          // Mostrar token en consola para poder copiarlo y usarlo al conectar
-          // Nota: esto imprime el token en la consola del navegador (devtools)
-          console.log("[CoachChat] auth token:", token);
-        } catch {}
+        // Evitar imprimir el token salvo depuración explícita
+        // logging eliminado
         if (!token) {
           setConnected(false);
           onConnectionChange?.(false);
@@ -867,56 +1098,146 @@ export default function CoachChatInline({
               timeout: 20000,
             });
         sioRef.current = sio;
+        // Utilidad: recargar mensajes del chat actual desde el servidor (sin resetear estado ni flicker)
+        const refreshMessagesFromServer = (cid: any) => {
+          try {
+            if (cid == null) return;
+            sio.emit("chat.join", { id_chat: cid }, (ack: any) => {
+              try {
+                if (!ack || ack.success === false) return;
+                const data = ack.data || {};
+                const msgsSrc = Array.isArray(data.messages)
+                  ? data.messages
+                  : Array.isArray((data as any).mensajes)
+                  ? (data as any).mensajes
+                  : [];
+                const myPidLocal =
+                  data?.my_participante ?? myParticipantIdRef.current;
+                const mapped: Message[] = msgsSrc.map((m: any) => {
+                  const ev = evalSenderForMapping(m, cid, "join");
+                  const sender: Sender = ev.sender;
+                  const msg: Message = {
+                    id: String(
+                      m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                    ),
+                    room: normRoom,
+                    sender,
+                    text: String(
+                      m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                    ).trim(),
+                    at: String(
+                      normalizeDateStr(m?.fecha_envio) ||
+                        new Date().toISOString()
+                    ),
+                    delivered: true,
+                    read: !!m?.leido,
+                    srcParticipantId: getEmitter(m),
+                    attachments: mapArchivoToAttachments(m),
+                    uiKey: String(
+                      m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                    ),
+                  } as Message;
+                  (msg as any).__senderById = !!ev.byId;
+                  (msg as any).__senderReason = ev.reason;
+                  return msg;
+                });
+                const reconciled = reconcilePreserveSender(mapped);
+                const merged = mergePreservingOptimistics(reconciled);
+                setItems(merged);
+                try {
+                  mapped.forEach((mm) => seenRef.current.add(mm.id));
+                } catch {}
+              } catch {}
+            });
+          } catch {}
+        };
+
         sio.on("connect", () => {
           if (!alive) return;
           setConnected(true);
           onConnectionChange?.(true);
-          try {
-            console.log("[CoachChat] conectado", {
-              room: normRoom,
-              role,
-              chatId: chatIdRef.current,
-            });
-          } catch {}
+          // Silenciar log de conexión permanente; se informará en JOIN ok
         });
+        // Fallback: algunos backends emiten eventos distintos al subir archivos.
+        // Escuchamos cualquier evento y si parece relacionado a archivos/subidas del chat actual,
+        // refrescamos rápidamente los mensajes desde el servidor.
+        try {
+          const handleFileLike = (payload: any) => {
+            try {
+              const pid = payload?.id_chat ?? payload?.chatId ?? null;
+              const sameChat =
+                pid != null &&
+                chatIdRef.current != null &&
+                String(pid) === String(chatIdRef.current);
+              const msg = buildMessageFromPayload(payload, "realtime");
+              if (sameChat && msg) {
+                pushIncomingMessage(msg);
+                lastRealtimeAtRef.current = Date.now();
+                return true;
+              }
+              return false;
+            } catch {
+              return false;
+            }
+          };
+          // Genérico: cualquier evento que parezca file/upload
+          sio.onAny((event: string, payload: any) => {
+            try {
+              const ev = String(event || "").toLowerCase();
+              const looksLikeUpload =
+                ev.includes("upload") ||
+                ev.includes("file") ||
+                ev.includes("archivo") ||
+                ev.includes("adjunto");
+              if (looksLikeUpload && handleFileLike(payload)) return;
+              // Si parece file pero no pudimos construir mensaje, refrescar
+              if (looksLikeUpload) {
+                refreshMessagesFromServer(chatIdRef.current);
+              }
+            } catch {}
+          });
+          // Eventos comunes específicos
+          const names = [
+            "chat.attachment",
+            "chat.attachment.created",
+            "chat.file",
+            "chat.file.uploaded",
+            "archivo.creado",
+            "archivo.subido",
+            "adjunto.creado",
+          ];
+          for (const n of names) {
+            try {
+              sio.on(n, (payload: any) => {
+                if (!handleFileLike(payload)) {
+                  refreshMessagesFromServer(chatIdRef.current);
+                }
+              });
+            } catch {}
+          }
+        } catch {}
         sio.on("disconnect", () => {
           if (!alive) return;
           setConnected(false);
           onConnectionChange?.(false);
-          try {
-            console.log("[CoachChat] desconectado", { room: normRoom, role });
-          } catch {}
+          // Silenciar desconexión por defecto
         });
         sio.on("connect_error", (err: any) => {
           try {
-            console.error("[CoachChat] connect_error", {
-              message: err?.message || String(err),
-              url: socketio?.url ?? "<default>",
-            });
+            // logging eliminado
           } catch {}
         });
         sio.on("error", (err: any) => {
           try {
-            console.error("[CoachChat] error", err?.message || err);
+            // logging eliminado
           } catch {}
         });
 
         sio.on("chat.message", (msg: any) => {
           try {
+            lastRealtimeAtRef.current = Date.now();
             const currentChatId = chatIdRef.current;
-            try {
-              console.log("[CoachChat] chat.message <=", {
-                id_chat: msg?.id_chat,
-                id_mensaje: msg?.id_mensaje ?? msg?.id,
-                texto: msg?.contenido ?? msg?.texto,
-                emisor: getEmitter(msg),
-                currentChatId,
-              });
-              // Log completo del JSON del mensaje recibido
-              try {
-                console.log("[CoachChat] chat.message RAW <=", msg);
-              } catch {}
-            } catch {}
+            // logging eliminado
             // Si el mensaje es de otro chat (o no hay chat unido aún), avisa para refrescar y sumar no leídos
             if (
               msg?.id_chat != null &&
@@ -968,10 +1289,7 @@ export default function CoachChatInline({
                     );
                   } catch {}
                 }
-                console.log(
-                  "[CoachChat] chat.message de otro chat -> refresh+bump",
-                  { id_chat: msg?.id_chat }
-                );
+                // logging eliminado
               } catch {}
               return;
             }
@@ -1008,30 +1326,18 @@ export default function CoachChatInline({
               }
             } catch {}
 
-            let sender: Sender;
-            if (role === "coach") {
-              const mineEval =
-                senderIsMeById || senderIsMeBySession || senderIsMeByOutbox;
-              sender = mineEval ? "coach" : "alumno";
-            } else if (role === "alumno") {
-              const tipoNorm = normalizeTipo(
-                msg?.participante_tipo ||
-                  getTipoByParticipantId(msg?.id_chat_participante_emisor)
-              );
-              const mineByTipo = tipoNorm === "cliente";
-              sender =
-                senderIsMeById ||
-                senderIsMeBySession ||
-                senderIsMeByOutbox ||
-                mineByTipo
-                  ? "alumno"
-                  : "coach";
-            } else {
-              sender =
-                senderIsMeById || senderIsMeBySession || senderIsMeByOutbox
-                  ? role
-                  : "alumno";
-            }
+            const attsLive = mapArchivoToAttachments(msg);
+            // logging eliminado
+            const senderIsMeByRecent = hasRecentUploadMatch(
+              role,
+              currentChatId,
+              attsLive
+            );
+            // logging eliminado
+            // Determinar remitente de forma consistente usando el helper central
+            // evalSenderForMapping para evitar discrepancias entre join/poll/realtime.
+            const evalR = evalSenderForMapping(msg, currentChatId, "realtime");
+            const sender: Sender = evalR.sender;
 
             const newMsg: Message = {
               id,
@@ -1044,83 +1350,46 @@ export default function CoachChatInline({
               delivered: true,
               read: false,
               srcParticipantId: getEmitter(msg),
+              uiKey: id,
             };
-            const atts = mapArchivoToAttachments(msg);
-            if (atts && atts.length) newMsg.attachments = atts;
+            if (attsLive && attsLive.length) newMsg.attachments = attsLive;
             setItems((prev) => {
-              if (sender === role) {
-                const next = [...prev];
-                // 1) Intentar emparejar por texto (como antes)
-                for (let i = next.length - 1; i >= 0; i--) {
-                  const mm = next[i];
-                  if (mm.sender !== role) continue;
-                  if ((mm.text || "").trim() !== (newMsg.text || "").trim())
-                    continue;
-                  const tNew = Date.parse(newMsg.at || "");
-                  const tOld = Date.parse(mm.at || "");
-                  const near =
-                    !isNaN(tNew) &&
-                    !isNaN(tOld) &&
-                    Math.abs(tNew - tOld) < 8000;
-                  if (mm.delivered === false || near) {
-                    next[i] = { ...newMsg, read: mm.read || false };
-                    return next;
-                  }
-                }
-                // 2) Intentar emparejar por adjuntos (mensaje optimista de archivos)
-                if (
-                  Array.isArray(newMsg.attachments) &&
-                  newMsg.attachments.length > 0
-                ) {
-                  for (let i = next.length - 1; i >= 0; i--) {
-                    const mm = next[i];
-                    if (mm.sender !== role) continue;
-                    if (
-                      !Array.isArray(mm.attachments) ||
-                      mm.attachments.length === 0
-                    )
-                      continue;
-                    // Coincidencia por cantidad y nombres/tamaños aproximados
-                    const sameCount =
-                      (mm.attachments?.length || 0) ===
-                      (newMsg.attachments?.length || 0);
-                    if (!sameCount) continue;
-                    const namesA = (mm.attachments || []).map((a) =>
-                      (a.name || "").toLowerCase().trim()
-                    );
-                    const namesB = (newMsg.attachments || []).map((a) =>
-                      (a.name || "").toLowerCase().trim()
-                    );
-                    const sizesA = (mm.attachments || []).map(
-                      (a) => a.size || 0
-                    );
-                    const sizesB = (newMsg.attachments || []).map(
-                      (a) => a.size || 0
-                    );
-                    const namesMatch = namesA.every(
-                      (n, idx) => n === namesB[idx]
-                    );
-                    const sizesNear = sizesA.every(
-                      (s, idx) => Math.abs(s - (sizesB[idx] || 0)) < 2048 // ~2KB tolerancia
-                    );
-                    const tNew = Date.parse(newMsg.at || "");
-                    const tOld = Date.parse(mm.at || "");
-                    const near =
-                      !isNaN(tNew) &&
-                      !isNaN(tOld) &&
-                      Math.abs(tNew - tOld) < 15000; // adjuntos pueden tardar más
-                    if (
-                      (mm.delivered === false || near) &&
-                      (namesMatch || sizesNear)
-                    ) {
-                      next[i] = { ...newMsg, read: mm.read || false };
-                      return next;
-                    }
-                  }
+              const next = [...prev];
+              const attKey = (arr?: Attachment[]) =>
+                (arr || [])
+                  .map((a) => `${a.name}:${a.size}:${a.mime}`)
+                  .sort()
+                  .join("|");
+              for (let i = next.length - 1; i >= 0; i--) {
+                const mm = next[i];
+                const tNew = Date.parse(newMsg.at || "");
+                const tOld = Date.parse(mm.at || "");
+                const near =
+                  !isNaN(tNew) && !isNaN(tOld) && Math.abs(tNew - tOld) < 8000;
+                const sameText =
+                  (mm.text || "").trim() === (newMsg.text || "").trim();
+                const sameAtts =
+                  attKey(mm.attachments) === attKey(newMsg.attachments);
+                if (near && sameText && sameAtts) {
+                  const keepSender = !evalR.byId ? mm.sender : sender;
+                  next[i] = {
+                    ...newMsg,
+                    sender: keepSender,
+                    read: mm.read || false,
+                  } as Message;
+                  return next;
                 }
               }
               return [...prev, newMsg];
             });
+            // Si el usuario no está al fondo y el mensaje no es mío, mostrar contador de nuevos
+            try {
+              const isMineNow =
+                (sender || "").toLowerCase() === role.toLowerCase();
+              if (!pinnedToBottomRef.current && !isMineNow) {
+                setNewMessagesCount((n) => n + 1);
+              }
+            } catch {}
             // Pedir refresco de listado también cuando llega mensaje del chat actual
             try {
               const evtRefresh = new CustomEvent("chat:list-refresh", {
@@ -1132,20 +1401,9 @@ export default function CoachChatInline({
               window.dispatchEvent(evtRefresh);
             } catch {}
             markRead();
-            try {
-              console.log("[CoachChat] mensaje agregado", {
-                id_local: id,
-                sender,
-                delivered: true,
-              });
-            } catch {}
-            if (
-              (myParticipantId == null || myParticipantId === "") &&
-              sender === role &&
-              msg?.id_chat_participante_emisor != null
-            ) {
-              setMyParticipantId(msg.id_chat_participante_emisor);
-            }
+            // logging eliminado
+            // No actualizamos myParticipantId a partir de eventos entrantes para evitar desincronización;
+            // se establece de forma confiable en JOIN o al ENVIAR un mensaje.
           } catch {}
         });
         try {
@@ -1158,19 +1416,13 @@ export default function CoachChatInline({
                 },
               });
               window.dispatchEvent(evt);
-              console.log(
-                "[CoachChat] chat.created recibido -> refresh lista",
-                {
-                  id_chat: data?.id_chat ?? data?.id,
-                }
-              );
+              // Silenciar log de evento chat.created
             } catch {}
           });
         } catch {}
 
         sio.on("chat.message.read", (data: any) => {
           try {
-            console.log("[CoachChat] chat.message.read <=", data);
             const idMsg = data?.id_mensaje ?? data?.id ?? null;
             if (!idMsg) return;
             setItems((prev) =>
@@ -1182,9 +1434,6 @@ export default function CoachChatInline({
         });
         sio.on("chat.read.all", () => {
           try {
-            console.log(
-              "[CoachChat] chat.read.all <= (marcar todos como leídos en UI)"
-            );
             setItems((prev) =>
               prev.map((m) =>
                 (m.sender || "").toLowerCase() === role.toLowerCase()
@@ -1251,6 +1500,78 @@ export default function CoachChatInline({
     };
   }, [normRoom, role, socketio?.url, socketio?.token]);
 
+  // Polling ligero como salvavidas: si no hay eventos en tiempo real recientes,
+  // solicitamos mensajes del chat actual cada ~1.8s cuando la pestaña está visible.
+  React.useEffect(() => {
+    if (!connected) return;
+    if (chatId == null) return;
+    if (typeof document === "undefined") return;
+    const timer = setInterval(() => {
+      try {
+        if (document.visibilityState !== "visible") return;
+        const since = Date.now() - (lastRealtimeAtRef.current || 0);
+        if (since < 1500) return; // hay eventos RT, no hace falta
+        const sio = sioRef.current;
+        const current = chatIdRef.current ?? chatId;
+        if (!sio || current == null) return;
+        sio.emit("chat.join", { id_chat: current }, (ack: any) => {
+          try {
+            if (!ack || ack.success === false) return;
+            const data = ack.data || {};
+            const msgsSrc = Array.isArray(data.messages)
+              ? data.messages
+              : Array.isArray((data as any).mensajes)
+              ? (data as any).mensajes
+              : [];
+            const myPidLocal =
+              data?.my_participante ?? myParticipantIdRef.current;
+            const mapped: Message[] = msgsSrc.map((m: any) => {
+              const ev = evalSenderForMapping(m, current, "poll");
+              const sender: Sender = ev.sender;
+              const msg: Message = {
+                id: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+                room: normRoom,
+                sender,
+                text: String(
+                  m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                ).trim(),
+                at: String(
+                  normalizeDateStr(m?.fecha_envio) || new Date().toISOString()
+                ),
+                delivered: true,
+                read: !!m?.leido,
+                srcParticipantId: getEmitter(m),
+                attachments: mapArchivoToAttachments(m),
+                uiKey: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+              } as Message;
+              (msg as any).__senderById = !!ev.byId;
+              (msg as any).__senderReason = ev.reason;
+              return msg;
+            });
+            const reconciled = reconcilePreserveSender(mapped);
+            const merged = mergePreservingOptimistics(reconciled);
+            // Solo actualizar si cambió algo (evitar flicker)
+            const prev = itemsRef.current || [];
+            const lastPrev = prev[prev.length - 1];
+            const lastNew = merged[merged.length - 1];
+            const changed =
+              prev.length !== merged.length ||
+              (lastPrev &&
+                lastNew &&
+                String(lastPrev.id) !== String(lastNew.id));
+            if (changed) {
+              setItems(merged);
+              try {
+                merged.forEach((mm) => seenRef.current.add(mm.id));
+              } catch {}
+            }
+          } catch {}
+        });
+      } catch {}
+    }, 1800);
+    return () => clearInterval(timer);
+  }, [connected, chatId, role]);
+
   React.useEffect(() => {
     const newId = socketio?.chatId ?? null;
     const autoJoin = socketio?.autoJoin ?? true;
@@ -1292,13 +1613,7 @@ export default function CoachChatInline({
             setMyParticipantId(data.my_participante);
             myParticipantIdRef.current = data.my_participante;
           }
-          try {
-            console.log("[CoachChat] JOIN ok", {
-              id_chat: cid,
-              my_participante: data?.my_participante ?? null,
-              has_participants: !!(data.participants || data.participantes),
-            });
-          } catch {}
+          // logging eliminado
           const parts = data.participants || data.participantes || [];
           joinedParticipantsRef.current = Array.isArray(parts) ? parts : [];
           joinDataRef.current = { participants: joinedParticipantsRef.current };
@@ -1326,35 +1641,12 @@ export default function CoachChatInline({
             : Array.isArray((data as any).mensajes)
             ? (data as any).mensajes
             : [];
-          try {
-            console.groupCollapsed(
-              `[CoachChat] RAW mensajes del join (id_chat: ${String(cid)}) — ${
-                msgsSrc.length
-              } items`
-            );
-            console.log(JSON.stringify(msgsSrc, null, 2));
-            console.groupEnd();
-          } catch {}
           const myPidLocal =
             data?.my_participante ?? myParticipantIdRef.current;
           const mapped: Message[] = msgsSrc.map((m: any) => {
-            const isMineById =
-              myPidLocal != null &&
-              String(getEmitter(m) ?? "") === String(myPidLocal);
-            let sender: Sender;
-            if (role === "coach") {
-              sender = isMineById ? "coach" : "alumno";
-            } else if (role === "alumno") {
-              const tipoNorm = normalizeTipo(
-                m?.participante_tipo ||
-                  getTipoByParticipantId(m?.id_chat_participante_emisor)
-              );
-              const mineByTipo = tipoNorm === "cliente";
-              sender = isMineById || mineByTipo ? "alumno" : "coach";
-            } else {
-              sender = isMineById ? role : "alumno";
-            }
-            return {
+            const ev = evalSenderForMapping(m, cid, "join");
+            const sender: Sender = ev.sender;
+            const msg: Message = {
               id: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
               room: normRoom,
               sender,
@@ -1368,9 +1660,18 @@ export default function CoachChatInline({
               read: !!m?.leido,
               srcParticipantId: getEmitter(m),
               attachments: mapArchivoToAttachments(m),
-            };
+              uiKey: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+            } as Message;
+            (msg as any).__senderById = !!ev.byId;
+            (msg as any).__senderReason = ev.reason;
+            return msg;
           });
-          setItems(mapped);
+
+          {
+            const reconciled = reconcilePreserveSender(mapped);
+            const merged = mergePreservingOptimistics(reconciled);
+            setItems(merged);
+          }
           mapped.forEach((mm) => seenRef.current.add(mm.id));
           setIsJoining(false);
           try {
@@ -1381,9 +1682,7 @@ export default function CoachChatInline({
             });
           } catch {}
         } else {
-          try {
-            console.warn("[CoachChat] JOIN fallo", ack);
-          } catch {}
+          // logging eliminado
           setIsJoining(false);
         }
       } catch {
@@ -1445,13 +1744,7 @@ export default function CoachChatInline({
     try {
       sio.emit("chat.list", payload, async (ack: any) => {
         try {
-          try {
-            console.log("[CoachChat] chat.list =>", {
-              payload,
-              success: ack?.success,
-              items: Array.isArray(ack?.data) ? ack.data.length : 0,
-            });
-          } catch {}
+          // logging eliminado
           if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
           const baseList: any[] = Array.isArray(list) ? list : [];
@@ -1526,11 +1819,6 @@ export default function CoachChatInline({
           if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
           onChatsList?.(list);
-          try {
-            console.log("[CoachChat] refreshListNow =>", {
-              items: list.length,
-            });
-          } catch {}
         } catch {}
       });
     } catch {}
@@ -1541,7 +1829,6 @@ export default function CoachChatInline({
     if (typeof document === "undefined") return;
     if (document.visibilityState !== "visible") return;
     try {
-      console.log("[CoachChat] EMIT chat.read.all =>", { id_chat: chatId });
       sioRef.current?.emit("chat.read.all", { id_chat: chatId });
       markRead();
     } catch {}
@@ -1558,15 +1845,7 @@ export default function CoachChatInline({
       const participants = participantsRef.current ?? socketio?.participants;
       if (!Array.isArray(participants) || participants.length === 0)
         return false;
-      try {
-        console.log(
-          "[CoachChat] ensureChatReadyForSend: sin chatId, buscar/crear",
-          {
-            autoCreate,
-            participants,
-          }
-        );
-      } catch {}
+      // logging eliminado
       const listPayload: any = {};
       if (role === "coach" && socketio?.idEquipo != null) {
         listPayload.participante_tipo = "equipo";
@@ -1593,13 +1872,7 @@ export default function CoachChatInline({
           resolve([]);
         }
       });
-      try {
-        console.log(
-          "[CoachChat] ensureChatReadyForSend: chat.list obtuvo",
-          list.length,
-          "items"
-        );
-      } catch {}
+      // logging eliminado
       const buildKey = (p: any) => {
         const t = normalizeTipo(p?.participante_tipo);
         if (t === "equipo" && p?.id_equipo)
@@ -1643,12 +1916,7 @@ export default function CoachChatInline({
       const matched: any | null = findMatchInList(list);
 
       if (matched && (matched.id_chat || matched.id)) {
-        try {
-          console.log(
-            "[CoachChat] ensureChatReadyForSend: MATCH existente",
-            matched
-          );
-        } catch {}
+        // logging eliminado
         return await new Promise<boolean>((resolve) => {
           try {
             sio.emit(
@@ -1667,12 +1935,7 @@ export default function CoachChatInline({
                       setMyParticipantId(data.my_participante);
                       myParticipantIdRef.current = data.my_participante;
                     }
-                    try {
-                      console.log("[CoachChat] JOIN ok (match)", {
-                        id_chat: cid,
-                        my_participante: data?.my_participante ?? null,
-                      });
-                    } catch {}
+                    // logging eliminado
                     const parts = data.participants || data.participantes || [];
                     joinedParticipantsRef.current = Array.isArray(parts)
                       ? parts
@@ -1707,37 +1970,12 @@ export default function CoachChatInline({
                       : Array.isArray((data as any).mensajes)
                       ? (data as any).mensajes
                       : [];
-                    try {
-                      console.groupCollapsed(
-                        `[CoachChat] RAW mensajes del join (match) — ${
-                          (msgsSrc || []).length
-                        } items`
-                      );
-                      console.log(JSON.stringify(msgsSrc, null, 2));
-                      console.groupEnd();
-                    } catch {}
                     const myPidLocal2 =
                       data?.my_participante ?? myParticipantIdRef.current;
                     const mapped: Message[] = msgsSrc.map((m: any) => {
-                      const isMineById =
-                        myPidLocal2 != null &&
-                        String(getEmitter(m) ?? "") === String(myPidLocal2);
-                      let sender: Sender;
-                      if (role === "coach") {
-                        sender = isMineById ? "coach" : "alumno";
-                      } else if (role === "alumno") {
-                        const tipoNorm = normalizeTipo(
-                          m?.participante_tipo ||
-                            getTipoByParticipantId(
-                              m?.id_chat_participante_emisor
-                            )
-                        );
-                        const mineByTipo = tipoNorm === "cliente";
-                        sender = isMineById || mineByTipo ? "alumno" : "coach";
-                      } else {
-                        sender = isMineById ? role : "alumno";
-                      }
-                      return {
+                      const ev = evalSenderForMapping(m, cid);
+                      const sender: Sender = ev.sender;
+                      const msg: Message = {
                         id: String(
                           m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
                         ),
@@ -1754,9 +1992,19 @@ export default function CoachChatInline({
                         read: !!m?.leido,
                         srcParticipantId: getEmitter(m),
                         attachments: mapArchivoToAttachments(m),
-                      };
+                        uiKey: String(
+                          m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                        ),
+                      } as Message;
+                      (msg as any).__senderById = !!ev.byId;
+                      (msg as any).__senderReason = ev.reason;
+                      return msg;
                     });
-                    setItems(mapped);
+                    {
+                      const reconciled = reconcilePreserveSender(mapped);
+                      const merged = mergePreservingOptimistics(reconciled);
+                      setItems(merged);
+                    }
                     mapped.forEach((mm) => seenRef.current.add(mm.id));
                     try {
                       onChatInfo?.({
@@ -1805,16 +2053,9 @@ export default function CoachChatInline({
                     setChatId(cid);
                     chatIdRef.current = cid;
                   } else {
-                    console.warn(
-                      "[CoachChat] CREATE ok pero sin id_chat en ack; intentando localizar por participantes"
-                    );
+                    // logging eliminado
                   }
-                  try {
-                    console.log("[CoachChat] CREATE ok", {
-                      id_chat: cid,
-                      data,
-                    });
-                  } catch {}
+                  // logging eliminado
                   const parts = data.participants || data.participantes || [];
                   joinedParticipantsRef.current = Array.isArray(parts)
                     ? parts
@@ -1846,10 +2087,7 @@ export default function CoachChatInline({
                       detail: { reason: "chat-created-local", id_chat: cid },
                     });
                     window.dispatchEvent(evt);
-                    console.log(
-                      "[CoachChat] dispatch chat:list-refresh (created local)",
-                      { id_chat: cid }
-                    );
+                    // logging eliminado
                   } catch {}
                   onChatInfo?.({
                     chatId: cid,
@@ -1861,9 +2099,7 @@ export default function CoachChatInline({
                     const to = setTimeout(() => {
                       if (!settled) {
                         settled = true;
-                        console.warn(
-                          "[CoachChat] JOIN post-create timeout (resolviendo true sin my_participante aún)"
-                        );
+                        // logging eliminado
                         resolve(true);
                       }
                     }, 1500);
@@ -1878,12 +2114,7 @@ export default function CoachChatInline({
                               setMyParticipantId(dj.my_participante);
                               myParticipantIdRef.current = dj.my_participante;
                             }
-                            try {
-                              console.log("[CoachChat] JOIN ok (post-create)", {
-                                id_chat: finalChatId,
-                                my_participante: dj?.my_participante ?? null,
-                              });
-                            } catch {}
+                            // logging eliminado
                             const parts2 =
                               dj.participants || dj.participantes || parts;
                             joinedParticipantsRef.current = Array.isArray(
@@ -1964,25 +2195,16 @@ export default function CoachChatInline({
                         const finalId = found.id_chat ?? found.id;
                         setChatId(finalId);
                         chatIdRef.current = finalId;
-                        console.log(
-                          "[CoachChat] CREATE fallback: localizado chatId por participantes",
-                          {
-                            id_chat: finalId,
-                          }
-                        );
+                        // logging eliminado
                         finalizeWithJoin(finalId);
                       } else {
-                        console.warn(
-                          "[CoachChat] CREATE fallback: no se pudo localizar el chat recién creado"
-                        );
+                        // logging eliminado
                         resolve(false);
                       }
                     })();
                   }
                 } else {
-                  try {
-                    console.warn("[CoachChat] CREATE fallo", ack);
-                  } catch {}
+                  // logging eliminado
                   resolve(false);
                 }
               } catch {
@@ -2008,9 +2230,7 @@ export default function CoachChatInline({
       const sio = sioRef.current;
       if (!sio) return;
       if (chatIdRef.current == null) {
-        console.log(
-          "[CoachChat] send(): no chatId, intentando ensureChatReadyForSend"
-        );
+        // logging eliminado
         const ok = await ensureChatReadyForSend();
         if (chatIdRef.current == null) {
           for (let i = 0; i < 15 && chatIdRef.current == null; i++) {
@@ -2018,9 +2238,7 @@ export default function CoachChatInline({
           }
         }
         if (!ok || chatIdRef.current == null) {
-          console.warn(
-            "[CoachChat] send(): abortado, no hay chatId tras ensureChatReadyForSend"
-          );
+          // logging eliminado
           return;
         }
       }
@@ -2043,7 +2261,7 @@ export default function CoachChatInline({
           }
         }
         if (effectivePid == null) {
-          console.log("[CoachChat] send(): esperando my_participante…");
+          // logging eliminado
           for (let i = 0; i < 30; i++) {
             await new Promise((r) => setTimeout(r, 120));
             if (myParticipantId != null) {
@@ -2067,11 +2285,12 @@ export default function CoachChatInline({
             }
           }
         }
-        console.log("[CoachChat] send(): preparado para enviar", {
-          id_chat: chatIdRef.current,
-          pid: effectivePid,
-          text: val,
-        });
+        // logging eliminado
+        // Fijar myParticipantId si aún no está establecido
+        if (myParticipantId == null && effectivePid != null) {
+          setMyParticipantId(effectivePid);
+          myParticipantIdRef.current = effectivePid;
+        }
         const clientId = `${Date.now()}-${Math.random()
           .toString(36)
           .slice(2, 8)}`;
@@ -2084,6 +2303,7 @@ export default function CoachChatInline({
           delivered: false,
           read: false,
           srcParticipantId: effectivePid ?? undefined,
+          uiKey: clientId,
         };
         setItems((prev) => [...prev, optimistic]);
         seenRef.current.add(clientId);
@@ -2095,10 +2315,7 @@ export default function CoachChatInline({
         });
 
         if (chatIdRef.current == null || effectivePid == null) {
-          console.error("[CoachChat] send(): NO ENVÍA — faltan datos", {
-            id_chat: chatIdRef.current,
-            pid: effectivePid,
-          });
+          // logging eliminado
           return;
         }
         sio.emit(
@@ -2111,10 +2328,7 @@ export default function CoachChatInline({
           },
           (ack: any) => {
             try {
-              console.log("[CoachChat] chat.message.send ACK <=", {
-                success: ack?.success,
-                id_mensaje: ack?.data?.id_mensaje ?? ack?.data?.id,
-              });
+              // logging eliminado
               setItems((prev) => {
                 const next = [...prev];
                 const serverId = ack?.data?.id_mensaje ?? ack?.data?.id;
@@ -2163,6 +2377,60 @@ export default function CoachChatInline({
         try {
           await uploadFiles(attachments.map((a) => a.file));
           clearAttachments();
+          // Fallback: refrescar mensajes del chat por si el servidor no emitió 'chat.message' para adjuntos
+          try {
+            const current = chatIdRef.current;
+            if (current != null) {
+              const sio = sioRef.current;
+              sio?.emit("chat.join", { id_chat: current }, (ack: any) => {
+                try {
+                  if (!ack || ack.success === false) return;
+                  const data = ack.data || {};
+                  const msgsSrc = Array.isArray(data.messages)
+                    ? data.messages
+                    : Array.isArray((data as any).mensajes)
+                    ? (data as any).mensajes
+                    : [];
+                  const myPidLocal =
+                    data?.my_participante ?? myParticipantIdRef.current;
+                  const mapped: Message[] = msgsSrc.map((m: any) => {
+                    const ev = evalSenderForMapping(m, current, "join");
+                    const sender: Sender = ev.sender;
+                    const msg: Message = {
+                      id: String(
+                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                      ),
+                      room: normRoom,
+                      sender,
+                      text: String(
+                        m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                      ).trim(),
+                      at: String(
+                        normalizeDateStr(m?.fecha_envio) ||
+                          new Date().toISOString()
+                      ),
+                      delivered: true,
+                      read: !!m?.leido,
+                      srcParticipantId: getEmitter(m),
+                      attachments: mapArchivoToAttachments(m),
+                      uiKey: String(
+                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                      ),
+                    } as Message;
+                    (msg as any).__senderById = !!ev.byId;
+                    (msg as any).__senderReason = ev.reason;
+                    return msg;
+                  });
+                  const reconciled = reconcilePreserveSender(mapped);
+                  const merged = mergePreservingOptimistics(reconciled);
+                  setItems(merged);
+                  try {
+                    merged.forEach((mm) => seenRef.current.add(mm.id));
+                  } catch {}
+                } catch {}
+              });
+            }
+          } catch {}
         } catch (e: any) {
           setUploadError(e?.message || "Error al subir adjuntos");
         }
@@ -2179,9 +2447,7 @@ export default function CoachChatInline({
         payload.id_chat_participante_emisor = myParticipantId;
       payload.client_session = clientSessionRef.current;
       sio.emit("chat.typing", payload);
-      try {
-        if (on) console.log("[CoachChat] EMIT typing:on", payload);
-      } catch {}
+      // logging eliminado
     } catch {}
   }
 
@@ -2248,7 +2514,7 @@ export default function CoachChatInline({
         );
       } catch {}
     } catch (e) {
-      console.error("[CoachChat] delete chat error", e);
+      // errores silenciados por política: no imprimir en consola
     }
   }
 
@@ -2379,51 +2645,91 @@ export default function CoachChatInline({
 
               const wrapperMt = newGroup ? "mt-2" : "mt-0.5";
 
+              const hasAudioOnly =
+                Array.isArray(m.attachments) &&
+                m.attachments.some((a) =>
+                  (a.mime || "").startsWith("audio/")
+                ) &&
+                (!m.text || m.text.trim() === "");
               return (
                 <div
-                  key={m.id}
+                  key={m.uiKey || m.id}
                   className={`flex ${
                     isMine ? "justify-end" : "justify-start"
                   } ${wrapperMt}`}
                 >
                   <div
-                    className={`w-fit max-w-[75%] px-3 py-2 shadow-sm ${radius} ${
-                      isMine ? "bg-[#DCF8C6]" : "bg-white"
-                    }`}
+                    className={`w-fit ${
+                      hasAudioOnly
+                        ? "p-0 bg-transparent shadow-none"
+                        : "max-w-[75%] px-3 py-2 shadow-sm " +
+                          (isMine ? "bg-[#DCF8C6]" : "bg-white")
+                    } ${radius}`}
                   >
-                    <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
-                      {m.text}
-                    </div>
+                    {m.text?.trim() ? (
+                      <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
+                        {m.text}
+                      </div>
+                    ) : null}
                     {Array.isArray(m.attachments) &&
-                      m.attachments.length > 0 && (
-                        <div className="mt-2 grid grid-cols-2 gap-2">
+                      m.attachments.length > 0 &&
+                      (hasAudioOnly ? (
+                        <div className="mt-0">
+                          {m.attachments
+                            .filter((a) => (a.mime || "").startsWith("audio/"))
+                            .map((a) => {
+                              const url = getAttachmentUrl(a);
+                              const timeLabel = formatTime(m.at);
+                              return (
+                                <div key={a.id} className="rounded-md">
+                                  <AudioBubble
+                                    src={url}
+                                    isMine={isMine}
+                                    timeLabel={timeLabel}
+                                  />
+                                </div>
+                              );
+                            })}
+                        </div>
+                      ) : (
+                        <div
+                          className={`mt-2 grid ${
+                            (m.attachments?.length || 0) === 1
+                              ? "grid-cols-1"
+                              : "grid-cols-2"
+                          } gap-2 w-fit`}
+                        >
                           {m.attachments.map((a) => {
                             const url = getAttachmentUrl(a);
                             const isImg = (a.mime || "").startsWith("image/");
                             const isVideo = (a.mime || "").startsWith("video/");
                             const isAudio = (a.mime || "").startsWith("audio/");
-
                             if (isAudio) {
+                              const timeLabel = formatTime(m.at);
                               return (
-                                <div
-                                  key={a.id}
-                                  className="col-span-2 rounded-md overflow-hidden bg-white/60 p-2"
-                                  title={a.name}
-                                >
-                                  <audio
+                                <div key={a.id} className="rounded-md">
+                                  <AudioBubble
                                     src={url}
-                                    controls
-                                    className="w-full"
-                                    preload="metadata"
+                                    isMine={isMine}
+                                    timeLabel={timeLabel}
                                   />
-                                  <div className="text-[10px] text-gray-500 mt-1 truncate">
-                                    {a.name}
-                                  </div>
                                 </div>
                               );
                             }
-
-                            // Para imágenes, videos y otros archivos, mantener el comportamiento original
+                            if (isVideo) {
+                              return (
+                                <div
+                                  key={a.id}
+                                  className="rounded-md overflow-hidden bg-white/60"
+                                >
+                                  <video
+                                    src={url}
+                                    controls
+                                    className="h-full w-full max-h-40"
+                                  />
+                                </div>
+                              );
+                            }
                             return (
                               <button
                                 key={a.id}
@@ -2431,20 +2737,18 @@ export default function CoachChatInline({
                                 onClick={() => openPreview(a)}
                                 className="relative rounded-md overflow-hidden bg-white/60 text-left"
                                 title={a.name}
+                                style={{ width: 220 }}
                               >
                                 {isImg ? (
                                   <img
                                     src={url || "/placeholder.svg"}
                                     alt={a.name}
-                                    className="max-h-40 w-full object-cover"
+                                    className="w-full"
+                                    style={{
+                                      aspectRatio: "11 / 6",
+                                      objectFit: "cover",
+                                    }}
                                   />
-                                ) : isVideo ? (
-                                  <div className="aspect-video w-full max-h-40">
-                                    <video
-                                      src={url}
-                                      className="h-full w-full"
-                                    />
-                                  </div>
                                 ) : (
                                   <div className="p-2 text-xs break-all underline">
                                     {a.name}
@@ -2454,23 +2758,25 @@ export default function CoachChatInline({
                             );
                           })}
                         </div>
-                      )}
-                    <div
-                      className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
-                        isMine ? "text-gray-600" : "text-gray-500"
-                      }`}
-                    >
-                      <span>{formatTime(m.at)}</span>
-                      {isMine && (
-                        <span
-                          className={`ml-0.5 ${
-                            m.read ? "text-[#53BDEB]" : "text-gray-500"
-                          }`}
-                        >
-                          {m.read ? "✓✓" : m.delivered ? "✓✓" : "✓"}
-                        </span>
-                      )}
-                    </div>
+                      ))}
+                    {!hasAudioOnly && (
+                      <div
+                        className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
+                          isMine ? "text-gray-600" : "text-gray-500"
+                        }`}
+                      >
+                        <span>{formatTime(m.at)}</span>
+                        {isMine && (
+                          <span
+                            className={`ml-0.5 ${
+                              m.read ? "text-[#53BDEB]" : "text-gray-500"
+                            }`}
+                          >
+                            {m.read ? "✓✓" : m.delivered ? "✓✓" : "✓"}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -2500,6 +2806,31 @@ export default function CoachChatInline({
               </div>
             </div>
           </div>
+          {/* Indicador de nuevos mensajes (flotante) */}
+          {newMessagesCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  const sc = scrollRef.current;
+                  if (sc) {
+                    sc.scrollTop = sc.scrollHeight;
+                    pinnedToBottomRef.current = true;
+                  }
+                } catch {}
+                setNewMessagesCount(0);
+              }}
+              className="absolute right-4 bottom-4 z-10 inline-flex items-center gap-2 rounded-full bg-[#25d366] text-white shadow-md px-3 py-1.5 text-sm hover:bg-[#1ebe57] transition"
+              title={`${newMessagesCount} nuevo${
+                newMessagesCount === 1 ? "" : "s"
+              }`}
+            >
+              <span className="min-w-[18px] h-[18px] rounded-full bg-white/20 grid place-items-center text-[11px] font-semibold px-1">
+                {newMessagesCount > 99 ? "99+" : newMessagesCount}
+              </span>
+              Nuevos mensajes
+            </button>
+          )}
           <div ref={bottomRef} />
         </div>
 
@@ -2549,6 +2880,13 @@ export default function CoachChatInline({
                     mediaRecorderRef.current?.stop();
                   } catch {}
                   setRecording(false);
+                  try {
+                    if (recordTimerRef.current) {
+                      clearInterval(recordTimerRef.current);
+                      recordTimerRef.current = null;
+                    }
+                    setRecordStartAt(null);
+                  } catch {}
                 } else {
                   (async () => {
                     try {
@@ -2561,15 +2899,55 @@ export default function CoachChatInline({
                         );
                         return;
                       }
-                      const stream = await navigator.mediaDevices.getUserMedia({
-                        audio: true,
-                      });
+                      // Estrategia robusta de getUserMedia
+                      // 1) { audio: true } (deja que el navegador elija)
+                      // 2) Si falla, { audio: { echoCancellation, noiseSuppression } }
+                      // 3) Si aún falla, detecta un deviceId disponible y úsalo
+                      let stream: MediaStream | null = null;
+                      let firstErr: any = null;
+                      try {
+                        stream = await navigator.mediaDevices.getUserMedia({
+                          audio: true,
+                        });
+                      } catch (e1: any) {
+                        firstErr = e1;
+                        try {
+                          stream = await navigator.mediaDevices.getUserMedia({
+                            audio: {
+                              echoCancellation: true,
+                              noiseSuppression: true,
+                            } as any,
+                          });
+                        } catch (e2: any) {
+                          try {
+                            const devices =
+                              await navigator.mediaDevices.enumerateDevices();
+                            const mics = devices.filter(
+                              (d) => d.kind === "audioinput"
+                            );
+                            if (mics.length > 0 && mics[0].deviceId) {
+                              stream =
+                                await navigator.mediaDevices.getUserMedia({
+                                  audio: {
+                                    deviceId: { exact: mics[0].deviceId },
+                                  } as any,
+                                });
+                            } else {
+                              throw e2;
+                            }
+                          } catch (e3: any) {
+                            throw firstErr || e2 || e3;
+                          }
+                        }
+                      }
                       recordedChunksRef.current = [];
                       const mimes = [
                         "audio/webm;codecs=opus",
                         "audio/webm",
                         "audio/ogg;codecs=opus",
                         "audio/ogg",
+                        "audio/mp4",
+                        "audio/aac",
                       ];
                       let mimeType: string | undefined = undefined;
                       for (const c of mimes) {
@@ -2591,18 +2969,27 @@ export default function CoachChatInline({
                       };
                       mr.onstop = () => {
                         try {
+                          const chosenType =
+                            mr.mimeType || mimeType || "audio/webm";
                           const blob = new Blob(recordedChunksRef.current, {
-                            type: mr.mimeType || "audio/webm",
+                            type: chosenType,
                           });
                           const ts = new Date();
                           const pad = (n: number) => String(n).padStart(2, "0");
+                          const ext = (() => {
+                            const t = (blob.type || "").toLowerCase();
+                            if (t.includes("ogg")) return "ogg";
+                            if (t.includes("mp4") || t.includes("aac"))
+                              return "m4a";
+                            return "webm";
+                          })();
                           const fname = `grabacion-${ts.getFullYear()}${pad(
                             ts.getMonth() + 1
                           )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
                             ts.getMinutes()
-                          )}${pad(ts.getSeconds())}.webm`;
+                          )}${pad(ts.getSeconds())}.${ext}`;
                           const file = new File([blob], fname, {
-                            type: blob.type || "audio/webm",
+                            type: blob.type || chosenType,
                           });
                           addPendingAttachments([file] as any);
                         } catch {
@@ -2613,13 +3000,51 @@ export default function CoachChatInline({
                         try {
                           stream.getTracks().forEach((t) => t.stop());
                         } catch {}
+                        try {
+                          if (recordTimerRef.current) {
+                            clearInterval(recordTimerRef.current);
+                            recordTimerRef.current = null;
+                          }
+                          setRecordStartAt(null);
+                        } catch {}
                       };
                       mr.start();
                       setRecording(true);
+                      try {
+                        setRecordStartAt(Date.now());
+                        recordTimerRef.current = setInterval(
+                          () => setRecordTick(Date.now()),
+                          250
+                        );
+                      } catch {}
                     } catch (err: any) {
-                      setUploadError(
-                        err?.message || "No se pudo iniciar la grabación"
-                      );
+                      const name = err?.name || "";
+                      if (
+                        name === "NotFoundError" ||
+                        name === "DevicesNotFoundError"
+                      ) {
+                        setUploadError(
+                          "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador."
+                        );
+                      } else if (
+                        name === "NotAllowedError" ||
+                        name === "PermissionDeniedError"
+                      ) {
+                        setUploadError(
+                          "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio."
+                        );
+                      } else if (name === "NotReadableError") {
+                        setUploadError(
+                          "El micrófono está siendo usado por otra aplicación o no es accesible."
+                        );
+                      } else {
+                        setUploadError(
+                          (err?.message || "No se pudo iniciar la grabación") +
+                            " (" +
+                            (name || "error") +
+                            ")"
+                        );
+                      }
                     }
                   })();
                 }
@@ -2637,6 +3062,24 @@ export default function CoachChatInline({
                 <Mic className="w-5 h-5" />
               )}
             </button>
+            {recording && (
+              <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-xs">
+                <span className="inline-block w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+                <span>
+                  {(() => {
+                    const ms = Math.max(
+                      0,
+                      recordStartAt ? recordTick - recordStartAt : 0
+                    );
+                    const s = Math.floor(ms / 1000);
+                    const mm = Math.floor(s / 60);
+                    const ss = String(s % 60).padStart(2, "0");
+                    return `${mm}:${ss}`;
+                  })()}
+                </span>
+                <span className="opacity-70">Grabando…</span>
+              </div>
+            )}
             {attachments.length > 0 && (
               <div className="flex-1 overflow-x-auto">
                 <div className="flex items-center gap-2">
@@ -2649,13 +3092,17 @@ export default function CoachChatInline({
                         // Pequeña miniatura si es imagen/video
                         a.file.type.startsWith("image/") ? (
                           <img
-                            src={a.preview || "/placeholder.svg"}
+                            src={a.preview}
                             alt={a.file.name}
                             className="h-6 w-6 rounded object-cover"
                           />
                         ) : (
                           <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
-                            {a.file.type.startsWith("video/") ? "VID" : "FILE"}
+                            {a.file.type.startsWith("video/")
+                              ? "VID"
+                              : a.file.type.startsWith("audio/")
+                              ? "AUD"
+                              : "FILE"}
                           </div>
                         )
                       ) : (
@@ -2699,7 +3146,7 @@ export default function CoachChatInline({
             <button
               onClick={send}
               disabled={uploading || (!text.trim() && attachments.length === 0)}
-              className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#0f6e64] transition-colors"
+              className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors"
             >
               <svg
                 className="w-5 h-5"
@@ -2730,225 +3177,26 @@ export default function CoachChatInline({
           )}
         </div>
       </div>
-      {/* Modal: Vista previa de adjuntos */}
-      <Dialog
+      {/* Modal: Vista previa de adjuntos (extraído) */}
+      <AttachmentPreviewModal
         open={previewOpen}
-        onOpenChange={(o) => {
+        onOpenChange={(o: boolean) => {
           setPreviewOpen(o);
           if (!o) setPreviewAttachment(null);
         }}
-      >
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              {previewAttachment?.name || "Vista previa"}
-            </DialogTitle>
-            <DialogDescription>
-              {previewAttachment?.mime || ""}
-              {typeof previewAttachment?.size === "number" && (
-                <> · {formatBytes(previewAttachment?.size)}</>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-1">
-            {previewAttachment
-              ? (() => {
-                  const a = previewAttachment;
-                  const url = getAttachmentUrl(a);
-                  const mime = (a.mime || "").toLowerCase();
-                  if (mime.startsWith("image/")) {
-                    return (
-                      <img
-                        src={url || "/placeholder.svg"}
-                        alt={a.name}
-                        className="max-h-[60vh] w-full object-contain rounded-md"
-                      />
-                    );
-                  }
-                  if (mime.startsWith("video/")) {
-                    return (
-                      <video
-                        src={url}
-                        controls
-                        className="max-h-[60vh] w-full rounded-md"
-                      />
-                    );
-                  }
-                  if (mime.startsWith("audio/")) {
-                    return <audio src={url} controls className="w-full" />;
-                  }
-                  if (mime === "application/pdf") {
-                    return (
-                      <iframe
-                        src={url}
-                        className="w-full h-[60vh] rounded-md bg-white"
-                      />
-                    );
-                  }
-                  return (
-                    <div className="p-4 rounded-md border bg-gray-50 text-sm">
-                      No hay vista previa disponible. Puedes descargar el
-                      archivo.
-                    </div>
-                  );
-                })()
-              : null}
-          </div>
-          <DialogFooter>
-            {previewAttachment && (
-              <div className="flex items-center gap-2">
-                <a
-                  href={getAttachmentUrl(previewAttachment)}
-                  download={previewAttachment.name}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center rounded-md bg-[#128C7E] text-white px-3 py-2 text-sm hover:bg-[#0f6e64]"
-                >
-                  Descargar
-                </a>
-                <a
-                  href={getAttachmentUrl(previewAttachment)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center justify-center rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
-                >
-                  Abrir en pestaña
-                </a>
-              </div>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      {/* Modal: Ticket generado por IA */}
-      <Dialog open={ticketModalOpen} onOpenChange={setTicketModalOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-amber-400 text-white">
-                <Sparkles className="h-4 w-4" />
-              </span>
-              Ticket sugerido por IA
-            </DialogTitle>
-            <DialogDescription>
-              Se generó a partir de la conversación actual (chat_id:{" "}
-              {String(chatIdRef.current ?? "—")}).
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Contenedor scrollable para contenido largo del ticket */}
-          <div className="max-h-[60vh] sm:max-h-[70vh] overflow-y-auto pr-1">
-            {ticketLoading ? (
-              <div className="flex items-center justify-center py-6">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-gray-300 border-t-transparent" />
-              </div>
-            ) : ticketError ? (
-              <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-rose-700 text-sm">
-                {ticketError}
-              </div>
-            ) : ticketData ? (
-              <div className="space-y-4">
-                {ticketData.parsed?.html && (
-                  <div className="rounded-md border bg-white p-3">
-                    <div className="mb-2 flex items-center gap-1 text-[13px] uppercase text-gray-500">
-                      Resumen IA
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 border border-amber-200">
-                        <Sparkles className="h-3 w-3" /> IA
-                      </span>
-                    </div>
-                    <div
-                      className="prose prose-sm max-w-none text-gray-900 [&_p]:my-1 [&_strong]:font-semibold"
-                      dangerouslySetInnerHTML={{
-                        __html: ticketData.parsed.html,
-                      }}
-                    />
-                    {(ticketData.parsed.titulo ||
-                      ticketData.parsed.prioridad ||
-                      ticketData.parsed.categoria) && (
-                      <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
-                        {ticketData.parsed.titulo && (
-                          <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-gray-800 border">
-                            Título: {ticketData.parsed.titulo}
-                          </span>
-                        )}
-                        {ticketData.parsed.prioridad && (
-                          <span className="inline-flex items-center rounded-md bg-blue-100 px-2 py-0.5 text-blue-800 border border-blue-200">
-                            Prioridad: {ticketData.parsed.prioridad}
-                          </span>
-                        )}
-                        {ticketData.parsed.categoria && (
-                          <span className="inline-flex items-center rounded-md bg-violet-100 px-2 py-0.5 text-violet-800 border border-violet-200">
-                            Categoría: {ticketData.parsed.categoria}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="rounded-md border bg-white p-3">
-                  <div className="text-[13px] uppercase text-gray-500">
-                    Nombre
-                  </div>
-                  <div className="text-[15px] font-medium text-gray-900">
-                    {ticketData!.nombre || "—"}
-                  </div>
-                </div>
-                <div className="rounded-md border bg-white p-3">
-                  <div className="text-[13px] uppercase text-gray-500">
-                    Sugerencia
-                  </div>
-                  <div className="text-[15px] text-gray-900 whitespace-pre-wrap">
-                    {ticketData!.sugerencia || "—"}
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-md border bg-white p-3">
-                    <div className="text-[13px] uppercase text-gray-500">
-                      Tipo
-                    </div>
-                    <div className="text-[15px] font-medium text-gray-900">
-                      {ticketData!.tipo || "—"}
-                    </div>
-                  </div>
-                  <div className="rounded-md border bg-white p-3">
-                    <div className="text-[13px] uppercase text-gray-500">
-                      Archivos
-                    </div>
-                    <div className="text-[15px] text-gray-900">
-                      {ticketData!.archivos_cargados?.length || 0}
-                    </div>
-                  </div>
-                </div>
-                <div className="rounded-md border bg-white p-3">
-                  <div className="text-[13px] uppercase text-gray-500">
-                    Descripción
-                  </div>
-                  <div className="text-[15px] text-gray-900 whitespace-pre-wrap">
-                    {ticketData!.descripcion || "—"}
-                  </div>
-                </div>
-
-                <div className="rounded-lg bg-gradient-to-r from-amber-100 via-fuchsia-100 to-violet-100 p-3 border text-[13px] text-gray-700">
-                  ✨ Sugerido automáticamente por IA. Revisa y ajusta antes de
-                  crear el ticket definitivo.
-                </div>
-              </div>
-            ) : (
-              <div className="text-sm text-gray-600">
-                Sin datos para mostrar.
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <button
-              className="inline-flex items-center justify-center rounded-md border bg-white px-3 py-2 text-sm hover:bg-gray-50"
-              onClick={() => setTicketModalOpen(false)}
-            >
-              Cerrar
-            </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        attachment={previewAttachment}
+        getAttachmentUrl={getAttachmentUrl}
+        formatBytes={formatBytes}
+      />
+      {/* Modal: Ticket generado por IA (extraído) */}
+      <TicketGenerationModal
+        open={ticketModalOpen}
+        onOpenChange={setTicketModalOpen}
+        loading={ticketLoading}
+        error={ticketError}
+        data={ticketData}
+        onConfirm={() => setTicketModalOpen(false)}
+      />
     </>
   );
 }

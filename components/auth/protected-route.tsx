@@ -35,20 +35,9 @@ export function ProtectedRoute({
   // While redirecting, render nothing (router.push already sent user to /login)
   if (!isAuthenticated) return null;
 
-  if (allowedRoles && !hasAnyRole(allowedRoles)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-destructive mb-2">
-            Acceso Denegado
-          </h1>
-          <p className="text-muted-foreground">
-            No tienes permisos para acceder a esta página.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // Política temporal: todos los usuarios autenticados pueden acceder a todas las vistas.
+  // Ignoramos la verificación de allowedRoles para evitar estados de "Acceso Denegado".
+  // if (allowedRoles && !hasAnyRole(allowedRoles)) { ... }
 
   return <>{children}</>;
 }

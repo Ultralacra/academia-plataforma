@@ -1,5 +1,5 @@
 // lib/api-config.ts
-import { getAuthToken } from "./auth";
+import { getAuthToken, authService } from "./auth";
 
 export const API_HOST =
   process.env.NEXT_PUBLIC_API_HOST ?? "https://v001.vercel.app/v1";
@@ -68,6 +68,21 @@ export async function apiFetch<T = unknown>(
     cache: "no-store",
   });
   if (!res.ok) {
+    // Redirigir a login solo si NO autenticado (401). No forzar en 403.
+    if (res.status === 401) {
+      try {
+        authService.logout();
+      } catch {}
+      if (typeof window !== "undefined") {
+        try {
+          // Evitar loops si ya estamos en /login
+          const here = window.location?.pathname || "";
+          if (!here.startsWith("/login")) {
+            window.location.replace("/login");
+          }
+        } catch {}
+      }
+    }
     const text = await res.text().catch(() => "");
     throw new Error(text || `HTTP ${res.status} on ${path}`);
   }

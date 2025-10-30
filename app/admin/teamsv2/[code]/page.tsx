@@ -478,7 +478,8 @@ export default function CoachDetailPage({
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      {/* Evitar scroll del contenedor raíz en esta página */}
+      <div className="space-y-6 overflow-hidden">
         <div className="flex items-start gap-6">
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 rounded-lg bg-neutral-100 grid place-items-center text-2xl font-bold text-neutral-800">
@@ -593,10 +594,11 @@ export default function CoachDetailPage({
           </TabsContent>
 
           <TabsContent value="chat" className="mt-0">
-            <div className="h-[calc(100vh-180px)] overflow-hidden">
-              <div className="grid grid-cols-12 gap-4 h-full">
+            {/* Altura fija basada en viewport para evitar scroll de la pestaña */}
+            <div className="h-[calc(100vh-260px)] overflow-hidden">
+              <div className="grid grid-cols-12 gap-4 h-full min-h-0">
                 {/* Sección: Chats creados */}
-                <div className="col-span-3 h-full flex flex-col overflow-hidden">
+                <div className="col-span-3 h-full flex flex-col overflow-hidden min-h-0">
                   <div className="rounded-lg border bg-white shadow-sm h-full flex flex-col overflow-hidden">
                     <div className="p-3 bg-slate-50 border-b flex-shrink-0">
                       <input
@@ -756,7 +758,7 @@ export default function CoachDetailPage({
                   </div>
                 </div>
 
-                <div className="col-span-9 h-full overflow-hidden">
+                <div className="col-span-9 h-full overflow-hidden flex flex-col min-h-0">
                   <CoachChatInline
                     key={`chat-${code}-${targetTeamCode ?? "inbox"}`}
                     room={`${code}:equipo:${targetTeamCode ?? "inbox"}`}
@@ -774,8 +776,6 @@ export default function CoachDetailPage({
                     precreateOnParticipants
                     socketio={{
                       url: "https://v001.onrender.com",
-                      tokenEndpoint: "https://v001.onrender.com/v1/auth/token",
-                      tokenId: `equipo:${String(code)}`,
                       idEquipo: String(code),
                       participants: targetTeamCode
                         ? [
