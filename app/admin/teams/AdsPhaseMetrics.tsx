@@ -2,6 +2,17 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Fase3Row, Fase4Row } from "./AdsStudentsTable";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip as RTooltip,
+  FunnelChart,
+  Funnel,
+  LabelList,
+} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 
 function toNum(v?: string | number | null): number | null {
   if (v == null) return null;
@@ -99,6 +110,52 @@ export default function AdsPhaseMetrics({
   const effPagoAvg = effCount ? effPagoSum / effCount : null;
   const effCompraAvg = effCount ? effCompraSum / effCount : null;
 
+  // Series para gráficos
+  const COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b"];
+
+  // Dona: distribución de alumnos F3 vs F4
+  const phasePieData = [
+    { name: "Fase 3", value: totalF3 },
+    { name: "Fase 4", value: totalF4 },
+  ];
+
+  // Embudo promedio: normalizado a 100 en la primera etapa
+  const base = 100;
+  const stepAds = effAdsAvg != null ? Math.round(base * effAdsAvg) : null;
+  const stepPago =
+    effPagoAvg != null && stepAds != null
+      ? Math.round(stepAds * effPagoAvg)
+      : null;
+  const stepCompra =
+    effCompraAvg != null && stepPago != null
+      ? Math.round(stepPago * effCompraAvg)
+      : null;
+  const funnelData = [
+    { name: "Impactados", value: base },
+    { name: "Efect. Ads", value: stepAds ?? 0 },
+    { name: "Pago iniciado", value: stepPago ?? 0 },
+    { name: "Compra", value: stepCompra ?? 0 },
+  ];
+
+  // Barras 100% por etapa (simple y comparativo)
+  const bar100Data = [
+    {
+      etapa: "Efect. Ads",
+      ok: effAdsAvg != null ? effAdsAvg * 100 : 0,
+      rest: effAdsAvg != null ? 100 - effAdsAvg * 100 : 100,
+    },
+    {
+      etapa: "Pago iniciado",
+      ok: effPagoAvg != null ? effPagoAvg * 100 : 0,
+      rest: effPagoAvg != null ? 100 - effPagoAvg * 100 : 100,
+    },
+    {
+      etapa: "Compra",
+      ok: effCompraAvg != null ? effCompraAvg * 100 : 0,
+      rest: effCompraAvg != null ? 100 - effCompraAvg * 100 : 100,
+    },
+  ];
+
   // Tops por ROAS
   const topRoas = (fase4 || [])
     .map((r) => ({
@@ -195,6 +252,109 @@ export default function AdsPhaseMetrics({
         </Card>
       </div>
 
+      {/* Fila 1.5: Visualizaciones (torta y embudo) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Distribución por fase</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={phasePieData}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={60}
+                    outerRadius={95}
+                  >
+                    {phasePieData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <RTooltip
+                    formatter={(v: any) =>
+                      new Intl.NumberFormat("es-CO").format(Number(v || 0))
+                    }
+                    separator=": "
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Embudo promedio (F4)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <FunnelChart>
+                  <TooltipContentFunnel />
+                  <Funnel dataKey="value" data={funnelData} isAnimationActive>
+                    <LabelList
+                      position="right"
+                      dataKey="name"
+                      stroke="none"
+                      fill="#111827"
+                    />
+                  </Funnel>
+                </FunnelChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="text-xs text-muted-foreground mt-2">
+              Normalizado a 100. Calculado con promedios de efectividad.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Fila 1.6: Embudo 100% (barras) */}
+      <div className="grid grid-cols-1 gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Embudo 100% (simple)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={bar100Data}
+                  layout="vertical"
+                  margin={{ left: 24, right: 16, top: 8, bottom: 8 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="#e5e7eb"
+                    opacity={0.5}
+                  />
+                  <XAxis type="number" domain={[0, 100]} hide />
+                  <YAxis type="category" dataKey="etapa" width={90} />
+                  <Bar
+                    dataKey="rest"
+                    stackId="a"
+                    fill="#e5e7eb"
+                    radius={[0, 8, 8, 0]}
+                  />
+                  <Bar
+                    dataKey="ok"
+                    stackId="a"
+                    fill="#3b82f6"
+                    radius={[8, 0, 0, 8]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="text-xs text-muted-foreground mt-2">
+              Cada barra representa el porcentaje de conversión de esa etapa
+              (0–100%).
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Fila 2: Ads overview y pauta activa */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card>
@@ -239,7 +399,7 @@ export default function AdsPhaseMetrics({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Embudo promedio (F4)</CardTitle>
+            <CardTitle className="text-sm">Embudo (valores)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-3 text-sm">
@@ -316,5 +476,16 @@ export default function AdsPhaseMetrics({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// Tooltip simple para el embudo
+function TooltipContentFunnel() {
+  return (
+    <RTooltip
+      formatter={(v: any) => `${Number(v || 0)} / 100`}
+      labelFormatter={(l: any) => String(l)}
+      separator=": "
+    />
   );
 }

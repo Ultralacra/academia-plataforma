@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Toggle } from "@/components/ui/toggle";
 import {
   Table,
   TableBody,
@@ -81,6 +82,14 @@ export default function AdsStudentsTable({
 }) {
   const [tab, setTab] = useState<"f3" | "f4">("f4");
   const [q, setQ] = useState("");
+  const [onlyInterv, setOnlyInterv] = useState(false);
+  const [onlyPauta, setOnlyPauta] = useState(false);
+  const [faseFilter, setFaseFilter] = useState<
+    "all" | "testeo" | "optimizacion" | "escala"
+  >("all");
+  const [sortBy, setSortBy] = useState<
+    "roas" | "inversion" | "facturacion" | null
+  >("roas");
   const qn = useMemo(() => normalize(q), [q]);
 
   const f3 = useMemo(() => {
@@ -99,22 +108,79 @@ export default function AdsStudentsTable({
   }, [fase3, qn]);
 
   const f4 = useMemo(() => {
-    const list = Array.isArray(fase4) ? fase4 : [];
-    if (!qn) return list;
-    return list.filter((r) => {
-      const s = [
-        r["Nombre del estudiante"],
-        r["Obs del estado"],
-        r["  Tipo de intervención sugerida"],
-        r["Coach de  Copy"],
-        r["Coach de Plataformas"],
-        r["Fase"],
-      ]
-        .map((x) => normalize(x))
-        .join(" ");
-      return includesAll(s, qn);
-    });
-  }, [fase4, qn]);
+    let list = Array.isArray(fase4) ? fase4 : [];
+    // Texto
+    if (qn) {
+      list = list.filter((r) => {
+        const s = [
+          r["Nombre del estudiante"],
+          r["Obs del estado"],
+          r["  Tipo de intervención sugerida"],
+          r["Coach de  Copy"],
+          r["Coach de Plataformas"],
+          r["Fase"],
+        ]
+          .map((x) => normalize(x))
+          .join(" ");
+        return includesAll(s, qn);
+      });
+    }
+    // Filtros rápidos
+    if (onlyInterv) {
+      list = list.filter((r) =>
+        /sí|si|true|1/i.test(
+          String(
+            r["¿Requiere intervención?"] ||
+              r["¿Requiere intervención? (1)"] ||
+              ""
+          )
+        )
+      );
+    }
+    if (onlyPauta) {
+      list = list.filter((r) => {
+        const s = String(r["¿Tiene pauta activa?"] || "").toLowerCase();
+        return s === "sí" || s === "si" || s === "true" || s === "1";
+      });
+    }
+    if (faseFilter !== "all") {
+      const key =
+        faseFilter === "testeo"
+          ? "testeo"
+          : faseFilter === "optimizacion"
+          ? "optimiz"
+          : "escala";
+      list = list.filter((r) => normalize(r["Fase"]).includes(key));
+    }
+    // Orden
+    const toNumLocal = (v?: string | number | null) => {
+      if (v == null) return null;
+      const s = String(v).trim();
+      if (!s) return null;
+      return Number(s.replace(/\./g, "").replace(/,/g, "."));
+    };
+    if (sortBy) {
+      list = [...list].sort((a, b) => {
+        if (sortBy === "roas") {
+          const av = toNumLocal(a["ROAs"]) ?? -Infinity;
+          const bv = toNumLocal(b["ROAs"]) ?? -Infinity;
+          return bv - av;
+        }
+        if (sortBy === "inversion") {
+          const av = toNumLocal(a["Inversión en Pauta"]) ?? -Infinity;
+          const bv = toNumLocal(b["Inversión en Pauta"]) ?? -Infinity;
+          return bv - av;
+        }
+        if (sortBy === "facturacion") {
+          const av = toNumLocal(a["Facturación"]) ?? -Infinity;
+          const bv = toNumLocal(b["Facturación"]) ?? -Infinity;
+          return bv - av;
+        }
+        return 0;
+      });
+    }
+    return list;
+  }, [fase4, qn, onlyInterv, onlyPauta, faseFilter, sortBy]);
 
   // Helpers UI/format
   function toNum(v?: string | number | null): number | null {
@@ -178,7 +244,7 @@ export default function AdsStudentsTable({
       onValueChange={(v) => setTab(v as any)}
       className="space-y-3"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <TabsList>
           <TabsTrigger value="f4">Fase 4</TabsTrigger>
           <TabsTrigger value="f3">Fase 3</TabsTrigger>
@@ -189,6 +255,87 @@ export default function AdsStudentsTable({
           onChange={(e) => setQ(e.target.value)}
           className="max-w-xs"
         />
+        {/* Filtros rápidos */}
+        <div className="ml-auto flex items-center gap-1">
+          <Toggle
+            aria-label="Solo intervención"
+            pressed={onlyInterv}
+            onPressedChange={setOnlyInterv}
+            variant="outline"
+          >
+            Intervención
+          </Toggle>
+          <Toggle
+            aria-label="Solo pauta activa"
+            pressed={onlyPauta}
+            onPressedChange={setOnlyPauta}
+            variant="outline"
+          >
+            Pauta activa
+          </Toggle>
+        </div>
+        <div className="flex items-center gap-1 text-xs">
+          <span className="text-muted-foreground">Fase:</span>
+          <button
+            className={`px-2 py-1 rounded-md border ${
+              faseFilter === "all" ? "bg-gray-100" : "bg-white"
+            }`}
+            onClick={() => setFaseFilter("all")}
+          >
+            Todas
+          </button>
+          <button
+            className={`px-2 py-1 rounded-md border ${
+              faseFilter === "testeo" ? "bg-gray-100" : "bg-white"
+            }`}
+            onClick={() => setFaseFilter("testeo")}
+          >
+            Testeo
+          </button>
+          <button
+            className={`px-2 py-1 rounded-md border ${
+              faseFilter === "optimizacion" ? "bg-gray-100" : "bg-white"
+            }`}
+            onClick={() => setFaseFilter("optimizacion")}
+          >
+            Optimización
+          </button>
+          <button
+            className={`px-2 py-1 rounded-md border ${
+              faseFilter === "escala" ? "bg-gray-100" : "bg-white"
+            }`}
+            onClick={() => setFaseFilter("escala")}
+          >
+            Escala
+          </button>
+        </div>
+        <div className="flex items-center gap-1 text-xs">
+          <span className="text-muted-foreground">Orden:</span>
+          <button
+            className={`px-2 py-1 rounded-md border ${
+              sortBy === "roas" ? "bg-gray-100" : "bg-white"
+            }`}
+            onClick={() => setSortBy("roas")}
+          >
+            ROAS
+          </button>
+          <button
+            className={`px-2 py-1 rounded-md border ${
+              sortBy === "inversion" ? "bg-gray-100" : "bg-white"
+            }`}
+            onClick={() => setSortBy("inversion")}
+          >
+            Inversión
+          </button>
+          <button
+            className={`px-2 py-1 rounded-md border ${
+              sortBy === "facturacion" ? "bg-gray-100" : "bg-white"
+            }`}
+            onClick={() => setSortBy("facturacion")}
+          >
+            Facturación
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -232,13 +379,13 @@ export default function AdsStudentsTable({
                     <TableHead className="whitespace-nowrap text-right">
                       Carga
                     </TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
+                    <TableHead className="whitespace-nowrap">
                       Efect. Ads
                     </TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
+                    <TableHead className="whitespace-nowrap">
                       Efect. Pago
                     </TableHead>
-                    <TableHead className="whitespace-nowrap text-right">
+                    <TableHead className="whitespace-nowrap">
                       Efect. Compra
                     </TableHead>
                     <TableHead className="whitespace-nowrap">Compras</TableHead>
@@ -297,14 +444,20 @@ export default function AdsStudentsTable({
                       <TableCell className="text-right">
                         {fmtPercent(r["Carga de Página"])}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {fmtPercent(r["Efectividad Ads"])}
+                      <TableCell>
+                        <PercentBar
+                          value={toNum(r["Efectividad Ads"]) ?? null}
+                        />
                       </TableCell>
-                      <TableCell className="text-right">
-                        {fmtPercent(r["Efectividad pago iniciado"])}
+                      <TableCell>
+                        <PercentBar
+                          value={toNum(r["Efectividad pago iniciado"]) ?? null}
+                        />
                       </TableCell>
-                      <TableCell className="text-right">
-                        {fmtPercent(r["Efectividad compra"])}
+                      <TableCell>
+                        <PercentBar
+                          value={toNum(r["Efectividad compra"]) ?? null}
+                        />
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
@@ -580,5 +733,23 @@ export default function AdsStudentsTable({
         </>
       )}
     </Tabs>
+  );
+}
+
+function PercentBar({ value }: { value: number | null }) {
+  if (value == null || !Number.isFinite(value)) return <span>—</span>;
+  const pct = value <= 1 ? value * 100 : value;
+  const w = Math.max(0, Math.min(100, pct));
+  const color = w >= 66 ? "#10b981" : w >= 33 ? "#f59e0b" : "#ef4444";
+  return (
+    <div className="w-40 max-w-full">
+      <div className="h-2.5 w-full rounded-full bg-gray-200">
+        <div
+          className="h-2.5 rounded-full"
+          style={{ width: `${w}%`, backgroundColor: color }}
+        />
+      </div>
+      <div className="text-xs text-muted-foreground mt-1">{w.toFixed(1)}%</div>
+    </div>
   );
 }

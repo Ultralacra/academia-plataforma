@@ -453,7 +453,7 @@ export default function ChatHubPage() {
             <div
               className={`${
                 isMobile ? (selected ? "hidden" : "block") : "block"
-              } w-full lg:w-96 border-r bg-card flex flex-col min-w-0`}
+              } w-full lg:w-96 border-r bg-card flex flex-col min-w-0 min-h-0 overflow-y-auto`}
             >
               <div className="p-4 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-0 z-10">
                 <div className="relative flex items-center gap-2">
@@ -547,7 +547,7 @@ export default function ChatHubPage() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1">
                 {loading && (
                   <div className="p-6 text-center text-sm text-muted-foreground">
                     Cargando conversaciones...
