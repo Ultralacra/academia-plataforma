@@ -22,6 +22,7 @@ import {
   type StatusSint,
 } from "./_parts/detail-utils";
 import TicketsPanel from "./_parts/TicketsPanel";
+import SessionsStudentPanel from "./_parts/SessionsStudentPanel";
 import ChatPanel from "./_parts/ChatPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
 import { getStudentTickets } from "../api";
@@ -207,7 +208,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
   useEffect(() => {
     if (!student?.code) return;
     let mounted = true;
+    const pollingRef = { busy: false };
     const id = setInterval(async () => {
+      if (pollingRef.busy) return;
+      pollingRef.busy = true;
       try {
         await fetchPhaseHistory(student.code);
         try {
@@ -218,9 +222,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
           if (!mounted) return;
           setStatusHistory(eh);
           setTasksHistory(th);
-        } catch {}
+        } catch {
+          // falla silenciosa de historial/estatus/tareas
+        }
       } catch (e) {
-        /* ignore */
+        // falla silenciosa de etapas
+      } finally {
+        pollingRef.busy = false;
       }
     }, 10000);
     return () => {
@@ -243,6 +251,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
         url: r.url ?? null,
         // El endpoint puede devolver id_coach o id; lo guardamos como coachId
         coachId: r.id_coach ?? r.id ?? r.id_relacion ?? null,
+        // Guardamos también un posible código de equipo/coach para mapear contra sesiones (p.ej. XYI8LFIZ_0j3KwcP)
+        teamCode: r.codigo_coach ?? r.codigo_equipo ?? r.codigo ?? r.id ?? null,
       }));
       setCoaches(cs);
       return cs;
@@ -410,7 +420,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
     created_at: string;
   }> | null>(null);
 
-  const [topTab, setTopTab] = useState<"detalle" | "chat" | "ads">("detalle");
+  const [topTab, setTopTab] = useState<"detalle" | "chat" | "ads" | "sesiones">(
+    "detalle"
+  );
 
   if (loading) {
     return (
@@ -463,6 +475,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
         <TabBtn active={topTab === "ads"} onClick={() => setTopTab("ads")}>
           Métricas ADS
         </TabBtn>
+        <TabBtn
+          active={topTab === "sesiones"}
+          onClick={() => setTopTab("sesiones")}
+        >
+          Sesiones
+        </TabBtn>
       </div>
 
       {topTab === "chat" ? (
@@ -479,6 +497,26 @@ export default function StudentDetailContent({ code }: { code: string }) {
           <AdsMetricsForm
             studentCode={student.code || code}
             studentName={student.name}
+          />
+        </div>
+      ) : topTab === "sesiones" ? (
+        <div className="mt-2">
+          <SessionsStudentPanel
+            studentCode={student.code || code}
+            studentName={student.name}
+            studentStage={
+              (student.stage || student.raw?.etapa || faseActual) as string
+            }
+            assignedCoaches={(coaches || []).map((c) => ({
+              id: (c as any).coachId ?? (c as any).id ?? null,
+              code:
+                (c as any).teamCode ??
+                (c as any).codigo ??
+                (c as any).id ??
+                null,
+              name: c.name,
+              area: (c as any).area ?? undefined,
+            }))}
           />
         </div>
       ) : (

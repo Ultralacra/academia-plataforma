@@ -26,22 +26,34 @@ export type CoachTeam = {
   codigo?: string | null;
 };
 
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = 12000): Promise<T> {
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const authHeaders: Record<string, string> = token
     ? { Authorization: `Bearer ${token}` }
     : {};
-  const res = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...authHeaders, ...(init?.headers as any) },
-    cache: 'no-store',
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), Math.max(1000, timeoutMs));
+  try {
+    const res = await fetch(url, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...authHeaders, ...(init?.headers as any) },
+      cache: 'no-store',
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(text || `HTTP ${res.status} on ${url}`);
+    }
+    if (res.status === 204) return undefined as unknown as T;
+    return (await res.json()) as T;
+  } catch (e: any) {
+    if (e?.name === 'AbortError') {
+      throw new Error(`Timeout ${timeoutMs}ms on ${url}`);
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
   }
-  if (res.status === 204) return undefined as unknown as T;
-  return (await res.json()) as T;
 }
 
 function parseTeamAlumnos(raw: unknown): TeamMember[] {

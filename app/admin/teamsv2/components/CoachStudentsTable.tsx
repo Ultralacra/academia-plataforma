@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import { Eye } from "lucide-react";
 
 type Row = {
   id: number | string;
@@ -111,9 +112,13 @@ function badgeForStage(value?: string | null) {
 export default function CoachStudentsTable({
   rows,
   title = "ALUMNOS DEL COACH",
+  onOffer,
+  onView,
 }: {
   rows: Row[];
   title?: string;
+  onOffer?: (row: Row) => void;
+  onView?: (row: Row) => void;
 }) {
   const fmt = useMemo(() => new Intl.DateTimeFormat("es-ES"), []);
   const data = Array.isArray(rows) ? rows : [];
@@ -136,13 +141,20 @@ export default function CoachStudentsTable({
               <th className="px-3 py-2 text-left">Última actividad</th>
               <th className="px-3 py-2 text-right">Inactividad (días)</th>
               <th className="px-3 py-2 text-right">Tickets</th>
+              {onView && <th className="px-3 py-2 text-right">Ver</th>}
+              {onOffer && <th className="px-3 py-2 text-right">Sesión</th>}
             </tr>
           </thead>
           <tbody>
             {data.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={(() => {
+                    let cols = 8;
+                    if (onView) cols += 1;
+                    if (onOffer) cols += 1;
+                    return cols;
+                  })()}
                   className="px-3 py-4 text-sm text-neutral-500 text-center"
                 >
                   Sin alumnos
@@ -198,6 +210,30 @@ export default function CoachStudentsTable({
                         ? "—"
                         : Number(r.tickets).toLocaleString("es-ES")}
                     </td>
+                    {onView && (
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs border hover:bg-gray-100"
+                          title="Ver sesiones del alumno"
+                          onClick={() => onView(r)}
+                        >
+                          <Eye className="h-3.5 w-3.5 mr-1" /> Ver
+                        </button>
+                      </td>
+                    )}
+                    {onOffer && (
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs border hover:bg-gray-100"
+                          title="Ofrecer sesión"
+                          onClick={() => onOffer(r)}
+                        >
+                          Sesión
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })

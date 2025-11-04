@@ -124,3 +124,28 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Global override: remove ALL box-shadows and drop-shadows across the app */
+/* Box-shadow utilities and arbitrary values */
+:where([class*="shadow"]:not(.shadow-none),
+  .shadow,
+  .shadow-xs,
+  .shadow-sm,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl,
+  .shadow-2xl,
+  .shadow-inner) {
+  box-shadow: none !important;
+}
+
+/* Drop-shadow filter utilities */
+:where([class*="drop-shadow"],
+  .drop-shadow,
+  .drop-shadow-sm,
+  .drop-shadow-md,
+  .drop-shadow-lg,
+  .drop-shadow-xl,
+  .drop-shadow-2xl) {
+  filter: none !important;
+}

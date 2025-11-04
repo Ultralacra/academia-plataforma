@@ -34,13 +34,21 @@ import {
 import Link from "next/link";
 import TicketsPanelCoach from "../TicketsPanelCoach";
 import CoachChatInline from "./CoachChatInline";
-import { getCoaches, type CoachItem as CoachMini } from "../api";
+import {
+  getCoaches,
+  type CoachItem as CoachMini,
+  offerSession,
+  listAlumnoSessions,
+  type SessionItem,
+} from "../api";
 import { useMemo } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import PersonalMetrics from "../PersonalMetrics";
 import CoachStudentsTable from "../components/CoachStudentsTable";
 import { fetchMetrics } from "@/app/admin/teams/teamsApi";
+import SessionsPanel from "../components/SessionsPanel";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function CoachDetailPage({
   params,
@@ -80,6 +88,13 @@ export default function CoachDetailPage({
   const [currentOpenChatId, setCurrentOpenChatId] = useState<
     string | number | null
   >(null);
+
+  // Tabs control + sessions prefill
+  const [activeTab, setActiveTab] = useState<string>("tickets");
+  const [sessionsPrefillAlumno, setSessionsPrefillAlumno] = useState<
+    string | null
+  >(null);
+  const [sessionsOfferSignal, setSessionsOfferSignal] = useState<number>(0);
 
   const [puestoOptionsApi, setPuestoOptionsApi] = useState<OpcionItem[]>([]);
   const [areaOptionsApi, setAreaOptionsApi] = useState<OpcionItem[]>([]);
@@ -544,12 +559,13 @@ export default function CoachDetailPage({
           </div>
         </div>
 
-        <Tabs defaultValue="tickets" className="mt-2">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
           <TabsList>
             <TabsTrigger value="tickets">Tickets</TabsTrigger>
             <TabsTrigger value="metricas">Métricas</TabsTrigger>
             <TabsTrigger value="alumnos">Alumnos</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
+            <TabsTrigger value="sesiones">Sesiones</TabsTrigger>
           </TabsList>
 
           {/* Pestaña Tickets: scroll interno, pantalla completa */}
@@ -881,6 +897,20 @@ export default function CoachDetailPage({
               </div>
             </div>
           </TabsContent>
+
+          <TabsContent value="sesiones" className="mt-0">
+            <div className="h-[calc(100vh-180px)] overflow-auto">
+              <div className="p-4 bg-white border rounded-lg">
+                {loading ? (
+                  <div>Cargando...</div>
+                ) : error ? (
+                  <div className="text-sm text-red-600">{error}</div>
+                ) : (
+                  <SessionsPanel coachCode={code} />
+                )}
+              </div>
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
       <CoachStudentsModal
@@ -1021,7 +1051,17 @@ export default function CoachDetailPage({
   );
 }
 
-function CoachStudentsInline({ coachCode }: { coachCode: string }) {
+function CoachStudentsInline({
+  coachCode,
+  onOfferStudent,
+}: {
+  coachCode: string;
+  onOfferStudent?: (
+    code: string | null | undefined,
+    stage?: string | null,
+    name?: string | null
+  ) => void;
+}) {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -1030,6 +1070,23 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
   const [stateFilter, setStateFilter] = useState<string>("");
   const [stageFilter, setStageFilter] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
+
+  // Visor y resumen de sesiones por alumno
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerLoading, setViewerLoading] = useState(false);
+  const [viewerAlumnoCode, setViewerAlumnoCode] = useState<string>("");
+  const [viewerAlumnoName, setViewerAlumnoName] = useState<string>("");
+  const [viewerRows, setViewerRows] = useState<SessionItem[]>([]);
+
+  // Quick offer modal state
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickAlumnoCode, setQuickAlumnoCode] = useState<string>("");
+  const [quickAlumnoName, setQuickAlumnoName] = useState<string>("");
+  const [quickEtapa, setQuickEtapa] = useState<string>("");
+  const [quickFecha, setQuickFecha] = useState<string>("");
+  const [quickDuracion, setQuickDuracion] = useState<number>(45);
+  const [quickNotas, setQuickNotas] = useState<string>("");
+  const [quickSaving, setQuickSaving] = useState(false);
 
   useEffect(() => {
     if (!coachCode) return;
@@ -1180,12 +1237,266 @@ function CoachStudentsInline({ coachCode }: { coachCode: string }) {
           </div>
         </div>
       ) : (
-        <CoachStudentsTable rows={filteredRows} title="ALUMNOS" />
+        <CoachStudentsTable
+          rows={filteredRows}
+          title="ALUMNOS"
+          onOffer={(row: any) => {
+            const code = String(row.code || "").trim();
+            if (!code) return;
+            setQuickAlumnoCode(code);
+            setQuickAlumnoName(row.name || code);
+            setQuickEtapa(row.stage || "");
+            setQuickFecha(toDatetimeLocal(new Date()));
+            setQuickDuracion(45);
+            setQuickNotas("");
+            setQuickOpen(true);
+          }}
+          onView={async (row: any) => {
+            const code = String(row.code || "").trim();
+            if (!code) return;
+            setViewerAlumnoCode(code);
+            setViewerAlumnoName(row.name || code);
+            setViewerLoading(true);
+            setViewerOpen(true);
+            try {
+              const list = await listAlumnoSessions(code, coachCode);
+              setViewerRows(list);
+            } catch {
+              setViewerRows([]);
+            } finally {
+              setViewerLoading(false);
+            }
+          }}
+        />
       )}
       {error && <div className="text-sm text-red-600">{error}</div>}
       <div className="text-xs text-neutral-500">
         Total: {totalCount} • Mostrando: {filteredRows.length}
       </div>
+
+      {/* Quick Offer Modal (Alumnos tab) */}
+      <Dialog open={quickOpen} onOpenChange={setQuickOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ofrecer sesión</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="text-sm text-neutral-600">
+              Alumno: <strong>{quickAlumnoName}</strong>
+            </div>
+            <div>
+              <Label className="text-xs">Etapa</Label>
+              <Input value={quickEtapa} disabled />
+            </div>
+            <div>
+              <Label className="text-xs">Fecha programada</Label>
+              <Input
+                type="datetime-local"
+                value={quickFecha}
+                onChange={(e) => setQuickFecha(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Duración (minutos)</Label>
+              <Input
+                type="number"
+                min={15}
+                max={180}
+                value={String(quickDuracion)}
+                onChange={(e) => setQuickDuracion(Number(e.target.value) || 45)}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Notas</Label>
+              <Textarea
+                value={quickNotas}
+                onChange={(e: any) => setQuickNotas(e.target.value)}
+                placeholder="Detalles importantes para la sesión"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <div className="flex items-center gap-2">
+              <Button
+                disabled={
+                  !quickAlumnoCode ||
+                  !quickFecha ||
+                  !quickNotas.trim() ||
+                  quickSaving
+                }
+                onClick={async () => {
+                  try {
+                    setQuickSaving(true);
+                    const d = quickFecha ? new Date(quickFecha) : new Date();
+                    const iso = new Date(
+                      d.getFullYear(),
+                      d.getMonth(),
+                      d.getDate(),
+                      d.getHours(),
+                      d.getMinutes(),
+                      0,
+                      0
+                    ).toISOString();
+                    const payload = {
+                      codigo_alumno: quickAlumnoCode,
+                      codigo_coach: coachCode,
+                      etapa: quickEtapa || undefined,
+                      fecha_programada: iso,
+                      duracion: quickDuracion || 45,
+                      notas: quickNotas.trim(),
+                    } as const;
+                    // eslint-disable-next-line no-console
+                    console.log("[sessions] quick-offer payload", payload);
+                    await offerSession(payload);
+                    toast({ title: "Sesión ofrecida" });
+                    setQuickOpen(false);
+                  } catch (e: any) {
+                    toast({ title: e?.message ?? "Error al crear sesión" });
+                  } finally {
+                    setQuickSaving(false);
+                  }
+                }}
+              >
+                Crear
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Visor de sesiones por alumno */}
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              Sesiones de {viewerAlumnoName || viewerAlumnoCode}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 max-h-[65vh] overflow-auto">
+            {viewerLoading ? (
+              <div className="text-sm text-neutral-600">Cargando…</div>
+            ) : viewerRows.length === 0 ? (
+              <div className="text-sm text-neutral-600">Sin sesiones</div>
+            ) : (
+              (() => {
+                const groups = viewerRows.reduce<Record<string, SessionItem[]>>(
+                  (acc, it) => {
+                    const k = (it.etapa || "—").toString();
+                    if (!acc[k]) acc[k] = [];
+                    acc[k].push(it);
+                    return acc;
+                  },
+                  {}
+                );
+                const order = Object.keys(groups).sort();
+                const fmt = new Intl.DateTimeFormat("es-ES", {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                });
+                const badge = (estado?: string | null) => {
+                  const k = String(estado || "").toLowerCase();
+                  const base =
+                    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs";
+                  if (k === "requested")
+                    return (
+                      <span className={`${base} bg-amber-100 text-amber-800`}>
+                        Solicitada
+                      </span>
+                    );
+                  if (k === "offered")
+                    return (
+                      <span className={`${base} bg-sky-100 text-sky-800`}>
+                        Ofrecida
+                      </span>
+                    );
+                  if (k === "approved")
+                    return (
+                      <span
+                        className={`${base} bg-emerald-100 text-emerald-800`}
+                      >
+                        Aprobada
+                      </span>
+                    );
+                  if (k === "pending")
+                    return (
+                      <span
+                        className={`${base} bg-neutral-100 text-neutral-700`}
+                      >
+                        Pendiente
+                      </span>
+                    );
+                  if (k === "canceled")
+                    return (
+                      <span className={`${base} bg-rose-100 text-rose-800`}>
+                        Cancelada
+                      </span>
+                    );
+                  if (k === "done")
+                    return (
+                      <span className={`${base} bg-teal-100 text-teal-800`}>
+                        Completada
+                      </span>
+                    );
+                  return (
+                    <span className={`${base} bg-neutral-100 text-neutral-700`}>
+                      {estado || "—"}
+                    </span>
+                  );
+                };
+                return (
+                  <div className="space-y-4">
+                    {order.map((et) => (
+                      <div key={`grp-${et}`} className="border rounded-md">
+                        <div className="px-3 py-2 bg-neutral-50 border-b text-sm font-medium">
+                          Etapa: {et}
+                        </div>
+                        <div className="divide-y">
+                          {groups[et].map((s) => (
+                            <div
+                              key={`s-${s.id}`}
+                              className="px-3 py-2 text-sm flex items-start justify-between gap-3"
+                            >
+                              <div className="min-w-0">
+                                <div className="text-neutral-800">
+                                  {s.fecha_programada
+                                    ? fmt.format(new Date(s.fecha_programada))
+                                    : "Sin fecha"}
+                                </div>
+                                <div className="text-xs text-neutral-600">
+                                  Duración: {s.duracion || 45} min
+                                </div>
+                                {s.notas && (
+                                  <div className="mt-1 text-xs text-neutral-700 line-clamp-2">
+                                    {s.notas}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-shrink-0">
+                                {badge(s.estado)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function toDatetimeLocal(d?: Date): string {
+  const dt = d ?? new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const yyyy = dt.getFullYear();
+  const mm = pad(dt.getMonth() + 1);
+  const dd = pad(dt.getDate());
+  const hh = pad(dt.getHours());
+  const mi = pad(dt.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
 }

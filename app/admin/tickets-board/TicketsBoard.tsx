@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   User,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Dialog,
@@ -75,11 +76,13 @@ type StatusKey =
   | "EN_PROGRESO"
   | "PENDIENTE"
   | "PENDIENTE_DE_ENVIO"
+  | "PAUSADO"
   | "RESUELTO";
 const STATUS_LABEL: Record<StatusKey, string> = {
   EN_PROGRESO: "En progreso",
   PENDIENTE: "Pendiente",
   PENDIENTE_DE_ENVIO: "Pendiente de envío",
+  PAUSADO: "Pausado",
   RESUELTO: "Resuelto",
 };
 
@@ -87,6 +90,7 @@ const STATUS_STYLE: Record<StatusKey, string> = {
   PENDIENTE: "bg-blue-50 text-blue-700 border-blue-200",
   EN_PROGRESO: "bg-amber-50 text-amber-700 border-amber-200",
   PENDIENTE_DE_ENVIO: "bg-sky-50 text-sky-700 border-sky-200",
+  PAUSADO: "bg-purple-50 text-purple-700 border-purple-200",
   RESUELTO: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
@@ -94,6 +98,7 @@ function coerceStatus(raw?: string | null): StatusKey {
   const s = (raw ?? "").toUpperCase();
   if (s.includes("RESUELTO") || s.includes("COMPLETO")) return "RESUELTO";
   if (s.includes("ENVIO") || s.includes("ENVÍO")) return "PENDIENTE_DE_ENVIO";
+  if (s.includes("PAUSA") || s.includes("PAUSADO")) return "PAUSADO";
   if (
     s.includes("EN_PROGRES") ||
     s.includes("EN_PROCESO") ||
@@ -269,10 +274,28 @@ export default function TicketsBoard() {
     };
   }, [search, fechaDesde, fechaHasta, coachFiltro]);
 
+  // Snackbar inicial avisando sobre tickets en PAUSADO
+  const didShowPausedToast = useRef(false);
+  useEffect(() => {
+    if (loading) return;
+    if (didShowPausedToast.current) return;
+    const pausedCount = tickets.filter(
+      (t) => coerceStatus(t.estado) === "PAUSADO"
+    ).length;
+    if (pausedCount > 0) {
+      didShowPausedToast.current = true;
+      toast({
+        title: "Tickets pausados requieren atención",
+        description: `Tienes ${pausedCount} ticket(s) en Pausado. Revisa y envía la información correspondiente.`,
+      });
+    }
+  }, [loading, tickets]);
+
   const estados = useMemo(() => {
     return [
       "PENDIENTE",
       "EN_PROGRESO",
+      "PAUSADO",
       "PENDIENTE_DE_ENVIO",
       "RESUELTO",
     ] as string[];
@@ -640,7 +663,6 @@ export default function TicketsBoard() {
               </option>
             ))}
           </select>
-
           <Button
             onClick={async () => {
               setLoading(true);
@@ -676,7 +698,7 @@ export default function TicketsBoard() {
           Cargando tickets...
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {estados.map((estado) => {
             const itemsForCol = tickets.filter(
               (t) => coerceStatus(t.estado) === (estado as StatusKey)
@@ -717,7 +739,12 @@ export default function TicketsBoard() {
                         draggable
                         onDragStart={(e) => handleDragStart(e, t.id)}
                         onClick={() => openTicketDetail(t)}
-                        className="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md cursor-pointer"
+                        className={
+                          "group rounded-lg border bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md cursor-pointer " +
+                          (coerceStatus(t.estado) === "PAUSADO"
+                            ? "border-amber-300 ring-1 ring-amber-200"
+                            : "border-slate-200")
+                        }
                       >
                         <div className="space-y-3">
                           <div className="flex items-start justify-between gap-3">
@@ -732,6 +759,15 @@ export default function TicketsBoard() {
                               {STATUS_LABEL[coerceStatus(t.estado)]}
                             </span>
                           </div>
+
+                          {coerceStatus(t.estado) === "PAUSADO" && (
+                            <div className="flex items-center gap-1.5 text-amber-700">
+                              <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                              <span className="text-[11px] font-medium">
+                                Requiere atención
+                              </span>
+                            </div>
+                          )}
 
                           <div className="space-y-1.5 text-xs text-slate-600">
                             <div className="flex items-center gap-1.5">
@@ -1141,6 +1177,28 @@ export default function TicketsBoard() {
               </div>
             ) : (
               <div className="p-6 space-y-6">
+                {coerceStatus(editForm.estado as any) === "PAUSADO" && (
+                  <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div className="text-sm text-amber-800">
+                      Este ticket está pausado y requiere acción. Por favor
+                      envía la información correspondiente.
+                    </div>
+                    <div className="ml-auto">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          try {
+                            editFileInputRef.current?.click();
+                          } catch {}
+                        }}
+                      >
+                        Adjuntar ahora
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {/* Título */}
                 <div className="space-y-2">
                   <Label htmlFor="edit-nombre" className="text-sm font-medium">

@@ -25,6 +25,7 @@ import {
   User,
   Users,
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Download,
   Eye,
@@ -89,12 +90,14 @@ type StatusKey =
   | "EN_PROGRESO"
   | "PENDIENTE"
   | "PENDIENTE_DE_ENVIO"
+  | "PAUSADO"
   | "RESUELTO";
 
 const STATUS_LABEL: Record<StatusKey, string> = {
   EN_PROGRESO: "En progreso",
   PENDIENTE: "Pendiente",
   PENDIENTE_DE_ENVIO: "Pendiente de envío",
+  PAUSADO: "Pausado",
   RESUELTO: "Resuelto",
 };
 
@@ -102,6 +105,7 @@ const STATUS_STYLE: Record<StatusKey, string> = {
   PENDIENTE: "bg-blue-50 text-blue-700 border-blue-200",
   EN_PROGRESO: "bg-amber-50 text-amber-700 border-amber-200",
   PENDIENTE_DE_ENVIO: "bg-sky-50 text-sky-700 border-sky-200",
+  PAUSADO: "bg-purple-50 text-purple-700 border-purple-200",
   RESUELTO: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
@@ -253,6 +257,8 @@ export default function TicketsPanelCoach({
     url?: string;
   }>(null);
   const [blobCache, setBlobCache] = useState<Record<string, string>>({});
+  // Aviso inline: si el ticket está pausado, mostramos un banner dentro del Drawer
+  const [editActiveTab, setEditActiveTab] = useState<string>("general");
 
   type ExtraDetails = {
     prioridad?: "BAJA" | "MEDIA" | "ALTA";
@@ -721,6 +727,23 @@ export default function TicketsPanelCoach({
     })();
     return () => ctrl.abort();
   }, [coachCode, page, pageSize, fechaDesde, fechaHasta]);
+
+  // Snackbar inicial avisando sobre tickets en PAUSADO
+  const didShowPausedToast = useRef(false);
+  useEffect(() => {
+    if (loading) return;
+    if (didShowPausedToast.current) return;
+    const pausedCount = rows.filter(
+      (t) => String(t.estado ?? "").toUpperCase() === "PAUSADO"
+    ).length;
+    if (pausedCount > 0) {
+      didShowPausedToast.current = true;
+      toast({
+        title: "Tickets pausados requieren atención",
+        description: `Tienes ${pausedCount} ticket(s) en Pausado. Revisa y envía la información correspondiente.`,
+      });
+    }
+  }, [loading, rows]);
 
   const combined = useMemo(() => {
     const locals = localTickets.map((t) => ({
@@ -1216,6 +1239,7 @@ export default function TicketsPanelCoach({
             [
               "PENDIENTE",
               "EN_PROGRESO",
+              "PAUSADO",
               "PENDIENTE_DE_ENVIO",
               "RESUELTO",
             ] as StatusKey[]
@@ -1268,11 +1292,12 @@ export default function TicketsPanelCoach({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
             {(
               [
                 "PENDIENTE",
                 "EN_PROGRESO",
+                "PAUSADO",
                 "PENDIENTE_DE_ENVIO",
                 "RESUELTO",
               ] as StatusKey[]
@@ -1321,7 +1346,12 @@ export default function TicketsPanelCoach({
                           e.dataTransfer.setData("text/plain", t.codigo);
                           e.dataTransfer.effectAllowed = "move";
                         }}
-                        className="group rounded-lg border border-slate-200 bg-white p-3 shadow-sm hover:shadow-md hover:border-slate-300 cursor-grab active:cursor-grabbing transition-all"
+                        className={
+                          "group rounded-lg border bg-white p-3 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-all " +
+                          (String(t.estado ?? "").toUpperCase() === "PAUSADO"
+                            ? "border-amber-300 ring-1 ring-amber-200 hover:border-amber-400"
+                            : "border-slate-200 hover:border-slate-300")
+                        }
                       >
                         <div className="flex items-start justify-between gap-2 mb-2">
                           <h4
@@ -1393,6 +1423,15 @@ export default function TicketsPanelCoach({
                           </Button>
                         </div>
                         <div className="space-y-2 text-xs text-slate-600">
+                          {String(t.estado ?? "").toUpperCase() ===
+                            "PAUSADO" && (
+                            <div className="flex items-center gap-1.5 text-amber-700">
+                              <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                              <span className="text-[11px] font-medium">
+                                Requiere atención
+                              </span>
+                            </div>
+                          )}
                           {t.alumno_nombre && (
                             <div
                               className="flex items-center gap-1.5 truncate"
@@ -1487,6 +1526,7 @@ export default function TicketsPanelCoach({
       </div>
 
       {/* Files Dialog */}
+
       <Dialog
         open={!!openFiles}
         onOpenChange={(v) => {
@@ -1752,7 +1792,11 @@ export default function TicketsPanelCoach({
                 Selecciona un ticket
               </div>
             ) : (
-              <Tabs defaultValue="general" className="w-full">
+              <Tabs
+                value={editActiveTab}
+                onValueChange={setEditActiveTab}
+                className="w-full"
+              >
                 <div className="border-b px-6">
                   <TabsList className="w-full justify-start h-12 bg-transparent p-0">
                     <TabsTrigger
@@ -1777,6 +1821,32 @@ export default function TicketsPanelCoach({
                 </div>
 
                 <TabsContent value="general" className="p-6 space-y-6 mt-0">
+                  {String(editForm.estado ?? "").toUpperCase() ===
+                    "PAUSADO" && (
+                    <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                      <div className="text-sm text-amber-800">
+                        Este ticket está pausado y requiere acción. Por favor
+                        envía la información correspondiente.
+                      </div>
+                      <div className="ml-auto">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            try {
+                              setEditActiveTab("archivos");
+                              setTimeout(() => {
+                                editFileInputRef.current?.click();
+                              }, 0);
+                            } catch {}
+                          }}
+                        >
+                          Adjuntar ahora
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label
