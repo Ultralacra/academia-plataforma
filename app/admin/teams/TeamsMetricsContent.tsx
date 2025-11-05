@@ -121,6 +121,7 @@ export default function TeamsMetricsContent() {
       avgResponseMin: number;
       avgResolutionMin: number;
     };
+
     ads?: {
       roas: number | null;
       inversion: number | null;
@@ -174,6 +175,13 @@ export default function TeamsMetricsContent() {
       informante?: string | null;
       cantidad?: number;
     }>;
+
+    ticketsByInformanteByDay?: Array<{
+      created_at: string; // YYYY-MM-DD o ISO
+      informante: string; // nombre del informante
+      cantidad: number; // tickets ese día para ese informante
+    }>;
+
     avgResolutionByStudent?: Array<{
       code: string;
       name: string;
@@ -249,6 +257,8 @@ export default function TeamsMetricsContent() {
     clientsByStateDetails: [],
     ticketsByName: [],
     ticketsByInformante: [],
+    // ✅ Nuevo: estado inicial
+    ticketsByInformanteByDay: [],
     avgResolutionByStudent: [],
     avgResolutionSummary: null,
     ticketsByEstado: [],
@@ -446,10 +456,6 @@ export default function TeamsMetricsContent() {
         };
 
         // ticketsByInformante: lista de { informante, cantidad }
-        // Aceptar múltiples formas que pueda devolver el backend:
-        // - array de objetos [{ informante, cantidad }]
-        // - objeto map { "Nombre": 12, ... }
-        // - claves alternativas (byInformante, informantes, tickets_by_informante, ticketsByInformer)
         let rawInformanteSrc: any = [];
 
         if (Array.isArray(teams.ticketsByInformante))
@@ -651,9 +657,6 @@ export default function TeamsMetricsContent() {
             }))
           : [];
 
-        // Filtrado por búsqueda (etiqueta, firma, miembros, clientes)
-        // Filtro de búsqueda eliminado
-
         if (!alive) return;
         setVm({
           meta: {
@@ -676,6 +679,14 @@ export default function TeamsMetricsContent() {
           clientsByStateDetails,
           ticketsByName,
           ticketsByInformante,
+          // ✅ Nuevo: se copia desde el payload normalizado
+          ticketsByInformanteByDay: Array.isArray(
+            (teams as any).ticketsByInformanteByDay
+          )
+            ? (teams as any).ticketsByInformanteByDay
+            : Array.isArray((teams as any).tickets_by_informante_by_day)
+            ? (teams as any).tickets_by_informante_by_day
+            : [],
           avgResolutionByStudent: Array.isArray(
             (teams as any).avgResolutionByStudent
           )
@@ -731,6 +742,9 @@ export default function TeamsMetricsContent() {
           clientsByPhaseDetails: [],
           clientsByStateDetails: [],
           ticketsByName: [],
+          ticketsByInformante: [],
+          // ✅ Nuevo: catch vacío
+          ticketsByInformanteByDay: [],
           avgResolutionByStudent: [],
           avgResolutionSummary: null,
           ticketsByEstado: [],
@@ -805,8 +819,6 @@ export default function TeamsMetricsContent() {
   const filteredVm = useMemo(() => {
     if (!coach) return vm;
 
-    // Filtrar arrays por coach
-    // Filtramos por nombre si podemos resolverlo
     const targetName = coachName || coach;
     const baseRespByCoach = vm.respByCoach.filter(
       (r) => r.coach === targetName
@@ -824,7 +836,6 @@ export default function TeamsMetricsContent() {
         }
       : null;
 
-    // Alumnos del coach desde metrics-v2 detalle
     const studentsOfCoach = (vm.clientsByCoachDetail || []).map((r) => ({
       id: r.id,
       name: r.nombre,
@@ -833,38 +844,18 @@ export default function TeamsMetricsContent() {
       stage: r.etapa ?? null,
     }));
 
-    // Tickets del coach: aquellos cuyo alumno pertenece a studentsOfCoach
     const studentNames = new Set(
       studentsOfCoach.map((s: any) => s.name?.toLowerCase())
     );
-    // Series y KPIs ya vienen de metrics v2; no usamos tickets locales
-
-    // Agrupar tickets para series (daily/weekly/monthly) sólo del coach
-    const dailyMap = new Map<string, number>();
-    const weeklyMap = new Map<string, number>();
-    const monthlyMap = new Map<string, number>();
-    // Usar directamente series de vm (metrics v2), sin recalcular desde tickets
 
     const ticketsSeries: TicketsSeriesVM = vm.ticketsSeries;
 
-    // ticketsPer derivado (último día, últimos 7 y 30 días)
-    const now = new Date();
-    const dayCut = new Date(now);
-    dayCut.setUTCDate(now.getUTCDate() - 0);
-    const weekCut = new Date(now);
-    weekCut.setUTCDate(now.getUTCDate() - 6);
-    const monthCut = new Date(now);
-    monthCut.setUTCDate(now.getUTCDate() - 29);
-    let dayCount = 0,
-      weekCount = 0,
-      monthCount = 0;
     const ticketsPer = vm.ticketsPer;
 
-    // alumnosPorEquipo: un solo coach
     const alumnosPorEquipo = [
       { name: targetName, alumnos: studentsOfCoach.length },
     ];
-    // areasCount agrupando área de alumnos del coach (si la tuviera)
+
     const areaMap = new Map<string, number>();
     (vm.clientsByCoachDetail || []).forEach((s) => {
       const area = (s as any).area ? String((s as any).area) : "Sin área";
@@ -875,7 +866,6 @@ export default function TeamsMetricsContent() {
       count,
     }));
 
-    // Totales derivados
     const respEntry = baseRespByCoach[0];
     const createdRow = createdBlock?.rows?.[0];
     const totals = {
@@ -971,7 +961,6 @@ export default function TeamsMetricsContent() {
       coachName: coach ? coachName || coach : null,
     };
 
-    // Distribución de alumnos del coach (si aplica)
     const stateDist: Record<string, number> = {};
     const stageDist: Record<string, number> = {};
     if (coach && coachStudentsEnriched.length) {
@@ -1043,14 +1032,11 @@ export default function TeamsMetricsContent() {
       const payload = buildMetricsExport();
       const txt = JSON.stringify(payload, null, 2);
       navigator.clipboard?.writeText(txt);
-      // opcional: toast si existiera hook
       console.log("JSON copiado al portapapeles");
     } catch (e) {
       console.error("No se pudo copiar el JSON", e);
     }
   }
-
-  // Búsqueda manual eliminada: ahora la consulta se actualiza automáticamente
 
   function handleDownloadJSON() {
     try {
@@ -1206,7 +1192,7 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* KPIs específicos de ADS (sólo para coaches con área ADS). En pestaña ADS se muestran siempre que haya datos y match del coach */}
+      {/* KPIs específicos de ADS */}
       {coach &&
         !loading &&
         (() => {
@@ -1214,7 +1200,6 @@ export default function TeamsMetricsContent() {
           const isAds =
             /ads/i.test(String(selected?.area || selected?.puesto || "")) ||
             /johan/i.test(String(selected?.nombre || ""));
-          // En pestaña ADS usamos métricas estáticas, sin depender de rango/backend
           if (tab !== "ads" && (!isAds || !displayVm.ads)) return null;
           return (
             <div className="mt-2">
@@ -1229,12 +1214,10 @@ export default function TeamsMetricsContent() {
           );
         })()}
 
-      {/* Métricas de fases (F3/F4) en formato KPIs, amigables para coach, sólo en pestaña ADS */}
       {tab === "ads" && (
         <AdsPhaseMetrics fase3={adsFase3 as any} fase4={adsFase4 as any} />
       )}
 
-      {/* Tabla de alumnos para Fase 3/4 (estática), sólo en pestaña ADS */}
       {tab === "ads" && (
         <AdsStudentsTable
           fase3={adsFase3 as any}
@@ -1243,7 +1226,7 @@ export default function TeamsMetricsContent() {
         />
       )}
 
-      {/* Vista agregada cuando NO hay coach: donuts por estado/fase y tipos de ticket (solo General) */}
+      {/* Vista agregada cuando NO hay coach */}
       {tab === "general" && !coach && !loading && (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           <StudentsPhaseDonut
@@ -1260,7 +1243,6 @@ export default function TeamsMetricsContent() {
             aggData={displayVm.clientsByStateAgg}
             details={displayVm.clientsByStateDetails}
           />
-          {/* Donut por tipo de ticket */}
           <TicketsByStudentDonut
             data={(displayVm.ticketsByType || []).map((t) => ({
               name: t.tipo,
@@ -1268,7 +1250,6 @@ export default function TeamsMetricsContent() {
             }))}
             title="TICKETS POR TIPO"
           />
-          {/* Donut por estado de ticket */}
           <TicketsByStudentDonut
             data={(displayVm.ticketsByEstado || []).map((t) => ({
               name: t.estado,
@@ -1279,7 +1260,7 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* Fila de KPIs General: a la izquierda Promedio+Tasa, a la derecha Ticket más lento */}
+      {/* Fila de KPIs General */}
       {tab === "general" && !loading && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <ResolutionAndRateCard
@@ -1299,7 +1280,7 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* Grid General: izquierda Tickets por alumno, derecha Tickets por periodo (diario) */}
+      {/* Grid General: izquierda Tickets por alumno, derecha periodos + informante */}
       {tab === "general" && !loading ? (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div className="space-y-3">
@@ -1323,12 +1304,15 @@ export default function TeamsMetricsContent() {
               initialLimit={!coach ? 25 : undefined}
               showLimiter={!coach}
             />
-            {/* Bloque de estados removido a petición */}
           </div>
           <div className="space-y-3">
             <TicketsByPeriodBar data={displayVm.ticketsSeries.daily} />
             <TicketsByInformanteBar
-              data={displayVm.ticketsByInformante || []}
+              data={{
+                ticketsByInformante: displayVm.ticketsByInformante ?? [],
+                ticketsByInformanteByDay:
+                  displayVm.ticketsByInformanteByDay ?? [],
+              }}
             />
           </div>
         </div>
@@ -1339,20 +1323,7 @@ export default function TeamsMetricsContent() {
         </div>
       )}
 
-      {/* Sección "Tiempo de respuesta por coach" removida a petición */}
-      {/* Sección KPI cards y resumen de tickets removida a petición */}
-
-      {/* Bloque de productividad (sesiones / tiempo invertido) ocultado temporalmente a petición */}
-      {/* Para reactivar, restaurar el render de <ProductivityCharts /> */}
-
-      {/* Tabla de tickets por equipo ocultada a petición */}
-      {false && displayVm.ticketsByTeam.length > 0 && (
-        <TicketsByTeamTable rows={displayVm.ticketsByTeam} loading={loading} />
-      )}
-
-      {/* Gráfico "Distribución de estatus de tickets" eliminado temporalmente a petición */}
-
-      {/* Tabla al final */}
+      {/* Tabla por coach */}
       {tab === "general" && coach && !loading && (
         <StudentsByCoachTable
           coach={coachName || coach}
@@ -1432,8 +1403,6 @@ export default function TeamsMetricsContent() {
           }))}
         />
       )}
-
-      {/* (bloque legacy de alerta roja removido; usamos SlowestResponseCard arriba) */}
     </div>
   );
 }

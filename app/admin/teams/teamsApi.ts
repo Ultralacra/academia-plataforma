@@ -84,12 +84,12 @@ export async function fetchAllStudents(
 }
 
 // ==== Metrics directas (sin dataService) ====
+// ==== Metrics directas (sin dataService) ====
 export async function fetchMetrics(
   fechaDesde?: string,
   fechaHasta?: string,
   coachCode?: string
 ) {
-  // Nuevo endpoint v2 con soporte de coach
   const params = new URLSearchParams();
   if (fechaDesde) params.set("fechaDesde", fechaDesde);
   if (fechaHasta) params.set("fechaHasta", fechaHasta);
@@ -98,30 +98,26 @@ export async function fetchMetrics(
   const url = `/metrics/get/metrics-v2${qs}`;
   const json = await apiFetch<any>(url);
 
-  // Mapear al shape esperado por TeamsMetricsContent (root.data.teams....)
   const d = (json?.data as any) || {};
-  const ticketsByDay: Array<{ day: string; tickets: number }> = Array.isArray(
-    d.ticketsByDay
-  )
+
+  // ---- ticketsByDay -> daily/weekly/monthly ----
+  const ticketsByDay: Array<{ day: string; tickets: number }> = Array.isArray(d.ticketsByDay)
     ? d.ticketsByDay
     : [];
   const daily = ticketsByDay.map((r) => ({
     date: new Date(r.day).toISOString().slice(0, 10),
     count: Number(r.tickets || 0) || 0,
   }));
-  // Agregar series semanales y mensuales agregadas desde daily
   const weeklyMap = new Map<string, number>();
   const monthlyMap = new Map<string, number>();
   daily.forEach((p) => {
     const dDate = new Date(p.date + "T00:00:00Z");
     if (isNaN(dDate.getTime())) return;
-    // Semana ISO: obtener lunes de esa semana como clave
     const tmp = new Date(Date.UTC(dDate.getUTCFullYear(), dDate.getUTCMonth(), dDate.getUTCDate()));
     const dayNum = (tmp.getUTCDay() + 6) % 7; // 0 = lunes
     tmp.setUTCDate(tmp.getUTCDate() - dayNum);
-    const weekKey = tmp.toISOString().slice(0, 10); // YYYY-MM-DD (lunes de la semana)
+    const weekKey = tmp.toISOString().slice(0, 10);
     weeklyMap.set(weekKey, (weeklyMap.get(weekKey) ?? 0) + p.count);
-    // Mensual
     const monthKey = `${dDate.getUTCFullYear()}-${String(dDate.getUTCMonth() + 1).padStart(2, "0")}`;
     monthlyMap.set(monthKey, (monthlyMap.get(monthKey) ?? 0) + p.count);
   });
@@ -132,7 +128,8 @@ export async function fetchMetrics(
     (a, b) => a.month.localeCompare(b.month)
   );
   const ticketsTotal = daily.reduce((a, c) => a + (c.count || 0), 0);
-  // Derivar per a partir de los últimos 1/7/30 día
+
+  // ---- per day/week/month (últimos 1/7/30) ----
   const now = new Date();
   const dayKey = now.toISOString().slice(0, 10);
   const weekCut = new Date(now);
@@ -149,21 +146,21 @@ export async function fetchMetrics(
     if (dDate >= monthCut) perMonth += p.count;
   });
 
-  // Normalizar posibles claves para ticketsByInformante que venga en payload
+  // ---- Normalización ticketsByInformante ----
   let rawInformanteSrc: any = [];
   if (Array.isArray(d.ticketsByInformante)) rawInformanteSrc = d.ticketsByInformante;
   else if (Array.isArray(d.ticketsByInformer)) rawInformanteSrc = d.ticketsByInformer;
   else if (Array.isArray(d.byInformante)) rawInformanteSrc = d.byInformante;
   else if (Array.isArray(d.informantes)) rawInformanteSrc = d.informantes;
   else if (Array.isArray(d.tickets_by_informante)) rawInformanteSrc = d.tickets_by_informante;
-  else if (d.ticketsByInformante && typeof d.ticketsByInformante === "object") rawInformanteSrc = d.ticketsByInformante;
+  else if (d.ticketsByInformante && typeof d.ticketsByInformante === "object")
+    rawInformanteSrc = d.ticketsByInformante;
 
   let ticketsByInformante: Array<{ informante?: string | null; cantidad?: number }> = [];
   if (Array.isArray(rawInformanteSrc) && rawInformanteSrc.length) {
     ticketsByInformante = rawInformanteSrc.map((r: any) => ({
       informante: r.informante ?? r.name ?? r.informante_nombre ?? r.nombre ?? null,
-      cantidad:
-        Number(r.cantidad ?? r.count ?? r.tickets ?? r.cantidad_tickets ?? 0) || 0,
+      cantidad: Number(r.cantidad ?? r.count ?? r.tickets ?? r.cantidad_tickets ?? 0) || 0,
     }));
   } else if (rawInformanteSrc && typeof rawInformanteSrc === "object") {
     ticketsByInformante = Object.keys(rawInformanteSrc).map((k) => ({
@@ -171,6 +168,14 @@ export async function fetchMetrics(
       cantidad: Number((rawInformanteSrc as any)[k]) || 0,
     }));
   }
+
+  // ---- NEW: passthrough/normalize ticketsByInformanteByDay ----
+  const ticketsByInformanteByDay: Array<{ created_at: string; informante: string; cantidad: number }> =
+    Array.isArray(d.ticketsByInformanteByDay)
+      ? d.ticketsByInformanteByDay
+      : Array.isArray(d.tickets_by_informante_by_day)
+      ? d.tickets_by_informante_by_day
+      : [];
 
   const teams = {
     totals: {
@@ -180,22 +185,21 @@ export async function fetchMetrics(
       avgResponseMin: 0,
       avgResolutionMin: 0,
     },
-    // Métricas específicas de ADS (opcionales, provistas por backend)
+
+    // Métricas de ADS (sin cambios)
     ads: (() => {
       const src = d.adsMetrics ?? d.ads ?? null;
-      if (!src || typeof src !== 'object') return null;
+      if (!src || typeof src !== "object") return null;
       function num(v: any) {
-        const n = Number(
-          typeof v === 'string' ? v.replace(/[,]/g, '.') : v
-        );
+        const n = Number(typeof v === "string" ? v.replace(/[,]/g, ".") : v);
         return Number.isFinite(n) ? n : null;
       }
       function bool(v: any) {
-        if (typeof v === 'boolean') return v;
-        if (typeof v === 'number') return v !== 0;
-        if (typeof v === 'string') {
+        if (typeof v === "boolean") return v;
+        if (typeof v === "number") return v !== 0;
+        if (typeof v === "string") {
           const s = v.trim().toLowerCase();
-          return s === '1' || s === 'true' || s === 'sí' || s === 'si';
+          return s === "1" || s === "true" || s === "sí" || s === "si";
         }
         return null;
       }
@@ -225,13 +229,16 @@ export async function fetchMetrics(
         pauta_activa: boolean | null;
       };
     })(),
+
     ticketsPer: { day: perDay, week: perWeek, month: perMonth },
+
     ticketsSeries: {
       daily,
       weekly,
       monthly,
     },
-    // Agregados por fase y por estado
+
+    // Agregados (sin cambios)
     clientsByPhaseAgg: Array.isArray(d.clientsByPhase)
       ? d.clientsByPhase.reduce((acc: any[], it: any) => {
           const name = String(it.etapa ?? "Sin fase");
@@ -252,7 +259,8 @@ export async function fetchMetrics(
           return acc;
         }, [])
       : [],
-    // Detalle con nombres por fase y estado (para acordeón)
+
+    // Detalles (sin cambios relevantes)
     clientsByPhaseDetails: Array.isArray(d.clientsByPhase)
       ? (() => {
           const map = new Map<string, { name: string; value: number; students: string[] }>();
@@ -267,7 +275,6 @@ export async function fetchMetrics(
             const prev = map.get(name);
             if (prev) {
               prev.value += value;
-              // concatenar y de-duplicar
               const set = new Set<string>([...prev.students, ...students]);
               prev.students = Array.from(set);
             } else {
@@ -300,7 +307,7 @@ export async function fetchMetrics(
           return Array.from(map.values());
         })()
       : [],
-    // Detalle de alumnos del coach directamente desde metrics-v2
+
     clientsByCoachDetail: Array.isArray(d.clientsByCoachDetail)
       ? (d.clientsByCoachDetail as any[]).map((it) => ({
           id: Number(it.id),
@@ -310,7 +317,6 @@ export async function fetchMetrics(
           etapa: it.etapa ?? null,
           ingreso: it.ingreso ?? null,
           ultima_actividad: it.ultima_actividad ?? null,
-          // El backend puede enviar dias_inactividad o inactividad
           inactividad: (it.dias_inactividad ?? it.inactividad) ?? null,
           tickets: it.tickets ?? null,
           area: it.area ?? null,
@@ -326,13 +332,18 @@ export async function fetchMetrics(
           paso_f5: it.paso_f5 ?? null,
         }))
       : [],
-  ticketsByName: Array.isArray(d.ticketsByName) ? d.ticketsByName : [],
-  // ticketsByInformante normalizada desde payload (si existe)
-  ticketsByInformante: ticketsByInformante,
+
+    ticketsByName: Array.isArray(d.ticketsByName) ? d.ticketsByName : [],
+
+    // Normalizado desde payload (si existe)
+    ticketsByInformante,
+
+    // NEW: añadimos al objeto teams para que el componente lo pueda detectar
+    ticketsByInformanteByDay,
+
     avgResolutionSummary: d?.avgResolutionByCoach?.resumen
       ? {
-          tickets_resueltos:
-            Number(d.avgResolutionByCoach.resumen.tickets_resueltos ?? 0) || 0,
+          tickets_resueltos: Number(d.avgResolutionByCoach.resumen.tickets_resueltos ?? 0) || 0,
           avg_seconds: String(d.avgResolutionByCoach.resumen.avg_seconds ?? ""),
           avg_minutes:
             d.avgResolutionByCoach.resumen.avg_minutes != null
@@ -342,25 +353,24 @@ export async function fetchMetrics(
             d.avgResolutionByCoach.resumen.avg_hours != null
               ? Number(d.avgResolutionByCoach.resumen.avg_hours)
               : null,
-          avg_time_hms: String(
-            d.avgResolutionByCoach.resumen.avg_time_hms ?? ""
-          ),
+          avg_time_hms: String(d.avgResolutionByCoach.resumen.avg_time_hms ?? ""),
         }
       : null,
+
     ticketsByEstado: Array.isArray(d.ticketsByEstado)
       ? (d.ticketsByEstado as any[]).map((it) => ({
           estado: String(it.estado ?? ""),
           cantidad: Number(it.cantidad ?? 0) || 0,
         }))
       : [],
-    // Distribución por tipo de ticket
+
     ticketsByType: Array.isArray(d.ticketsByType)
       ? (d.ticketsByType as any[]).map((it) => ({
           tipo: String(it.tipo ?? "SIN_TIPO"),
           cantidad: Number(it.cantidad ?? 0) || 0,
         }))
       : [],
-    // Ticket con respuesta más lenta
+
     slowestResponseTicket: d?.slowestResponseTickets
       ? {
           ticket_id: Number(d.slowestResponseTickets.ticket_id ?? 0) || 0,
@@ -371,19 +381,15 @@ export async function fetchMetrics(
           estado_ticket: String(d.slowestResponseTickets.estado_ticket ?? ""),
           fecha_creacion: String(d.slowestResponseTickets.fecha_creacion ?? ""),
           fecha_respuesta: String(d.slowestResponseTickets.fecha_respuesta ?? ""),
-          minutos_respuesta:
-            Number(d.slowestResponseTickets.minutos_respuesta ?? 0) || 0,
-          horas_respuesta:
-            Number(d.slowestResponseTickets.horas_respuesta ?? 0) || 0,
-          dias_respuesta:
-            Number(d.slowestResponseTickets.dias_respuesta ?? 0) || 0,
+          minutos_respuesta: Number(d.slowestResponseTickets.minutos_respuesta ?? 0) || 0,
+          horas_respuesta: Number(d.slowestResponseTickets.horas_respuesta ?? 0) || 0,
+          dias_respuesta: Number(d.slowestResponseTickets.dias_respuesta ?? 0) || 0,
         }
       : null,
-    // Promedios de resolución por alumno (incluye segundos, minutos y horas)
+
     avgResolutionByStudent: Array.isArray(d?.avgResolutionByCoach?.detalle)
       ? (d.avgResolutionByCoach.detalle as any[]).map((it) => {
-          const avg_seconds =
-            it.avg_seconds != null ? Number(it.avg_seconds) : null;
+          const avg_seconds = it.avg_seconds != null ? Number(it.avg_seconds) : null;
           const avg_minutes =
             it.avg_minutes != null
               ? Number(it.avg_minutes)
@@ -409,7 +415,7 @@ export async function fetchMetrics(
           };
         })
       : [],
-    // allClientsByCoach: puede venir como grupos por coach o como lista plana (para coach seleccionado)
+
     allClientsByCoach: Array.isArray(d.allClientsByCoach) && (d.allClientsByCoach as any[])[0]?.students
       ? (d.allClientsByCoach as any[]).map((group) => ({
           coach: String(group.coach ?? group.nombre_coach ?? group.name ?? "Sin coach"),
@@ -440,6 +446,7 @@ export async function fetchMetrics(
             : [],
         }))
       : [],
+
     allClientsByCoachFlat: Array.isArray(d.allClientsByCoach) && !(d.allClientsByCoach as any[])[0]?.students
       ? (d.allClientsByCoach as any[]).map((it) => ({
           id: Number(it.id),
@@ -464,7 +471,8 @@ export async function fetchMetrics(
           paso_f5: it.paso_f5 ?? null,
         }))
       : [],
-    // Campos no provistos por v2: dejamos vacíos para no romper UI
+
+    // placeholders no provistos por v2:
     respByCoach: [] as any[],
     respByTeam: [] as any[],
     prodByCoach: [] as any[],
