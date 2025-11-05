@@ -91,8 +91,12 @@ export type CoachTicket = {
   nombre: string | null;
   id_alumno: string | null;
   alumno_nombre: string | null;
+  informante?: string | null;
+  informante_nombre?: string | null;
   created_at: string | null;
   deadline: string | null;
+  resuelto_por?: string | null;
+  resuelto_por_nombre?: string | null;
   ultimo_estado?: { estatus?: string; fecha?: string } | string | null;
   estado: "PENDIENTE" | "EN_PROGRESO" | "PENDIENTE_DE_ENVIO" | "RESUELTO" | string;
 };
@@ -141,9 +145,13 @@ export async function getCoachTickets(params: {
     nombre: r.nombre ?? null,
     id_alumno: r.id_alumno ?? null,
     alumno_nombre: r.alumno_nombre ?? null,
+    informante: r.informante ?? r.informado_por ?? null,
+    informante_nombre: r.informante_nombre ?? null,
     created_at: r.created_at ?? null,
     deadline: r.deadline ?? null,
   ultimo_estado: r.ultimo_estado ?? null,
+    resuelto_por: r.resuelto_por ?? null,
+    resuelto_por_nombre: r.resuelto_por_nombre ?? null,
     estado: normalizeEstado(r.estado),
   }));
   return {

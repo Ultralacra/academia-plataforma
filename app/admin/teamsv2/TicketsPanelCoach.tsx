@@ -610,19 +610,37 @@ export default function TicketsPanelCoach({
       return;
     }
     let descripcion = createDescripcion.trim();
-    if (links.length) {
-      const block = ["", "Links:", ...links.map((u) => `- ${u}`)].join("\n");
-      descripcion = (descripcion ? descripcion + "\n" : "") + block;
+    const uniqueLinks = Array.from(
+      new Set(links.map((u) => u.trim()).filter(Boolean))
+    );
+    if (uniqueLinks.length) {
+      const urlsComma = uniqueLinks.join(", ");
+      // Mantener descripcion aparte y sumar las URLs en una línea para fácil parseo del backend
+      descripcion = descripcion
+        ? `${descripcion}\nURLs: ${urlsComma}`
+        : `URLs: ${urlsComma}`;
     }
     try {
       setCreating(true);
-      await createTicket({
+      const result = await createTicket({
         nombre: createNombre.trim(),
         id_alumno: selectedAlumno,
         tipo,
         descripcion: descripcion || undefined,
         archivos: createFiles.slice(0, 10),
+        urls: uniqueLinks,
       });
+      // Intentar adjuntar URLs como "archivos" para que se rendericen en la UI de archivos
+      try {
+        if (uniqueLinks.length > 0) {
+          const data = (result?.data ?? result) as any;
+          const ticketId =
+            data?.codigo || data?.id || data?.ticket_id || data?.ticketId;
+          if (ticketId) {
+            await uploadTicketFiles(String(ticketId), [], uniqueLinks);
+          }
+        }
+      } catch {}
       const res = await getCoachTickets({
         coach: coachCode,
         page,
@@ -1404,10 +1422,15 @@ export default function TicketsPanelCoach({
                                 restante: saved.restante ?? null,
                                 // Mostrar SIEMPRE nombres cuando sea posible
                                 informante:
-                                  resolvePersonName(saved.informante) ?? "",
+                                  resolvePersonName(
+                                    saved.informante ?? (t as any).informante
+                                  ) ?? "",
                                 resolucion: saved.resolucion ?? "",
                                 resuelto_por:
-                                  resolvePersonName(saved.resuelto_por) ?? "",
+                                  resolvePersonName(
+                                    saved.resuelto_por ??
+                                      (t as any).resuelto_por
+                                  ) ?? "",
                                 revision: saved.revision ?? "",
                                 tarea: saved.tarea ?? "",
                                 equipo: Array.isArray(saved.equipo)
@@ -1440,6 +1463,40 @@ export default function TicketsPanelCoach({
                               <User className="h-3.5 w-3.5 text-slate-400" />
                               <span className="truncate">
                                 {t.alumno_nombre}
+                              </span>
+                            </div>
+                          )}
+                          {(t as any).informante && (
+                            <div
+                              className="flex items-center gap-1.5 truncate"
+                              title={
+                                (t as any).informante_nombre ||
+                                (t as any).informante ||
+                                undefined
+                              }
+                            >
+                              <Users className="h-3.5 w-3.5 text-slate-400" />
+                              <span className="truncate">
+                                Informante:{" "}
+                                {(t as any).informante_nombre ||
+                                  (t as any).informante}
+                              </span>
+                            </div>
+                          )}
+                          {(t as any).resuelto_por && (
+                            <div
+                              className="flex items-center gap-1.5 truncate"
+                              title={
+                                (t as any).resuelto_por_nombre ||
+                                (t as any).resuelto_por ||
+                                undefined
+                              }
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                              <span className="truncate">
+                                Resuelto por:{" "}
+                                {(t as any).resuelto_por_nombre ||
+                                  (t as any).resuelto_por}
                               </span>
                             </div>
                           )}
@@ -1880,6 +1937,30 @@ export default function TicketsPanelCoach({
                             {editTicket.alumno_nombre || "—"}
                           </span>
                         </div>
+                        {(editTicket as any).informante && (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Users className="h-4 w-4 text-slate-400" />
+                            <span className="text-slate-500 min-w-[90px]">
+                              Informante
+                            </span>
+                            <span className="truncate">
+                              {(editTicket as any).informante_nombre ||
+                                (editTicket as any).informante}
+                            </span>
+                          </div>
+                        )}
+                        {(editTicket as any).resuelto_por && (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            <span className="text-slate-500 min-w-[90px]">
+                              Resuelto por
+                            </span>
+                            <span className="truncate">
+                              {(editTicket as any).resuelto_por_nombre ||
+                                (editTicket as any).resuelto_por}
+                            </span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 min-w-0">
                           <Calendar className="h-4 w-4 text-slate-400" />
                           <span className="text-slate-500 min-w-[90px]">

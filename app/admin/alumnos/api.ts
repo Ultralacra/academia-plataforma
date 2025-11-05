@@ -238,6 +238,7 @@ export type CreateTicketForm = {
   tipo: string; // debe venir de opciones "tipo_ticket"
   descripcion?: string;
   archivos?: File[];
+  urls?: string[]; // enlaces opcionales asociados al ticket (separadas por coma en descripcion y/o campo urls)
 };
 
 export async function createTicket(form: CreateTicketForm): Promise<any> {
@@ -246,7 +247,20 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   fd.set('nombre', form.nombre);
   fd.set('id_alumno', form.id_alumno);
   fd.set('tipo', form.tipo);
-  if (form.descripcion) fd.set('descripcion', form.descripcion);
+  // Si vienen URLs, agregarlas a la descripcion en formato separado por comas
+  let descripcion = form.descripcion || '';
+  if (form.urls && form.urls.length > 0) {
+    const unique = Array.from(new Set(form.urls.map((u) => u.trim()).filter(Boolean)));
+    const urlsComma = unique.join(', ');
+    descripcion = descripcion
+      ? `${descripcion}\nURLs: ${urlsComma}`
+      : urlsComma; // si el backend espera la URL en descripcion
+    // También enviar el campo 'urls' si el backend lo soporta
+    try {
+      fd.set('urls', JSON.stringify(unique));
+    } catch {}
+  }
+  if (descripcion) fd.set('descripcion', descripcion);
   (form.archivos ?? []).forEach((file) => fd.append('archivos', file));
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
