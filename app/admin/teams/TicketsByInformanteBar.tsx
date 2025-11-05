@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+/* ─────────────────────── Tipos ─────────────────────── */
 type Row = {
   informante?: string | null;
   informante_nombre?: string | null;
@@ -37,7 +38,9 @@ type Row = {
 };
 
 type ChartRow = { label: string; value: number };
+type RangeKey = "week" | "2weeks" | "3weeks" | "month";
 
+/* ─────────────────────── Utils ─────────────────────── */
 function get(obj: any, path: string) {
   return path
     .split(".")
@@ -63,10 +66,9 @@ const normISODate = (d: any) => {
   if (!t) return null;
   const dt = new Date(t);
   if (Number.isNaN(dt.getTime())) return null;
-  return dt.toISOString().slice(0, 10); // YYYY-MM-DD
+  return dt.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
 };
 
-// >>> NUEVO: etiqueta "día Mes" (tres letras)
 const MONTHS_ES = [
   "Ene",
   "Feb",
@@ -82,13 +84,19 @@ const MONTHS_ES = [
   "Dic",
 ];
 function labelDiaMesFromISO(iso: string) {
-  // iso esperado: YYYY-MM-DD
   const d = parseInt(iso.slice(8, 10), 10);
   const m = parseInt(iso.slice(5, 7), 10); // 1..12
   const mes = MONTHS_ES[(m - 1 + 12) % 12] ?? "";
   return `${d} ${mes}`;
 }
 
+// helpers de fechas en local (evitar desfases por zona)
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const dateToLocalISO = (date: Date) =>
+  `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+const parseISOLocalStart = (iso: string) => new Date(`${iso}T00:00:00`);
+
+/* ─────────────────────── Componente ─────────────────────── */
 export default function TicketsByInformanteBar({
   data,
   title = "TICKETS POR INFORMANTE",
@@ -98,6 +106,7 @@ export default function TicketsByInformanteBar({
 }) {
   const [tab, setTab] = useState<"general" | "por-dia">("general");
   const [selected, setSelected] = useState<string>("");
+  const [range, setRange] = useState<RangeKey>("month"); // por defecto Mes completo
 
   const palette = [
     "#6366F1",
@@ -112,6 +121,7 @@ export default function TicketsByInformanteBar({
     "#F97316",
   ];
 
+  /* ───────── Bloque 1: fuentes, agregados y opciones ───────── */
   const {
     rowsGeneral,
     totalGeneral,
@@ -119,11 +129,11 @@ export default function TicketsByInformanteBar({
     yAxisWidthGeneral,
     hasDaySource,
     informanteOptions,
-    dayAgg,
+    dayAgg, // Map<string, Map<ISODate, count>>
   } = useMemo(() => {
     const maybe = data as any;
 
-    // -------- GENERAL --------
+    // GENERAL
     const generalPaths = [
       "ticketsByInformante",
       "tickets_by_informante",
@@ -154,7 +164,7 @@ export default function TicketsByInformanteBar({
       if (plausible && hasCount) generalSource = maybe;
     }
 
-    // -------- POR DÍA (detalle / base agregada) --------
+    // DETALLE POR DÍA
     const dayPaths = [
       "ticketsByInformanteByDay",
       "tickets_by_informante_by_day",
@@ -180,7 +190,7 @@ export default function TicketsByInformanteBar({
     }
     const hasDaySource = Array.isArray(daySource) && daySource.length > 0;
 
-    // -------- General: agrupar por informante --------
+    // Agrupar general por informante
     const genMap: Record<string, number> = {};
     for (const d of generalSource || []) {
       const name = normName(
@@ -205,7 +215,7 @@ export default function TicketsByInformanteBar({
     );
     const chartHeightGeneral = Math.max(300, rowsGeneral.length * 36 + 80);
 
-    // -------- Por día: construir dayAgg (name -> (isoDate -> count)) --------
+    // Construir dayAgg: nombre -> (isoDate -> count)
     const dayAgg = new Map<string, Map<string, number>>();
     if (hasDaySource) {
       for (const d of daySource) {
@@ -240,14 +250,14 @@ export default function TicketsByInformanteBar({
     };
   }, [data]);
 
-  // Selección por defecto cuando hay opciones
+  // Selección por defecto del informante
   useEffect(() => {
     if (!selected && informanteOptions?.length) {
       setSelected(informanteOptions[0]);
     }
   }, [informanteOptions, selected]);
 
-  // Serie dependiente de "selected": etiqueta "día Mes"
+  /* ───────── Bloque 2: serie dependiente de selected + range ───────── */
   const { daysForSelected, totalSelected, chartHeightDays, yAxisWidthDays } =
     useMemo(() => {
       if (!selected || !dayAgg?.has(selected)) {
@@ -258,12 +268,51 @@ export default function TicketsByInformanteBar({
           yAxisWidthDays: 100,
         };
       }
-      const selectedMap = dayAgg.get(selected)!;
 
-      const daysForSelected: ChartRow[] = Array.from(selectedMap.entries())
-        .sort(([d1], [d2]) => d1.localeCompare(d2)) // asc por fecha
+      const selectedMap = dayAgg.get(selected)!; // Map<iso, count>
+      if (selectedMap.size === 0) {
+        return {
+          daysForSelected: [] as ChartRow[],
+          totalSelected: 0,
+          chartHeightDays: 300,
+          yAxisWidthDays: 100,
+        };
+      }
+
+      // Tomamos la PRIMERA fecha disponible del informante => mes de referencia
+      const allDatesAsc = Array.from(selectedMap.keys()).sort(); // asc
+      const earliestISO = allDatesAsc[0];
+
+      const base = parseISOLocalStart(earliestISO);
+      const refYear = base.getFullYear();
+      const refMonth = base.getMonth(); // 0..11
+      const monthStart = new Date(refYear, refMonth, 1);
+      const monthEnd = new Date(refYear, refMonth + 1, 0);
+      const monthStartISO = dateToLocalISO(monthStart);
+      const monthEndISO = dateToLocalISO(monthEnd);
+
+      // Definir tope por rango (Semana 1 = días 1..7; 2 semanas = 1..14; 3 semanas = 1..21; Mes = 1..fin)
+      const daysInMonth = monthEnd.getDate();
+      const limitByRange =
+        range === "week"
+          ? 7
+          : range === "2weeks"
+          ? 14
+          : range === "3weeks"
+          ? 21
+          : daysInMonth;
+
+      // Filtrar SOLO días del mes de referencia hasta el umbral elegido
+      const filtered = Array.from(selectedMap.entries()).filter(([iso]) => {
+        if (iso < monthStartISO || iso > monthEndISO) return false;
+        const dayNum = parseInt(iso.slice(8, 10), 10);
+        return dayNum >= 1 && dayNum <= limitByRange;
+      });
+
+      const daysForSelected: ChartRow[] = filtered
+        .sort(([d1], [d2]) => d1.localeCompare(d2))
         .map(([iso, value]) => ({
-          label: labelDiaMesFromISO(iso), // << aquí el cambio
+          label: labelDiaMesFromISO(iso),
           value,
         }));
 
@@ -284,8 +333,9 @@ export default function TicketsByInformanteBar({
         chartHeightDays,
         yAxisWidthDays,
       };
-    }, [dayAgg, selected]);
+    }, [dayAgg, selected, range]);
 
+  /* ───────── Configs tooltip ───────── */
   const chartConfigGeneral: ChartConfig = {
     tickets: { label: "Tickets", color: "var(--chart-1)" },
   };
@@ -300,6 +350,7 @@ export default function TicketsByInformanteBar({
     </div>
   );
 
+  /* ───────── Render ───────── */
   return (
     <div className="w-full rounded-2xl border border-gray-200 bg-white">
       <div className="border-b border-gray-100 px-5 py-4">
@@ -389,35 +440,48 @@ export default function TicketsByInformanteBar({
       ) : (
         // POR DÍA
         <div className="p-5 space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Informante:</span>
-              <Select
-                value={selected || undefined}
-                onValueChange={(v) => setSelected(v)}
-              >
-                <SelectTrigger className="w-64">
-                  <SelectValue placeholder="Selecciona un informante" />
-                </SelectTrigger>
-                <SelectContent>
-                  {informanteOptions.map((n) => (
-                    <SelectItem key={n} value={n}>
-                      {n}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="text-sm text-gray-600">
-              Total del periodo:{" "}
-              <span className="font-semibold text-gray-900">
-                {totalSelected}
-              </span>
-            </div>
+          {/* Select de Informante */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-600">Informante:</span>
+            <Select
+              value={selected || undefined}
+              onValueChange={(v) => setSelected(v)}
+            >
+              <SelectTrigger className="w-64">
+                <SelectValue placeholder="Selecciona un informante" />
+              </SelectTrigger>
+              <SelectContent>
+                {informanteOptions.map((n) => (
+                  <SelectItem key={n} value={n}>
+                    {n}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
+          {/* Tabs de Rango (Semana / 2 / 3 / Mes) */}
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-600">Rango:</span>
+            <Tabs value={range} onValueChange={(v) => setRange(v as RangeKey)}>
+              <TabsList className="grid grid-cols-4">
+                <TabsTrigger value="week">Semana</TabsTrigger>
+                <TabsTrigger value="2weeks">2 semanas</TabsTrigger>
+                <TabsTrigger value="3weeks">3 semanas</TabsTrigger>
+                <TabsTrigger value="month">Mes completo</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* Total del período */}
+          <div className="text-sm text-gray-600">
+            Total del período:{" "}
+            <span className="font-semibold text-gray-900">{totalSelected}</span>
+          </div>
+
+          {/* Serie por día */}
           {!daysForSelected || daysForSelected.length === 0 ? (
-            renderEmpty("Ese informante no tiene días con tickets en el rango.")
+            renderEmpty("No hay días con tickets para ese rango.")
           ) : (
             <ChartContainer
               config={chartConfigDays}
