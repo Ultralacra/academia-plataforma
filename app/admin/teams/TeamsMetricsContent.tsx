@@ -7,6 +7,7 @@ import Filters from "./Filters";
 import TicketsByStudentBar from "./TicketsByStudentBar";
 import TicketsByStudentDonut from "./TicketsByStudentDonut";
 import TicketsByPeriodBar from "./TicketsByPeriodBar";
+import TicketsByInformanteBar from "./TicketsByInformanteBar";
 import ProductivityCharts from "./ProductivityCharts";
 // import Charts from "./Charts"; // oculto para vista individual
 import CreatedMetricsContent from "./CreatedMetricsContent";
@@ -169,6 +170,10 @@ export default function TeamsMetricsContent() {
       students: string[];
     }[];
     ticketsByName?: { name: string; count: number }[];
+    ticketsByInformante?: Array<{
+      informante?: string | null;
+      cantidad?: number;
+    }>;
     avgResolutionByStudent?: Array<{
       code: string;
       name: string;
@@ -243,6 +248,7 @@ export default function TeamsMetricsContent() {
     clientsByPhaseDetails: [],
     clientsByStateDetails: [],
     ticketsByName: [],
+    ticketsByInformante: [],
     avgResolutionByStudent: [],
     avgResolutionSummary: null,
     ticketsByEstado: [],
@@ -439,6 +445,53 @@ export default function TeamsMetricsContent() {
             : [],
         };
 
+        // ticketsByInformante: lista de { informante, cantidad }
+        // Aceptar múltiples formas que pueda devolver el backend:
+        // - array de objetos [{ informante, cantidad }]
+        // - objeto map { "Nombre": 12, ... }
+        // - claves alternativas (byInformante, informantes, tickets_by_informante, ticketsByInformer)
+        let rawInformanteSrc: any = [];
+
+        if (Array.isArray(teams.ticketsByInformante))
+          rawInformanteSrc = teams.ticketsByInformante;
+        else if (Array.isArray(teams.byInformante))
+          rawInformanteSrc = teams.byInformante;
+        else if (Array.isArray(teams.informantes))
+          rawInformanteSrc = teams.informantes;
+        else if (Array.isArray(teams.tickets_by_informante))
+          rawInformanteSrc = teams.tickets_by_informante;
+        else if (Array.isArray(teams.ticketsByInformer))
+          rawInformanteSrc = teams.ticketsByInformer;
+        else if (
+          teams.ticketsByInformante &&
+          typeof teams.ticketsByInformante === "object"
+        )
+          rawInformanteSrc = teams.ticketsByInformante; // could be an object map
+
+        let ticketsByInformante: Array<{
+          informante?: string | null;
+          cantidad?: number;
+        }> = [];
+
+        if (Array.isArray(rawInformanteSrc) && rawInformanteSrc.length) {
+          ticketsByInformante = rawInformanteSrc.map((r: any) => ({
+            informante:
+              r.informante ?? r.name ?? r.informante_nombre ?? r.nombre ?? null,
+            cantidad:
+              Number(
+                r.cantidad ?? r.count ?? r.tickets ?? r.cantidad_tickets ?? 0
+              ) || 0,
+          }));
+        } else if (rawInformanteSrc && typeof rawInformanteSrc === "object") {
+          // object map: { "Nombre": 12 }
+          ticketsByInformante = Object.keys(rawInformanteSrc).map((k) => ({
+            informante: k,
+            cantidad: Number((rawInformanteSrc as any)[k]) || 0,
+          }));
+        } else {
+          ticketsByInformante = [];
+        }
+
         const respByCoach =
           Array.isArray(teams.respByCoach) && teams.respByCoach.length
             ? teams.respByCoach.map((r: any) => ({
@@ -622,6 +675,7 @@ export default function TeamsMetricsContent() {
           clientsByPhaseDetails,
           clientsByStateDetails,
           ticketsByName,
+          ticketsByInformante,
           avgResolutionByStudent: Array.isArray(
             (teams as any).avgResolutionByStudent
           )
@@ -1271,7 +1325,12 @@ export default function TeamsMetricsContent() {
             />
             {/* Bloque de estados removido a petición */}
           </div>
-          <TicketsByPeriodBar data={displayVm.ticketsSeries.daily} />
+          <div className="space-y-3">
+            <TicketsByPeriodBar data={displayVm.ticketsSeries.daily} />
+            <TicketsByInformanteBar
+              data={displayVm.ticketsByInformante || []}
+            />
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

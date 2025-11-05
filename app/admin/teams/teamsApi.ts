@@ -149,6 +149,29 @@ export async function fetchMetrics(
     if (dDate >= monthCut) perMonth += p.count;
   });
 
+  // Normalizar posibles claves para ticketsByInformante que venga en payload
+  let rawInformanteSrc: any = [];
+  if (Array.isArray(d.ticketsByInformante)) rawInformanteSrc = d.ticketsByInformante;
+  else if (Array.isArray(d.ticketsByInformer)) rawInformanteSrc = d.ticketsByInformer;
+  else if (Array.isArray(d.byInformante)) rawInformanteSrc = d.byInformante;
+  else if (Array.isArray(d.informantes)) rawInformanteSrc = d.informantes;
+  else if (Array.isArray(d.tickets_by_informante)) rawInformanteSrc = d.tickets_by_informante;
+  else if (d.ticketsByInformante && typeof d.ticketsByInformante === "object") rawInformanteSrc = d.ticketsByInformante;
+
+  let ticketsByInformante: Array<{ informante?: string | null; cantidad?: number }> = [];
+  if (Array.isArray(rawInformanteSrc) && rawInformanteSrc.length) {
+    ticketsByInformante = rawInformanteSrc.map((r: any) => ({
+      informante: r.informante ?? r.name ?? r.informante_nombre ?? r.nombre ?? null,
+      cantidad:
+        Number(r.cantidad ?? r.count ?? r.tickets ?? r.cantidad_tickets ?? 0) || 0,
+    }));
+  } else if (rawInformanteSrc && typeof rawInformanteSrc === "object") {
+    ticketsByInformante = Object.keys(rawInformanteSrc).map((k) => ({
+      informante: k,
+      cantidad: Number((rawInformanteSrc as any)[k]) || 0,
+    }));
+  }
+
   const teams = {
     totals: {
       teams: 0,
@@ -303,7 +326,9 @@ export async function fetchMetrics(
           paso_f5: it.paso_f5 ?? null,
         }))
       : [],
-    ticketsByName: Array.isArray(d.ticketsByName) ? d.ticketsByName : [],
+  ticketsByName: Array.isArray(d.ticketsByName) ? d.ticketsByName : [],
+  // ticketsByInformante normalizada desde payload (si existe)
+  ticketsByInformante: ticketsByInformante,
     avgResolutionSummary: d?.avgResolutionByCoach?.resumen
       ? {
           tickets_resueltos:

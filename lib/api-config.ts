@@ -87,7 +87,18 @@ export async function apiFetch<T = unknown>(
     throw new Error(text || `HTTP ${res.status} on ${path}`);
   }
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  const json = await res.json();
+  // En modo desarrollo, loguear la URL y la respuesta para depuración.
+  try {
+    if (typeof window !== "undefined" && process.env.NODE_ENV !== "production") {
+      // Evitar errores si console está undefined en algún entorno extraño
+      try {
+        console.debug("apiFetch ->", buildUrl(path), json);
+      } catch {}
+    }
+  } catch {}
+
+  return json as T;
 }
 
 /* ====== NUEVO: métricas con filtro de fechas ====== */
