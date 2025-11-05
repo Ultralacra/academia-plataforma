@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import StudentChatMinimal from "@/components/chat/StudentChatMinimal";
+import StudentChatInline from "@/components/chat/StudentChatInline";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { MessageSquare, X } from "lucide-react";
@@ -99,9 +99,8 @@ export default function StudentChatWidget({
               </div>
             ) : (
               <div className="h-full">
-                <StudentChatMinimal
-                  room={room}
-                  role="alumno"
+                <StudentChatInline
+                  code={room}
                   title="Chat con administración"
                   subtitle={`Código: ${room}`}
                   className="h-full"

@@ -115,6 +115,8 @@ export default function CoachChatInline({
     () => (room || "").trim().toLowerCase(),
     [room]
   );
+  // Límite de tamaño por archivo: 10MB
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
   const [connected, setConnected] = React.useState(false);
   const [items, setItems] = React.useState<Message[]>([]);
@@ -265,7 +267,9 @@ export default function CoachChatInline({
         if (chatIdRef.current != null) return;
         const parts = participantsRef.current ?? socketio?.participants;
         if (!Array.isArray(parts) || parts.length === 0) return;
-        await ensureChatReadyForSend({ onlyFind: true });
+        // Para alumno queremos encontrar o crear automáticamente para cargar historial.
+        if (role === "alumno") await ensureChatReadyForSend();
+        else await ensureChatReadyForSend({ onlyFind: true });
       } catch {}
     })();
   }, [connected, precreateOnParticipants, socketio?.participants]);
@@ -491,7 +495,30 @@ export default function CoachChatInline({
 
       const id = String(chatIdRef.current);
       setUploading(true);
-      const arr = Array.from(selected as FileList | File[]);
+      let arr = Array.from(selected as FileList | File[]);
+      // Filtrar archivos que exceden el límite y reportar
+      const tooBig = arr.filter((f) => (f?.size || 0) > MAX_FILE_SIZE);
+      if (tooBig.length) {
+        const names = tooBig
+          .map((f) => f.name)
+          .slice(0, 3)
+          .join(", ");
+        const more = tooBig.length > 3 ? ` y ${tooBig.length - 3} más` : "";
+        setUploadError(
+          `Se omitieron ${tooBig.length} archivo(s) por exceder 10MB: ${names}${more}.`
+        );
+        arr = arr.filter((f) => (f?.size || 0) <= MAX_FILE_SIZE);
+      }
+      if (arr.length === 0) {
+        setUploading(false);
+        setUploadState({
+          active: false,
+          total: 0,
+          done: 0,
+          current: undefined,
+        });
+        return;
+      }
       setUploadState({
         active: true,
         total: arr.length,
@@ -602,9 +629,23 @@ export default function CoachChatInline({
   }
 
   const addPendingAttachments = (files: FileList | File[]) => {
+    setUploadError(null);
     const arr = Array.from(files as FileList | File[]);
     if (!arr.length) return;
-    const mapped = arr.map((f) => ({
+    const valid = arr.filter((f) => (f?.size || 0) <= MAX_FILE_SIZE);
+    const rejected = arr.filter((f) => (f?.size || 0) > MAX_FILE_SIZE);
+    if (rejected.length) {
+      const names = rejected
+        .map((f) => f.name)
+        .slice(0, 3)
+        .join(", ");
+      const more = rejected.length > 3 ? ` y ${rejected.length - 3} más` : "";
+      setUploadError(
+        `No se pueden adjuntar archivos mayores a 10MB. Se omitieron: ${names}${more}.`
+      );
+    }
+    if (!valid.length) return;
+    const mapped = valid.map((f) => ({
       file: f,
       preview:
         f.type.startsWith("image/") ||
@@ -1638,6 +1679,63 @@ export default function CoachChatInline({
               }
             } catch {}
           }
+          if (
+            !myParticipantIdRef.current &&
+            role === "alumno" &&
+            socketio?.idCliente != null
+          ) {
+            try {
+              const mineCli = joinedParticipantsRef.current.find(
+                (p: any) =>
+                  String((p?.participante_tipo || "").toLowerCase()) ===
+                    "cliente" &&
+                  String(p?.id_cliente) === String(socketio.idCliente) &&
+                  p?.id_chat_participante != null
+              );
+              if (mineCli?.id_chat_participante != null) {
+                setMyParticipantId(mineCli.id_chat_participante);
+                myParticipantIdRef.current = mineCli.id_chat_participante;
+              }
+            } catch {}
+          }
+          if (
+            !myParticipantIdRef.current &&
+            role === "admin" &&
+            socketio?.idAdmin != null
+          ) {
+            try {
+              const mineAdm = joinedParticipantsRef.current.find(
+                (p: any) =>
+                  String((p?.participante_tipo || "").toLowerCase()) ===
+                    "admin" &&
+                  String(p?.id_admin) === String(socketio.idAdmin) &&
+                  p?.id_chat_participante != null
+              );
+              if (mineAdm?.id_chat_participante != null) {
+                setMyParticipantId(mineAdm.id_chat_participante);
+                myParticipantIdRef.current = mineAdm.id_chat_participante;
+              }
+            } catch {}
+          }
+          if (
+            !myParticipantIdRef.current &&
+            role === "alumno" &&
+            socketio?.idCliente != null
+          ) {
+            try {
+              const mineCli = joinedParticipantsRef.current.find(
+                (p: any) =>
+                  String((p?.participante_tipo || "").toLowerCase()) ===
+                    "cliente" &&
+                  String(p?.id_cliente) === String(socketio.idCliente) &&
+                  p?.id_chat_participante != null
+              );
+              if (mineCli?.id_chat_participante != null) {
+                setMyParticipantId(mineCli.id_chat_participante);
+                myParticipantIdRef.current = mineCli.id_chat_participante;
+              }
+            } catch {}
+          }
           const msgsSrc = Array.isArray(data.messages)
             ? data.messages
             : Array.isArray((data as any).mensajes)
@@ -1734,6 +1832,9 @@ export default function CoachChatInline({
     if (role === "coach" && socketio?.idEquipo != null) {
       roleFilter.participante_tipo = "equipo";
       roleFilter.id_equipo = String(socketio.idEquipo);
+    } else if (role === "admin" && socketio?.idAdmin != null) {
+      roleFilter.participante_tipo = "admin";
+      roleFilter.id_admin = String(socketio.idAdmin);
     }
     const payload = {
       ...roleFilter,
@@ -1807,6 +1908,9 @@ export default function CoachChatInline({
       if (role === "coach" && socketio?.idEquipo != null) {
         roleFilter.participante_tipo = "equipo";
         roleFilter.id_equipo = String(socketio.idEquipo);
+      } else if (role === "admin" && socketio?.idAdmin != null) {
+        roleFilter.participante_tipo = "admin";
+        roleFilter.id_admin = String(socketio.idAdmin);
       }
       const payload = {
         ...roleFilter,
@@ -1852,6 +1956,15 @@ export default function CoachChatInline({
       if (role === "coach" && socketio?.idEquipo != null) {
         listPayload.participante_tipo = "equipo";
         listPayload.id_equipo = String(socketio.idEquipo);
+      } else if (role === "alumno" && socketio?.idCliente != null) {
+        listPayload.participante_tipo = "cliente";
+        listPayload.id_cliente = String(socketio.idCliente);
+        if (socketio?.idEquipo != null) {
+          listPayload.id_equipo = String(socketio.idEquipo);
+        }
+      } else if (role === "admin" && socketio?.idAdmin != null) {
+        listPayload.participante_tipo = "admin";
+        listPayload.id_admin = String(socketio.idAdmin);
       }
       const list: any[] = await new Promise((resolve) => {
         try {
@@ -1964,6 +2077,71 @@ export default function CoachChatInline({
                           setMyParticipantId(mine.id_chat_participante);
                           myParticipantIdRef.current =
                             mine.id_chat_participante;
+                        }
+                      } catch {}
+                    }
+                    if (
+                      !myParticipantIdRef.current &&
+                      role === "alumno" &&
+                      socketio?.idCliente != null
+                    ) {
+                      try {
+                        const mineCli = joinedParticipantsRef.current.find(
+                          (p: any) =>
+                            String(
+                              (p?.participante_tipo || "").toLowerCase()
+                            ) === "cliente" &&
+                            String(p?.id_cliente) ===
+                              String(socketio.idCliente) &&
+                            p?.id_chat_participante != null
+                        );
+                        if (mineCli?.id_chat_participante != null) {
+                          setMyParticipantId(mineCli.id_chat_participante);
+                          myParticipantIdRef.current =
+                            mineCli.id_chat_participante;
+                        }
+                      } catch {}
+                    }
+                    if (
+                      !myParticipantIdRef.current &&
+                      role === "admin" &&
+                      socketio?.idAdmin != null
+                    ) {
+                      try {
+                        const mineAdm = joinedParticipantsRef.current.find(
+                          (p: any) =>
+                            String(
+                              (p?.participante_tipo || "").toLowerCase()
+                            ) === "admin" &&
+                            String(p?.id_admin) === String(socketio.idAdmin) &&
+                            p?.id_chat_participante != null
+                        );
+                        if (mineAdm?.id_chat_participante != null) {
+                          setMyParticipantId(mineAdm.id_chat_participante);
+                          myParticipantIdRef.current =
+                            mineAdm.id_chat_participante;
+                        }
+                      } catch {}
+                    }
+                    if (
+                      !myParticipantIdRef.current &&
+                      role === "alumno" &&
+                      socketio?.idCliente != null
+                    ) {
+                      try {
+                        const mineCli = joinedParticipantsRef.current.find(
+                          (p: any) =>
+                            String(
+                              (p?.participante_tipo || "").toLowerCase()
+                            ) === "cliente" &&
+                            String(p?.id_cliente) ===
+                              String(socketio.idCliente) &&
+                            p?.id_chat_participante != null
+                        );
+                        if (mineCli?.id_chat_participante != null) {
+                          setMyParticipantId(mineCli.id_chat_participante);
+                          myParticipantIdRef.current =
+                            mineCli.id_chat_participante;
                         }
                       } catch {}
                     }
@@ -2081,6 +2259,68 @@ export default function CoachChatInline({
                       if (mine?.id_chat_participante != null) {
                         setMyParticipantId(mine.id_chat_participante);
                         myParticipantIdRef.current = mine.id_chat_participante;
+                      }
+                    } catch {}
+                  }
+                  if (
+                    !myParticipantIdRef.current &&
+                    role === "alumno" &&
+                    socketio?.idCliente != null
+                  ) {
+                    try {
+                      const mineCli = joinedParticipantsRef.current.find(
+                        (p: any) =>
+                          String((p?.participante_tipo || "").toLowerCase()) ===
+                            "cliente" &&
+                          String(p?.id_cliente) ===
+                            String(socketio.idCliente) &&
+                          p?.id_chat_participante != null
+                      );
+                      if (mineCli?.id_chat_participante != null) {
+                        setMyParticipantId(mineCli.id_chat_participante);
+                        myParticipantIdRef.current =
+                          mineCli.id_chat_participante;
+                      }
+                    } catch {}
+                  }
+                  if (
+                    !myParticipantIdRef.current &&
+                    role === "admin" &&
+                    socketio?.idAdmin != null
+                  ) {
+                    try {
+                      const mineAdm = joinedParticipantsRef.current.find(
+                        (p: any) =>
+                          String((p?.participante_tipo || "").toLowerCase()) ===
+                            "admin" &&
+                          String(p?.id_admin) === String(socketio.idAdmin) &&
+                          p?.id_chat_participante != null
+                      );
+                      if (mineAdm?.id_chat_participante != null) {
+                        setMyParticipantId(mineAdm.id_chat_participante);
+                        myParticipantIdRef.current =
+                          mineAdm.id_chat_participante;
+                      }
+                    } catch {}
+                  }
+                  if (
+                    !myParticipantIdRef.current &&
+                    role === "alumno" &&
+                    socketio?.idCliente != null
+                  ) {
+                    try {
+                      const mineCli = joinedParticipantsRef.current.find(
+                        (p: any) =>
+                          String((p?.participante_tipo || "").toLowerCase()) ===
+                            "cliente" &&
+                          String(p?.id_cliente) ===
+                            String(socketio.idCliente) &&
+                          p?.id_chat_participante != null
+                      );
+                      if (mineCli?.id_chat_participante != null) {
+                        setMyParticipantId(mineCli.id_chat_participante);
+                        myParticipantIdRef.current =
+                          mineCli.id_chat_participante;
                       }
                     } catch {}
                   }
@@ -2260,6 +2500,24 @@ export default function CoachChatInline({
             );
             if (mine?.id_chat_participante != null)
               effectivePid = mine.id_chat_participante;
+          } else if (role === "alumno") {
+            const mineCli = parts.find(
+              (p: any) =>
+                normalizeTipo(p?.participante_tipo) === "cliente" &&
+                (!socketio?.idCliente ||
+                  String(p?.id_cliente) === String(socketio?.idCliente))
+            );
+            if (mineCli?.id_chat_participante != null)
+              effectivePid = mineCli.id_chat_participante;
+          } else if (role === "admin") {
+            const mineAdm = parts.find(
+              (p: any) =>
+                normalizeTipo(p?.participante_tipo) === "admin" &&
+                (!socketio?.idAdmin ||
+                  String(p?.id_admin) === String(socketio?.idAdmin))
+            );
+            if (mineAdm?.id_chat_participante != null)
+              effectivePid = mineAdm.id_chat_participante;
           }
         }
         if (effectivePid == null) {
@@ -2282,6 +2540,28 @@ export default function CoachChatInline({
               );
               if (mine?.id_chat_participante != null) {
                 effectivePid = mine.id_chat_participante;
+                break;
+              }
+            } else if (role === "alumno") {
+              const mineCli = parts.find(
+                (p: any) =>
+                  normalizeTipo(p?.participante_tipo) === "cliente" &&
+                  (!socketio?.idCliente ||
+                    String(p?.id_cliente) === String(socketio?.idCliente))
+              );
+              if (mineCli?.id_chat_participante != null) {
+                effectivePid = mineCli.id_chat_participante;
+                break;
+              }
+            } else if (role === "admin") {
+              const mineAdm = parts.find(
+                (p: any) =>
+                  normalizeTipo(p?.participante_tipo) === "admin" &&
+                  (!socketio?.idAdmin ||
+                    String(p?.id_admin) === String(socketio?.idAdmin))
+              );
+              if (mineAdm?.id_chat_participante != null) {
+                effectivePid = mineAdm.id_chat_participante;
                 break;
               }
             }
@@ -2315,6 +2595,18 @@ export default function CoachChatInline({
           at: Date.now(),
           pid: effectivePid,
         });
+
+        // Forzar permanencia al fondo al enviar (experiencia de chat)
+        try {
+          const sc = scrollRef.current;
+          const br = bottomRef.current;
+          if (sc) {
+            sc.scrollTop = sc.scrollHeight;
+          }
+          if (br) br.scrollIntoView({ behavior: "auto", block: "end" });
+          pinnedToBottomRef.current = true;
+          setNewMessagesCount(0);
+        } catch {}
 
         if (chatIdRef.current == null || effectivePid == null) {
           // logging eliminado
@@ -2366,6 +2658,15 @@ export default function CoachChatInline({
                   clearTimeout(typingRef.current.timer);
                   typingRef.current.on = false;
                 }
+                // Asegurar scroll al fondo tras ACK
+                try {
+                  const sc = scrollRef.current;
+                  const br = bottomRef.current;
+                  if (sc) sc.scrollTop = sc.scrollHeight;
+                  if (br) br.scrollIntoView({ behavior: "auto", block: "end" });
+                  pinnedToBottomRef.current = true;
+                  setNewMessagesCount(0);
+                } catch {}
               } catch {}
             } catch {}
           }
@@ -2602,7 +2903,7 @@ export default function CoachChatInline({
         <div
           ref={scrollRef}
           onScroll={onScrollContainer}
-          className="relative flex-1 overflow-y-auto p-4 min-h-0 bg-[#ECE5DD]"
+          className="relative flex-1 h-0 min-h-0 overflow-y-auto p-4 bg-[#ECE5DD]"
           style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
             scrollbarGutter: "stable both-edges",
@@ -2993,7 +3294,13 @@ export default function CoachChatInline({
                           const file = new File([blob], fname, {
                             type: blob.type || chosenType,
                           });
-                          addPendingAttachments([file] as any);
+                          if ((file.size || 0) > MAX_FILE_SIZE) {
+                            setUploadError(
+                              "El audio grabado excede el límite de 10MB y no se adjuntará."
+                            );
+                          } else {
+                            addPendingAttachments([file] as any);
+                          }
                         } catch {
                           setUploadError(
                             "No se pudo procesar el audio grabado."

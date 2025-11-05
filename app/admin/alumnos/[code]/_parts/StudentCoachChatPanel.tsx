@@ -13,7 +13,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { RotateCw, Search } from "lucide-react";
 import { dataService, type TeamWithCounts } from "@/lib/data-service";
-import ChatRealtime from "@/components/chat/ChatRealtime";
+import CoachChatInline from "@/app/admin/teamsv2/[code]/CoachChatInline";
+import { CHAT_HOST } from "@/lib/api-config";
 
 export default function StudentCoachChatPanel({
   code,
@@ -222,8 +223,10 @@ export default function StudentCoachChatPanel({
           El alumno puede chatear con cualquier coach
         </p>
       </div>
-      <div className={fullHeight ? "p-3 flex-1" : "p-3 h-[620px]"}>
-        <div className="grid grid-cols-12 gap-3 h-full">
+      <div
+        className={fullHeight ? "p-3 flex-1 min-h-0" : "p-3 h-[620px] min-h-0"}
+      >
+        <div className="grid grid-cols-12 gap-3 h-full min-h-0">
           {/* Sidebar: filtros + coaches + mis conversaciones */}
           <div className="col-span-3 overflow-auto border rounded p-3 bg-white space-y-3">
             {/* Buscador */}
@@ -362,7 +365,15 @@ export default function StudentCoachChatPanel({
                       String((p?.participante_tipo || "").toLowerCase()) ===
                       "equipo"
                   );
-                  const title = coach?.id_equipo
+                  // Intentar identificar al coach por catálogo (id o código)
+                  const coachInfo = teams.find(
+                    (t) =>
+                      String(t.id) === String(coach?.id_equipo ?? "") ||
+                      String(t.codigo) === String(coach?.id_equipo ?? "")
+                  );
+                  const title = coachInfo?.nombre
+                    ? String(coachInfo.nombre)
+                    : coach?.id_equipo
                     ? `Coach ${coach.id_equipo}`
                     : `Chat ${id}`;
                   const lastObj =
@@ -373,6 +384,11 @@ export default function StudentCoachChatPanel({
                     it?.last?.text ??
                     ""
                   ).toString();
+                  const areaPuesto = coachInfo
+                    ? [coachInfo.puesto, coachInfo.area]
+                        .filter(Boolean)
+                        .join(" · ")
+                    : "";
                   const countKey = `chatUnreadById:alumno:${String(id ?? "")}`;
                   const storedCount = parseInt(
                     (typeof window !== "undefined" &&
@@ -419,9 +435,9 @@ export default function StudentCoachChatPanel({
                                 {formatListTime(lastAt)}
                               </span>
                             </div>
-                            {last && (
+                            {(areaPuesto || last) && (
                               <div className="text-[11px] text-neutral-600 truncate">
-                                {last}
+                                {areaPuesto || last}
                               </div>
                             )}
                           </div>
@@ -440,8 +456,8 @@ export default function StudentCoachChatPanel({
           </div>
 
           {/* Panel de chat */}
-          <div className="col-span-9 h-full min-h-[540px] overflow-hidden">
-            <ChatRealtime
+          <div className="col-span-9 h-full flex flex-col min-h-0">
+            <CoachChatInline
               key={chatKey}
               room={room}
               role="alumno"
@@ -449,12 +465,11 @@ export default function StudentCoachChatPanel({
               subtitle={targetSubtitle}
               variant="card"
               className="h-full min-h-[540px] rounded-lg shadow-sm overflow-hidden"
-              transport="socketio"
+              precreateOnParticipants
               socketio={{
-                url: "https://v001.onrender.com",
-                tokenEndpoint: "https://v001.onrender.com/v1/auth/token",
-                tokenId: `cliente:${String(code)}`,
+                url: (CHAT_HOST || "").replace(/\/$/, ""),
                 idCliente: String(code),
+                idEquipo: targetCoachId ? String(targetCoachId) : undefined,
                 participants: participants,
                 autoCreate: true,
                 autoJoin: !!selectedChatId,
@@ -462,8 +477,12 @@ export default function StudentCoachChatPanel({
               }}
               onConnectionChange={setConnected}
               requestListSignal={listSignal}
-              listOnConnect={false}
-              listParams={listParams}
+              listParams={{
+                participante_tipo: targetCoachId ? "equipo" : "cliente",
+                ...(targetCoachId
+                  ? { id_equipo: String(targetCoachId) }
+                  : { id_cliente: String(code) }),
+              }}
               onChatsList={(list) =>
                 setStudentChats(Array.isArray(list) ? list : [])
               }

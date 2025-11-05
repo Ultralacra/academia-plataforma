@@ -117,25 +117,39 @@ export default function AdsPhaseMetrics({
   const effPagoAvg = effCount ? effPagoSum / effCount : null;
   const effCompraAvg = effCount ? effCompraSum / effCount : null;
 
-  // Ayudas de lectura y diagnóstico
-  const base = 100;
-  const stepAds = effAdsAvg != null ? Math.round(base * effAdsAvg) : null;
-  const stepPago =
-    effPagoAvg != null && stepAds != null
-      ? Math.round(stepAds * effPagoAvg)
-      : null;
-  const stepCompra =
-    effCompraAvg != null && stepPago != null
-      ? Math.round(stepPago * effCompraAvg)
-      : null;
-  const dropAdsPago =
-    stepAds != null && stepPago != null
-      ? Math.max(stepAds - stepPago, 0)
-      : null;
-  const dropPagoCompra =
-    stepPago != null && stepCompra != null
-      ? Math.max(stepPago - stepCompra, 0)
-      : null;
+  // Totales absolutos por etapa (F4)
+  let totalAlcance = 0;
+  let totalClics = 0;
+  let totalVisitas = 0;
+  let totalPagos = 0;
+  let totalCompras = 0; // suma de todas las compras (carnada, bumps, OTOs, downsell)
+  (fase4 || []).forEach((r) => {
+    const alc = toNum(r?.["Alcance"]) || 0;
+    const cli = toNum(r?.["Clics"]) || 0;
+    const vis = toNum(r?.["Visitas"]) || 0;
+    const pag = toNum(r?.["Pagos iniciados"]) || 0;
+    const c1 = toNum(r?.["Compra carnada"]) || 0;
+    const b1 = toNum(r?.["Compra Bump 1"]) || 0;
+    const b2 = toNum(r?.["Compra Bump 2"]) || 0;
+    const o1 = toNum(r?.["Compra OTO 1"]) || 0;
+    const o2 = toNum(r?.["Compra OTO 2"]) || 0;
+    const dn = toNum(r?.["Compra Downsell"]) || 0;
+    totalAlcance += alc;
+    totalClics += cli;
+    totalVisitas += vis;
+    totalPagos += pag;
+    totalCompras += c1 + b1 + b2 + o1 + o2 + dn;
+  });
+
+  // Efectividades globales por etapa (sobre totales)
+  const effAdsAbs = totalAlcance > 0 ? totalVisitas / totalAlcance : null;
+  const effPagoAbs = totalVisitas > 0 ? totalPagos / totalVisitas : null;
+  const effCompraAbs = totalPagos > 0 ? totalCompras / totalPagos : null;
+
+  // Caídas absolutas entre etapas
+  const dropAlcVis = Math.max(totalAlcance - totalVisitas, 0);
+  const dropVisPag = Math.max(totalVisitas - totalPagos, 0);
+  const dropPagCom = Math.max(totalPagos - totalCompras, 0);
 
   function badgeTone(
     v: number | null | undefined
@@ -179,12 +193,12 @@ export default function AdsPhaseMetrics({
     { name: "Fase 4", value: totalF4 },
   ];
 
-  // Embudo promedio: normalizado a 100 en la primera etapa
+  // Datos para embudo absoluto (opcional si se quisiera graficar)
   const funnelData = [
-    { name: "Impactados", value: base },
-    { name: "Efect. Ads", value: stepAds ?? 0 },
-    { name: "Pago iniciado", value: stepPago ?? 0 },
-    { name: "Compra", value: stepCompra ?? 0 },
+    { name: "Alcance", value: totalAlcance },
+    { name: "Visitas", value: totalVisitas },
+    { name: "Pagos", value: totalPagos },
+    { name: "Compras", value: totalCompras },
   ];
 
   // Barras 100% por etapa (simple y comparativo)
@@ -260,19 +274,24 @@ export default function AdsPhaseMetrics({
   // Componente interno: visualización de paso con barra de progreso
   function StepViz({
     label,
-    value, // 0..100 base 100
-    eff, // 0..1 o 0..100 (se normaliza a %)
-    drop, // puntos porcentuales de caída vs etapa previa
+    value, // conteo absoluto
+    eff, // 0..1 o 0..100 (se normaliza a % para la insignia)
+    drop, // caída absoluta vs etapa previa
+    max, // máximo del track para escalar la barra
   }: {
     label: string;
     value: number | null;
     eff?: number | null;
     drop?: number | null;
+    max: number;
   }) {
-    const pct =
-      value == null ? null : Math.max(0, Math.min(100, Number(value)));
+    const count = value == null ? null : Math.max(0, Number(value));
     const effPct =
       eff == null ? null : Number(eff) <= 1 ? Number(eff) * 100 : Number(eff);
+    const widthPct =
+      count == null || max <= 0
+        ? 0
+        : Math.max(0, Math.min(100, (count / max) * 100));
     return (
       <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm space-y-2 h-full">
         <div className="flex items-center justify-between gap-2">
@@ -280,7 +299,7 @@ export default function AdsPhaseMetrics({
           <div className="flex items-center gap-1">
             {drop != null && drop > 0 && (
               <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                -{drop} pp
+                -{fmtNumber(drop)}
               </Badge>
             )}
             <Badge
@@ -293,17 +312,15 @@ export default function AdsPhaseMetrics({
         </div>
         <div className="flex items-baseline gap-2">
           <div className="text-2xl font-semibold tabular-nums">
-            {pct != null ? pct : "—"}
+            {count != null ? fmtNumber(count) : "—"}
           </div>
-          <div className="text-[11px] text-muted-foreground">/ 100</div>
         </div>
         <div className="mt-1">
           <div className="h-3.5 w-full rounded-full bg-slate-100">
             <div
               className="h-3.5 rounded-full bg-gradient-to-r from-blue-400 to-blue-600"
               style={{
-                width:
-                  pct == null ? "0%" : `${pct > 0 ? Math.max(pct, 2) : 0}%`,
+                width: `${widthPct > 0 ? Math.max(widthPct, 2) : 0}%`,
               }}
             />
           </div>
@@ -389,27 +406,30 @@ export default function AdsPhaseMetrics({
           </CardHeader>
           <CardContent>
             <div className="text-sm leading-relaxed">
-              {stepAds != null && stepPago != null && stepCompra != null ? (
+              {totalAlcance + totalVisitas + totalPagos + totalCompras > 0 ? (
                 <>
-                  Por cada 100 impactados: <b>{stepAds}%</b> enganchan con Ads,
-                  <b> {stepPago}%</b> inician el pago y <b>{stepCompra}%</b>{" "}
-                  terminan comprando.
-                  {dropAdsPago != null && dropPagoCompra != null && (
-                    <>
-                      {" "}
-                      La mayor caída está{" "}
-                      {dropAdsPago >= dropPagoCompra ? (
-                        <>
-                          entre <b>Ads → Pago</b> (<b>-{dropAdsPago} pp</b>).
-                        </>
-                      ) : (
-                        <>
-                          entre <b>Pago → Compra</b> (
-                          <b>-{dropPagoCompra} pp</b>).
-                        </>
-                      )}
-                    </>
-                  )}
+                  De <b>{fmtNumber(totalAlcance)}</b> alcanzados,{" "}
+                  <b>{fmtNumber(totalVisitas)}</b> visitan la página,{" "}
+                  <b>{fmtNumber(totalPagos)}</b> inician el pago y{" "}
+                  <b>{fmtNumber(totalCompras)}</b> terminan comprando.
+                  {(() => {
+                    const drops = [
+                      { k: "Alcance → Visitas", v: dropAlcVis },
+                      { k: "Visitas → Pagos", v: dropVisPag },
+                      { k: "Pagos → Compras", v: dropPagCom },
+                    ];
+                    const maxDrop = drops.reduce(
+                      (a, b) => (a.v >= b.v ? a : b),
+                      { k: "", v: 0 }
+                    );
+                    return maxDrop.v > 0 ? (
+                      <>
+                        {" "}
+                        La mayor caída está entre <b>{maxDrop.k}</b> (
+                        <b>-{fmtNumber(maxDrop.v)}</b>).
+                      </>
+                    ) : null;
+                  })()}
                 </>
               ) : (
                 <>
@@ -496,7 +516,7 @@ export default function AdsPhaseMetrics({
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-sm">
-              Flujo de conversión (por cada 100)
+              Flujo de conversión (absolutos)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -505,63 +525,71 @@ export default function AdsPhaseMetrics({
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
-                      <StepViz label="Impactados" value={100} eff={1} />
+                      <StepViz
+                        label="Alcance"
+                        value={totalAlcance}
+                        eff={1}
+                        max={Math.max(totalAlcance, 1)}
+                      />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent>
-                    Base: 100 personas impactadas.
+                    Personas alcanzadas (suma total).
                   </TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
                       <StepViz
-                        label="Efect. Ads"
-                        value={stepAds}
-                        eff={effAdsAvg}
+                        label="Visitas"
+                        value={totalVisitas}
+                        eff={effAdsAbs}
+                        max={Math.max(totalAlcance, 1)}
                       />
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>{`100 × Efect. Ads → ${
-                    stepAds ?? "—"
-                  }`}</TooltipContent>
+                  <TooltipContent>{`Visitas / Alcance → ${fmtPercent(
+                    effAdsAbs
+                  )}`}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
                       <StepViz
-                        label="Pago iniciado"
-                        value={stepPago}
-                        eff={effPagoAvg}
-                        drop={dropAdsPago}
+                        label="Pagos"
+                        value={totalPagos}
+                        eff={effPagoAbs}
+                        drop={dropVisPag}
+                        max={Math.max(totalAlcance, 1)}
                       />
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>{`${stepAds ?? "—"} × Efect. pago → ${
-                    stepPago ?? "—"
-                  }`}</TooltipContent>
+                  <TooltipContent>{`Pagos / Visitas → ${fmtPercent(
+                    effPagoAbs
+                  )}`}</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <div>
                       <StepViz
-                        label="Compra"
-                        value={stepCompra}
-                        eff={effCompraAvg}
-                        drop={dropPagoCompra}
+                        label="Compras"
+                        value={totalCompras}
+                        eff={effCompraAbs}
+                        drop={dropPagCom}
+                        max={Math.max(totalAlcance, 1)}
                       />
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>{`${stepPago ?? "—"} × Efect. compra → ${
-                    stepCompra ?? "—"
-                  }`}</TooltipContent>
+                  <TooltipContent>{`Compras / Pagos → ${fmtPercent(
+                    effCompraAbs
+                  )}`}</TooltipContent>
                 </Tooltip>
               </div>
             </TooltipProvider>
             <div className="text-xs text-muted-foreground mt-2">
-              Cada tarjeta muestra cuántas personas llegan a esa etapa al partir
-              de 100 impactados. "pp" = puntos porcentuales de caída vs la etapa
-              previa.
+              Cada tarjeta muestra el total absoluto por etapa; la insignia
+              indica la conversión de esa etapa. La etiqueta roja indica la
+              caída absoluta vs. la etapa previa.
             </div>
           </CardContent>
         </Card>

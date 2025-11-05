@@ -8,7 +8,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: "Academia Platform",
+  title: "Academia X",
   description: "Plataforma de gestión para academia",
   generator: "",
   // Favicon e iconos. Coloca tu archivo en public/ (p. ej. /favicon.png o /favicon.ico)

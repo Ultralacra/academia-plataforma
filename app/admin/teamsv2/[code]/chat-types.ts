@@ -29,6 +29,7 @@ export type SocketIOConfig = {
   token?: string;
   idEquipo?: string;
   idCliente?: string;
+  idAdmin?: string;
   participants?: any[];
   autoCreate?: boolean;
   autoJoin?: boolean;
@@ -53,6 +54,13 @@ export type TicketData = {
     descripcion?: string;
     prioridad?: string;
     categoria?: string;
+    // Campos extendidos para enriquecer el modal de generación de tickets
+    alumno?: string;
+    area?: string;
+    coachCodigo?: string;
+    coachNombre?: string;
+    recomendacion?: string;
+    siguientePaso?: string;
     html?: string;
   };
 };

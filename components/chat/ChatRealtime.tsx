@@ -72,6 +72,10 @@ type SocketIOChatOptions = {
   url?: string;
   /** Token JWT del sistema de auth; si no se pasa, se usará el de auth local */
   token?: string;
+  /** Endpoint opcional para obtener un token temporal (útil para impersonar cliente/coach). */
+  tokenEndpoint?: string;
+  /** Identidad/subject para el endpoint de token temporal (por ejemplo: "cliente:CODIGO"). */
+  tokenId?: string;
   participants?: Array<any>;
   idCliente?: number | string;
   idEquipo?: number | string;
@@ -142,6 +146,8 @@ export default function ChatRealtime({
     () => (room || "").trim().toLowerCase(),
     [room]
   );
+  // Límite de tamaño por archivo: 10MB
+  const MAX_FILE_SIZE = 10 * 1024 * 1024;
   const [currentRole, setCurrentRole] = React.useState<Sender>(role);
   const [items, setItems] = React.useState<Message[]>([]);
   const [text, setText] = React.useState("");
@@ -188,6 +194,7 @@ export default function ChatRealtime({
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const inputRef = React.useRef<HTMLTextAreaElement | null>(null);
   const [connected, setConnected] = React.useState(false);
+  const [attachError, setAttachError] = React.useState<string | null>(null);
   const WS_OPEN = typeof WebSocket !== "undefined" ? WebSocket.OPEN : 1;
 
   // Estado específico de Socket.IO
@@ -564,9 +571,50 @@ export default function ChatRealtime({
         const url = socketio?.url || undefined;
         // 1) Obtener token de autenticación de la app (JWT) con espera breve si aún no está listo
         const resolveToken = async (): Promise<string | undefined> => {
+          // 0) Token pasado directamente
           const override = (socketio as any)?.token as string | undefined;
           if (override && typeof override === "string") return override;
-          // Espera hasta 4s en intervalos de 300ms si todavía no hay token (p. ej., hidratación auth)
+
+          // 1) Intentar token temporal desde endpoint si se provee
+          const ep = (socketio as any)?.tokenEndpoint as string | undefined;
+          const tid = (socketio as any)?.tokenId as string | undefined;
+          if (ep && tid) {
+            try {
+              // Probar GET ?id= primero
+              const u = `${ep.replace(/\/$/, "")}?id=${encodeURIComponent(
+                tid
+              )}`;
+              const r = await fetch(u, {
+                method: "GET",
+                credentials: "include",
+              });
+              if (r.ok) {
+                const j = await r.json().catch(() => ({} as any));
+                const tok = (j && (j.token || j.access_token)) as
+                  | string
+                  | undefined;
+                if (tok) return tok;
+              }
+            } catch {}
+            try {
+              // Fallback: POST JSON { id }
+              const r2 = await fetch(ep, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: tid }),
+                credentials: "include",
+              });
+              if (r2.ok) {
+                const j2 = await r2.json().catch(() => ({} as any));
+                const tok2 = (j2 && (j2.token || j2.access_token)) as
+                  | string
+                  | undefined;
+                if (tok2) return tok2;
+              }
+            } catch {}
+          }
+
+          // 2) Caer al token de la app (admin) si existe
           const deadline = Date.now() + 4000;
           while (alive && Date.now() < deadline) {
             const t = getAuthToken();
@@ -590,6 +638,13 @@ export default function ChatRealtime({
             (socketio as any)?.token ?? null
           );
           console.log("[ChatRealtime] auth token used:", token);
+          if ((socketio as any)?.tokenEndpoint || (socketio as any)?.tokenId) {
+            console.log(
+              "[ChatRealtime] tokenEndpoint:",
+              (socketio as any)?.tokenEndpoint
+            );
+            console.log("[ChatRealtime] tokenId:", (socketio as any)?.tokenId);
+          }
         } catch {}
         if (!token) {
           // No conectar sin token; volveremos a intentar en el próximo render/cambio de props
@@ -1119,6 +1174,8 @@ export default function ChatRealtime({
     currentRole,
     socketio?.url,
     socketio?.token,
+    socketio?.tokenEndpoint,
+    socketio?.tokenId,
     socketio?.autoCreate,
     socketio?.autoJoin,
     socketio?.idCliente,
@@ -1602,7 +1659,10 @@ export default function ChatRealtime({
       setIsJoining(false);
       return;
     }
-    const newId = socketio?.chatId ?? null;
+    const newIdRaw = socketio?.chatId ?? null;
+    const newIdNum = Number(newIdRaw);
+    const newId =
+      newIdRaw != null && !Number.isNaN(newIdNum) ? newIdNum : newIdRaw;
     const autoJoin = socketio?.autoJoin ?? true;
     if (String(prevRequestedChatIdRef.current ?? "") === String(newId ?? ""))
       return;
@@ -1631,27 +1691,49 @@ export default function ChatRealtime({
       // Failsafe: si no recibimos ack en tiempo razonable, ocultar skeleton
       const t = setTimeout(() => {
         try {
+          console.warn("[chat.join] timeout sin ack, cerrando skeleton", {
+            id_chat: newId,
+          });
+          joinInFlightRef.current = false;
           setIsJoining(false);
         } catch {}
-      }, 6000);
+      }, 10000);
       joinInFlightRef.current = true;
-      sio.emit("chat.join", { id_chat: newId }, (ack: any) => {
+      const payload = { id_chat: newId } as any;
+      try {
+        console.log("[chat.join] =>", payload);
+      } catch {}
+      sio.emit("chat.join", payload, (ack: any) => {
         try {
           clearTimeout(t);
           joinInFlightRef.current = false;
-          if (ack && ack.success) {
-            const data = ack.data || {};
+          const ok = !!(
+            ack &&
+            (ack.success === true ||
+              ack.ok === true ||
+              String(ack.status || "").toLowerCase() === "ok" ||
+              (typeof ack.statusCode === "number" &&
+                ack.statusCode >= 200 &&
+                ack.statusCode < 300))
+          );
+          if (ok) {
+            const data = ack.data || ack.result || ack.payload || {};
             const cid = data.id_chat ?? newId;
             if (cid != null) setChatId(cid);
             lastJoinedChatIdRef.current = cid;
             if (data.my_participante) setMyParticipantId(data.my_participante);
-            const parts = data.participants || data.participantes;
+            const parts =
+              data.participants || data.participantes || data.Participantes;
             assignMyParticipantIdFromList(parts);
             // Mapear mensajes cargados
             const msgsSrc = Array.isArray(data.messages)
               ? data.messages
               : Array.isArray((data as any).mensajes)
               ? (data as any).mensajes
+              : Array.isArray((data as any).Mensajes)
+              ? (data as any).Mensajes
+              : Array.isArray((data as any).items)
+              ? (data as any).items
               : [];
             const otherRoleOnJoin: Sender = (() => {
               if (currentRole === "alumno") {
@@ -1720,6 +1802,9 @@ export default function ChatRealtime({
             } catch {}
             setIsJoining(false);
           } else {
+            try {
+              console.warn("[chat.join] ack error o sin success =>", ack);
+            } catch {}
             setIsJoining(false);
           }
         } catch {
@@ -2043,7 +2128,24 @@ export default function ChatRealtime({
   function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const list = Array.from(e.target.files ?? []);
     if (!list.length) return;
-    setPendingFiles((prev) => prev.concat(list).slice(0, 10));
+    setAttachError(null);
+    const rejected = list.filter((f) => (f?.size || 0) > MAX_FILE_SIZE);
+    const valid = list.filter((f) => (f?.size || 0) <= MAX_FILE_SIZE);
+    if (rejected.length) {
+      const names = rejected
+        .map((f) => f.name)
+        .slice(0, 3)
+        .join(", ");
+      const more = rejected.length > 3 ? ` y ${rejected.length - 3} más` : "";
+      setAttachError(
+        `No se pueden adjuntar archivos mayores a 10MB. Se omitieron: ${names}${more}.`
+      );
+    }
+    if (!valid.length) {
+      e.currentTarget.value = "";
+      return;
+    }
+    setPendingFiles((prev) => prev.concat(valid).slice(0, 10));
     e.currentTarget.value = "";
   }
 
@@ -3431,6 +3533,9 @@ export default function ChatRealtime({
               <Send className="w-5 h-5" />
             </button>
           </div>
+          {attachError && (
+            <div className="mt-2 text-xs text-rose-600">{attachError}</div>
+          )}
           {pendingPreviews.length > 0 && (
             <div className="mt-2 grid grid-cols-3 gap-2">
               {pendingPreviews.map((p, i) => (
