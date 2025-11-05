@@ -71,6 +71,38 @@ export function useTicketNotifications(opts?: { room?: string }) {
     };
   }, [room]);
 
+  // Notificación local: permite que cualquier parte del app dispare un evento
+  // window.dispatchEvent(new CustomEvent('ticket:notify', { detail: { title, ticketId, previous, current, at } }))
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (ev: Event) => {
+      try {
+        const anyEv = ev as CustomEvent<any>;
+        const d = anyEv.detail || {};
+        const at = d.at ?? new Date().toISOString();
+        const note: TicketNotif = {
+          id: String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8),
+          ticketId: d.ticketId,
+          previous: d.previous,
+          current: d.current,
+          title:
+            d.title ||
+            (d.current && d.ticketId
+              ? `Ticket ${d.ticketId} → ${d.current}`
+              : `Nuevo evento de ticket`),
+          at,
+        };
+        setItems((s) => [note, ...s].slice(0, 50));
+        setUnread((u) => u + 1);
+        try {
+          toast({ title: "Notificación", description: note.title });
+        } catch {}
+      } catch {}
+    };
+    window.addEventListener("ticket:notify", handler as any);
+    return () => window.removeEventListener("ticket:notify", handler as any);
+  }, []);
+
   function markAllRead() {
     setUnread(0);
   }

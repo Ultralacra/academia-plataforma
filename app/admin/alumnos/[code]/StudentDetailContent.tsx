@@ -36,6 +36,9 @@ import {
   getClienteEstatus,
   getClienteTareas,
   updateClientLastTask,
+  createAdsMetric,
+  updateAdsMetric,
+  getAdsMetricByStudentCode,
 } from "../api";
 import {
   Select,
@@ -872,37 +875,250 @@ function AdsMetricsForm({
     auto_eff?: boolean;
   };
 
-  const STORAGE_KEY = "ads_metrics_by_student";
-  const [data, setData] = useState<Metrics>(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const map = raw ? (JSON.parse(raw) as Record<string, Metrics>) : {};
-      return (
-        map[studentCode] || {
-          auto_roas: true,
-          auto_eff: true,
-          pauta_activa: false,
-          requiere_interv: false,
-        }
-      );
-    } catch {
-      return {
-        auto_roas: true,
-        auto_eff: true,
-        pauta_activa: false,
-        requiere_interv: false,
-      } as Metrics;
-    }
+  const [data, setData] = useState<Metrics>({
+    auto_roas: true,
+    auto_eff: true,
+    pauta_activa: false,
+    requiere_interv: false,
   });
+  const [loading, setLoading] = useState<boolean>(true);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [created, setCreated] = useState<boolean>(false);
+  const [metricId, setMetricId] = useState<string | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const didInitRef = useRef<boolean>(false);
+  const creatingRef = useRef<boolean>(false);
+
+  // Helpers de mapeo server <-> form
+  function mapServerToForm(d: any): Metrics {
+    const safeNum = (v: any): string | undefined => {
+      const n = Number(v);
+      return Number.isFinite(n) ? String(v) : undefined;
+    };
+    return {
+      fecha_inicio: d?.periodo?.inicio || "",
+      fecha_asignacion: d?.periodo?.asignacion || "",
+      fecha_fin: d?.periodo?.fin || "",
+
+      inversion: safeNum(d?.rendimiento?.inversion) || "",
+      facturacion: safeNum(d?.rendimiento?.facturacion) || "",
+      roas: safeNum(d?.rendimiento?.roas) || "",
+
+      alcance: safeNum(d?.embudo?.alcance) || "",
+      clics: safeNum(d?.embudo?.clics) || "",
+      visitas: safeNum(d?.embudo?.visitas) || "",
+      pagos: safeNum(d?.embudo?.pagos) || "",
+      carga_pagina: safeNum(d?.embudo?.carga_pagina) || "",
+
+      eff_ads: safeNum(d?.efectividades?.ads) || "",
+      eff_pago: safeNum(d?.efectividades?.pago) || "",
+      eff_compra: safeNum(d?.efectividades?.compra) || "",
+
+      compra_carnada: safeNum(d?.compras?.carnada) || "",
+      compra_bump1: safeNum(d?.compras?.bump1) || "",
+      compra_bump2: safeNum(d?.compras?.bump2) || "",
+      compra_oto1: safeNum(d?.compras?.oto1) || "",
+      compra_oto2: safeNum(d?.compras?.oto2) || "",
+      compra_downsell: safeNum(d?.compras?.downsell) || "",
+
+      pauta_activa: !!(
+        d?.estado?.pauta_activa ??
+        d?.metrics_raw?.pauta_activa ??
+        false
+      ),
+      requiere_interv: !!(
+        d?.estado?.requiere_interv ??
+        d?.metrics_raw?.requiere_interv ??
+        false
+      ),
+      fase: d?.estado?.fase || "",
+
+      coach_copy: d?.coaches?.copy || "",
+      coach_plat: d?.coaches?.plataformas || "",
+      obs: d?.notas?.observaciones || "",
+      interv_sugerida: d?.notas?.intervencion_sugerida || "",
+
+      auto_roas: !!(
+        d?.rendimiento?.roas_auto ??
+        d?.metrics_raw?.auto_roas ??
+        true
+      ),
+      auto_eff: !!(d?.efectividades?.auto ?? d?.metrics_raw?.auto_eff ?? true),
+    };
+  }
+
+  function extractMetricId(d: any): string | null {
+    const id = d?.id ?? d?.codigo ?? d?.metric_id ?? d?._id ?? null;
+    return id != null ? String(id) : null;
+  }
+
+  function toNumOrNull(s?: string): number | null {
+    if (s == null || s === "") return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function mapFormToServer(form: Metrics) {
+    return {
+      estudiante: {
+        codigo: studentCode,
+        nombre: studentName || studentCode,
+      },
+      periodo: {
+        inicio: form.fecha_inicio || null,
+        asignacion: form.fecha_asignacion || null,
+        fin: form.fecha_fin || null,
+      },
+      rendimiento: {
+        inversion: toNumOrNull(form.inversion),
+        facturacion: toNumOrNull(form.facturacion),
+        roas: toNumOrNull(form.roas),
+        roas_auto: !!form.auto_roas,
+      },
+      embudo: {
+        alcance: toNumOrNull(form.alcance),
+        clics: toNumOrNull(form.clics),
+        visitas: toNumOrNull(form.visitas),
+        pagos: toNumOrNull(form.pagos),
+        carga_pagina: toNumOrNull(form.carga_pagina),
+      },
+      efectividades: {
+        ads: toNumOrNull(form.eff_ads),
+        pago: toNumOrNull(form.eff_pago),
+        compra: toNumOrNull(form.eff_compra),
+        auto: !!form.auto_eff,
+      },
+      compras: {
+        carnada: toNumOrNull(form.compra_carnada),
+        bump1: toNumOrNull(form.compra_bump1),
+        bump2: toNumOrNull(form.compra_bump2),
+        oto1: toNumOrNull(form.compra_oto1),
+        oto2: toNumOrNull(form.compra_oto2),
+        downsell: toNumOrNull(form.compra_downsell),
+      },
+      estado: {
+        pauta_activa: !!form.pauta_activa,
+        requiere_interv: !!form.requiere_interv,
+        fase: form.fase || null,
+      },
+      coaches: {
+        copy: form.coach_copy || null,
+        plataformas: form.coach_plat || null,
+      },
+      notas: {
+        observaciones: form.obs || null,
+        intervencion_sugerida: form.interv_sugerida || null,
+      },
+      metrics_raw: {
+        auto_roas: !!form.auto_roas,
+        auto_eff: !!form.auto_eff,
+        pauta_activa: !!form.pauta_activa,
+        requiere_interv: !!form.requiere_interv,
+      },
+      calculados: {
+        roas: toNumOrNull(form.roas),
+        eff_ads: toNumOrNull(form.eff_ads),
+        eff_pago: toNumOrNull(form.eff_pago),
+      },
+      meta: {
+        generado_en: new Date().toISOString(),
+        version: 1,
+      },
+    };
+  }
+
+  // Cargar métrica existente por estudiante
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setLoading(true);
+      try {
+        const existing = await getAdsMetricByStudentCode(studentCode);
+        if (mounted && existing) {
+          setData(mapServerToForm(existing));
+          setCreated(true);
+        } else if (mounted) {
+          setCreated(false);
+        }
+      } catch (e) {
+        console.error("ADS metrics load error", e);
+      } finally {
+        if (mounted) setLoading(false);
+        didInitRef.current = true;
+      }
+    })();
+    return () => {
+      mounted = false;
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentCode]);
+
+  // Autosave con debounce al cambiar datos (crea si no existe, actualiza si existe)
+  useEffect(() => {
+    if (!didInitRef.current) return; // evitar correr en el primer set tras load
+    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(async () => {
+      try {
+        setSaving(true);
+        const payload = mapFormToServer(data);
+        if (created) {
+          // Actualiza usando el ID de la métrica; si aún no lo tenemos, intenta obtenerlo
+          let id = metricId;
+          if (!id) {
+            try {
+              const fresh = await getAdsMetricByStudentCode(studentCode);
+              if (fresh) {
+                id = extractMetricId(fresh);
+                setMetricId(id);
+              }
+            } catch {}
+          }
+          if (id) {
+            await updateAdsMetric(id, payload);
+          } else {
+            // Fallback: crear si por alguna razón no hay id todavía
+            if (!creatingRef.current) {
+              creatingRef.current = true;
+              await createAdsMetric(payload);
+              setCreated(true);
+              try {
+                const fresh = await getAdsMetricByStudentCode(studentCode);
+                if (fresh) {
+                  setData(mapServerToForm(fresh));
+                  setMetricId(extractMetricId(fresh));
+                }
+              } catch {}
+              creatingRef.current = false;
+            }
+          }
+        } else {
+          // Crear solo una vez
+          if (creatingRef.current) return;
+          creatingRef.current = true;
+          await createAdsMetric(payload);
+          setCreated(true);
+          // refrescar una vez para alinear con servidor y capturar metricId
+          try {
+            const fresh = await getAdsMetricByStudentCode(studentCode);
+            if (fresh) {
+              setData(mapServerToForm(fresh));
+              setMetricId(extractMetricId(fresh));
+            }
+          } catch {}
+          creatingRef.current = false;
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setSaving(false);
+      }
+    }, 600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(data), created]);
 
   function persist(next: Metrics) {
     setData(next);
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const map = raw ? (JSON.parse(raw) as Record<string, Metrics>) : {};
-      map[studentCode] = next;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
-    } catch {}
   }
 
   // Derivados automáticos
@@ -937,6 +1153,13 @@ function AdsMetricsForm({
 
   return (
     <div className="space-y-6">
+      <div className="text-sm text-muted-foreground">
+        {loading
+          ? "Cargando métricas…"
+          : saving
+          ? "Guardando…"
+          : "Cambios guardados"}
+      </div>
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">

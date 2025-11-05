@@ -400,6 +400,15 @@ export async function deleteTicketFile(fileId: string): Promise<any> {
   });
 }
 
+// 12-bis) Eliminar ticket por codigo (DELETE /v1/ticket/delete/ticket/:codigo)
+export async function deleteTicket(ticketCodigo: string): Promise<any> {
+  if (!ticketCodigo) throw new Error('ticketCodigo requerido');
+  return await apiFetch<any>(
+    `/ticket/delete/ticket/${encodeURIComponent(ticketCodigo)}`,
+    { method: 'DELETE' }
+  );
+}
+
 // 9) Actualizar cliente (etapa / estado / nicho)
 export async function updateClient(clientCode: string, payload: Record<string, any>): Promise<any> {
   const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
@@ -510,4 +519,65 @@ export async function downloadClientContractBlob(clientCode: string): Promise<{
   } catch {}
   const blob = await res.blob();
   return { blob, filename, contentType };
+}
+
+// ===== ADS METRICS =====
+// Tipos y helpers para CRUD básico de métricas de ADS
+
+export type AdsMetricPayload = {
+  estudiante: { codigo: string; nombre: string };
+  periodo: { inicio: string | null; asignacion: string | null; fin: string | null };
+  rendimiento: { inversion: number | null; facturacion: number | null; roas: number | null; roas_auto: boolean };
+  embudo: { alcance: number | null; clics: number | null; visitas: number | null; pagos: number | null; carga_pagina: number | null };
+  efectividades: { ads: number | null; pago: number | null; compra: number | null; auto: boolean };
+  compras: { carnada: number | null; bump1: number | null; bump2: number | null; oto1: number | null; oto2: number | null; downsell: number | null };
+  estado: { pauta_activa: boolean; requiere_interv: boolean; fase: string | null };
+  coaches: { copy: string | null; plataformas: string | null };
+  notas: { observaciones: string | null; intervencion_sugerida: string | null };
+  metrics_raw: { auto_roas: boolean; auto_eff: boolean; pauta_activa: boolean; requiere_interv: boolean };
+  calculados: { roas: number | null; eff_ads: number | null; eff_pago: number | null };
+  meta: { generado_en: string; version: number };
+};
+
+export async function createAdsMetric(payload: AdsMetricPayload): Promise<any> {
+  return await apiFetch<any>(`/ads-metrics/create/ads-metric`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+export async function getAdsMetrics(): Promise<any[]> {
+  const json = await apiFetch<any>(`/ads-metrics/get/ads-metrics`);
+  const rows: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? (json as any[]) : [];
+  return rows;
+}
+
+// Nota: el endpoint /get/ads-metric/:codigo recibe el ID de la métrica, NO el código del alumno.
+export async function getAdsMetricById(metricId: string): Promise<any | null> {
+  if (!metricId) return null;
+  const json = await apiFetch<any>(`/ads-metrics/get/ads-metric/${encodeURIComponent(metricId)}`);
+  return (json?.data ?? json) || null;
+}
+
+export async function getAdsMetricByStudentCode(studentCode: string): Promise<any | null> {
+  if (!studentCode) return null;
+  const all = await getAdsMetrics();
+  // Buscar por estudiante.codigo en la lista
+  const found = (all || []).find((m: any) => (m?.estudiante?.codigo ?? m?.estudiante_codigo) === studentCode) || null;
+  return found;
+}
+
+// saveAdsMetric: por ahora usamos el endpoint de create como upsert (si el backend ya soporta update, cambiar aquí)
+export async function saveAdsMetric(payload: AdsMetricPayload): Promise<any> {
+  return await createAdsMetric(payload);
+}
+
+export async function updateAdsMetric(metricId: string, payload: AdsMetricPayload): Promise<any> {
+  if (!metricId) throw new Error('metricId requerido');
+  return await apiFetch<any>(`/ads-metrics/update/ads-metric/${encodeURIComponent(metricId)}` ,{
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 }

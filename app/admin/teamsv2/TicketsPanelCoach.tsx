@@ -64,6 +64,7 @@ import {
   createTicket,
   deleteTicketFile,
   uploadTicketFiles,
+  deleteTicket,
 } from "@/app/admin/alumnos/api";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -302,6 +303,11 @@ export default function TicketsPanelCoach({
       created_at: string | null;
     }[]
   >([]);
+  // Confirmación de eliminación de ticket
+  const [deleteTicketCodigo, setDeleteTicketCodigo] = useState<string | null>(
+    null
+  );
+  const [deletingTicket, setDeletingTicket] = useState(false);
 
   useEffect(() => {
     if (!editOpen || !editTicket?.codigo) return;
@@ -641,6 +647,25 @@ export default function TicketsPanelCoach({
           }
         }
       } catch {}
+      // Disparar notificación local para el header inmediatamente
+      try {
+        const data = (result?.data ?? result) as any;
+        const ticketId =
+          data?.codigo || data?.id || data?.ticket_id || data?.ticketId;
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("ticket:notify", {
+              detail: {
+                title: `Ticket creado: ${createNombre.trim()}`,
+                ticketId: ticketId ? String(ticketId) : undefined,
+                previous: undefined,
+                current: "CREADO",
+                at: new Date().toISOString(),
+              },
+            })
+          );
+        }
+      } catch {}
       const res = await getCoachTickets({
         coach: coachCode,
         page,
@@ -794,6 +819,26 @@ export default function TicketsPanelCoach({
   ) {
     try {
       await updateTicket(ticketCodigo, { estado: newEstado });
+      // Notificación local: cambio de estado
+      try {
+        const t = rows.find((r) => r.codigo === ticketCodigo);
+        const title = `Ticket actualizado: ${t?.nombre || ticketCodigo} → ${
+          STATUS_LABEL[newEstado]
+        }`;
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("ticket:notify", {
+              detail: {
+                title,
+                ticketId: ticketCodigo,
+                previous: undefined,
+                current: newEstado,
+                at: new Date().toISOString(),
+              },
+            })
+          );
+        }
+      } catch {}
       toast({ title: "Ticket actualizado" });
     } catch (e: any) {
       toast({ title: e?.message ?? "Error al actualizar ticket" });
@@ -2362,6 +2407,14 @@ export default function TicketsPanelCoach({
 
           <DrawerFooter className="border-t">
             <div className="flex items-center justify-end gap-2">
+              {editTicket?.codigo && (
+                <Button
+                  variant="destructive"
+                  onClick={() => setDeleteTicketCodigo(editTicket.codigo!)}
+                >
+                  Eliminar
+                </Button>
+              )}
               <DrawerClose asChild>
                 <Button variant="outline">Cancelar</Button>
               </DrawerClose>
@@ -2406,6 +2459,77 @@ export default function TicketsPanelCoach({
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      {/* Confirmación: eliminar ticket */}
+      <Dialog
+        open={!!deleteTicketCodigo}
+        onOpenChange={(v) => {
+          if (!v) setDeleteTicketCodigo(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Eliminar ticket</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-sm text-slate-600">
+            {`¿Deseas eliminar el ticket "${
+              editTicket?.nombre ?? "(sin título)"
+            }"? Esta acción no se puede deshacer.`}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteTicketCodigo(null)}
+              disabled={deletingTicket}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!deleteTicketCodigo) return;
+                setDeletingTicket(true);
+                try {
+                  await deleteTicket(deleteTicketCodigo);
+                  // Notificación local
+                  try {
+                    if (typeof window !== "undefined") {
+                      window.dispatchEvent(
+                        new CustomEvent("ticket:notify", {
+                          detail: {
+                            title: `Ticket eliminado: ${
+                              editTicket?.nombre || deleteTicketCodigo
+                            }`,
+                            ticketId: deleteTicketCodigo,
+                            previous: undefined,
+                            current: "ELIMINADO",
+                            at: new Date().toISOString(),
+                          },
+                        })
+                      );
+                    }
+                  } catch {}
+                  // Quitar de la lista y cerrar drawer
+                  setRows((prev) =>
+                    prev.filter((r) => r.codigo !== deleteTicketCodigo)
+                  );
+                  setEditOpen(false);
+                  toast({ title: "Ticket eliminado" });
+                } catch (e) {
+                  console.error(e);
+                  toast({ title: "Error al eliminar ticket" });
+                } finally {
+                  setDeletingTicket(false);
+                  setDeleteTicketCodigo(null);
+                }
+              }}
+              disabled={deletingTicket}
+            >
+              {deletingTicket ? "Eliminando..." : "Eliminar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

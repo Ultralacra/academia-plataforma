@@ -5,16 +5,14 @@ import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Menu } from "lucide-react";
-import { Bell } from "lucide-react";
+import { LogOut, User, Menu, Bell } from "lucide-react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge";
 import { useTicketNotifications } from "@/components/hooks/useTicketNotifications";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,9 +32,18 @@ interface DashboardLayoutProps {
 
 function NotificationsBadge() {
   const { items, unread, markAllRead } = useTicketNotifications();
+  const [open, setOpen] = useState(false);
   const list = useMemo(() => items.slice(0, 10), [items]);
+
   return (
-    <Popover>
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        // Al cerrar el popover, limpiar contador de no leídas
+        if (!v) markAllRead();
+      }}
+    >
       <PopoverTrigger asChild>
         <button className="relative p-2 rounded-full hover:bg-muted/10">
           <Bell className="h-4 w-4" />
@@ -57,9 +64,51 @@ function NotificationsBadge() {
           ) : (
             list.map((n) => (
               <div key={n.id} className="p-2 border-b last:border-b-0">
-                <div className="text-sm font-medium">{n.title}</div>
-                <div className="text-xs text-muted-foreground">
-                  {n.at ? new Date(n.at).toLocaleString() : ""}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-sm font-medium leading-snug min-w-0">
+                    <div className="truncate" title={n.title}>
+                      {n.title}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {n.at ? new Date(n.at).toLocaleString() : ""}
+                    </div>
+                  </div>
+                  {(() => {
+                    const s = String(n.current || "").toUpperCase();
+                    const style =
+                      s === "PENDIENTE"
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : s === "EN_PROGRESO"
+                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        : s === "PENDIENTE_DE_ENVIO"
+                        ? "bg-sky-50 text-sky-700 border-sky-200"
+                        : s === "PAUSADO"
+                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                        : s === "RESUELTO"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : s === "CREADO"
+                        ? "bg-slate-100 text-slate-700 border-slate-200"
+                        : s === "ELIMINADO"
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : "hidden";
+                    const labelMap: Record<string, string> = {
+                      EN_PROGRESO: "En progreso",
+                      PENDIENTE: "Pendiente",
+                      PENDIENTE_DE_ENVIO: "Pendiente de envío",
+                      PAUSADO: "Pausado",
+                      RESUELTO: "Resuelto",
+                      CREADO: "Creado",
+                      ELIMINADO: "Eliminado",
+                    };
+                    const lab = labelMap[s] || "";
+                    return (
+                      <span
+                        className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${style}`}
+                      >
+                        {lab}
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
             ))
@@ -84,7 +133,6 @@ function NotificationsBadge() {
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { user, logout, isLoading } = useAuth();
 
-  // Botón interno que accede al contexto del Sidebar ya dentro del Provider
   const MenuToggleButton = () => {
     const { toggleSidebar } = useSidebar();
     return (
@@ -99,9 +147,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </Button>
     );
   };
+
   return (
     <SidebarProvider>
-      {/* Contenedor raíz sin scroll horizontal */}
       <div className="flex h-screen w-full overflow-hidden">
         <AppSidebar />
         <main className="flex-1 min-w-0 flex flex-col overflow-x-hidden">
@@ -110,7 +158,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <MenuToggleButton />
             </div>
             <div className="flex items-center gap-2 sm:gap-4 ml-auto">
-              {/* Notifications */}
               <NotificationsBadge />
               <div className="flex items-center gap-2 text-sm min-w-0">
                 <User className="h-4 w-4" />
@@ -128,7 +175,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                     Salir
                   </Button>
                 </AlertDialogTrigger>
-                {/* Hacer el diálogo más compacto y centrado */}
                 <AlertDialogContent className="sm:max-w-sm p-4">
                   <AlertDialogHeader className="text-center">
                     <AlertDialogTitle className="text-base">

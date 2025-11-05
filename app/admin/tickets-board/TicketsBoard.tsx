@@ -69,6 +69,7 @@ import {
   updateTicket,
   uploadTicketFiles,
   deleteTicketFile,
+  deleteTicket,
 } from "@/app/admin/alumnos/api";
 import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
 
@@ -214,6 +215,8 @@ export default function TicketsBoard() {
   const [reassignCoach, setReassignCoach] = useState<string>("");
   const [reassignConfirmOpen, setReassignConfirmOpen] = useState(false);
   const [reassignLoading, setReassignLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deletingTicket, setDeletingTicket] = useState(false);
 
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("");
@@ -328,6 +331,25 @@ export default function TicketsBoard() {
     if (!codigo) return;
     updateTicket(codigo, { estado: targetEstado })
       .then(() => {
+        // Notificación local: cambio de estado
+        try {
+          const title = `Ticket actualizado: ${tk?.nombre || codigo} → ${
+            STATUS_LABEL[coerceStatus(targetEstado)]
+          }`;
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("ticket:notify", {
+                detail: {
+                  title,
+                  ticketId: codigo,
+                  previous: undefined,
+                  current: coerceStatus(targetEstado),
+                  at: new Date().toISOString(),
+                },
+              })
+            );
+          }
+        } catch {}
         toast({ title: `Ticket actualizado` });
       })
       .catch(async (err) => {
@@ -597,6 +619,29 @@ export default function TicketsBoard() {
           typeof editForm.estado === "string" ? editForm.estado : undefined,
         deadline: editForm.deadline ?? undefined,
       } as any);
+      // Notificación local: guardado de cambios (incluye estado si cambia)
+      try {
+        const current =
+          typeof editForm.estado === "string"
+            ? coerceStatus(editForm.estado)
+            : undefined;
+        const title = `Ticket actualizado: ${
+          editForm.nombre || selectedTicket.nombre || selectedTicket.codigo
+        }${current ? ` → ${STATUS_LABEL[current]}` : ""}`;
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("ticket:notify", {
+              detail: {
+                title,
+                ticketId: selectedTicket.codigo,
+                previous: undefined,
+                current,
+                at: new Date().toISOString(),
+              },
+            })
+          );
+        }
+      } catch {}
       toast({ title: "Ticket actualizado correctamente" });
       setTickets((prev) =>
         prev.map((t) =>
@@ -1541,6 +1586,14 @@ export default function TicketsBoard() {
 
           <SheetFooter className="border-t pt-4">
             <div className="flex items-center justify-end gap-2">
+              {selectedTicket?.codigo && (
+                <Button
+                  variant="destructive"
+                  onClick={() => setDeleteConfirmOpen(true)}
+                >
+                  Eliminar
+                </Button>
+              )}
               <SheetClose asChild>
                 <Button variant="outline">Cancelar</Button>
               </SheetClose>
@@ -1654,6 +1707,67 @@ export default function TicketsBoard() {
               disabled={reassignLoading}
             >
               {reassignLoading ? "Reasignando..." : "Confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmación: eliminar ticket */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminar ticket</AlertDialogTitle>
+            <AlertDialogDescription>
+              {`¿Deseas eliminar el ticket "${
+                selectedTicket?.nombre || "(sin título)"
+              }"? Esta acción no se puede deshacer.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingTicket}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (!selectedTicket?.codigo) return;
+                setDeletingTicket(true);
+                try {
+                  await deleteTicket(selectedTicket.codigo);
+                  // Notificación local
+                  try {
+                    if (typeof window !== "undefined") {
+                      window.dispatchEvent(
+                        new CustomEvent("ticket:notify", {
+                          detail: {
+                            title: `Ticket eliminado: ${
+                              selectedTicket?.nombre || selectedTicket.codigo
+                            }`,
+                            ticketId: selectedTicket.codigo,
+                            current: "ELIMINADO",
+                            at: new Date().toISOString(),
+                          },
+                        })
+                      );
+                    }
+                  } catch {}
+                  // Quitar de la lista y cerrar drawer
+                  setTickets((prev) =>
+                    prev.filter((t) => t.codigo !== selectedTicket.codigo)
+                  );
+                  setDrawerOpen(false);
+                  toast({ title: "Ticket eliminado" });
+                } catch (e) {
+                  console.error(e);
+                  toast({ title: "Error al eliminar ticket" });
+                } finally {
+                  setDeletingTicket(false);
+                  setDeleteConfirmOpen(false);
+                }
+              }}
+              disabled={deletingTicket}
+            >
+              {deletingTicket ? "Eliminando..." : "Eliminar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
