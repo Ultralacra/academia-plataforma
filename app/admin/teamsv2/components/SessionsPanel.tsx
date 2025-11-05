@@ -233,6 +233,10 @@ export default function SessionsPanel({
         label: "Cancelada",
         className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
       },
+      failed: {
+        label: "Fallida",
+        className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
+      },
       done: {
         label: "Realizada",
         className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
@@ -267,7 +271,8 @@ export default function SessionsPanel({
 
   function canReschedule(estado?: string | null) {
     const v = String(estado || "").toLowerCase();
-    return v === "approved" || v === "offered" || v === "pendiente";
+    // Solo permitir reprogramar sesiones ofrecidas o en estado pendiente (no aprobadas)
+    return v === "offered" || v === "pending" || v === "pendiente";
   }
 
   function canComplete(estado?: string | null) {
@@ -277,7 +282,10 @@ export default function SessionsPanel({
 
   function canCancel(estado?: string | null) {
     const v = String(estado || "").toLowerCase();
-    return v !== "canceled" && v !== "done";
+    // No permitir cancelar si ya fue cancelada, realizada o aprobada
+    return (
+      v !== "canceled" && v !== "done" && v !== "approved" && v !== "aprobada"
+    );
   }
 
   function badgeForStage(value?: string | null) {
@@ -522,35 +530,43 @@ export default function SessionsPanel({
                               <XCircle className="w-4 h-4 text-rose-600" />
                             </Button>
                           )}
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Editar"
-                            onClick={() => {
-                              setSelected(s);
-                              const d = s.fecha_programada
-                                ? new Date(s.fecha_programada)
-                                : new Date();
-                              setEditFecha(toDatetimeLocalValue(d));
-                              setEditNotas(s.notas || "");
-                              setEditMode("edit");
-                              setEditOpen(true);
-                            }}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            title="Eliminar"
-                            onClick={() => {
-                              setSelected(s);
-                              setEditOpen(false);
-                              setConfirmOpen(true);
-                            }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          {!(
+                            String(s.estado || "").toLowerCase() ===
+                              "approved" ||
+                            String(s.estado || "").toLowerCase() === "aprobada"
+                          ) && (
+                            <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Editar"
+                                onClick={() => {
+                                  setSelected(s);
+                                  const d = s.fecha_programada
+                                    ? new Date(s.fecha_programada)
+                                    : new Date();
+                                  setEditFecha(toDatetimeLocalValue(d));
+                                  setEditNotas(s.notas || "");
+                                  setEditMode("edit");
+                                  setEditOpen(true);
+                                }}
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Eliminar"
+                                onClick={() => {
+                                  setSelected(s);
+                                  setEditOpen(false);
+                                  setConfirmOpen(true);
+                                }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -681,6 +697,9 @@ export default function SessionsPanel({
                               </div>
                               <div>
                                 Aprobadas: <strong>{get("approved")}</strong>
+                              </div>
+                              <div>
+                                Fallidas: <strong>{get("failed")}</strong>
                               </div>
                               <div>
                                 Pendientes: <strong>{get("pending")}</strong>
@@ -850,21 +869,25 @@ export default function SessionsPanel({
           )}
           <DialogFooter>
             <div className="flex items-center gap-2">
-              {selected && (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    const d = selected.fecha_programada
-                      ? new Date(selected.fecha_programada)
-                      : new Date();
-                    setEditFecha(toDatetimeLocalValue(d));
-                    setEditNotas(selected.notas || "");
-                    setEditOpen(true);
-                  }}
-                >
-                  <Pencil className="w-4 h-4 mr-2" /> Editar
-                </Button>
-              )}
+              {selected &&
+                !(
+                  String(selected.estado || "").toLowerCase() === "approved" ||
+                  String(selected.estado || "").toLowerCase() === "aprobada"
+                ) && (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      const d = selected.fecha_programada
+                        ? new Date(selected.fecha_programada)
+                        : new Date();
+                      setEditFecha(toDatetimeLocalValue(d));
+                      setEditNotas(selected.notas || "");
+                      setEditOpen(true);
+                    }}
+                  >
+                    <Pencil className="w-4 h-4 mr-2" /> Editar
+                  </Button>
+                )}
             </div>
           </DialogFooter>
         </DialogContent>

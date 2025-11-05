@@ -72,6 +72,10 @@ function translateEstado(estado?: string | null) {
       label: "Pendiente",
       className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
     },
+    failed: {
+      label: "Fallida",
+      className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
+    },
     solicitada: {
       label: "Solicitada",
       className: "rounded-md bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs",
@@ -168,6 +172,8 @@ export default function SessionsStudentPanel({
   const [selected, setSelected] = useState<SessionItem | null>(null);
   const [confirmAcceptOpen, setConfirmAcceptOpen] = useState(false);
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   async function fetchAll() {
     try {
@@ -230,7 +236,10 @@ export default function SessionsStudentPanel({
 
   function canCancel(estado?: string | null) {
     const v = String(estado || "").toLowerCase();
-    return v !== "canceled" && v !== "done";
+    // No permitir cancelar si ya fue cancelada, realizada o aprobada
+    return (
+      v !== "canceled" && v !== "done" && v !== "approved" && v !== "aprobada"
+    );
   }
 
   const coachMap = useMemo(() => {
@@ -288,6 +297,7 @@ export default function SessionsStudentPanel({
                 "requested",
                 "offered",
                 "approved",
+                "failed",
                 "pending",
                 "canceled",
                 "done",
@@ -305,6 +315,8 @@ export default function SessionsStudentPanel({
                   ? "Canceladas"
                   : k === "done"
                   ? "Realizadas"
+                  : k === "failed"
+                  ? "Fallidas"
                   : k;
               const pillClass = (k: string) =>
                 k === "requested"
@@ -313,6 +325,8 @@ export default function SessionsStudentPanel({
                   ? "bg-sky-100 text-sky-800"
                   : k === "approved"
                   ? "bg-emerald-100 text-emerald-800"
+                  : k === "failed"
+                  ? "bg-rose-100 text-rose-800"
                   : k === "pending"
                   ? "bg-neutral-100 text-neutral-700"
                   : k === "canceled"
@@ -511,7 +525,7 @@ export default function SessionsStudentPanel({
             {/* Historial */}
             <div className="mt-1 rounded-md border bg-neutral-50">
               <div className="px-3 py-2 text-xs font-medium text-neutral-700 flex items-center justify-between">
-                <span>Historial</span>
+                <span>Historial de sesiones del alumno</span>
                 {historyLoading && (
                   <span className="text-[10px] text-neutral-500">
                     Cargando…
@@ -524,74 +538,36 @@ export default function SessionsStudentPanel({
                     Sin historial disponible.
                   </div>
                 ) : (
-                  <>
-                    <div className="mb-2 grid grid-cols-2 gap-2 text-[11px] text-neutral-700">
-                      {(() => {
-                        const counts = history.reduce((acc, it) => {
-                          const k = String(it.estado || "").toLowerCase();
-                          acc[k] = (acc[k] || 0) + 1;
-                          return acc;
-                        }, {} as Record<string, number>);
-                        const get = (k: string) => counts[k] || 0;
-                        return (
-                          <>
-                            <div>
-                              Solicitadas:{" "}
-                              <strong>
-                                {get("requested") + get("solicitada")}
-                              </strong>
-                            </div>
-                            <div>
-                              Ofrecidas: <strong>{get("offered")}</strong>
-                            </div>
-                            <div>
-                              Aprobadas: <strong>{get("approved")}</strong>
-                            </div>
-                            <div>
-                              Canceladas: <strong>{get("canceled")}</strong>
-                            </div>
-                            <div>
-                              Realizadas: <strong>{get("done")}</strong>
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-                    <div className="max-h-32 overflow-y-auto rounded border bg-white">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="text-[11px]">Fecha</TableHead>
-                            <TableHead className="text-[11px]">
-                              Estado
-                            </TableHead>
-                            <TableHead className="text-[11px]">Coach</TableHead>
+                  <div className="max-h-32 overflow-y-auto rounded border bg-white">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-[11px]">Fecha</TableHead>
+                          <TableHead className="text-[11px]">Estado</TableHead>
+                          <TableHead className="text-[11px]">Coach</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {history.slice(0, 5).map((h) => (
+                          <TableRow key={String(h.id)}>
+                            <TableCell className="text-[11px]">
+                              {formatDateTime(h.fecha_programada)}
+                            </TableCell>
+                            <TableCell className="text-[11px]">
+                              <span
+                                className={translateEstado(h.estado).className}
+                              >
+                                {translateEstado(h.estado).label}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-[11px]">
+                              {h.coach_nombre || h.codigo_coach || "—"}
+                            </TableCell>
                           </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {history.slice(0, 5).map((h) => (
-                            <TableRow key={String(h.id)}>
-                              <TableCell className="text-[11px]">
-                                {formatDateTime(h.fecha_programada)}
-                              </TableCell>
-                              <TableCell className="text-[11px]">
-                                <span
-                                  className={
-                                    translateEstado(h.estado).className
-                                  }
-                                >
-                                  {translateEstado(h.estado).label}
-                                </span>
-                              </TableCell>
-                              <TableCell className="text-[11px]">
-                                {h.coach_nombre || h.codigo_coach || "—"}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
                 )}
               </div>
             </div>
@@ -638,6 +614,36 @@ export default function SessionsStudentPanel({
                     } as const;
                     // eslint-disable-next-line no-console
                     console.log("[sessions] request payload", payload);
+                    // Consultar historial actual usando el endpoint de sesiones
+                    // para detectar posibles conflictos (sesión aprobada same slot)
+                    try {
+                      const existing = await listAlumnoSessions(
+                        studentCode,
+                        String(coachSel)
+                      );
+                      const conflict = (existing || []).some((it) => {
+                        const st = String(it.estado || "").toLowerCase();
+                        if (st === "approved" || st === "aprobada") {
+                          // comparar fecha exacta en ISO (misma minute)
+                          const f = it.fecha_programada
+                            ? new Date(it.fecha_programada).toISOString()
+                            : null;
+                          return f && f === iso;
+                        }
+                        return false;
+                      });
+                      if (conflict) {
+                        toast({
+                          title:
+                            "Ya existe una sesión aprobada en ese horario. Revisa el historial antes de solicitar.",
+                        });
+                        setSaving(false);
+                        return;
+                      }
+                    } catch (e) {
+                      // si falla la comprobación, continuar con la solicitud (no bloquear por fallo de red)
+                    }
+
                     await requestSession(payload);
                     toast({ title: "Solicitud enviada" });
                     setRequestOpen(false);
@@ -762,19 +768,32 @@ export default function SessionsStudentPanel({
           )}
           <DialogFooter>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => setConfirmAcceptOpen(false)}>No</Button>
-              <Button onClick={async () => {
-                if (!selected) return;
-                try {
-                  await acceptSession(selected.id);
-                  toast({ title: 'Sesión aceptada' });
-                  setConfirmAcceptOpen(false);
-                  setDetailOpen(false);
-                  fetchAll();
-                } catch (e: any) {
-                  toast({ title: e?.message ?? 'Error al aceptar' });
-                }
-              }}>Sí, aceptar</Button>
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmAcceptOpen(false)}
+              >
+                No
+              </Button>
+              <Button
+                disabled={accepting}
+                onClick={async () => {
+                  if (!selected) return;
+                  try {
+                    setAccepting(true);
+                    await acceptSession(selected.id);
+                    toast({ title: "Sesión aceptada" });
+                    setConfirmAcceptOpen(false);
+                    setDetailOpen(false);
+                    fetchAll();
+                  } catch (e: any) {
+                    toast({ title: e?.message ?? "Error al aceptar" });
+                  } finally {
+                    setAccepting(false);
+                  }
+                }}
+              >
+                {accepting ? "Procesando…" : "Sí, aceptar"}
+              </Button>
             </div>
           </DialogFooter>
         </DialogContent>
@@ -789,38 +808,59 @@ export default function SessionsStudentPanel({
           {selected ? (
             <div className="text-sm text-neutral-700 space-y-1">
               <div>
-                ¿Deseas cancelar esta sesión con el coach <strong>{coachLabelFor(selected)}</strong>?
+                ¿Deseas cancelar esta sesión con el coach{" "}
+                <strong>{coachLabelFor(selected)}</strong>?
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
                 <div>
-                  <span className="text-neutral-500">Fecha:</span> {formatDateTime(selected.fecha_programada)}
+                  <span className="text-neutral-500">Fecha:</span>{" "}
+                  {formatDateTime(selected.fecha_programada)}
                 </div>
                 <div>
-                  <span className="text-neutral-500">Duración:</span> {(selected.duracion ?? 60)} min
+                  <span className="text-neutral-500">Duración:</span>{" "}
+                  {selected.duracion ?? 60} min
                 </div>
                 <div className="col-span-2">
-                  <span className="text-neutral-500">Etapa:</span> {selected.etapa || studentStage || '—'}
+                  <span className="text-neutral-500">Etapa:</span>{" "}
+                  {selected.etapa || studentStage || "—"}
                 </div>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-neutral-700">¿Deseas cancelar esta sesión?</div>
+            <div className="text-sm text-neutral-700">
+              ¿Deseas cancelar esta sesión?
+            </div>
           )}
           <DialogFooter>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => setConfirmCancelOpen(false)}>No</Button>
-              <Button variant="destructive" className="bg-rose-100 text-rose-800 hover:bg-rose-200" onClick={async () => {
-                if (!selected) return;
-                try {
-                  await cancelSession(selected.id);
-                  toast({ title: 'Sesión cancelada' });
-                  setConfirmCancelOpen(false);
-                  setDetailOpen(false);
-                  fetchAll();
-                } catch (e: any) {
-                  toast({ title: e?.message ?? 'Error al cancelar' });
-                }
-              }}>Sí, cancelar</Button>
+              <Button
+                variant="ghost"
+                onClick={() => setConfirmCancelOpen(false)}
+              >
+                No
+              </Button>
+              <Button
+                variant="destructive"
+                className="bg-rose-100 text-rose-800 hover:bg-rose-200"
+                disabled={cancelling}
+                onClick={async () => {
+                  if (!selected) return;
+                  try {
+                    setCancelling(true);
+                    await cancelSession(selected.id);
+                    toast({ title: "Sesión cancelada" });
+                    setConfirmCancelOpen(false);
+                    setDetailOpen(false);
+                    fetchAll();
+                  } catch (e: any) {
+                    toast({ title: e?.message ?? "Error al cancelar" });
+                  } finally {
+                    setCancelling(false);
+                  }
+                }}
+              >
+                {cancelling ? "Procesando…" : "Sí, cancelar"}
+              </Button>
             </div>
           </DialogFooter>
         </DialogContent>

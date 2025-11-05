@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart, Bar, XAxis, YAxis, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Cell, LabelList } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
@@ -8,7 +8,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 
-type Row = { date: string; count: number };
+type Row = { [k: string]: any };
 
 export default function TicketsByPeriodBar({
   data,
@@ -17,18 +17,52 @@ export default function TicketsByPeriodBar({
   data: Row[];
   title?: string;
 }) {
-  const rows = (data || []).map((d) => {
-    // Evitar desfase por zona horaria: fijar UTC explícito
-    const iso = `${d.date}T00:00:00Z`;
-    const label = new Date(iso).toLocaleDateString("es-ES", {
-      day: "2-digit",
-      month: "short",
-      timeZone: "UTC",
+  // Agrupar por día (UTC) y ordenar por fecha.
+  // El input puede venir con propiedades diferentes (p.ej. `date`/`count` o `day`/`tickets`).
+  const grouped: Record<string, number> = {};
+  for (const d of data || []) {
+    // detectar campo de fecha y de cantidad con fallback
+    const rawDate = d?.date ?? d?.day ?? d?.dayKey ?? d?.fecha ?? d?.day_date;
+    const rawCount =
+      d?.count ?? d?.tickets ?? d?.value ?? d?.tickets_count ?? d?.clients ?? 0;
+    if (!rawDate) continue;
+
+    // Normalizar a un objeto Date válido.
+    let dt: Date | null = null;
+    try {
+      // Si viene ya con 'T' (ISO) o termina con Z, parse directo
+      if (String(rawDate).includes("T") || String(rawDate).endsWith("Z")) {
+        dt = new Date(String(rawDate));
+      } else {
+        // Si parece YYYY-MM-DD o similar, añadir hora UTC 00:00
+        dt = new Date(`${String(rawDate)}T00:00:00Z`);
+      }
+    } catch {
+      dt = null;
+    }
+    if (!dt || isNaN(dt.getTime())) continue;
+    const dayKey = dt.toISOString().slice(0, 10); // YYYY-MM-DD (UTC)
+    grouped[dayKey] = (grouped[dayKey] || 0) + Number(rawCount || 0);
+  }
+
+  const rows = Object.keys(grouped)
+    .slice()
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+    .map((dayKey) => {
+      const dt = new Date(`${dayKey}T00:00:00Z`);
+      const label = dt.toLocaleDateString("es-ES", {
+        day: "2-digit",
+        month: "short",
+        timeZone: "UTC",
+      });
+      return { label, value: grouped[dayKey] || 0 };
     });
-    return { label, value: Number(d.count || 0) || 0 };
-  });
 
   const total = rows.reduce((a, c) => a + c.value, 0);
+
+  // Calcular altura dinámica para usar mejor el espacio vertical según número de filas.
+  // Base 280px, luego sumar 26px por fila aproximadamente.
+  const chartHeight = Math.max(300, rows.length * 26 + 80);
 
   // Paleta multicolor por barra
   const palette = [
@@ -65,14 +99,16 @@ export default function TicketsByPeriodBar({
       <div className="p-5">
         <ChartContainer
           config={chartConfig}
-          className="w-full aspect-auto"
-          style={{ height: 360 }}
+          className="w-full"
+          style={{ height: chartHeight }}
         >
           <BarChart
             accessibilityLayer
             data={rows}
             layout="vertical"
-            margin={{ left: 0, right: 24 }}
+            barSize={14}
+            barCategoryGap={8}
+            margin={{ left: 0, right: 12, top: 8, bottom: 8 }}
           >
             <XAxis type="number" dataKey="value" hide />
             <YAxis
@@ -81,13 +117,20 @@ export default function TicketsByPeriodBar({
               tickLine={false}
               tickMargin={8}
               axisLine={false}
-              width={80}
+              width={110}
+              interval={0}
+              tick={{ fontSize: 12, fill: "#374151" }}
             />
             <ChartTooltip
               cursor={false}
               content={<ChartTooltipContent hideLabel />}
             />
             <Bar dataKey="value" radius={6}>
+              <LabelList
+                dataKey="value"
+                position="right"
+                formatter={(v: any) => String(v)}
+              />
               {rows.map((_, i) => (
                 <Cell key={`cell-${i}`} fill={palette[i % palette.length]} />
               ))}
