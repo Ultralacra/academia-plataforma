@@ -327,7 +327,11 @@ export function TicketGenerationModal({
                   <button
                     type="button"
                     onClick={() => setMode("form")}
-                    className={`px-3 py-1.5 text-xs ${mode === "form" ? "bg-violet-600 text-white" : "hover:bg-gray-50"}`}
+                    className={`px-3 py-1.5 text-xs ${
+                      mode === "form"
+                        ? "bg-violet-600 text-white"
+                        : "hover:bg-gray-50"
+                    }`}
                     title="Editar campos"
                   >
                     Formulario
@@ -335,7 +339,11 @@ export function TicketGenerationModal({
                   <button
                     type="button"
                     onClick={() => setMode("preview")}
-                    className={`px-3 py-1.5 text-xs border-l ${mode === "preview" ? "bg-violet-600 text-white" : "hover:bg-gray-50"}`}
+                    className={`px-3 py-1.5 text-xs border-l ${
+                      mode === "preview"
+                        ? "bg-violet-600 text-white"
+                        : "hover:bg-gray-50"
+                    }`}
                     title="Vista previa del ticket"
                   >
                     Vista previa
@@ -349,7 +357,9 @@ export function TicketGenerationModal({
                   {/* BEGIN form block */}
                   <div className="space-y-3 rounded-lg border bg-white dark:bg-zinc-900 p-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-sm">Datos del ticket</h3>
+                      <h3 className="font-semibold text-sm">
+                        Datos del ticket
+                      </h3>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -358,38 +368,115 @@ export function TicketGenerationModal({
                           if (!data) return;
                           const p = data.parsed || {};
                           const c = data.content || "";
-                          setTitulo(p.titulo || readFieldFromContent(c, "Título (obligatorio)") || titulo);
-                          setDescripcion(p.descripcion || readFieldFromContent(c, "Descripción") || descripcion);
-                          setPrioridad((p.prioridad || readFieldFromContent(c, "Prioridad") || prioridad).trim());
-                          setCategoria(p.categoria || readFieldFromContent(c, "Categoría") || categoria);
-                          setTipo((data.tipo || readFieldFromContent(c, "Tipo de ticket") || tipo).trim());
-                          setAlumno((p as any).alumno || readFieldFromContent(c, "Alumno") || alumno);
-                          setArea((p as any).area || readFieldFromContent(c, "Área") || area);
-                          setCoachCodigo((p as any).coachCodigo || readFieldFromContent(c, "Código de coach asignado") || coachCodigo);
-                          setCoachNombre((p as any).coachNombre || readFieldFromContent(c, "Nombre de coach asignado") || coachNombre);
-                          setRecomendacion((p as any).recomendacion || readFieldFromContent(c, "Recomendación o siguiente paso") || readFieldFromContent(c, "Recomendación") || readFieldFromContent(c, "Siguiente paso") || recomendacion);
+                          setTitulo(
+                            p.titulo ||
+                              readFieldFromContent(c, "Título (obligatorio)") ||
+                              titulo
+                          );
+                          setDescripcion(
+                            p.descripcion ||
+                              readFieldFromContent(c, "Descripción") ||
+                              descripcion
+                          );
+                          setPrioridad(
+                            (
+                              p.prioridad ||
+                              readFieldFromContent(c, "Prioridad") ||
+                              prioridad
+                            ).trim()
+                          );
+                          setCategoria(
+                            p.categoria ||
+                              readFieldFromContent(c, "Categoría") ||
+                              categoria
+                          );
+                          setTipo(
+                            (
+                              data.tipo ||
+                              readFieldFromContent(c, "Tipo de ticket") ||
+                              tipo
+                            ).trim()
+                          );
+                          setAlumno(
+                            (p as any).alumno ||
+                              readFieldFromContent(c, "Alumno") ||
+                              alumno
+                          );
+                          setArea(
+                            (p as any).area ||
+                              readFieldFromContent(c, "Área") ||
+                              area
+                          );
+                          setCoachCodigo(
+                            (p as any).coachCodigo ||
+                              readFieldFromContent(
+                                c,
+                                "Código de coach asignado"
+                              ) ||
+                              coachCodigo
+                          );
+                          setCoachNombre(
+                            (p as any).coachNombre ||
+                              readFieldFromContent(
+                                c,
+                                "Nombre de coach asignado"
+                              ) ||
+                              coachNombre
+                          );
+                          setRecomendacion(
+                            (p as any).recomendacion ||
+                              readFieldFromContent(
+                                c,
+                                "Recomendación o siguiente paso"
+                              ) ||
+                              readFieldFromContent(c, "Recomendación") ||
+                              readFieldFromContent(c, "Siguiente paso") ||
+                              recomendacion
+                          );
                         }}
                         title="Rellenar desde la sugerencia de IA"
                       >
-                        <RefreshCcw className="h-3.5 w-3.5 mr-1" /> Rellenar desde IA
+                        <RefreshCcw className="h-3.5 w-3.5 mr-1" /> Rellenar
+                        desde IA
                       </Button>
                     </div>
                     <div>
                       <Label htmlFor="titulo">Título</Label>
-                      <Input id="titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título del ticket" />
+                      <Input
+                        id="titulo"
+                        value={titulo}
+                        onChange={(e) => setTitulo(e.target.value)}
+                        placeholder="Título del ticket"
+                      />
                     </div>
                     <div>
                       <Label htmlFor="descripcion">Descripción</Label>
-                      <Textarea id="descripcion" value={descripcion} onChange={(e) => setDescripcion(e.target.value)} rows={5} placeholder="Describe el problema o solicitud" />
+                      <Textarea
+                        id="descripcion"
+                        value={descripcion}
+                        onChange={(e) => setDescripcion(e.target.value)}
+                        rows={5}
+                        placeholder="Describe el problema o solicitud"
+                      />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label htmlFor="alumno">Alumno</Label>
-                        <Input id="alumno" value={alumno} onChange={(e) => setAlumno(e.target.value)} placeholder="Nombre del alumno" />
+                        <Input
+                          id="alumno"
+                          value={alumno}
+                          onChange={(e) => setAlumno(e.target.value)}
+                          placeholder="Nombre del alumno"
+                        />
                       </div>
                       <div>
                         <Label htmlFor="area">Área</Label>
-                        <Input id="area" value={area} onChange={(e) => setArea(e.target.value)} placeholder="Ej. Copy, Ads, Funnel" />
+                        <Input
+                          id="area"
+                          value={area}
+                          onChange={(e) => setArea(e.target.value)}
+                          placeholder="Ej. Copy, Ads, Funnel"
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
@@ -408,73 +495,145 @@ export function TicketGenerationModal({
                       </div>
                       <div>
                         <Label htmlFor="categoria">Categoría</Label>
-                        <Input id="categoria" value={categoria} onChange={(e) => setCategoria(e.target.value)} placeholder="Ej. Solicitud de información" />
+                        <Input
+                          id="categoria"
+                          value={categoria}
+                          onChange={(e) => setCategoria(e.target.value)}
+                          placeholder="Ej. Solicitud de información"
+                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label htmlFor="tipo">Tipo de ticket</Label>
-                        <Input id="tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} placeholder="Ej. Duda de Copy" />
+                        <Input
+                          id="tipo"
+                          value={tipo}
+                          onChange={(e) => setTipo(e.target.value)}
+                          placeholder="Ej. Duda de Copy"
+                        />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <Label htmlFor="coachCodigo">Código coach</Label>
-                          <Input id="coachCodigo" value={coachCodigo} onChange={(e) => setCoachCodigo(e.target.value)} placeholder="Ej. C-123" />
+                          <Input
+                            id="coachCodigo"
+                            value={coachCodigo}
+                            onChange={(e) => setCoachCodigo(e.target.value)}
+                            placeholder="Ej. C-123"
+                          />
                         </div>
                         <div>
                           <Label htmlFor="coachNombre">Nombre coach</Label>
-                          <Input id="coachNombre" value={coachNombre} onChange={(e) => setCoachNombre(e.target.value)} placeholder="Nombre y apellido" />
+                          <Input
+                            id="coachNombre"
+                            value={coachNombre}
+                            onChange={(e) => setCoachNombre(e.target.value)}
+                            placeholder="Nombre y apellido"
+                          />
                         </div>
                       </div>
                     </div>
                     <div>
-                      <Label htmlFor="recomendacion">Recomendación o siguiente paso</Label>
-                      <Textarea id="recomendacion" value={recomendacion} onChange={(e) => setRecomendacion(e.target.value)} rows={3} placeholder="Sugerencia o siguiente paso propuesto por la IA" />
+                      <Label htmlFor="recomendacion">
+                        Recomendación o siguiente paso
+                      </Label>
+                      <Textarea
+                        id="recomendacion"
+                        value={recomendacion}
+                        onChange={(e) => setRecomendacion(e.target.value)}
+                        rows={3}
+                        placeholder="Sugerencia o siguiente paso propuesto por la IA"
+                      />
                     </div>
                   </div>
 
                   <div className="space-y-3">
                     <div className="rounded-lg border bg-white dark:bg-zinc-900 p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-sm">Sugerencia de Ticket</h3>
+                        <h3 className="font-semibold text-sm">
+                          Sugerencia de Ticket
+                        </h3>
                         <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                           <Sparkles className="h-3.5 w-3.5" /> IA
                         </span>
                       </div>
                       <ScrollArea className="h-72 pr-3">
                         {data.parsed?.html ? (
-                          <div className="prose prose-sm dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: data.parsed.html }} />
+                          <div
+                            className="prose prose-sm dark:prose-invert max-w-none"
+                            dangerouslySetInnerHTML={{
+                              __html: data.parsed.html,
+                            }}
+                          />
                         ) : (
                           <div className="space-y-1 text-sm">
                             <div>
-                              <span className="font-semibold">Título:</span> {titulo || "—"}
+                              <span className="font-semibold">Título:</span>{" "}
+                              {titulo || "—"}
                             </div>
                             <div>
-                              <span className="font-semibold">Descripción:</span> {descripcion || "—"}
+                              <span className="font-semibold">
+                                Descripción:
+                              </span>{" "}
+                              {descripcion || "—"}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 pt-1">
                               {prioridad && (
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border ${
-                                  prioridad === "Alta"
-                                    ? "bg-rose-50 dark:bg-rose-900/20 border-rose-200 text-rose-700 dark:text-rose-300"
-                                    : prioridad === "Media"
-                                    ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 text-amber-700 dark:text-amber-300"
-                                    : "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 text-emerald-700 dark:text-emerald-300"
-                                }`}>Prioridad: {prioridad}</span>
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border ${
+                                    prioridad === "Alta"
+                                      ? "bg-rose-50 dark:bg-rose-900/20 border-rose-200 text-rose-700 dark:text-rose-300"
+                                      : prioridad === "Media"
+                                      ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 text-amber-700 dark:text-amber-300"
+                                      : "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 text-emerald-700 dark:text-emerald-300"
+                                  }`}
+                                >
+                                  Prioridad: {prioridad}
+                                </span>
                               )}
                               {categoria && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border bg-sky-50 dark:bg-sky-900/20 border-sky-200 text-sky-700 dark:text-sky-300">Categoría: {categoria}</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border bg-sky-50 dark:bg-sky-900/20 border-sky-200 text-sky-700 dark:text-sky-300">
+                                  Categoría: {categoria}
+                                </span>
                               )}
                               {tipo && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 text-indigo-700 dark:text-indigo-300">Tipo: {tipo}</span>
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 text-indigo-700 dark:text-indigo-300">
+                                  Tipo: {tipo}
+                                </span>
                               )}
                             </div>
                             <div className="grid grid-cols-2 gap-2 pt-1 text-[13px]">
-                              <div className="opacity-80">Alumno: <span className="font-medium">{alumno || "—"}</span></div>
-                              <div className="opacity-80">Área: <span className="font-medium">{area || "—"}</span></div>
-                              <div className="opacity-80">Código coach: <span className="font-medium">{coachCodigo || "N/A"}</span></div>
-                              <div className="opacity-80">Nombre coach: <span className="font-medium">{coachNombre || "—"}</span></div>
-                              <div className="col-span-2 opacity-80">Recomendación: <span className="font-medium">{recomendacion || "—"}</span></div>
+                              <div className="opacity-80">
+                                Alumno:{" "}
+                                <span className="font-medium">
+                                  {alumno || "—"}
+                                </span>
+                              </div>
+                              <div className="opacity-80">
+                                Área:{" "}
+                                <span className="font-medium">
+                                  {area || "—"}
+                                </span>
+                              </div>
+                              <div className="opacity-80">
+                                Código coach:{" "}
+                                <span className="font-medium">
+                                  {coachCodigo || "N/A"}
+                                </span>
+                              </div>
+                              <div className="opacity-80">
+                                Nombre coach:{" "}
+                                <span className="font-medium">
+                                  {coachNombre || "—"}
+                                </span>
+                              </div>
+                              <div className="col-span-2 opacity-80">
+                                Recomendación:{" "}
+                                <span className="font-medium">
+                                  {recomendacion || "—"}
+                                </span>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -482,11 +641,17 @@ export function TicketGenerationModal({
                     </div>
                     <div className="rounded-lg border bg-white dark:bg-zinc-900 p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-sm">Archivos adjuntos</h3>
-                        <span className="text-[11px] text-muted-foreground">{normalizedAttachments.length} archivo(s)</span>
+                        <h3 className="font-semibold text-sm">
+                          Archivos adjuntos
+                        </h3>
+                        <span className="text-[11px] text-muted-foreground">
+                          {normalizedAttachments.length} archivo(s)
+                        </span>
                       </div>
                       {normalizedAttachments.length === 0 ? (
-                        <div className="text-xs text-muted-foreground">No hay adjuntos</div>
+                        <div className="text-xs text-muted-foreground">
+                          No hay adjuntos
+                        </div>
                       ) : (
                         <div className="grid grid-cols-2 gap-2">
                           {normalizedAttachments.map((a) => {
@@ -494,30 +659,73 @@ export function TicketGenerationModal({
                             const mime = resolveAttachmentMime(a);
                             if (isImage(mime)) {
                               return (
-                                <div key={a.id} className="rounded border overflow-hidden bg-white dark:bg-zinc-950">
-                                  <img src={url} alt={a.name} className="w-full h-auto object-cover" />
-                                  <div className="px-2 py-1 text-[11px] truncate" title={a.name}>{a.name}</div>
+                                <div
+                                  key={a.id}
+                                  className="rounded border overflow-hidden bg-white dark:bg-zinc-950"
+                                >
+                                  <img
+                                    src={url}
+                                    alt={a.name}
+                                    className="w-full h-auto object-cover"
+                                  />
+                                  <div
+                                    className="px-2 py-1 text-[11px] truncate"
+                                    title={a.name}
+                                  >
+                                    {a.name}
+                                  </div>
                                 </div>
                               );
                             }
                             if (isVideo(mime)) {
                               return (
-                                <div key={a.id} className="rounded border overflow-hidden bg-white dark:bg-zinc-950">
-                                  <video src={url} controls className="w-full max-h-40" />
-                                  <div className="px-2 py-1 text-[11px] truncate" title={a.name}>{a.name}</div>
+                                <div
+                                  key={a.id}
+                                  className="rounded border overflow-hidden bg-white dark:bg-zinc-950"
+                                >
+                                  <video
+                                    src={url}
+                                    controls
+                                    className="w-full max-h-40"
+                                  />
+                                  <div
+                                    className="px-2 py-1 text-[11px] truncate"
+                                    title={a.name}
+                                  >
+                                    {a.name}
+                                  </div>
                                 </div>
                               );
                             }
                             if (isAudio(mime)) {
                               return (
-                                <div key={a.id} className="rounded border overflow-hidden bg-white dark:bg-zinc-950 p-2">
-                                  <audio src={url} controls className="w-full" />
-                                  <div className="px-1 pt-1 text-[11px] truncate" title={a.name}>{a.name}</div>
+                                <div
+                                  key={a.id}
+                                  className="rounded border overflow-hidden bg-white dark:bg-zinc-950 p-2"
+                                >
+                                  <audio
+                                    src={url}
+                                    controls
+                                    className="w-full"
+                                  />
+                                  <div
+                                    className="px-1 pt-1 text-[11px] truncate"
+                                    title={a.name}
+                                  >
+                                    {a.name}
+                                  </div>
                                 </div>
                               );
                             }
                             return (
-                              <a key={a.id} href={url} target="_blank" rel="noreferrer" className="rounded border bg-white dark:bg-zinc-950 p-2 text-xs underline break-words" title={a.name}>
+                              <a
+                                key={a.id}
+                                href={url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded border bg-white dark:bg-zinc-950 p-2 text-xs underline break-words"
+                                title={a.name}
+                              >
                                 {a.name}
                               </a>
                             );
@@ -532,10 +740,16 @@ export function TicketGenerationModal({
                 <div className="rounded-lg border bg-white dark:bg-zinc-900 p-3">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="font-semibold text-sm">Vista previa</h3>
-                    <span className="text-[11px] text-muted-foreground">{normalizedAttachments.length} archivo(s)</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {normalizedAttachments.length} archivo(s)
+                    </span>
                   </div>
                   <div className="prose prose-sm dark:prose-invert max-w-none mb-3">
-                    <div dangerouslySetInnerHTML={{ __html: simpleMarkdownToHtml(buildMarkdown()) }} />
+                    <div
+                      dangerouslySetInnerHTML={{
+                        __html: simpleMarkdownToHtml(buildMarkdown()),
+                      }}
+                    />
                   </div>
                   {normalizedAttachments.length > 0 && (
                     <div className="space-y-2">
@@ -546,30 +760,69 @@ export function TicketGenerationModal({
                           const mime = resolveAttachmentMime(a);
                           if (isImage(mime)) {
                             return (
-                              <div key={a.id} className="rounded border overflow-hidden bg-white dark:bg-zinc-950">
-                                <img src={url} alt={a.name} className="w-full h-auto object-cover" />
-                                <div className="px-2 py-1 text-[11px] truncate" title={a.name}>{a.name}</div>
+                              <div
+                                key={a.id}
+                                className="rounded border overflow-hidden bg-white dark:bg-zinc-950"
+                              >
+                                <img
+                                  src={url}
+                                  alt={a.name}
+                                  className="w-full h-auto object-cover"
+                                />
+                                <div
+                                  className="px-2 py-1 text-[11px] truncate"
+                                  title={a.name}
+                                >
+                                  {a.name}
+                                </div>
                               </div>
                             );
                           }
                           if (isVideo(mime)) {
                             return (
-                              <div key={a.id} className="rounded border overflow-hidden bg-white dark:bg-zinc-950">
-                                <video src={url} controls className="w-full max-h-40" />
-                                <div className="px-2 py-1 text-[11px] truncate" title={a.name}>{a.name}</div>
+                              <div
+                                key={a.id}
+                                className="rounded border overflow-hidden bg-white dark:bg-zinc-950"
+                              >
+                                <video
+                                  src={url}
+                                  controls
+                                  className="w-full max-h-40"
+                                />
+                                <div
+                                  className="px-2 py-1 text-[11px] truncate"
+                                  title={a.name}
+                                >
+                                  {a.name}
+                                </div>
                               </div>
                             );
                           }
                           if (isAudio(mime)) {
                             return (
-                              <div key={a.id} className="rounded border overflow-hidden bg-white dark:bg-zinc-950 p-2">
+                              <div
+                                key={a.id}
+                                className="rounded border overflow-hidden bg-white dark:bg-zinc-950 p-2"
+                              >
                                 <audio src={url} controls className="w-full" />
-                                <div className="px-1 pt-1 text-[11px] truncate" title={a.name}>{a.name}</div>
+                                <div
+                                  className="px-1 pt-1 text-[11px] truncate"
+                                  title={a.name}
+                                >
+                                  {a.name}
+                                </div>
                               </div>
                             );
                           }
                           return (
-                            <a key={a.id} href={url} target="_blank" rel="noreferrer" className="rounded border bg-white dark:bg-zinc-950 p-2 text-xs underline break-words" title={a.name}>
+                            <a
+                              key={a.id}
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="rounded border bg-white dark:bg-zinc-950 p-2 text-xs underline break-words"
+                              title={a.name}
+                            >
                               {a.name}
                             </a>
                           );
