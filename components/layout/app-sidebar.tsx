@@ -54,6 +54,7 @@ const adminItems: MenuItem[] = [
   { title: "Chat Beta", url: "/chat/beta", icon: MessageSquare },
   { title: "Usuarios sistema", url: "/admin/users", icon: Users },
   { title: "Roles", url: "/admin/access/roles", icon: Settings },
+  { title: "CRM", url: "/admin/crm", icon: Users },
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
   // Grupo colapsable renombrado a “Métricas”
