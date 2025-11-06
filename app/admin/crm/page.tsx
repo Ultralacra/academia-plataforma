@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -34,6 +34,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { crmService } from "@/lib/crm-service";
+import type { ProspectCore } from "@/lib/crm-types";
+import { toast } from "@/components/ui/use-toast";
 
 // Vista CRM: solo visual (sin llamadas a API). Basada en componentes existentes.
 // Estructura: filtros + métricas + lista/kanban + drawer modal para detalle y crear prospecto.
@@ -44,52 +47,49 @@ function CrmContent() {
     nombre: string;
     email?: string;
     telefono?: string;
-    canal?: string; // Ej: Facebook, Landing, Referido
+    canal?: string;
     etapa: "Nuevo" | "Contactado" | "Calificado" | "Ganado" | "Perdido";
-    owner?: string; // Coach o asesor
+    owner?: string;
     pais?: string;
     ciudad?: string;
     tags?: string[];
-    creado?: string; // ISO date
-    actualizado?: string; // ISO date
+    creado?: string;
+    actualizado?: string;
     notas?: string;
-    links?: string[];
   };
 
-  const sample: Prospect[] = [
-    {
-      id: "p1",
-      nombre: "Juan Pérez",
-      email: "juan@example.com",
-      telefono: "+51 999 111 222",
-      canal: "Facebook",
-      etapa: "Nuevo",
-      owner: "Coach A",
-      pais: "Perú",
-      ciudad: "Lima",
-      tags: ["FB-ads", "Prospecto"],
-      creado: new Date().toISOString(),
-      actualizado: new Date().toISOString(),
-      notas: "Interesado en plan Premium. Llamar por la tarde.",
-      links: ["https://facebook.com/juan", "www.linkedin.com/in/juan"],
-    },
-    {
-      id: "p2",
-      nombre: "María López",
-      email: "maria@example.com",
-      telefono: "+57 300 123 4567",
-      canal: "Landing",
-      etapa: "Contactado",
-      owner: "Coach B",
-      pais: "Colombia",
-      ciudad: "Medellín",
-      tags: ["landing", "email"],
-      creado: new Date().toISOString(),
-      actualizado: new Date().toISOString(),
-      notas: "Pidió información de becas.",
-      links: ["https://maria.blog", "example.com/form"],
-    },
-  ];
+  const [rows, setRows] = useState<Prospect[]>([]);
+  const reload = () => {
+    const res = crmService.listProspects({});
+    const mapped: Prospect[] = res.items.map((p: ProspectCore) => ({
+      id: p.id,
+      nombre: p.nombre,
+      email: p.email || undefined,
+      telefono: p.telefono || undefined,
+      canal: p.canalFuente || undefined,
+      etapa:
+        p.etapaPipeline === "nuevo"
+          ? "Nuevo"
+          : p.etapaPipeline === "contactado"
+          ? "Contactado"
+          : p.etapaPipeline === "calificado" || p.etapaPipeline === "propuesta"
+          ? "Calificado"
+          : p.etapaPipeline === "ganado"
+          ? "Ganado"
+          : "Perdido",
+      owner: p.ownerNombre || undefined,
+      pais: p.pais || undefined,
+      ciudad: p.ciudad || undefined,
+      tags: p.tags || [],
+      creado: p.creadoAt,
+      actualizado: p.actualizadoAt,
+      notas: p.notasResumen || undefined,
+    }));
+    setRows(mapped);
+  };
+  useEffect(() => {
+    reload();
+  }, []);
 
   const [q, setQ] = useState("");
   const [view, setView] = useState<"lista" | "kanban">("lista");
@@ -108,7 +108,7 @@ function CrmContent() {
   ];
 
   const filtrados = useMemo(() => {
-    return sample.filter((p) => {
+    return rows.filter((p) => {
       const hayQ = q.trim()
         ? [p.nombre, p.email, p.telefono, p.owner]
             .filter(Boolean)
@@ -119,16 +119,16 @@ function CrmContent() {
       const byOwner = ownerFiltro ? p.owner === ownerFiltro : true;
       return hayQ && byEtapa && byCanal && byOwner;
     });
-  }, [q, etapaFiltro, canalFiltro, ownerFiltro]);
+  }, [q, etapaFiltro, canalFiltro, ownerFiltro, rows]);
 
   const counts = useMemo(() => {
-    const total = sample.length;
+    const total = rows.length;
     const byEtapa: Record<string, number> = {};
     etapas.forEach(
-      (e) => (byEtapa[e] = sample.filter((p) => p.etapa === e).length)
+      (e) => (byEtapa[e] = rows.filter((p) => p.etapa === e).length)
     );
     return { total, byEtapa };
-  }, []);
+  }, [rows]);
 
   const normalizeUrl = (s?: string) => {
     const str = String(s || "").trim();
@@ -168,58 +168,14 @@ function CrmContent() {
               <DialogTrigger asChild>
                 <Button size="sm" className="gap-2">
                   <Plus className="h-4 w-4" />
-                  Nuevo prospecto
+                  Cierre de venta
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Nuevo prospecto</DialogTitle>
+                  <DialogTitle>Registrar cierre de venta</DialogTitle>
                 </DialogHeader>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Nombre</Label>
-                    <Input placeholder="Nombre completo" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <Input type="email" placeholder="correo@dominio.com" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Teléfono</Label>
-                    <Input placeholder="+51..." />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Canal</Label>
-                    <Input placeholder="Facebook, Landing, Referido..." />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Owner</Label>
-                    <Input placeholder="Coach/asesor" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Ubicación</Label>
-                    <Input placeholder="País / Ciudad" />
-                  </div>
-                  <div className="col-span-2 space-y-2">
-                    <Label>Notas</Label>
-                    <textarea
-                      className="w-full min-h-[100px] rounded-md border border-slate-200 px-3 py-2 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
-                      placeholder="Comentarios y próximos pasos..."
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
-                    onClick={() => setOpenCreate(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button disabled>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Guardar (demo)
-                  </Button>
-                </DialogFooter>
+                <CrmCloseSaleForm onDone={() => { setOpenCreate(false); reload(); }} />
               </DialogContent>
             </Dialog>
           </div>
@@ -456,24 +412,16 @@ function CrmContent() {
                   {openDetail.notas || "—"}
                 </div>
               </div>
-              {openDetail.links?.length ? (
-                <div className="rounded-lg border bg-white p-4">
-                  <div className="text-sm font-medium">Links</div>
-                  <div className="mt-1 flex flex-col gap-1">
-                    {openDetail.links.map((u, i) => (
-                      <a
-                        key={i}
-                        href={normalizeUrl(u)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sky-600 underline break-all text-sm"
-                      >
-                        {u}
-                      </a>
-                    ))}
-                  </div>
+              <div className="rounded-lg border bg-white p-4 space-y-2">
+                <div className="text-sm font-medium">Acciones rápidas</div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.verifyPayment(openDetail.id, true); if (ok) { toast({ title: "Pago confirmado" }); reload(); } }}>Pago confirmado</Button>
+                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.sendContract(openDetail.id, `https://sign.example.com/${openDetail.id}`); if (ok) { toast({ title: "Contrato enviado" }); reload(); } }}>Enviar contrato</Button>
+                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.markContractSigned(openDetail.id); if (ok) { toast({ title: "Contrato firmado" }); reload(); } }}>Marcar firmado</Button>
+                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.activateAccess(openDetail.id, false); if (ok) { toast({ title: "Acceso activado" }); reload(); } }}>Activar acceso</Button>
+                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.convertProspect(openDetail.id); if (ok) { toast({ title: "Convertido a alumno" }); reload(); } }}>Convertir a alumno</Button>
                 </div>
-              ) : null}
+              </div>
             </div>
           )}
           <DialogFooter>
@@ -494,5 +442,63 @@ export default function CrmPage() {
         <CrmContent />
       </DashboardLayout>
     </ProtectedRoute>
+  );
+}
+
+// Formulario cierre de venta
+function CrmCloseSaleForm({ onDone }: { onDone: () => void }) {
+  const [nombre, setNombre] = useState("");
+  const [email, setEmail] = useState("");
+  const [telefono, setTelefono] = useState("");
+  const [programa, setPrograma] = useState("");
+  const [bonos, setBonos] = useState("");
+  const [modalidad, setModalidad] = useState("contado");
+  const [monto, setMonto] = useState(0);
+  const [moneda, setMoneda] = useState("USD");
+  const [plataforma, setPlataforma] = useState("");
+  const [primeraCuota, setPrimeraCuota] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    try {
+      setLoading(true);
+      const base = crmService.createProspect({ nombre, email, telefono, etapaPipeline: "nuevo" });
+      crmService.updateProspect(base.id, { canalFuente: "Venta", notasResumen: "Cierre registrado" });
+      const cuotas = modalidad === "cuotas" && primeraCuota ? [{ monto: monto, dueAt: new Date(primeraCuota).toISOString() }] : [];
+      crmService.closeSale(base.id, {
+        programa,
+        modalidadPago: modalidad,
+        montoTotal: monto,
+        moneda,
+        plataformaPago: plataforma,
+        bonosOfrecidos: bonos.split(",").map(s=>s.trim()).filter(Boolean),
+        cuotas,
+      });
+      toast({ title: "Cierre registrado", description: nombre });
+      onDone();
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo registrar" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2"><Label>Nombre completo</Label><Input value={nombre} onChange={e=>setNombre(e.target.value)} /></div>
+      <div className="space-y-2"><Label>Correo</Label><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} /></div>
+      <div className="space-y-2"><Label>Teléfono</Label><Input value={telefono} onChange={e=>setTelefono(e.target.value)} /></div>
+      <div className="space-y-2"><Label>Programa adquirido</Label><Input value={programa} onChange={e=>setPrograma(e.target.value)} /></div>
+      <div className="space-y-2"><Label>Bonos ofrecidos</Label><Input value={bonos} onChange={e=>setBonos(e.target.value)} placeholder="Separar por comas" /></div>
+      <div className="space-y-2"><Label>Modalidad pago</Label><Input value={modalidad} onChange={e=>setModalidad(e.target.value)} placeholder="contado | cuotas" /></div>
+      <div className="space-y-2"><Label>Monto total</Label><Input type="number" value={monto} onChange={e=>setMonto(parseFloat(e.target.value||'0'))} /></div>
+      <div className="space-y-2"><Label>Moneda</Label><Input value={moneda} onChange={e=>setMoneda(e.target.value)} /></div>
+      <div className="space-y-2"><Label>Plataforma pago</Label><Input value={plataforma} onChange={e=>setPlataforma(e.target.value)} placeholder="Hotmart / PayPal" /></div>
+      <div className="space-y-2"><Label>Fecha 1ra cuota (si aplica)</Label><Input type="date" value={primeraCuota} onChange={e=>setPrimeraCuota(e.target.value)} /></div>
+      <div className="col-span-2 flex justify-end gap-2 mt-2">
+        <Button variant="outline" onClick={onDone}>Cancelar</Button>
+        <Button onClick={submit} disabled={loading || !nombre || !programa || !plataforma}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Registrar</Button>
+      </div>
+    </div>
   );
 }
