@@ -175,7 +175,12 @@ function CrmContent() {
                 <DialogHeader>
                   <DialogTitle>Registrar cierre de venta</DialogTitle>
                 </DialogHeader>
-                <CrmCloseSaleForm onDone={() => { setOpenCreate(false); reload(); }} />
+                <CrmCloseSaleForm
+                  onDone={() => {
+                    setOpenCreate(false);
+                    reload();
+                  }}
+                />
               </DialogContent>
             </Dialog>
           </div>
@@ -415,11 +420,77 @@ function CrmContent() {
               <div className="rounded-lg border bg-white p-4 space-y-2">
                 <div className="text-sm font-medium">Acciones rápidas</div>
                 <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.verifyPayment(openDetail.id, true); if (ok) { toast({ title: "Pago confirmado" }); reload(); } }}>Pago confirmado</Button>
-                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.sendContract(openDetail.id, `https://sign.example.com/${openDetail.id}`); if (ok) { toast({ title: "Contrato enviado" }); reload(); } }}>Enviar contrato</Button>
-                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.markContractSigned(openDetail.id); if (ok) { toast({ title: "Contrato firmado" }); reload(); } }}>Marcar firmado</Button>
-                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.activateAccess(openDetail.id, false); if (ok) { toast({ title: "Acceso activado" }); reload(); } }}>Activar acceso</Button>
-                  <Button size="sm" variant="outline" onClick={() => { const ok = crmService.convertProspect(openDetail.id); if (ok) { toast({ title: "Convertido a alumno" }); reload(); } }}>Convertir a alumno</Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const ok = crmService.verifyPayment(openDetail.id, true);
+                      if (ok) {
+                        toast({ title: "Pago confirmado" });
+                        reload();
+                      }
+                    }}
+                  >
+                    Pago confirmado
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const ok = crmService.sendContract(
+                        openDetail.id,
+                        `https://sign.example.com/${openDetail.id}`
+                      );
+                      if (ok) {
+                        toast({ title: "Contrato enviado" });
+                        reload();
+                      }
+                    }}
+                  >
+                    Enviar contrato
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const ok = crmService.markContractSigned(openDetail.id);
+                      if (ok) {
+                        toast({ title: "Contrato firmado" });
+                        reload();
+                      }
+                    }}
+                  >
+                    Marcar firmado
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const ok = crmService.activateAccess(
+                        openDetail.id,
+                        false
+                      );
+                      if (ok) {
+                        toast({ title: "Acceso activado" });
+                        reload();
+                      }
+                    }}
+                  >
+                    Activar acceso
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const ok = crmService.convertProspect(openDetail.id);
+                      if (ok) {
+                        toast({ title: "Convertido a alumno" });
+                        reload();
+                      }
+                    }}
+                  >
+                    Convertir a alumno
+                  </Button>
                 </div>
               </div>
             </div>
@@ -462,16 +533,30 @@ function CrmCloseSaleForm({ onDone }: { onDone: () => void }) {
   const submit = async () => {
     try {
       setLoading(true);
-      const base = crmService.createProspect({ nombre, email, telefono, etapaPipeline: "nuevo" });
-      crmService.updateProspect(base.id, { canalFuente: "Venta", notasResumen: "Cierre registrado" });
-      const cuotas = modalidad === "cuotas" && primeraCuota ? [{ monto: monto, dueAt: new Date(primeraCuota).toISOString() }] : [];
+      const base = crmService.createProspect({
+        nombre,
+        email,
+        telefono,
+        etapaPipeline: "nuevo",
+      });
+      crmService.updateProspect(base.id, {
+        canalFuente: "Venta",
+        notasResumen: "Cierre registrado",
+      });
+      const cuotas =
+        modalidad === "cuotas" && primeraCuota
+          ? [{ monto: monto, dueAt: new Date(primeraCuota).toISOString() }]
+          : [];
       crmService.closeSale(base.id, {
         programa,
         modalidadPago: modalidad,
         montoTotal: monto,
         moneda,
         plataformaPago: plataforma,
-        bonosOfrecidos: bonos.split(",").map(s=>s.trim()).filter(Boolean),
+        bonosOfrecidos: bonos
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
         cuotas,
       });
       toast({ title: "Cierre registrado", description: nombre });
@@ -485,19 +570,81 @@ function CrmCloseSaleForm({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="grid grid-cols-2 gap-4">
-      <div className="space-y-2"><Label>Nombre completo</Label><Input value={nombre} onChange={e=>setNombre(e.target.value)} /></div>
-      <div className="space-y-2"><Label>Correo</Label><Input type="email" value={email} onChange={e=>setEmail(e.target.value)} /></div>
-      <div className="space-y-2"><Label>Teléfono</Label><Input value={telefono} onChange={e=>setTelefono(e.target.value)} /></div>
-      <div className="space-y-2"><Label>Programa adquirido</Label><Input value={programa} onChange={e=>setPrograma(e.target.value)} /></div>
-      <div className="space-y-2"><Label>Bonos ofrecidos</Label><Input value={bonos} onChange={e=>setBonos(e.target.value)} placeholder="Separar por comas" /></div>
-      <div className="space-y-2"><Label>Modalidad pago</Label><Input value={modalidad} onChange={e=>setModalidad(e.target.value)} placeholder="contado | cuotas" /></div>
-      <div className="space-y-2"><Label>Monto total</Label><Input type="number" value={monto} onChange={e=>setMonto(parseFloat(e.target.value||'0'))} /></div>
-      <div className="space-y-2"><Label>Moneda</Label><Input value={moneda} onChange={e=>setMoneda(e.target.value)} /></div>
-      <div className="space-y-2"><Label>Plataforma pago</Label><Input value={plataforma} onChange={e=>setPlataforma(e.target.value)} placeholder="Hotmart / PayPal" /></div>
-      <div className="space-y-2"><Label>Fecha 1ra cuota (si aplica)</Label><Input type="date" value={primeraCuota} onChange={e=>setPrimeraCuota(e.target.value)} /></div>
+      <div className="space-y-2">
+        <Label>Nombre completo</Label>
+        <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Correo</Label>
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Teléfono</Label>
+        <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Programa adquirido</Label>
+        <Input value={programa} onChange={(e) => setPrograma(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Bonos ofrecidos</Label>
+        <Input
+          value={bonos}
+          onChange={(e) => setBonos(e.target.value)}
+          placeholder="Separar por comas"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Modalidad pago</Label>
+        <Input
+          value={modalidad}
+          onChange={(e) => setModalidad(e.target.value)}
+          placeholder="contado | cuotas"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Monto total</Label>
+        <Input
+          type="number"
+          value={monto}
+          onChange={(e) => setMonto(parseFloat(e.target.value || "0"))}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Moneda</Label>
+        <Input value={moneda} onChange={(e) => setMoneda(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Plataforma pago</Label>
+        <Input
+          value={plataforma}
+          onChange={(e) => setPlataforma(e.target.value)}
+          placeholder="Hotmart / PayPal"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Fecha 1ra cuota (si aplica)</Label>
+        <Input
+          type="date"
+          value={primeraCuota}
+          onChange={(e) => setPrimeraCuota(e.target.value)}
+        />
+      </div>
       <div className="col-span-2 flex justify-end gap-2 mt-2">
-        <Button variant="outline" onClick={onDone}>Cancelar</Button>
-        <Button onClick={submit} disabled={loading || !nombre || !programa || !plataforma}>{loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Registrar</Button>
+        <Button variant="outline" onClick={onDone}>
+          Cancelar
+        </Button>
+        <Button
+          onClick={submit}
+          disabled={loading || !nombre || !programa || !plataforma}
+        >
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Registrar
+        </Button>
       </div>
     </div>
   );
