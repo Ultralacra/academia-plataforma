@@ -86,6 +86,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getAuthToken } from "@/lib/auth";
 
 type StatusKey =
   | "EN_PROGRESO"
@@ -292,6 +293,12 @@ export default function TicketsPanelCoach({
   const [detailsById, setDetailsById] = useState<
     Record<string | number, ExtraDetails>
   >({});
+  // Detalle del ticket (API)
+  const [ticketDetail, setTicketDetail] = useState<any | null>(null);
+  const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
+  const [ticketDetailError, setTicketDetailError] = useState<string | null>(
+    null
+  );
 
   const [editFilesLoading, setEditFilesLoading] = useState(false);
   const [editExistingFiles, setEditExistingFiles] = useState<
@@ -329,6 +336,14 @@ export default function TicketsPanelCoach({
       alive = false;
     };
   }, [editOpen, editTicket?.codigo]);
+
+  // Cargar detalle cuando la pestaña 'detalles' o 'archivos' esté activa (para mostrar Links)
+  useEffect(() => {
+    if (!editOpen) return;
+    if (!editTicket?.codigo) return;
+    if (editActiveTab !== "detalles" && editActiveTab !== "archivos") return;
+    loadTicketDetail(editTicket.codigo);
+  }, [editOpen, editTicket?.codigo, editActiveTab]);
 
   useEffect(() => {
     let alive = true;
@@ -521,6 +536,81 @@ export default function TicketsPanelCoach({
       .trim();
   }
 
+  // Helpers: estado y URLs para 'Detalle'
+  function coerceStatus(v: any): StatusKey {
+    const n = Number(v);
+    if (!Number.isNaN(n)) {
+      if (n === 1) return "PENDIENTE";
+      if (n === 2) return "EN_PROGRESO";
+      if (n === 3) return "PAUSADO";
+      if (n === 4) return "PENDIENTE_DE_ENVIO";
+      if (n === 5) return "RESUELTO";
+    }
+    const s = String(v || "").toUpperCase();
+    if (s.includes("EN PROGRES")) return "EN_PROGRESO";
+    if (s.includes("PROGRESO")) return "EN_PROGRESO";
+    if (s.includes("PAUS")) return "PAUSADO";
+    if (s.includes("ENVIO") || s.includes("ENVÍO")) return "PENDIENTE_DE_ENVIO";
+    if (s.includes("RESUELT")) return "RESUELTO";
+    return "PENDIENTE";
+  }
+  const isLikelyUrl = (s: string) =>
+    /^(https?:\/\/|www\.)\S+$/i.test(String(s || "").trim());
+  const normalizeUrl = (s: string) => {
+    const str = String(s || "").trim();
+    if (!str) return "";
+    return str.startsWith("http://") || str.startsWith("https://")
+      ? str
+      : `https://${str}`;
+  };
+  const extractUrlsFromDescription = (desc?: string | null) => {
+    const text = String(desc || "");
+    if (!text) return [] as string[];
+    const re = /(https?:\/\/[^\s,]+|www\.[^\s,]+)/gi;
+    const found = text.match(re) || [];
+    const clean = found.map((u) => u.trim()).filter((u) => isLikelyUrl(u));
+    const uniq: string[] = [];
+    const seen = new Set<string>();
+    for (const u of clean) {
+      const k = u.toLowerCase();
+      if (!seen.has(k)) {
+        uniq.push(u);
+        seen.add(k);
+      }
+    }
+    return uniq;
+  };
+
+  async function loadTicketDetail(codigo?: string | null) {
+    if (!codigo) return;
+    try {
+      setTicketDetailLoading(true);
+      setTicketDetailError(null);
+      setTicketDetail(null);
+      const url = `https://v001.vercel.app/v1/ticket/get/ticket/${encodeURIComponent(
+        String(codigo)
+      )}`;
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const json = await res.json().catch(() => ({}));
+      setTicketDetail(json?.data ?? json ?? null);
+    } catch (e: any) {
+      setTicketDetailError(
+        String(e?.message || e || "Error al cargar detalle")
+      );
+    } finally {
+      setTicketDetailLoading(false);
+    }
+  }
+
   function guessTipoKey(nombre: string): string | "" {
     const n = normalize(nombre);
     if (!n) return "";
@@ -634,19 +724,11 @@ export default function TicketsPanelCoach({
         tipo,
         descripcion: descripcion || undefined,
         archivos: createFiles.slice(0, 10),
-        urls: uniqueLinks,
+        // URLs ahora se persisten en la descripción; opcionalmente podríamos seguir enviándolas en 'urls'
+        // pero se ha solicitado centralizar el render basado en la descripción
+        urls: [],
       });
-      // Intentar adjuntar URLs como "archivos" para que se rendericen en la UI de archivos
-      try {
-        if (uniqueLinks.length > 0) {
-          const data = (result?.data ?? result) as any;
-          const ticketId =
-            data?.codigo || data?.id || data?.ticket_id || data?.ticketId;
-          if (ticketId) {
-            await uploadTicketFiles(String(ticketId), [], uniqueLinks);
-          }
-        }
-      } catch {}
+      // Ya no adjuntamos URLs como "archivos"; se leerán desde la descripción
       // Disparar notificación local para el header inmediatamente
       try {
         const data = (result?.data ?? result) as any;
@@ -1484,6 +1566,8 @@ export default function TicketsPanelCoach({
                               });
                               setEditFiles([]);
                               setEditPreviews([]);
+                              setEditLinks([]);
+                              setEditLinkInput("");
                               setEditOpen(true);
                             }}
                           >
@@ -2077,6 +2161,236 @@ export default function TicketsPanelCoach({
                     <Separator />
                     {/* Equipo asignado y Trabajo/Resolución removidos para unificar el patrón */}
                   </div>
+
+                  {/* Detalle desde API */}
+                  <div className="space-y-4">
+                    {ticketDetailLoading ? (
+                      <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+                        Cargando detalle…
+                      </div>
+                    ) : ticketDetailError ? (
+                      <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                        {ticketDetailError}
+                      </div>
+                    ) : ticketDetail ? (
+                      <>
+                        <div className="rounded-lg border border-slate-200 bg-white p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-base font-semibold text-slate-900">
+                                {ticketDetail?.nombre ||
+                                  editTicket?.nombre ||
+                                  "Ticket"}
+                              </div>
+                              {ticketDetail?.codigo && (
+                                <div className="text-xs text-slate-500 break-all">
+                                  Código: {ticketDetail.codigo}
+                                </div>
+                              )}
+                            </div>
+                            {ticketDetail?.estado && (
+                              <span
+                                className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
+                                  STATUS_STYLE[
+                                    coerceStatus(ticketDetail.estado as any)
+                                  ]
+                                }`}
+                              >
+                                {
+                                  STATUS_LABEL[
+                                    coerceStatus(ticketDetail.estado as any)
+                                  ]
+                                }
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
+                            <div className="space-y-1">
+                              <div className="text-slate-500 text-xs">
+                                Alumno
+                              </div>
+                              <div className="font-medium break-all">
+                                {ticketDetail?.alumno_nombre ||
+                                  editTicket?.alumno_nombre ||
+                                  "—"}
+                              </div>
+                              {ticketDetail?.id_alumno && (
+                                <div className="text-xs text-slate-500 break-all">
+                                  ID: {ticketDetail.id_alumno}
+                                </div>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-slate-500 text-xs">Tipo</div>
+                              <div className="font-medium">
+                                {ticketDetail?.tipo || "—"}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-slate-500 text-xs">
+                                Creado
+                              </div>
+                              <div>
+                                {ticketDetail?.created_at
+                                  ? new Date(
+                                      ticketDetail.created_at
+                                    ).toLocaleString("es-ES")
+                                  : fmtDate(editTicket?.created_at)}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-slate-500 text-xs">
+                                Deadline
+                              </div>
+                              <div>
+                                {ticketDetail?.deadline
+                                  ? new Date(
+                                      ticketDetail.deadline
+                                    ).toLocaleString("es-ES")
+                                  : fmtDate(editTicket?.deadline)}
+                              </div>
+                            </div>
+                            {ticketDetail?.plazo && (
+                              <div className="space-y-1">
+                                <div className="text-slate-500 text-xs">
+                                  Plazo
+                                </div>
+                                <div>{String(ticketDetail.plazo)}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                          <div className="text-sm font-medium">Descripción</div>
+                          <div className="whitespace-pre-wrap text-sm text-slate-800">
+                            {ticketDetail?.descripcion || "—"}
+                          </div>
+                          {(() => {
+                            const urlList: string[] = [
+                              ...extractUrlsFromDescription(
+                                ticketDetail?.descripcion
+                              ),
+                              ...((Array.isArray(ticketDetail?.links)
+                                ? ticketDetail.links
+                                : []) as string[]),
+                            ];
+                            const seen = new Set<string>();
+                            const links = urlList.filter((u) => {
+                              const k = String(u || "").toLowerCase();
+                              if (!k) return false;
+                              if (seen.has(k)) return false;
+                              seen.add(k);
+                              return true;
+                            });
+                            return links.length > 0 ? (
+                              <div className="pt-1">
+                                <div className="text-sm font-medium">Links</div>
+                                <div className="mt-1 flex flex-col gap-1">
+                                  {links.map((u, i) => (
+                                    <a
+                                      key={i}
+                                      href={normalizeUrl(u)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-sky-600 underline break-all text-sm"
+                                    >
+                                      {u}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+
+                        {Array.isArray(ticketDetail?.coaches) &&
+                          ticketDetail.coaches.length > 0 && (
+                            <div className="rounded-lg border border-slate-200 bg-white p-4">
+                              <div className="text-sm font-medium mb-2">
+                                Coaches
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {ticketDetail.coaches.map(
+                                  (c: any, idx: number) => (
+                                    <span
+                                      key={`${
+                                        c.codigo_equipo ?? c.nombre ?? idx
+                                      }`}
+                                      className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                                      title={`${c.nombre ?? "Coach"}${
+                                        c.area ? ` · ${c.area}` : ""
+                                      }${c.puesto ? ` · ${c.puesto}` : ""}`}
+                                    >
+                                      {(c.nombre ?? "Coach").slice(0, 20)}
+                                      {c.area
+                                        ? ` · ${String(c.area).slice(0, 10)}`
+                                        : ""}
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                          <div className="text-sm font-medium">Estados</div>
+                          {ticketDetail?.ultimo_estado?.estatus && (
+                            <div className="text-xs text-slate-600">
+                              Último:{" "}
+                              {
+                                STATUS_LABEL[
+                                  coerceStatus(
+                                    ticketDetail.ultimo_estado.estatus
+                                  )
+                                ]
+                              }
+                              {ticketDetail?.ultimo_estado?.fecha && (
+                                <>
+                                  {" · "}
+                                  {new Date(
+                                    ticketDetail.ultimo_estado.fecha
+                                  ).toLocaleString("es-ES")}
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {Array.isArray(ticketDetail?.estados) &&
+                          ticketDetail.estados.length > 0 ? (
+                            <div className="mt-1 space-y-1">
+                              {ticketDetail.estados.map((e: any) => (
+                                <div
+                                  key={e.id}
+                                  className="flex items-center gap-2 text-xs text-slate-700"
+                                >
+                                  <span
+                                    className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
+                                      STATUS_STYLE[coerceStatus(e.estatus_id)]
+                                    }`}
+                                  >
+                                    {STATUS_LABEL[coerceStatus(e.estatus_id)]}
+                                  </span>
+                                  <span>
+                                    {new Date(e.created_at).toLocaleString(
+                                      "es-ES"
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-500">
+                              Sin historial
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+                        Sin datos de detalle
+                      </div>
+                    )}
+                  </div>
                 </TabsContent>
 
                 <TabsContent value="archivos" className="p-6 space-y-6 mt-0">
@@ -2173,6 +2487,44 @@ export default function TicketsPanelCoach({
                         </p>
                       </div>
                     )}
+
+                    {/* Links detectados en la descripción (clicables) */}
+                    {(() => {
+                      const urlList: string[] = [
+                        ...extractUrlsFromDescription(
+                          ticketDetail?.descripcion
+                        ),
+                        ...((Array.isArray(ticketDetail?.links)
+                          ? ticketDetail.links
+                          : []) as string[]),
+                      ];
+                      const seen = new Set<string>();
+                      const links = urlList.filter((u) => {
+                        const k = String(u || "").toLowerCase();
+                        if (!k) return false;
+                        if (seen.has(k)) return false;
+                        seen.add(k);
+                        return true;
+                      });
+                      return links.length > 0 ? (
+                        <div className="mt-3">
+                          <div className="text-sm font-medium">Links</div>
+                          <div className="mt-1 flex flex-col gap-1">
+                            {links.map((u, i) => (
+                              <a
+                                key={`edit-links-${i}`}
+                                href={normalizeUrl(u)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-sky-600 underline break-all text-sm"
+                              >
+                                {u}
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null;
+                    })()}
 
                     <Separator />
 
@@ -2354,27 +2706,66 @@ export default function TicketsPanelCoach({
                               }
                               setUploadingEditFiles(true);
                               try {
-                                await uploadTicketFiles(
-                                  editTicket.codigo,
-                                  editFiles,
-                                  editLinks
-                                );
-                                toast({ title: "Archivos/URLs subidos" });
+                                // 1) Subir archivos físicos (si hay)
+                                if (editFiles.length > 0) {
+                                  await uploadTicketFiles(
+                                    editTicket.codigo,
+                                    editFiles,
+                                    []
+                                  );
+                                  // refrescar la lista de archivos existentes
+                                  const list = await getTicketFiles(
+                                    editTicket.codigo
+                                  );
+                                  setEditExistingFiles(list);
+                                  if (openFiles === editTicket.codigo) {
+                                    setFiles(list);
+                                  }
+                                }
+
+                                // 2) Integrar enlaces a la descripción
+                                if (editLinks.length > 0) {
+                                  // asegurarnos de tener una base de descripción
+                                  const base = ticketDetail?.descripcion || "";
+                                  // extraer URLs existentes y fusionar con nuevas
+                                  const existing =
+                                    extractUrlsFromDescription(base);
+                                  const mergedSet = new Set<string>(
+                                    existing.map((u) => normalizeUrl(u))
+                                  );
+                                  for (const raw of editLinks) {
+                                    const nu = normalizeUrl(raw);
+                                    if (nu) mergedSet.add(nu);
+                                  }
+                                  const merged = Array.from(mergedSet);
+                                  // limpiar línea previa de URLs: ... (si existe)
+                                  const lines: string[] = base.split(/\r?\n/);
+                                  const withoutLine = lines.filter(
+                                    (ln: string) => !/^\s*urls\s*:/i.test(ln)
+                                  );
+                                  const cleanDesc = withoutLine
+                                    .join("\n")
+                                    .trim();
+                                  const withUrls =
+                                    merged.length > 0
+                                      ? (cleanDesc ? cleanDesc + "\n" : "") +
+                                        `URLs: ${merged.join(", ")}`
+                                      : cleanDesc;
+                                  await updateTicket(editTicket.codigo, {
+                                    descripcion: withUrls || undefined,
+                                  } as any);
+                                  // recargar detalle para reflejar cambios
+                                  await loadTicketDetail(editTicket.codigo);
+                                  toast({
+                                    title: "Enlaces guardados en descripción",
+                                  });
+                                }
+
                                 setEditFiles([]);
                                 setEditLinks([]);
-                                // refrescar la lista de archivos existentes
-                                const list = await getTicketFiles(
-                                  editTicket.codigo
-                                );
-                                setEditExistingFiles(list);
-                                if (openFiles === editTicket.codigo) {
-                                  setFiles(list);
-                                }
                               } catch (e) {
                                 console.error(e);
-                                toast({
-                                  title: "Error subiendo archivos/URLs",
-                                });
+                                toast({ title: "Error al subir/guardar" });
                               } finally {
                                 setUploadingEditFiles(false);
                               }
@@ -2382,8 +2773,8 @@ export default function TicketsPanelCoach({
                             disabled={uploadingEditFiles}
                           >
                             {uploadingEditFiles
-                              ? "Subiendo..."
-                              : "Subir archivos/URLs"}
+                              ? "Procesando..."
+                              : "Subir archivos / Guardar URLs"}
                           </Button>
                           <Button
                             size="sm"

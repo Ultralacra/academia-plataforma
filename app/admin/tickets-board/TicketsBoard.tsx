@@ -5,6 +5,7 @@ import type React from "react";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { getTickets, type TicketBoardItem, reassignTicket } from "./api";
 import { Button } from "@/components/ui/button";
+import { getAuthToken } from "@/lib/auth";
 import { toast } from "@/components/ui/use-toast";
 
 import {
@@ -175,6 +176,42 @@ export default function TicketsBoard() {
     null
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<"general" | "detalle">("general");
+  const [ticketDetail, setTicketDetail] = useState<any | null>(null);
+  const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
+  const [ticketDetailError, setTicketDetailError] = useState<string | null>(
+    null
+  );
+
+  // Helpers: URLs y formato
+  const isLikelyUrl = (s: string) =>
+    /^(https?:\/\/|www\.)\S+$/i.test(String(s || "").trim());
+  const normalizeUrl = (s: string) => {
+    const str = String(s || "").trim();
+    if (!str) return "";
+    return str.startsWith("http://") || str.startsWith("https://")
+      ? str
+      : `https://${str}`;
+  };
+  const extractUrlsFromDescription = (desc?: string | null) => {
+    const text = String(desc || "");
+    if (!text) return [] as string[];
+    // Buscar URLs en cualquier parte del texto
+    const re = /(https?:\/\/[^\s,]+|www\.[^\s,]+)/gi;
+    const found = text.match(re) || [];
+    const clean = found.map((u) => u.trim()).filter((u) => isLikelyUrl(u));
+    // Dedupe
+    const uniq: string[] = [];
+    const seen = new Set<string>();
+    for (const u of clean) {
+      const k = u.toLowerCase();
+      if (!seen.has(k)) {
+        uniq.push(u);
+        seen.add(k);
+      }
+    }
+    return uniq;
+  };
 
   type ExtraDetails = {
     prioridad?: "BAJA" | "MEDIA" | "ALTA";
@@ -203,6 +240,7 @@ export default function TicketsBoard() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  // Links genéricos (antes: audio URLs)
   const [audioUrls, setAudioUrls] = useState<string[]>([]);
   const [newAudioUrl, setNewAudioUrl] = useState<string>("");
   const [fileToDelete, setFileToDelete] = useState<null | {
@@ -521,11 +559,58 @@ export default function TicketsBoard() {
     if (!v) return;
     setAudioUrls((prev) => [v, ...prev]);
     setNewAudioUrl("");
-    toast({ title: "URL de audio guardada localmente" });
+    toast({ title: "Link agregado (pendiente de guardar)" });
   }
 
   function removeAudioUrl(idx: number) {
     setAudioUrls((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  // Guardar los links en la descripción del ticket bajo la línea "URLs: ..."
+  async function saveLinksToDescription() {
+    if (!selectedTicket?.codigo) return;
+    const toAdd = audioUrls
+      .map((u) => String(u || "").trim())
+      .filter((u) => !!u && isLikelyUrl(u));
+    if (toAdd.length === 0) return;
+
+    // Partimos de la descripción actual del detalle si está cargado
+    const currentDesc = String(ticketDetail?.descripcion || "");
+
+    // Extraer URLs existentes y limpiar líneas previas de "URLs:"
+    const existing = extractUrlsFromDescription(currentDesc);
+    const lines = currentDesc.split(/\r?\n/);
+    const filteredLines = lines.filter((ln) => !/^\s*URLs\s*:/i.test(ln));
+
+    // Unir y deduplicar
+    const all = [...existing, ...toAdd];
+    const seen = new Set<string>();
+    const deduped = all.filter((u) => {
+      const k = u.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+
+    // Construir nueva descripción
+    const base = filteredLines.join("\n").trim();
+    const urlsLine = deduped.length > 0 ? `URLs: ${deduped.join(", ")}` : "";
+    const newDesc = base ? `${base}\n\n${urlsLine}` : urlsLine;
+
+    try {
+      await updateTicket(selectedTicket.codigo, {
+        descripcion: newDesc,
+      } as any);
+      toast({ title: "Links guardados en la descripción" });
+      // Recargar el detalle para reflejar los cambios
+      await loadTicketDetail(selectedTicket.codigo);
+      // Limpiar lista local
+      setAudioUrls([]);
+      setNewAudioUrl("");
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al guardar links" });
+    }
   }
 
   function openTicketDetail(ticket: TicketBoardItem) {
@@ -573,9 +658,42 @@ export default function TicketsBoard() {
       tarea: "",
     });
     setEditFiles([]);
+    setAudioUrls([]);
+    setNewAudioUrl("");
     setDrawerOpen(true);
     if (ticket.codigo) {
       loadFilesForTicket(ticket.codigo);
+      setDetailTab("general");
+      loadTicketDetail(ticket.codigo);
+    }
+  }
+
+  async function loadTicketDetail(codigo: string) {
+    try {
+      setTicketDetailLoading(true);
+      setTicketDetailError(null);
+      setTicketDetail(null);
+      const url = `https://v001.vercel.app/v1/ticket/get/ticket/${encodeURIComponent(
+        codigo
+      )}`;
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const json = await res.json().catch(() => ({}));
+      setTicketDetail(json?.data ?? json ?? null);
+    } catch (e: any) {
+      setTicketDetailError(
+        String(e?.message || e || "Error al cargar detalle")
+      );
+    } finally {
+      setTicketDetailLoading(false);
     }
   }
 
@@ -1221,366 +1339,695 @@ export default function TicketsBoard() {
                 Selecciona un ticket
               </div>
             ) : (
-              <div className="p-6 space-y-6">
-                {coerceStatus(editForm.estado as any) === "PAUSADO" && (
-                  <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-                    <div className="text-sm text-amber-800">
-                      Este ticket está pausado y requiere acción. Por favor
-                      envía la información correspondiente.
-                    </div>
-                    <div className="ml-auto">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => {
-                          try {
-                            editFileInputRef.current?.click();
-                          } catch {}
-                        }}
-                      >
-                        Adjuntar ahora
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                {/* Título */}
-                <div className="space-y-2">
-                  <Label htmlFor="edit-nombre" className="text-sm font-medium">
-                    Título del ticket
-                  </Label>
-                  <Input
-                    id="edit-nombre"
-                    className="h-10"
-                    value={editForm.nombre ?? ""}
-                    onChange={(e) =>
-                      setEditForm((f) => ({ ...f, nombre: e.target.value }))
-                    }
-                    placeholder="Nombre o asunto"
-                  />
-                </div>
-
-                {/* Personas involucradas */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <User className="h-4 w-4 text-slate-500" />
-                    Personas involucradas
-                  </div>
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-informante" className="text-sm">
-                        Informante
-                      </Label>
-                      <Input
-                        id="edit-informante"
-                        className="h-10 bg-slate-50 cursor-not-allowed"
-                        value={editForm.informante ?? ""}
-                        onChange={(e) =>
-                          setEditForm((f) => ({
-                            ...f,
-                            informante: e.target.value,
-                          }))
-                        }
-                        placeholder="Nombre del informante"
-                        disabled
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="edit-resuelto-por" className="text-sm">
-                        Resuelto por
-                      </Label>
-                      <Input
-                        id="edit-resuelto-por"
-                        className="h-10 bg-slate-50 cursor-not-allowed"
-                        value={editForm.resuelto_por ?? ""}
-                        placeholder="Nombre de quien resolvió"
-                        disabled
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Se eliminó la sección 'Equipo asignado' según solicitud */}
-
-                {/* 'Trabajo y resolución' eliminado del modal según solicitud del usuario */}
-                <Separator />
-
-                {/* Archivos (adjuntos + upload + recorder) */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Paperclip className="h-4 w-4 text-slate-500" />
-                      Archivos adjuntos
-                    </div>
-                  </div>
-
-                  {filesLoading ? (
-                    <div className="flex items-center justify-center py-8 text-slate-500">
-                      Cargando archivos...
-                    </div>
-                  ) : files.length > 0 ? (
-                    <div className="space-y-2">
-                      <div className="text-xs text-slate-500">
-                        {files.length} archivo(s) existente(s)
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {files.slice(0, 8).map((f) => (
-                          <div
-                            key={f.id}
-                            className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
-                          >
-                            <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-white">
-                              {iconFor(f.mime_type, f.nombre_archivo)}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div
-                                className="truncate text-sm font-medium"
-                                title={f.nombre_archivo}
-                              >
-                                {shortenFileName(f.nombre_archivo, 15)}
-                              </div>
-                              <div className="text-xs text-slate-500">
-                                {f.tamano_bytes
-                                  ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
-                                  : "—"}
-                              </div>
-                            </div>
-                            <div className="flex gap-2 items-center">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0"
-                                onClick={() =>
-                                  downloadFile(f.id, f.nombre_archivo)
-                                }
-                                aria-label={`Descargar ${f.nombre_archivo}`}
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0"
-                                onClick={() => openPreview(f)}
-                                aria-label={`Ver ${f.nombre_archivo}`}
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0"
-                                onClick={() =>
-                                  setFileToDelete({
-                                    id: f.id,
-                                    nombre_archivo: f.nombre_archivo,
-                                  })
-                                }
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      {files.length > 4 && (
-                        <div className="text-xs text-slate-500 text-center pt-2">
-                          +{files.length - 4} más
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-2">
-                        <FileIcon className="h-6 w-6 text-slate-400" />
-                      </div>
-                      <p className="text-sm text-slate-500">
-                        No hay archivos adjuntos
-                      </p>
-                    </div>
-                  )}
-
-                  <Separator />
-
-                  <div className="space-y-3">
-                    <Label className="text-sm font-medium">
-                      Adjuntar nuevos archivos
-                    </Label>
-                    <input
-                      ref={editFileInputRef}
-                      type="file"
-                      className="hidden"
-                      multiple
-                      onChange={(e) => {
-                        const picked = Array.from(e.target.files ?? []);
-                        if (!picked.length) return;
-                        setEditFiles((prev) =>
-                          [...prev, ...picked].slice(0, 10)
-                        );
-                        e.currentTarget.value = "";
-                      }}
-                    />
-                    <Button
-                      variant="outline"
-                      className="w-full gap-2 bg-transparent"
-                      onClick={() => editFileInputRef.current?.click()}
+              <>
+                <div className="px-6 pt-4">
+                  <div className="inline-flex items-center rounded-md border bg-white overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setDetailTab("general")}
+                      className={`px-3 py-1.5 text-xs ${
+                        detailTab === "general"
+                          ? "bg-slate-900 text-white"
+                          : "hover:bg-gray-50"
+                      }`}
+                      title="Editar campos"
                     >
-                      <Paperclip className="h-4 w-4" /> Seleccionar archivos
-                    </Button>
+                      General
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailTab("detalle")}
+                      className={`px-3 py-1.5 text-xs border-l ${
+                        detailTab === "detalle"
+                          ? "bg-slate-900 text-white"
+                          : "hover:bg-gray-50"
+                      }`}
+                      title="Detalle del ticket (API)"
+                    >
+                      Detalle
+                    </button>
+                  </div>
+                </div>
 
-                    {/* Grabador de audio y URLs */}
-                    <div className="space-y-3 pt-3">
-                      <Label className="text-sm font-medium">
-                        Grabar audio
-                      </Label>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant={isRecording ? "destructive" : "outline"}
-                          onClick={() => {
-                            if (isRecording) stopRecording();
-                            else startRecording();
-                          }}
-                        >
-                          {isRecording ? "Detener" : "Grabar"}
-                        </Button>
-                        {isRecording && (
-                          <div className="voice-visualizer" aria-hidden>
-                            <span className="bar" />
-                            <span className="bar" />
-                            <span className="bar" />
-                            <span className="bar" />
-                            <span className="bar" />
-                          </div>
-                        )}
-                        {recordedUrl && (
-                          <audio src={recordedUrl} controls className="h-8" />
-                        )}
-                        {recordedBlob && (
-                          <Button size="sm" onClick={addRecordedToFiles}>
-                            Añadir grabación a archivos
-                          </Button>
-                        )}
-                      </div>
-                      <div className="pt-2">
-                        <Label className="text-sm font-medium">
-                          Agregar URL de audio (no se enviará todavía)
-                        </Label>
-                        <div className="flex items-center gap-2 pt-2">
-                          <Input
-                            placeholder="https://..."
-                            value={newAudioUrl}
-                            onChange={(e) => setNewAudioUrl(e.target.value)}
-                          />
-                          <Button size="sm" onClick={addAudioUrl}>
-                            Agregar URL
+                <div className={detailTab === "general" ? "block" : "hidden"}>
+                  <div className="p-6 space-y-6">
+                    {coerceStatus(editForm.estado as any) === "PAUSADO" && (
+                      <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                        <div className="text-sm text-amber-800">
+                          Este ticket está pausado y requiere acción. Por favor
+                          envía la información correspondiente.
+                        </div>
+                        <div className="ml-auto">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              try {
+                                editFileInputRef.current?.click();
+                              } catch {}
+                            }}
+                          >
+                            Adjuntar ahora
                           </Button>
                         </div>
-                        {audioUrls.length > 0 && (
-                          <div className="space-y-2 pt-2">
-                            {audioUrls.map((u, idx) => (
-                              <div
-                                key={u + idx}
-                                className="flex items-center gap-2"
-                              >
-                                <audio src={u} controls className="h-8" />
-                                <div className="text-xs text-slate-500 truncate">
-                                  {u}
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => removeAudioUrl(idx)}
-                                >
-                                  Eliminar
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                      </div>
+                    )}
+                    {/* Título */}
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="edit-nombre"
+                        className="text-sm font-medium"
+                      >
+                        Título del ticket
+                      </Label>
+                      <Input
+                        id="edit-nombre"
+                        className="h-10"
+                        value={editForm.nombre ?? ""}
+                        onChange={(e) =>
+                          setEditForm((f) => ({ ...f, nombre: e.target.value }))
+                        }
+                        placeholder="Nombre o asunto"
+                      />
+                    </div>
+
+                    {/* Personas involucradas */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <User className="h-4 w-4 text-slate-500" />
+                        Personas involucradas
+                      </div>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-informante" className="text-sm">
+                            Informante
+                          </Label>
+                          <Input
+                            id="edit-informante"
+                            className="h-10 bg-slate-50 cursor-not-allowed"
+                            value={editForm.informante ?? ""}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                informante: e.target.value,
+                              }))
+                            }
+                            placeholder="Nombre del informante"
+                            disabled
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label
+                            htmlFor="edit-resuelto-por"
+                            className="text-sm"
+                          >
+                            Resuelto por
+                          </Label>
+                          <Input
+                            id="edit-resuelto-por"
+                            className="h-10 bg-slate-50 cursor-not-allowed"
+                            value={editForm.resuelto_por ?? ""}
+                            placeholder="Nombre de quien resolvió"
+                            disabled
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    {editFiles.length > 0 && (
-                      <>
+                    {/* Se eliminó la sección 'Equipo asignado' según solicitud */}
+
+                    {/* 'Trabajo y resolución' eliminado del modal según solicitud del usuario */}
+                    <Separator />
+
+                    {/* Archivos (adjuntos + upload + recorder) */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <Paperclip className="h-4 w-4 text-slate-500" />
+                          Archivos adjuntos
+                        </div>
+                      </div>
+
+                      {filesLoading ? (
+                        <div className="flex items-center justify-center py-8 text-slate-500">
+                          Cargando archivos...
+                        </div>
+                      ) : files.length > 0 ? (
                         <div className="space-y-2">
                           <div className="text-xs text-slate-500">
-                            {editFiles.length} archivo(s) seleccionado(s)
+                            {files.length} archivo(s) existente(s)
                           </div>
-                          <div className="space-y-2">
-                            {editFiles.map((f, i) => (
+                          <div className="grid grid-cols-2 gap-2">
+                            {files.slice(0, 8).map((f) => (
                               <div
-                                key={`${f.name}-${i}`}
-                                className="flex items-center gap-3 rounded-lg border bg-white p-3"
+                                key={f.id}
+                                className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
                               >
-                                <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-slate-100">
-                                  {iconFor(f.type, f.name)}
+                                <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-white">
+                                  {iconFor(f.mime_type, f.nombre_archivo)}
                                 </div>
                                 <div className="min-w-0 flex-1">
                                   <div
                                     className="truncate text-sm font-medium"
-                                    title={f.name}
+                                    title={f.nombre_archivo}
                                   >
-                                    {f.name}
+                                    {shortenFileName(f.nombre_archivo, 15)}
                                   </div>
                                   <div className="text-xs text-slate-500">
-                                    {Math.ceil(f.size / 1024)} KB
+                                    {f.tamano_bytes
+                                      ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
+                                      : "—"}
                                   </div>
                                 </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() =>
-                                    setEditFiles((prev) =>
-                                      prev.filter((_, idx) => idx !== i)
-                                    )
-                                  }
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
+                                <div className="flex gap-2 items-center">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() =>
+                                      downloadFile(f.id, f.nombre_archivo)
+                                    }
+                                    aria-label={`Descargar ${f.nombre_archivo}`}
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => openPreview(f)}
+                                    aria-label={`Ver ${f.nombre_archivo}`}
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() =>
+                                      setFileToDelete({
+                                        id: f.id,
+                                        nombre_archivo: f.nombre_archivo,
+                                      })
+                                    }
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
                             ))}
                           </div>
+                          {files.length > 4 && (
+                            <div className="text-xs text-slate-500 text-center pt-2">
+                              +{files.length - 4} más
+                            </div>
+                          )}
                         </div>
-                        <div className="mt-2 flex gap-2">
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={async () => {
-                              if (!selectedTicket?.codigo) return;
-                              setUploadingFiles(true);
-                              try {
-                                await uploadTicketFiles(
-                                  selectedTicket.codigo,
-                                  editFiles
-                                );
-                                toast({ title: "Archivos subidos" });
-                                setEditFiles([]);
-                                await loadFilesForTicket(selectedTicket.codigo);
-                              } catch (e) {
-                                console.error(e);
-                                toast({ title: "Error subiendo archivos" });
-                              } finally {
-                                setUploadingFiles(false);
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-2">
+                            <FileIcon className="h-6 w-6 text-slate-400" />
+                          </div>
+                          <p className="text-sm text-slate-500">
+                            No hay archivos adjuntos
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Links detectados en la descripción (clicables) */}
+                      {(() => {
+                        const urlList: string[] = [
+                          ...extractUrlsFromDescription(
+                            ticketDetail?.descripcion
+                          ),
+                          ...((Array.isArray(ticketDetail?.links)
+                            ? ticketDetail.links
+                            : []) as string[]),
+                        ];
+                        const seen = new Set<string>();
+                        const links = urlList.filter((u) => {
+                          const k = String(u || "").toLowerCase();
+                          if (!k) return false;
+                          if (seen.has(k)) return false;
+                          seen.add(k);
+                          return true;
+                        });
+                        return links.length > 0 ? (
+                          <div className="mt-3">
+                            <div className="text-sm font-medium">Links</div>
+                            <div className="mt-1 flex flex-col gap-1">
+                              {links.map((u, i) => (
+                                <a
+                                  key={`gen-links-${i}`}
+                                  href={normalizeUrl(u)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sky-600 underline break-all text-sm"
+                                >
+                                  {u}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+
+                      <Separator />
+
+                      <div className="space-y-3">
+                        <Label className="text-sm font-medium">
+                          Adjuntar nuevos archivos
+                        </Label>
+                        <input
+                          ref={editFileInputRef}
+                          type="file"
+                          className="hidden"
+                          multiple
+                          onChange={(e) => {
+                            const picked = Array.from(e.target.files ?? []);
+                            if (!picked.length) return;
+                            setEditFiles((prev) =>
+                              [...prev, ...picked].slice(0, 10)
+                            );
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          className="w-full gap-2 bg-transparent"
+                          onClick={() => editFileInputRef.current?.click()}
+                        >
+                          <Paperclip className="h-4 w-4" /> Seleccionar archivos
+                        </Button>
+
+                        {/* Grabador de audio y URLs */}
+                        <div className="space-y-3 pt-3">
+                          <Label className="text-sm font-medium">
+                            Grabar audio
+                          </Label>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant={isRecording ? "destructive" : "outline"}
+                              onClick={() => {
+                                if (isRecording) stopRecording();
+                                else startRecording();
+                              }}
+                            >
+                              {isRecording ? "Detener" : "Grabar"}
+                            </Button>
+                            {isRecording && (
+                              <div className="voice-visualizer" aria-hidden>
+                                <span className="bar" />
+                                <span className="bar" />
+                                <span className="bar" />
+                                <span className="bar" />
+                                <span className="bar" />
+                              </div>
+                            )}
+                            {recordedUrl && (
+                              <audio
+                                src={recordedUrl}
+                                controls
+                                className="h-8"
+                              />
+                            )}
+                            {recordedBlob && (
+                              <Button size="sm" onClick={addRecordedToFiles}>
+                                Añadir grabación a archivos
+                              </Button>
+                            )}
+                          </div>
+                          <div className="pt-2">
+                            <Label className="text-sm font-medium">
+                              Agregar link (se guardará en la descripción)
+                            </Label>
+                            <div className="flex items-center gap-2 pt-2">
+                              <Input
+                                placeholder="https://..."
+                                value={newAudioUrl}
+                                onChange={(e) => setNewAudioUrl(e.target.value)}
+                              />
+                              <Button size="sm" onClick={addAudioUrl}>
+                                Agregar link
+                              </Button>
+                            </div>
+                            {audioUrls.length > 0 && (
+                              <div className="space-y-2 pt-2">
+                                {audioUrls.map((u, idx) => (
+                                  <div
+                                    key={u + idx}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <a
+                                      href={normalizeUrl(u)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-xs text-sky-600 underline break-all"
+                                    >
+                                      {u}
+                                    </a>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => removeAudioUrl(idx)}
+                                    >
+                                      Eliminar
+                                    </Button>
+                                  </div>
+                                ))}
+                                <div className="pt-1">
+                                  <Button
+                                    size="sm"
+                                    onClick={saveLinksToDescription}
+                                  >
+                                    Guardar links
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {editFiles.length > 0 && (
+                          <>
+                            <div className="space-y-2">
+                              <div className="text-xs text-slate-500">
+                                {editFiles.length} archivo(s) seleccionado(s)
+                              </div>
+                              <div className="space-y-2">
+                                {editFiles.map((f, i) => (
+                                  <div
+                                    key={`${f.name}-${i}`}
+                                    className="flex items-center gap-3 rounded-lg border bg-white p-3"
+                                  >
+                                    <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-slate-100">
+                                      {iconFor(f.type, f.name)}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div
+                                        className="truncate text-sm font-medium"
+                                        title={f.name}
+                                      >
+                                        {f.name}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        {Math.ceil(f.size / 1024)} KB
+                                      </div>
+                                    </div>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                      onClick={() =>
+                                        setEditFiles((prev) =>
+                                          prev.filter((_, idx) => idx !== i)
+                                        )
+                                      }
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="mt-2 flex gap-2">
+                              <Button
+                                size="sm"
+                                className="flex-1"
+                                onClick={async () => {
+                                  if (!selectedTicket?.codigo) return;
+                                  setUploadingFiles(true);
+                                  try {
+                                    await uploadTicketFiles(
+                                      selectedTicket.codigo,
+                                      editFiles
+                                    );
+                                    toast({ title: "Archivos subidos" });
+                                    setEditFiles([]);
+                                    await loadFilesForTicket(
+                                      selectedTicket.codigo
+                                    );
+                                  } catch (e) {
+                                    console.error(e);
+                                    toast({ title: "Error subiendo archivos" });
+                                  } finally {
+                                    setUploadingFiles(false);
+                                  }
+                                }}
+                              >
+                                {uploadingFiles
+                                  ? "Subiendo..."
+                                  : "Subir archivos"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setEditFiles([])}
+                              >
+                                Limpiar
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={detailTab === "detalle" ? "block" : "hidden"}>
+                  <div className="p-6 space-y-4">
+                    {ticketDetailLoading ? (
+                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+                        Cargando detalle…
+                      </div>
+                    ) : ticketDetailError ? (
+                      <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                        {ticketDetailError}
+                      </div>
+                    ) : ticketDetail ? (
+                      <>
+                        {/* Resumen encabezado */}
+                        <div className="rounded-lg border border-slate-200 bg-white p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-base font-semibold text-slate-900">
+                                {ticketDetail?.nombre || "Ticket"}
+                              </div>
+                              {ticketDetail?.codigo && (
+                                <div className="text-xs text-slate-500 break-all">
+                                  Código: {ticketDetail.codigo}
+                                </div>
+                              )}
+                            </div>
+                            {ticketDetail?.estado && (
+                              <span
+                                className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
+                                  STATUS_STYLE[
+                                    coerceStatus(ticketDetail.estado as any)
+                                  ]
+                                }`}
+                              >
+                                {
+                                  STATUS_LABEL[
+                                    coerceStatus(ticketDetail.estado as any)
+                                  ]
+                                }
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
+                            <div className="space-y-1">
+                              <div className="text-slate-500 text-xs">
+                                Alumno
+                              </div>
+                              <div className="font-medium break-all">
+                                {ticketDetail?.alumno_nombre || "—"}
+                              </div>
+                              {ticketDetail?.id_alumno && (
+                                <div className="text-xs text-slate-500 break-all">
+                                  ID: {ticketDetail.id_alumno}
+                                </div>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-slate-500 text-xs">Tipo</div>
+                              <div className="font-medium">
+                                {ticketDetail?.tipo || "—"}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-slate-500 text-xs">
+                                Creado
+                              </div>
+                              <div>
+                                {ticketDetail?.created_at
+                                  ? new Date(
+                                      ticketDetail.created_at
+                                    ).toLocaleString("es-ES")
+                                  : "—"}
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-slate-500 text-xs">
+                                Deadline
+                              </div>
+                              <div>
+                                {ticketDetail?.deadline
+                                  ? new Date(
+                                      ticketDetail.deadline
+                                    ).toLocaleString("es-ES")
+                                  : "—"}
+                              </div>
+                            </div>
+                            {ticketDetail?.plazo && (
+                              <div className="space-y-1">
+                                <div className="text-slate-500 text-xs">
+                                  Plazo
+                                </div>
+                                <div>{String(ticketDetail.plazo)}</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Descripción y links */}
+                        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                          <div className="text-sm font-medium">Descripción</div>
+                          <div className="whitespace-pre-wrap text-sm text-slate-800">
+                            {ticketDetail?.descripcion || "—"}
+                          </div>
+                          {(() => {
+                            const urlList: string[] = [
+                              ...extractUrlsFromDescription(
+                                ticketDetail?.descripcion
+                              ),
+                              ...((Array.isArray(ticketDetail?.links)
+                                ? ticketDetail.links
+                                : []) as string[]),
+                            ];
+                            // Dedupe final
+                            const seen = new Set<string>();
+                            const links = urlList.filter((u) => {
+                              const k = String(u || "").toLowerCase();
+                              if (!k) return false;
+                              if (seen.has(k)) return false;
+                              seen.add(k);
+                              return true;
+                            });
+                            return links.length > 0 ? (
+                              <div className="pt-1">
+                                <div className="text-sm font-medium">Links</div>
+                                <div className="mt-1 flex flex-col gap-1">
+                                  {links.map((u, i) => (
+                                    <a
+                                      key={i}
+                                      href={normalizeUrl(u)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-sky-600 underline break-all text-sm"
+                                    >
+                                      {u}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null;
+                          })()}
+                        </div>
+
+                        {/* Coaches */}
+                        {Array.isArray(ticketDetail?.coaches) &&
+                          ticketDetail.coaches.length > 0 && (
+                            <div className="rounded-lg border border-slate-200 bg-white p-4">
+                              <div className="text-sm font-medium mb-2">
+                                Coaches
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {ticketDetail.coaches.map(
+                                  (c: any, idx: number) => (
+                                    <span
+                                      key={`${
+                                        c.codigo_equipo ?? c.nombre ?? idx
+                                      }`}
+                                      className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                                      title={`${c.nombre ?? "Coach"}${
+                                        c.area ? ` · ${c.area}` : ""
+                                      }${c.puesto ? ` · ${c.puesto}` : ""}`}
+                                    >
+                                      {(c.nombre ?? "Coach").slice(0, 20)}
+                                      {c.area
+                                        ? ` · ${String(c.area).slice(0, 10)}`
+                                        : ""}
+                                    </span>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                        {/* Estados */}
+                        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                          <div className="text-sm font-medium">Estados</div>
+                          {ticketDetail?.ultimo_estado?.estatus && (
+                            <div className="text-xs text-slate-600">
+                              Último:{" "}
+                              {
+                                STATUS_LABEL[
+                                  coerceStatus(
+                                    ticketDetail.ultimo_estado.estatus
+                                  )
+                                ]
                               }
-                            }}
-                          >
-                            {uploadingFiles ? "Subiendo..." : "Subir archivos"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setEditFiles([])}
-                          >
-                            Limpiar
-                          </Button>
+                              {ticketDetail?.ultimo_estado?.fecha && (
+                                <>
+                                  {" · "}
+                                  {new Date(
+                                    ticketDetail.ultimo_estado.fecha
+                                  ).toLocaleString("es-ES")}
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {Array.isArray(ticketDetail?.estados) &&
+                          ticketDetail.estados.length > 0 ? (
+                            <div className="mt-1 space-y-1">
+                              {ticketDetail.estados.map((e: any) => (
+                                <div
+                                  key={e.id}
+                                  className="flex items-center gap-2 text-xs text-slate-700"
+                                >
+                                  <span
+                                    className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
+                                      STATUS_STYLE[coerceStatus(e.estatus_id)]
+                                    }`}
+                                  >
+                                    {STATUS_LABEL[coerceStatus(e.estatus_id)]}
+                                  </span>
+                                  <span>
+                                    {new Date(e.created_at).toLocaleString(
+                                      "es-ES"
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-500">
+                              Sin historial
+                            </div>
+                          )}
                         </div>
                       </>
+                    ) : (
+                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+                        Sin datos de detalle
+                      </div>
                     )}
                   </div>
                 </div>
-              </div>
+              </>
             )}
           </div>
 

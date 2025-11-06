@@ -68,6 +68,7 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Separator } from "@/components/ui/separator";
+import { getAuthToken } from "@/lib/auth";
 
 function fmtDate(iso?: string | null) {
   if (!iso) return "—";
@@ -193,6 +194,10 @@ export default function TicketsPanel({
     null
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<"general" | "detalle">("general");
+  const [ticketDetail, setTicketDetail] = useState<any | null>(null);
+  const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
+  const [ticketDetailError, setTicketDetailError] = useState<string | null>(null);
 
   // New state variables for ticket creation
   const [openCreate, setOpenCreate] = useState(false);
@@ -646,7 +651,60 @@ export default function TicketsPanel({
   function openTicketDetail(ticket: StudentTicket) {
     setSelectedTicket(ticket);
     setDrawerOpen(true);
+    setDetailTab("general");
+    const codigo = (ticket as any)?.codigo || (ticket as any)?.id_externo || null;
+    if (codigo) loadTicketDetail(String(codigo));
   }
+
+  async function loadTicketDetail(codigo: string) {
+    try {
+      setTicketDetailLoading(true);
+      setTicketDetailError(null);
+      setTicketDetail(null);
+      const url = `https://v001.vercel.app/v1/ticket/get/ticket/${encodeURIComponent(codigo)}`;
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const json = await res.json().catch(() => ({}));
+      setTicketDetail(json?.data ?? json ?? null);
+    } catch (e: any) {
+      setTicketDetailError(String(e?.message || e || "Error al cargar detalle"));
+    } finally {
+      setTicketDetailLoading(false);
+    }
+  }
+
+  // Helpers: URLs y formato
+  const isLikelyUrl = (s: string) => /^(https?:\/\/|www\.)\S+$/i.test(String(s || "").trim());
+  const normalizeUrl = (s: string) => {
+    const str = String(s || "").trim();
+    if (!str) return "";
+    return str.startsWith("http://") || str.startsWith("https://") ? str : `https://${str}`;
+  };
+  const extractUrlsFromDescription = (desc?: string | null) => {
+    const text = String(desc || "");
+    if (!text) return [] as string[];
+    const re = /(https?:\/\/[^\s,]+|www\.[^\s,]+)/gi;
+    const found = text.match(re) || [];
+    const clean = found.map((u) => u.trim()).filter((u) => isLikelyUrl(u));
+    const uniq: string[] = [];
+    const seen = new Set<string>();
+    for (const u of clean) {
+      const k = u.toLowerCase();
+      if (!seen.has(k)) {
+        uniq.push(u);
+        seen.add(k);
+      }
+    }
+    return uniq;
+  };
 
   return (
     <>
@@ -873,9 +931,36 @@ export default function TicketsPanel({
             </div>
           </DrawerHeader>
 
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="space-y-6">
-              <div className="space-y-4">
+          <div className="flex-1 overflow-y-auto">
+            {/* Tabs pequeña en el drawer */}
+            <div className="px-6 pt-4">
+              <div className="inline-flex items-center rounded-md border bg-white overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setDetailTab("general")}
+                  className={`px-3 py-1.5 text-xs ${
+                    detailTab === "general" ? "bg-slate-900 text-white" : "hover:bg-gray-50"
+                  }`}
+                  title="Información general"
+                >
+                  General
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailTab("detalle")}
+                  className={`px-3 py-1.5 text-xs border-l ${
+                    detailTab === "detalle" ? "bg-slate-900 text-white" : "hover:bg-gray-50"
+                  }`}
+                  title="Detalle del ticket (API)"
+                >
+                  Detalle
+                </button>
+              </div>
+            </div>
+
+            <div className={detailTab === "general" ? "block" : "hidden"}>
+              <div className="p-6 space-y-6">
+                <div className="space-y-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium text-slate-500">
                     Título del ticket
@@ -943,6 +1028,153 @@ export default function TicketsPanel({
                       Haz clic en "Ver todos" para ver los archivos adjuntos a
                       este ticket.
                     </p>
+                  </div>
+                )}
+              </div>
+            </div>
+            </div>
+
+            <div className={detailTab === "detalle" ? "block" : "hidden"}>
+              <div className="p-6 space-y-6">
+                {ticketDetailLoading ? (
+                  <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+                    Cargando detalle…
+                  </div>
+                ) : ticketDetailError ? (
+                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                    {ticketDetailError}
+                  </div>
+                ) : ticketDetail ? (
+                  <>
+                    {/* Header resumido */}
+                    <div className="rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-base font-semibold text-slate-900">
+                            {ticketDetail?.nombre || "Ticket"}
+                          </div>
+                          {ticketDetail?.codigo && (
+                            <div className="text-xs text-slate-500 break-all">Código: {ticketDetail.codigo}</div>
+                          )}
+                        </div>
+                        {ticketDetail?.estado && (
+                          <span className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[coerceStatus(ticketDetail.estado as any)]}`}>
+                            {STATUS_LABEL[coerceStatus(ticketDetail.estado as any)]}
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
+                        <div className="space-y-1">
+                          <div className="text-slate-500 text-xs">Alumno</div>
+                          <div className="font-medium break-all">{ticketDetail?.alumno_nombre || student.name || "—"}</div>
+                          {ticketDetail?.id_alumno && (
+                            <div className="text-xs text-slate-500 break-all">ID: {ticketDetail.id_alumno}</div>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-slate-500 text-xs">Tipo</div>
+                          <div className="font-medium">{ticketDetail?.tipo || selectedTicket?.tipo || "—"}</div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-slate-500 text-xs">Creado</div>
+                          <div>{ticketDetail?.created_at ? new Date(ticketDetail.created_at).toLocaleString("es-ES") : fmtDate(selectedTicket?.creacion)}</div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-slate-500 text-xs">Deadline</div>
+                          <div>{ticketDetail?.deadline ? new Date(ticketDetail.deadline).toLocaleString("es-ES") : "—"}</div>
+                        </div>
+                        {ticketDetail?.plazo && (
+                          <div className="space-y-1">
+                            <div className="text-slate-500 text-xs">Plazo</div>
+                            <div>{String(ticketDetail.plazo)}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Descripción y links */}
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                      <div className="text-sm font-medium">Descripción</div>
+                      <div className="whitespace-pre-wrap text-sm text-slate-800">
+                        {ticketDetail?.descripcion || "—"}
+                      </div>
+                      {(() => {
+                        const urlList: string[] = [
+                          ...extractUrlsFromDescription(ticketDetail?.descripcion),
+                          ...((Array.isArray(ticketDetail?.links) ? ticketDetail.links : []) as string[]),
+                        ];
+                        const seen = new Set<string>();
+                        const links = urlList.filter((u) => {
+                          const k = String(u || "").toLowerCase();
+                          if (!k) return false;
+                          if (seen.has(k)) return false;
+                          seen.add(k);
+                          return true;
+                        });
+                        return links.length > 0 ? (
+                          <div className="pt-1">
+                            <div className="text-sm font-medium">Links</div>
+                            <div className="mt-1 flex flex-col gap-1">
+                              {links.map((u, i) => (
+                                <a key={i} href={normalizeUrl(u)} target="_blank" rel="noreferrer" className="text-sky-600 underline break-all text-sm">
+                                  {u}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+
+                    {/* Coaches */}
+                    {Array.isArray(ticketDetail?.coaches) && ticketDetail.coaches.length > 0 && (
+                      <div className="rounded-lg border border-slate-200 bg-white p-4">
+                        <div className="text-sm font-medium mb-2">Coaches</div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {ticketDetail.coaches.map((c: any, idx: number) => (
+                            <span
+                              key={`${c.codigo_equipo ?? c.nombre ?? idx}`}
+                              className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                              title={`${c.nombre ?? "Coach"}${c.area ? ` · ${c.area}` : ""}${c.puesto ? ` · ${c.puesto}` : ""}`}
+                            >
+                              {(c.nombre ?? "Coach").slice(0, 20)}{c.area ? ` · ${String(c.area).slice(0, 10)}` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Estados */}
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                      <div className="text-sm font-medium">Estados</div>
+                      {ticketDetail?.ultimo_estado?.estatus && (
+                        <div className="text-xs text-slate-600">
+                          Último: {STATUS_LABEL[coerceStatus(ticketDetail.ultimo_estado.estatus)]}
+                          {ticketDetail?.ultimo_estado?.fecha && (
+                            <>
+                              {" · "}
+                              {new Date(ticketDetail.ultimo_estado.fecha).toLocaleString("es-ES")}
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {Array.isArray(ticketDetail?.estados) && ticketDetail.estados.length > 0 ? (
+                        <div className="mt-1 space-y-1">
+                          {ticketDetail.estados.map((e: any) => (
+                            <div key={e.id} className="flex items-center gap-2 text-xs text-slate-700">
+                              <span className={`inline-flex items-center rounded px-1.5 py-0.5 border ${STATUS_STYLE[coerceStatus(e.estatus_id)]}`}>{STATUS_LABEL[coerceStatus(e.estatus_id)]}</span>
+                              <span>{new Date(e.created_at).toLocaleString("es-ES")}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500">Sin historial</div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+                    Sin datos de detalle
                   </div>
                 )}
               </div>
