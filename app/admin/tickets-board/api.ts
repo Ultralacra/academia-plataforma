@@ -74,7 +74,20 @@ export async function getTickets(opts: {
   });
   const url = `/ticket/get/ticket${q}`;
   const json = (await apiFetch<TicketBoardResponse>(url)) as TicketBoardResponse;
-  const rows = Array.isArray(json?.data) ? json.data : [];
+  let rows = Array.isArray(json?.data) ? json.data : [];
+
+  // Ocultar tickets eliminados a nivel de API (no se devuelven al tablero)
+  const isDeleted = (r: any): boolean => {
+    try {
+      const estado = String(r?.estado ?? r?.status ?? r?.estatus ?? "").toUpperCase();
+      if (/(ELIMINAD|BORRADO|DELETED)/.test(estado)) return true;
+      if (r?.eliminado === true || r?.deleted === true) return true;
+      if (r?.deleted_at || r?.eliminado_at) return true;
+      if (typeof r?.activo !== "undefined" && r?.activo === false) return true;
+    } catch {}
+    return false;
+  };
+  rows = rows.filter((r) => !isDeleted(r));
 
   const items: TicketBoardItem[] = rows.map((r: any) => ({
     id: Number(r.id),

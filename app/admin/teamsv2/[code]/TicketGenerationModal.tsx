@@ -44,6 +44,7 @@ import {
   updateTicket,
   type OpcionItem,
 } from "@/app/admin/alumnos/api";
+import { attachTicketFilesByIds } from "@/app/admin/alumnos/api";
 
 export function TicketGenerationModal({
   open,
@@ -1069,23 +1070,50 @@ export function TicketGenerationModal({
                     .join("\n\n")
                     .slice(0, 4000);
 
+                  // IDs de archivos ya existentes devueltos por la IA (si aplica)
+                  const rawArch = Array.isArray(
+                    (data as any)?.archivos_cargados
+                  )
+                    ? (data as any).archivos_cargados
+                    : [];
+                  const idsFromAi: string[] = Array.from(
+                    new Set(
+                      rawArch
+                        .map(
+                          (x: any) =>
+                            x?.id_mensaje ||
+                            x?.id ||
+                            x?._id ||
+                            x?.codigo ||
+                            x?.code
+                        )
+                        .filter(Boolean)
+                        .map((s: any) => String(s))
+                    )
+                  );
+
                   // Preparar archivos a partir de adjuntos (descargar por URL si es posible)
                   const files: File[] = [];
-                  try {
-                    for (const a of normalizedAttachments) {
-                      const url = getAttachmentUrl(a);
-                      if (!url) continue;
-                      const mime =
-                        resolveAttachmentMime(a) || "application/octet-stream";
-                      const res = await fetch(url);
-                      if (!res.ok) continue;
-                      const blob = await res.blob();
-                      const file = new File([blob], a.name || "adjunto", {
-                        type: mime,
-                      });
-                      files.push(file);
-                    }
-                  } catch {}
+                  // Si ya tenemos IDs de archivos existentes, evitamos subir duplicados;
+                  // si no hay IDs, intentamos subir archivos descargando por URL.
+                  if (idsFromAi.length === 0) {
+                    try {
+                      for (const a of normalizedAttachments) {
+                        const url = getAttachmentUrl(a);
+                        if (!url) continue;
+                        const mime =
+                          resolveAttachmentMime(a) ||
+                          "application/octet-stream";
+                        const res = await fetch(url);
+                        if (!res.ok) continue;
+                        const blob = await res.blob();
+                        const file = new File([blob], a.name || "adjunto", {
+                          type: mime,
+                        });
+                        files.push(file);
+                      }
+                    } catch {}
+                  }
 
                   setFlowStage("creating");
                   // Pequeño delay para mostrar el estado "creando"
@@ -1100,6 +1128,19 @@ export function TicketGenerationModal({
                     urls: links,
                   });
                   const payload = created?.data ?? created;
+
+                  // Adjuntar archivos existentes por ID si el backend lo soporta
+                  try {
+                    const codigo = payload?.codigo
+                      ? String(payload.codigo)
+                      : undefined;
+                    if (codigo && idsFromAi.length > 0) {
+                      await attachTicketFilesByIds(codigo, idsFromAi);
+                    }
+                  } catch (err) {
+                    // No bloquear el flujo si falla el adjunto por IDs
+                    console.warn("Adjunto por IDs falló:", err);
+                  }
 
                   // Intentar asignar estado por defecto
                   try {

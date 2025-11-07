@@ -255,6 +255,8 @@ export default function TicketsBoard() {
   const [reassignLoading, setReassignLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingTicket, setDeletingTicket] = useState(false);
+  // Control para expandir lista completa de archivos en el panel de edición
+  const [showAllFiles, setShowAllFiles] = useState(false);
 
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("");
@@ -666,6 +668,7 @@ export default function TicketsBoard() {
       setDetailTab("general");
       loadTicketDetail(ticket.codigo);
     }
+    setShowAllFiles(false);
   }
 
   async function loadTicketDetail(codigo: string) {
@@ -730,12 +733,53 @@ export default function TicketsBoard() {
   async function saveTicketChanges() {
     if (!selectedTicket?.codigo) return;
     try {
+      // Construir nueva descripción con links (audioUrls) si existen, anteponiendo contenido previo
+      let currentDesc = String(ticketDetail?.descripcion || "").trim();
+      // Eliminar líneas previas de URLs para evitar duplicados
+      const lines = currentDesc
+        .split(/\r?\n/)
+        .filter((ln) => !/^\s*URLs\s*:/i.test(ln));
+      currentDesc = lines.join("\n").trim();
+      const existingUrls =
+        extractUrlsFromDescription(ticketDetail?.descripcion) || [];
+      const newUrls = audioUrls
+        .map((u) => u.trim())
+        .filter((u) => !!u && isLikelyUrl(u));
+      const allUrlsSet = new Set<string>();
+      const allUrls: string[] = [];
+      [...existingUrls, ...newUrls].forEach((u) => {
+        const k = u.toLowerCase();
+        if (!allUrlsSet.has(k)) {
+          allUrlsSet.add(k);
+          allUrls.push(u);
+        }
+      });
+      const urlsLine = allUrls.length > 0 ? `URLs: ${allUrls.join(", ")}` : "";
+      const finalDescripcion = [currentDesc, urlsLine]
+        .filter(Boolean)
+        .join("\n\n")
+        .slice(0, 4000);
+
+      // Subir archivos seleccionados (incluye audios grabados) antes de actualizar metadata
+      if (editFiles.length > 0) {
+        try {
+          await uploadTicketFiles(selectedTicket.codigo, editFiles);
+          toast({ title: "Archivos subidos" });
+          setEditFiles([]);
+          await loadFilesForTicket(selectedTicket.codigo);
+        } catch (e) {
+          console.error(e);
+          toast({ title: "Error subiendo archivos" });
+        }
+      }
+
       await updateTicket(selectedTicket.codigo, {
         nombre: editForm.nombre,
         // ensure we only send a string or undefined
         estado:
           typeof editForm.estado === "string" ? editForm.estado : undefined,
         deadline: editForm.deadline ?? undefined,
+        descripcion: finalDescripcion || undefined,
       } as any);
       // Notificación local: guardado de cambios (incluye estado si cambia)
       try {
@@ -769,10 +813,15 @@ export default function TicketsBoard() {
                 nombre: editForm.nombre ?? t.nombre,
                 estado: editForm.estado ?? t.estado,
                 deadline: editForm.deadline ?? t.deadline,
+                // No almacenamos descripcion aquí; se mostrará en detalle recargado
               }
             : t
         )
       );
+      // Recargar detalle para reflejar nueva descripción y links
+      await loadTicketDetail(selectedTicket.codigo);
+      setAudioUrls([]);
+      setNewAudioUrl("");
       setDrawerOpen(false);
     } catch (e) {
       console.error(e);
@@ -1479,69 +1528,86 @@ export default function TicketsBoard() {
                             {files.length} archivo(s) existente(s)
                           </div>
                           <div className="grid grid-cols-2 gap-2">
-                            {files.slice(0, 8).map((f) => (
-                              <div
-                                key={f.id}
-                                className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
-                              >
-                                <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-white">
-                                  {iconFor(f.mime_type, f.nombre_archivo)}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div
-                                    className="truncate text-sm font-medium"
-                                    title={f.nombre_archivo}
-                                  >
-                                    {shortenFileName(f.nombre_archivo, 15)}
+                            {(showAllFiles ? files : files.slice(0, 8)).map(
+                              (f) => (
+                                <div
+                                  key={f.id}
+                                  className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
+                                >
+                                  <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-white">
+                                    {iconFor(f.mime_type, f.nombre_archivo)}
                                   </div>
-                                  <div className="text-xs text-slate-500">
-                                    {f.tamano_bytes
-                                      ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
-                                      : "—"}
+                                  <div className="min-w-0 flex-1">
+                                    <div
+                                      className="truncate text-sm font-medium"
+                                      title={f.nombre_archivo}
+                                    >
+                                      {shortenFileName(f.nombre_archivo, 15)}
+                                    </div>
+                                    <div className="text-xs text-slate-500">
+                                      {f.tamano_bytes
+                                        ? `${Math.ceil(
+                                            f.tamano_bytes / 1024
+                                          )} KB`
+                                        : "—"}
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 items-center">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                      onClick={() =>
+                                        downloadFile(f.id, f.nombre_archivo)
+                                      }
+                                      aria-label={`Descargar ${f.nombre_archivo}`}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                      onClick={() => openPreview(f)}
+                                      aria-label={`Ver ${f.nombre_archivo}`}
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-8 w-8 p-0"
+                                      onClick={() =>
+                                        setFileToDelete({
+                                          id: f.id,
+                                          nombre_archivo: f.nombre_archivo,
+                                        })
+                                      }
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
                                   </div>
                                 </div>
-                                <div className="flex gap-2 items-center">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0"
-                                    onClick={() =>
-                                      downloadFile(f.id, f.nombre_archivo)
-                                    }
-                                    aria-label={`Descargar ${f.nombre_archivo}`}
-                                  >
-                                    <Download className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0"
-                                    onClick={() => openPreview(f)}
-                                    aria-label={`Ver ${f.nombre_archivo}`}
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-8 w-8 p-0"
-                                    onClick={() =>
-                                      setFileToDelete({
-                                        id: f.id,
-                                        nombre_archivo: f.nombre_archivo,
-                                      })
-                                    }
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
+                              )
+                            )}
                           </div>
-                          {files.length > 4 && (
-                            <div className="text-xs text-slate-500 text-center pt-2">
-                              +{files.length - 4} más
-                            </div>
+                          {files.length > 8 && !showAllFiles && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllFiles(true)}
+                              className="text-xs text-slate-600 text-center pt-2 w-full hover:underline"
+                            >
+                              +{files.length - 8} más
+                            </button>
+                          )}
+                          {showAllFiles && files.length > 8 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowAllFiles(false)}
+                              className="text-xs text-slate-600 text-center pt-2 w-full hover:underline"
+                            >
+                              Mostrar menos
+                            </button>
                           )}
                         </div>
                       ) : (

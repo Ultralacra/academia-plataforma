@@ -391,6 +391,19 @@ export async function uploadTicketFiles(ticketId: string, files: File[], urls?: 
   });
 }
 
+// 10-bis) Adjuntar archivos existentes por ID (JSON { ids: [...] })
+export async function attachTicketFilesByIds(ticketId: string, ids: string[]): Promise<any> {
+  if (!ticketId) throw new Error('ticketId requerido');
+  const clean = Array.from(new Set((ids || []).map(String).map((s) => s.trim()).filter(Boolean)));
+  // Endpoint para duplicar/adjuntar archivos existentes por IDs al ticket creado
+  // Corrección: solo un slash después de 'ticket'
+  return await apiFetch<any>(`/ticket/duplicate/archivos/${encodeURIComponent(ticketId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: clean }),
+  });
+}
+
 // 11) Eliminar archivo de ticket (asumimos endpoint DELETE)
 // Nota: el endpoint real puede variar; se asume DELETE /v1/ticket/delete/archivo/{fileId}
 export async function deleteTicketFile(fileId: string): Promise<any> {
