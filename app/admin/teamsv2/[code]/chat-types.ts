@@ -49,6 +49,8 @@ export type TicketData = {
   descripcion?: string;
   archivos_cargados?: any[];
   content?: string;
+  ai_run_id?: string;
+  message_ids?: string[];
   parsed?: {
     titulo?: string;
     descripcion?: string;

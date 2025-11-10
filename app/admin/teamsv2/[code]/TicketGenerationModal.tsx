@@ -1119,6 +1119,20 @@ export function TicketGenerationModal({
                   // Pequeño delay para mostrar el estado "creando"
                   await new Promise((r) => setTimeout(r, 350));
 
+                  // Logs previos: confirmar qué vamos a enviar
+                  try {
+                    // eslint-disable-next-line no-console
+                    console.log(
+                      "[TicketGenerationModal] Enviando a createTicket:",
+                      {
+                        ai_run_id: (data as any)?.ai_run_id,
+                        message_ids: Array.isArray((data as any)?.message_ids)
+                          ? (data as any).message_ids
+                          : null,
+                      }
+                    );
+                  } catch {}
+
                   const created = await createTicket({
                     nombre: (titulo || "Ticket IA").slice(0, 120),
                     id_alumno: alumnoCode,
@@ -1126,8 +1140,32 @@ export function TicketGenerationModal({
                     descripcion: finalDescripcion,
                     archivos: files,
                     urls: links,
+                    ai_run_id: (data as any)?.ai_run_id || undefined,
+                    message_ids: Array.isArray((data as any)?.message_ids)
+                      ? ((data as any).message_ids as any[]).map((s) =>
+                          String(s)
+                        )
+                      : undefined,
                   });
                   const payload = created?.data ?? created;
+                  try {
+                    // Logs de diagnóstico para confirmar que llegaron ai_run_id y message_ids al frontend y qué devolvió el backend
+                    // eslint-disable-next-line no-console
+                    console.debug(
+                      "[TicketGenerationModal] createTicket payload sent:",
+                      {
+                        ai_run_id: (data as any)?.ai_run_id,
+                        message_ids: Array.isArray((data as any)?.message_ids)
+                          ? (data as any).message_ids
+                          : null,
+                      }
+                    );
+                    // eslint-disable-next-line no-console
+                    console.debug(
+                      "[TicketGenerationModal] createTicket response:",
+                      payload
+                    );
+                  } catch {}
 
                   // Adjuntar archivos existentes por ID si el backend lo soporta
                   try {

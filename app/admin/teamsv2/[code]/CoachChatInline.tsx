@@ -151,21 +151,7 @@ export default function CoachChatInline({
   const [ticketModalOpen, setTicketModalOpen] = React.useState(false);
   const [ticketLoading, setTicketLoading] = React.useState(false);
   const [ticketError, setTicketError] = React.useState<string | null>(null);
-  const [ticketData, setTicketData] = React.useState<{
-    nombre?: string;
-    sugerencia?: string;
-    tipo?: string;
-    descripcion?: string;
-    archivos_cargados?: any[];
-    content?: string;
-    parsed?: {
-      titulo?: string;
-      descripcion?: string;
-      prioridad?: string;
-      categoria?: string;
-      html?: string;
-    };
-  } | null>(null);
+  const [ticketData, setTicketData] = React.useState<TicketData | null>(null);
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
@@ -458,6 +444,10 @@ export default function CoachChatInline({
           archivos_cargados: Array.isArray(data?.archivos_cargados)
             ? data.archivos_cargados
             : [],
+          ai_run_id: data?.ai_run_id ? String(data.ai_run_id) : undefined,
+          message_ids: Array.isArray(data?.message_ids)
+            ? (data.message_ids as any[]).map((s) => String(s))
+            : undefined,
           parsed,
         });
       } else {
@@ -469,6 +459,10 @@ export default function CoachChatInline({
           archivos_cargados: Array.isArray(data?.archivos_cargados)
             ? data.archivos_cargados
             : [],
+          ai_run_id: data?.ai_run_id ? String(data.ai_run_id) : undefined,
+          message_ids: Array.isArray(data?.message_ids)
+            ? (data.message_ids as any[]).map((s) => String(s))
+            : undefined,
         });
       }
     } catch (e: any) {

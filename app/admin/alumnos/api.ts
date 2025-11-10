@@ -239,6 +239,8 @@ export type CreateTicketForm = {
   descripcion?: string;
   archivos?: File[];
   urls?: string[]; // enlaces opcionales asociados al ticket (separadas por coma en descripcion y/o campo urls)
+  ai_run_id?: string; // ID de la corrida de IA
+  message_ids?: string[]; // IDs de mensajes (array)
 };
 
 export async function createTicket(form: CreateTicketForm): Promise<any> {
@@ -260,8 +262,25 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
       fd.set('urls', JSON.stringify(unique));
     } catch {}
   }
+  // Nuevos campos para trazabilidad de IA
+  if (form.ai_run_id) fd.set('ai_run_id', String(form.ai_run_id));
+  if (Array.isArray(form.message_ids) && form.message_ids.length > 0) {
+    const arr = form.message_ids.map(String);
+    // ÚNICO campo message_ids como JSON (requerimiento):
+    // ej: ["id1","id2",...]
+    fd.set('message_ids', JSON.stringify(arr));
+  }
   if (descripcion) fd.set('descripcion', descripcion);
   (form.archivos ?? []).forEach((file) => fd.append('archivos', file));
+  // Log de depuración (solo en desarrollo) para verificar que realmente se envían los campos
+  // Log diagnóstico SIEMPRE para confirmar qué se está enviando (puedes quitarlo cuando verifiques)
+  try {
+    const entries = Array.from(fd.entries());
+    // eslint-disable-next-line no-console
+    console.debug('[createTicket] Enviando FormData (debug):', entries);
+    // eslint-disable-next-line no-console
+    console.log('[createTicket] Enviando FormData (log):', entries);
+  } catch {}
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!res.ok) {
