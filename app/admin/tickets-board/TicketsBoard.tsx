@@ -861,6 +861,46 @@ export default function TicketsBoard() {
             />
           </div>
 
+          {/* Filtro por fecha: Desde */}
+          <div className="relative">
+            <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="date"
+              className="h-9 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all min-w-[160px]"
+              value={fechaDesde}
+              max={fechaHasta || undefined}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFechaDesde(v);
+                // Si 'Desde' supera a 'Hasta', ajustamos 'Hasta'
+                if (fechaHasta && v && v > fechaHasta) {
+                  setFechaHasta(v);
+                }
+              }}
+              title="Fecha desde"
+            />
+          </div>
+
+          {/* Filtro por fecha: Hasta */}
+          <div className="relative">
+            <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="date"
+              className="h-9 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all min-w-[160px]"
+              value={fechaHasta}
+              min={fechaDesde || undefined}
+              onChange={(e) => {
+                const v = e.target.value;
+                setFechaHasta(v);
+                // Si 'Hasta' queda antes de 'Desde', ajustamos 'Desde'
+                if (fechaDesde && v && v < fechaDesde) {
+                  setFechaDesde(v);
+                }
+              }}
+              title="Fecha hasta"
+            />
+          </div>
+
           <select
             className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all min-w-[180px]"
             value={coachFiltro}

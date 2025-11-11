@@ -137,6 +137,121 @@ export interface ListProspectsResult {
   total: number;
 }
 
+/* ========================= Formularios de reserva ========================= */
+export type ReservationFieldType =
+  | "text"
+  | "email"
+  | "phone"
+  | "number"
+  | "textarea"
+  | "select"
+  | "date";
+
+export interface ReservationField {
+  id: ID;
+  label: string;
+  type: ReservationFieldType;
+  required?: boolean;
+  options?: string[]; // para selects
+}
+
+export interface ReservationForm {
+  id: ID;
+  nombre: string;
+  descripcion?: string | null;
+  creadoAt: string;
+  actualizadoAt: string;
+  fields: ReservationField[];
+  destino?: {
+    // configuración de envío (mock por ahora)
+    email?: string | null;
+    webhookUrl?: string | null;
+  } | null;
+}
+
+/* ========================= Scheduling (tipo Calendly lightweight) ========================= */
+export interface SchedulingSlot {
+  id: ID;
+  formId: ID; // formulario asociado
+  startAt: string; // ISO
+  endAt: string; // ISO
+  timezone?: string | null; // IANA tz
+  createdAt: string; // ISO
+  booked?: boolean; // derivado para UI
+}
+
+export interface ReservationBooking {
+  id: ID;
+  formId: ID;
+  slotId: ID;
+  prospectId?: ID | null; // si se asocia a un prospecto existente
+  nombre: string;
+  email?: string | null;
+  telefono?: string | null;
+  answers?: Record<string, any> | null; // respuestas de campos del form
+  createdAt: string; // ISO
+}
+
+/* ========================= Métricas ========================= */
+export interface CrmGlobalMetrics {
+  totalProspects: number;
+  byStage: Record<PipelineStageId, number>;
+  won: number; // ganados
+  lost: number; // perdidos
+  contacted: number; // etapa contactado o más
+  conversionRate: number; // won / total
+}
+
+export interface SellerMetricsRow {
+  ownerId: ID | null;
+  ownerNombre: string;
+  total: number;
+  contacted: number;
+  qualified: number; // calificado + propuesta
+  won: number;
+  lost: number;
+}
+
+export interface SellerMetricsResult {
+  rows: SellerMetricsRow[];
+  totalOwners: number;
+}
+
+// Métricas ampliadas
+export interface FunnelMetrics {
+  counts: Record<PipelineStageId, number>;
+  percentages: Record<PipelineStageId, number>;
+}
+
+export interface ChannelMetricsRow {
+  canal: string;
+  total: number;
+  contacted: number;
+  qualified: number;
+  won: number;
+  lost: number;
+  conversionRate: number;
+}
+export interface ChannelMetricsResult {
+  rows: ChannelMetricsRow[];
+  totalCanales: number;
+}
+
+export interface TrendPoint {
+  date: string; // ISO o etiqueta
+  created: number;
+  contacted: number;
+  qualified: number;
+  won: number;
+  lost: number;
+}
+
+export interface StageAgeStat {
+  stage: PipelineStageId;
+  avgDaysInStage: number;
+  maxDaysInStage: number;
+}
+
 /* ========================= Automatizaciones ========================= */
 export type AutomationTriggerId =
   | "registro_inicial"
