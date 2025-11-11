@@ -33,9 +33,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/auth/protected-route";
-import { ReservationFormsManager } from "./components/ReservationFormsManager";
 import { ProspectKanban } from "./components/ProspectKanban";
-import { SchedulingWidget } from "./components/SchedulingWidget";
 import { ProspectEditor } from "./components/ProspectEditor";
 import { ProspectDetailDrawer } from "./components/ProspectDetailDrawer";
 import { ProspectFilters } from "./components/ProspectFilters";
@@ -52,6 +50,7 @@ import { MetricsOverview } from "./components/MetricsOverview";
 import { SellerMetricsTable } from "./components/SellerMetricsTable";
 import { MetricsTabs } from "./components/MetricsTabs";
 import { crmAutomations } from "@/lib/crm-service";
+import { createLead, listLeads, updateLead, type Lead } from "./api";
 import { toast } from "@/components/ui/use-toast";
 import { StageBadge } from "./components/StageBadge";
 
@@ -73,10 +72,41 @@ function CrmContent() {
     creado?: string;
     actualizado?: string;
     notas?: string;
+    remote?: boolean;
   };
 
   const [rows, setRows] = useState<Prospect[]>([]);
-  const reload = () => {
+  const reload = async () => {
+    // Intentar usar la API real de leads
+    try {
+      const { items } = await listLeads({ page: 1, pageSize: 500 });
+      const mappedFromLeads: Prospect[] = items.map((l: Lead) => ({
+        id: l.codigo,
+        nombre: l.name,
+        email: l.email || undefined,
+        telefono: l.phone || undefined,
+        canal: l.source || undefined,
+        etapa:
+          (l.status || "new").toLowerCase() === "new"
+            ? "Nuevo"
+            : (l.status || "").toLowerCase() === "contacted"
+            ? "Contactado"
+            : (l.status || "").toLowerCase() === "qualified"
+            ? "Calificado"
+            : (l.status || "").toLowerCase() === "won"
+            ? "Ganado"
+            : "Perdido",
+        owner: l.owner_codigo || undefined,
+        creado: l.created_at || undefined,
+        actualizado: l.updated_at || undefined,
+        remote: true,
+      }));
+      setRows(mappedFromLeads);
+      return;
+    } catch (e) {
+      console.warn("listLeads falló, usando datos locales", e);
+    }
+    // Fallback mock local
     const res = crmService.listProspects({});
     const mapped: Prospect[] = res.items.map((p: ProspectCore) => ({
       id: p.id,
@@ -101,6 +131,7 @@ function CrmContent() {
       creado: p.creadoAt,
       actualizado: p.actualizadoAt,
       notas: p.notasResumen || undefined,
+      remote: false,
     }));
     setRows(mapped);
   };
@@ -114,6 +145,7 @@ function CrmContent() {
   const [canalFiltro, setCanalFiltro] = useState<string>("all");
   const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
   const [openCreate, setOpenCreate] = useState(false);
+  const [openCreateLead, setOpenCreateLead] = useState(false);
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("pipeline");
 
@@ -180,11 +212,11 @@ function CrmContent() {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="border-b bg-gradient-to-br from-white via-orange-50/40 to-white px-6 py-5">
+      <div className="border-b bg-white px-6 py-5">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-orange-600" />
+              <span className="inline-block w-2 h-2 rounded-full bg-indigo-600" />
               CRM
             </h1>
             <p className="text-sm text-slate-600">
@@ -197,7 +229,7 @@ function CrmContent() {
               size="sm"
               className={
                 view === "lista"
-                  ? "bg-orange-600 hover:bg-orange-700 text-white border-0"
+                  ? "bg-indigo-600 hover:bg-indigo-700 text-white border-0"
                   : ""
               }
               onClick={() => setView("lista")}
@@ -209,7 +241,7 @@ function CrmContent() {
               size="sm"
               className={
                 view === "kanban"
-                  ? "bg-orange-600 hover:bg-orange-700 text-white border-0"
+                  ? "bg-indigo-600 hover:bg-indigo-700 text-white border-0"
                   : ""
               }
               onClick={() => setView("kanban")}
@@ -220,7 +252,7 @@ function CrmContent() {
               <DialogTrigger asChild>
                 <Button
                   size="sm"
-                  className="gap-2 bg-orange-600 hover:bg-orange-700 text-white"
+                  className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
                   <Plus className="h-4 w-4" />
                   Cierre de venta
@@ -238,11 +270,35 @@ function CrmContent() {
                 />
               </DialogContent>
             </Dialog>
+            <Dialog open={openCreateLead} onOpenChange={setOpenCreateLead}>
+              <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  Nuevo lead
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-lg">
+                <DialogHeader>
+                  <DialogTitle>Crear lead</DialogTitle>
+                </DialogHeader>
+                <CreateLeadForm
+                  onCreated={() => {
+                    setOpenCreateLead(false);
+                    reload();
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </div>
       {/* Contenido en pestañas */}
-      <div className="flex-1 overflow-hidden p-6 bg-gradient-to-b from-white to-slate-50">
+      {/* Scroll interno habilitado sin fondos degradados */}
+      <div className="flex-1 min-h-0 p-6 overflow-y-auto bg-white">
         <CrmTabsLayout
           value={activeTab}
           onValueChange={setActiveTab}
@@ -269,56 +325,89 @@ function CrmContent() {
               />
               {view === "lista" ? (
                 <div className="rounded-xl border bg-white">
-                  <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs text-slate-500 border-b">
+                  <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium text-slate-600 border-b bg-slate-50/50">
                     <div className="col-span-3">Prospecto</div>
                     <div className="col-span-2">Contacto</div>
                     <div className="col-span-2">Canal</div>
                     <div className="col-span-2">Etapa</div>
                     <div className="col-span-2">Owner</div>
-                    <div className="col-span-1 text-right">Acciones</div>
+                    <div className="col-span-1 text-right">Acción</div>
                   </div>
                   <div>
-                    {filtrados.map((p) => (
-                      <div
-                        key={p.id}
-                        className="grid grid-cols-12 gap-2 px-4 py-3 border-b hover:bg-orange-50/40"
-                      >
-                        <div className="col-span-3 min-w-0">
-                          <div className="font-medium truncate">{p.nombre}</div>
-                          <div className="text-xs text-slate-500 truncate">
-                            {p.pais} {p.ciudad ? `· ${p.ciudad}` : ""}
-                          </div>
-                        </div>
-                        <div className="col-span-2 min-w-0 text-sm">
-                          <div className="truncate flex items-center gap-1">
-                            <Mail className="h-3.5 w-3.5 text-slate-400" />
-                            {p.email || "—"}
-                          </div>
-                          <div className="truncate flex items-center gap-1">
-                            <Phone className="h-3.5 w-3.5 text-slate-400" />
-                            {p.telefono || "—"}
-                          </div>
-                        </div>
-                        <div className="col-span-2 text-sm">
-                          {p.canal || "—"}
-                        </div>
-                        <div className="col-span-2">
-                          <StageBadge stage={p.etapa} />
-                        </div>
-                        <div className="col-span-2 text-sm">
-                          {p.owner || "—"}
-                        </div>
-                        <div className="col-span-1 text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setDrawerId(p.id)}
-                          >
-                            Detalle
-                          </Button>
-                        </div>
+                    {filtrados.length === 0 ? (
+                      <div className="p-8 text-center text-sm text-slate-500">
+                        No hay leads para mostrar
                       </div>
-                    ))}
+                    ) : (
+                      filtrados.map((p) => (
+                        <div
+                          key={p.id}
+                          className="grid grid-cols-12 gap-2 px-4 py-3 border-b last:border-b-0 hover:bg-indigo-50/40 transition-colors"
+                        >
+                          <div className="col-span-3 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="font-medium truncate text-slate-800"
+                                title={p.nombre}
+                              >
+                                {p.nombre}
+                              </span>
+                              {p.remote && (
+                                <span
+                                  className="inline-flex items-center rounded-md bg-indigo-100 text-indigo-700 px-1.5 py-0.5 text-[10px] font-medium"
+                                  title="Lead remoto API"
+                                >
+                                  API
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-500 truncate">
+                              {p.pais || ""} {p.ciudad ? `· ${p.ciudad}` : ""}
+                            </div>
+                          </div>
+                          <div className="col-span-2 min-w-0 text-xs">
+                            <div className="truncate flex items-center gap-1">
+                              <Mail className="h-3.5 w-3.5 text-slate-400" />
+                              <span className="truncate">{p.email || "—"}</span>
+                            </div>
+                            <div className="truncate flex items-center gap-1 mt-0.5">
+                              <Phone className="h-3.5 w-3.5 text-slate-400" />
+                              <span className="truncate">
+                                {p.telefono || "—"}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="col-span-2 text-xs flex items-center">
+                            {p.canal || (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </div>
+                          <div className="col-span-2">
+                            <StageBadge stage={p.etapa} />
+                          </div>
+                          <div className="col-span-2 text-xs flex items-center">
+                            {p.owner || (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </div>
+                          <div className="col-span-1 flex items-center justify-end">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setDrawerId(p.id)}
+                              disabled={p.remote}
+                              title={
+                                p.remote
+                                  ? "Detalle no disponible para leads remotos aún"
+                                  : "Detalle"
+                              }
+                            >
+                              Detalle
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               ) : (
@@ -334,12 +423,35 @@ function CrmContent() {
                   }))}
                   onOpenDetail={(p) => setDrawerId(p.id)}
                   onMoved={() => reload()}
+                  onStageChange={async (id, newStage) => {
+                    const row = rows.find((r) => r.id === id);
+                    const toLeadStatus: Record<string, string> = {
+                      nuevo: "new",
+                      contactado: "contacted",
+                      calificado: "qualified",
+                      ganado: "won",
+                      perdido: "lost",
+                    };
+                    if (row?.remote) {
+                      try {
+                        await updateLead(id, {
+                          status: toLeadStatus[newStage],
+                        });
+                        toast({
+                          title: "Lead actualizado",
+                          description: `Estado: ${toLeadStatus[newStage]}`,
+                        });
+                      } catch (e) {
+                        toast({ title: "Error al actualizar lead" });
+                      }
+                    } else {
+                      crmService.updateProspectStage(id, newStage);
+                    }
+                  }}
                 />
               )}
             </div>
           }
-          agenda={<SchedulingWidget />}
-          forms={<ReservationFormsManager />}
           metrics={
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -427,6 +539,24 @@ function CrmCloseSaleForm({ onDone }: { onDone: () => void }) {
           .filter(Boolean),
         cuotas,
       });
+      // Registrar también el lead en la API remota (si está disponible)
+      try {
+        const lead = await createLead({
+          name: nombre,
+          email: email || undefined,
+          phone: telefono || undefined,
+          source: "crm_sale",
+          status: "new",
+          // owner_codigo podría establecerse si lo tuviéramos
+        });
+        // Guardar el código del lead remoto como referencia en el prospecto local
+        crmService.updateProspect(base.id, {
+          notasResumen: `Cierre registrado · lead_codigo: ${lead.codigo}`,
+        });
+      } catch (apiErr) {
+        // No bloquear el flujo si falla la API; solo informamos
+        console.warn("No se pudo registrar el lead en la API", apiErr);
+      }
       toast({ title: "Cierre registrado", description: nombre });
       onDone();
     } catch (e) {
@@ -512,6 +642,100 @@ function CrmCloseSaleForm({ onDone }: { onDone: () => void }) {
         >
           {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
           Registrar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Formulario para crear un lead manualmente vía API /v1/leads
+function CreateLeadForm({ onCreated }: { onCreated: () => void }) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [source, setSource] = useState("web_form");
+  const [status, setStatus] = useState("new");
+  const [owner, setOwner] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async () => {
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      await createLead({
+        name: name.trim(),
+        email: email.trim() || undefined,
+        phone: phone.trim() || undefined,
+        source: source.trim() || undefined,
+        status: status.trim() || undefined,
+        owner_codigo: owner.trim() || undefined,
+      });
+      toast({ title: "Lead creado", description: name.trim() });
+      onCreated();
+    } catch (e) {
+      toast({ title: "Error", description: "No se pudo crear el lead" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div className="col-span-2 space-y-2">
+        <Label>Nombre *</Label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Email</Label>
+        <Input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Teléfono</Label>
+        <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Source</Label>
+        <Input value={source} onChange={(e) => setSource(e.target.value)} />
+      </div>
+      <div className="space-y-2">
+        <Label>Status</Label>
+        <select
+          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+        >
+          <option value="new">new</option>
+          <option value="contacted">contacted</option>
+          <option value="qualified">qualified</option>
+          <option value="won">won</option>
+          <option value="lost">lost</option>
+        </select>
+      </div>
+      <div className="space-y-2">
+        <Label>Owner código</Label>
+        <Input value={owner} onChange={(e) => setOwner(e.target.value)} />
+      </div>
+      <div className="col-span-2 flex justify-end gap-2 mt-2">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setName("");
+            setEmail("");
+            setPhone("");
+            setOwner("");
+            setSource("web_form");
+            setStatus("new");
+          }}
+        >
+          Limpiar
+        </Button>
+        <Button onClick={submit} disabled={loading || !name.trim()}>
+          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          Crear lead
         </Button>
       </div>
     </div>

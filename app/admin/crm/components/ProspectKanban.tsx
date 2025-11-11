@@ -19,10 +19,12 @@ export function ProspectKanban({
   items,
   onOpenDetail,
   onMoved,
+  onStageChange,
 }: {
   items: KanbanProspect[];
   onOpenDetail: (p: KanbanProspect) => void;
   onMoved?: (id: string, newStage: PipelineStageId) => void;
+  onStageChange?: (id: string, newStage: PipelineStageId) => void;
 }) {
   const columns = [
     "Nuevo",
@@ -46,7 +48,12 @@ export function ProspectKanban({
       Perdido: "perdido",
     };
     const mapped = stageMap[stage];
-    crmService.updateProspectStage(id, mapped);
+    if (onStageChange) {
+      onStageChange(id, mapped);
+    } else {
+      // Fallback a mock local si no se provee manejador externo
+      crmService.updateProspectStage(id, mapped);
+    }
     onMoved?.(id, mapped);
   };
 
@@ -61,7 +68,7 @@ export function ProspectKanban({
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => onDrop(e, col)}
           >
-            <div className="flex items-center justify-between border-b px-4 py-3 bg-gradient-to-r from-white to-orange-50/30 rounded-t-xl">
+            <div className="flex items-center justify-between border-b px-4 py-3 bg-slate-50 rounded-t-xl">
               <div className="flex items-center gap-2">
                 <StageBadge stage={col} />
                 <span className="text-xs font-medium text-slate-500">
@@ -77,7 +84,7 @@ export function ProspectKanban({
                   onDragStart={(e) =>
                     e.dataTransfer.setData("text/plain", p.id)
                   }
-                  className="rounded-md border bg-white p-3 shadow-sm hover:shadow-md cursor-move transition-colors"
+                  className="rounded-md border bg-white p-3 shadow-sm hover:shadow-md cursor-move transition-colors hover:bg-indigo-50/40"
                 >
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <h4
