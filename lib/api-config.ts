@@ -28,6 +28,11 @@ export const endpoints = {
     // relaciones coach ↔ alumno; acepta ?coach=ID o ?alumno=CODIGO
     list: "/client/get/clients-coaches",
   },
+  metadata: {
+    list: "/metadata", // GET lista
+    create: "/metadata", // POST crear
+    detail: (id: string | number) => `/metadata/${id}`, // GET detalle por id
+  },
 } as const;
 
 export const buildUrl = (path: string) =>

@@ -25,6 +25,7 @@
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": [
     "node_modules",
-    "app/admin/teamsv2/[code]/TicketGenerationModal.tsx"
+    "app/admin/teamsv2/[code]/TicketGenerationModal.tsx",
+    "app/admin/crm/components/CloseSaleForm.tsx"
   ]
 }

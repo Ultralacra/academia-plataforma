@@ -13,6 +13,7 @@ export interface KanbanProspect
     "id" | "nombre" | "email" | "telefono" | "canalFuente" | "ownerNombre"
   > {
   etapa: string;
+  saleStatus?: string;
 }
 
 export function ProspectKanban({
@@ -102,6 +103,13 @@ export function ProspectKanban({
                       <Users className="h-3.5 w-3.5" />
                     </Button>
                   </div>
+                  {p.saleStatus ? (
+                    <div className="mb-2">
+                      <Badge variant="secondary" className="text-[10px]">
+                        {p.saleStatus}
+                      </Badge>
+                    </div>
+                  ) : null}
                   <div className="space-y-2 text-xs text-slate-600">
                     <div className="flex items-center gap-1.5 truncate">
                       <Mail className="h-3.5 w-3.5 text-slate-400" />

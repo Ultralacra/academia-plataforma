@@ -18,8 +18,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,7 +35,7 @@ import { Card } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { ProspectKanban } from "./components/ProspectKanban";
 import { ProspectEditor } from "./components/ProspectEditor";
-import { ProspectDetailDrawer } from "./components/ProspectDetailDrawer";
+// Detalle por modal deshabilitado; ahora usamos una vista dedicada /admin/crm/booking/[id]
 import { ProspectFilters } from "./components/ProspectFilters";
 import { CrmTabsLayout } from "./components/TabsLayout";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -53,11 +53,13 @@ import { crmAutomations } from "@/lib/crm-service";
 import { createLead, listLeads, updateLead, type Lead } from "./api";
 import { toast } from "@/components/ui/use-toast";
 import { StageBadge } from "./components/StageBadge";
-
-// Vista CRM: solo visual (sin llamadas a API). Basada en componentes existentes.
-// Estructura: filtros + métricas + lista/kanban + drawer modal para detalle y crear prospecto.
+import { CloseSaleForm } from "./components/CloseSaleForm2";
+import { SalesPersonalMetrics } from "./components/SalesPersonalMetrics";
+import { listMetadata } from "@/lib/metadata";
+import { useRouter } from "next/navigation";
 
 function CrmContent() {
+  const router = useRouter();
   type Prospect = {
     id: string;
     nombre: string;
@@ -65,48 +67,64 @@ function CrmContent() {
     telefono?: string;
     canal?: string;
     etapa: "Nuevo" | "Contactado" | "Calificado" | "Ganado" | "Perdido";
-    owner?: string;
     pais?: string;
     ciudad?: string;
     tags?: string[];
     creado?: string;
     actualizado?: string;
     notas?: string;
-    remote?: boolean;
+    remote?: boolean; // viene de API real (metadata)
+    saleStatus?: string;
   };
 
   const [rows, setRows] = useState<Prospect[]>([]);
+
+  const mapLeadStatusToEtapa = (status?: string) => {
+    const s = (status || "new").toLowerCase();
+    if (s === "new") return "Nuevo";
+    if (s === "contacted") return "Contactado";
+    if (s === "qualified") return "Calificado";
+    if (s === "won") return "Ganado";
+    if (s === "lost") return "Perdido";
+    return "Nuevo";
+  };
+
+  // Eliminado: ya no usamos submissions locales vía localStorage.
+
   const reload = async () => {
-    // Intentar usar la API real de leads
+    // Cargar leads desde API real
     try {
       const { items } = await listLeads({ page: 1, pageSize: 500 });
+      // Enriquecer con status de venta embebido si existe (payload.sale.status)
+      let saleStatusMap = new Map<string, string>();
+      try {
+        const meta = await listMetadata<any>();
+        for (const r of meta.items || []) {
+          if (r.entity === "booking" && (r as any).payload?.sale?.status) {
+            saleStatusMap.set(String(r.id), (r as any).payload.sale.status);
+          }
+        }
+      } catch (e) {
+        // no bloquear por errores en metadata
+      }
       const mappedFromLeads: Prospect[] = items.map((l: Lead) => ({
         id: l.codigo,
         nombre: l.name,
         email: l.email || undefined,
         telefono: l.phone || undefined,
         canal: l.source || undefined,
-        etapa:
-          (l.status || "new").toLowerCase() === "new"
-            ? "Nuevo"
-            : (l.status || "").toLowerCase() === "contacted"
-            ? "Contactado"
-            : (l.status || "").toLowerCase() === "qualified"
-            ? "Calificado"
-            : (l.status || "").toLowerCase() === "won"
-            ? "Ganado"
-            : "Perdido",
-        owner: l.owner_codigo || undefined,
+        etapa: mapLeadStatusToEtapa(l.status),
         creado: l.created_at || undefined,
         actualizado: l.updated_at || undefined,
         remote: true,
+        saleStatus: saleStatusMap.get(l.codigo || ""),
       }));
       setRows(mappedFromLeads);
       return;
     } catch (e) {
-      console.warn("listLeads falló, usando datos locales", e);
+      console.warn("listLeads falló, usando datos locales/mocks", e);
     }
-    // Fallback mock local
+    // Fallback a mock
     const res = crmService.listProspects({});
     const mapped: Prospect[] = res.items.map((p: ProspectCore) => ({
       id: p.id,
@@ -124,7 +142,6 @@ function CrmContent() {
           : p.etapaPipeline === "ganado"
           ? "Ganado"
           : "Perdido",
-      owner: p.ownerNombre || undefined,
       pais: p.pais || undefined,
       ciudad: p.ciudad || undefined,
       tags: p.tags || [],
@@ -135,6 +152,7 @@ function CrmContent() {
     }));
     setRows(mapped);
   };
+
   useEffect(() => {
     reload();
   }, []);
@@ -143,9 +161,11 @@ function CrmContent() {
   const [view, setView] = useState<"lista" | "kanban">("lista");
   const [etapaFiltro, setEtapaFiltro] = useState<string>("all");
   const [canalFiltro, setCanalFiltro] = useState<string>("all");
+  // Owner eliminado de la tabla; mantenemos estado por compatibilidad UI pero podría retirarse luego.
   const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
   const [openCreate, setOpenCreate] = useState(false);
   const [openCreateLead, setOpenCreateLead] = useState(false);
+  // Drawer eliminado en favor de ruta dedicada
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("pipeline");
 
@@ -160,34 +180,76 @@ function CrmContent() {
   const filtrados = useMemo(() => {
     return rows.filter((p) => {
       const hayQ = q.trim()
-        ? [p.nombre, p.email, p.telefono, p.owner]
+        ? [p.nombre, p.email, p.telefono]
             .filter(Boolean)
             .some((x) => String(x).toLowerCase().includes(q.toLowerCase()))
         : true;
       const byEtapa = etapaFiltro === "all" ? true : p.etapa === etapaFiltro;
       const byCanal = canalFiltro === "all" ? true : p.canal === canalFiltro;
-      const byOwner = ownerFiltro === "all" ? true : p.owner === ownerFiltro;
-      return hayQ && byEtapa && byCanal && byOwner;
+      return hayQ && byEtapa && byCanal; // Owner filtrado removido
     });
   }, [q, etapaFiltro, canalFiltro, ownerFiltro, rows]);
 
-  const counts = useMemo(() => {
-    const gm: CrmGlobalMetrics = computeGlobalMetrics();
-    return {
-      total: gm.totalProspects,
-      byEtapa: {
-        Nuevo: gm.byStage.nuevo,
-        Contactado: gm.byStage.contactado,
-        Calificado: gm.byStage.calificado + gm.byStage.propuesta,
-        Ganado: gm.byStage.ganado,
-        Perdido: gm.byStage.perdido,
-      },
-      conversionRate: gm.conversionRate,
-    };
+  // Métricas desde rows (metadata) en vez de mock
+  const gmFromRows = useMemo<CrmGlobalMetrics>(() => {
+    const byStage = {
+      nuevo: 0,
+      contactado: 0,
+      calificado: 0,
+      propuesta: 0,
+      ganado: 0,
+      perdido: 0,
+    } as CrmGlobalMetrics["byStage"];
+    for (const r of rows) {
+      const etapa = r.etapa;
+      if (etapa === "Nuevo") byStage.nuevo++;
+      else if (etapa === "Contactado") byStage.contactado++;
+      else if (etapa === "Calificado") byStage.calificado++;
+      else if (etapa === "Ganado") byStage.ganado++;
+      else if (etapa === "Perdido") byStage.perdido++;
+    }
+    const totalProspects = rows.length;
+    const won = byStage.ganado;
+    const lost = byStage.perdido;
+    const contacted =
+      byStage.contactado + byStage.calificado + byStage.propuesta + won + lost;
+    const conversionRate = totalProspects ? won / totalProspects : 0;
+    return { totalProspects, byStage, won, lost, contacted, conversionRate };
   }, [rows]);
 
   const sellerMetrics = useMemo<SellerMetricsResult>(() => {
-    return computeSellerMetrics();
+    const map = new Map<
+      string,
+      {
+        ownerId: string | null;
+        ownerNombre: string;
+        total: number;
+        contacted: number;
+        qualified: number;
+        won: number;
+        lost: number;
+      }
+    >();
+    for (const r of rows) {
+      const key = "(Sin owner)";
+      if (!map.has(key))
+        map.set(key, {
+          ownerId: null,
+          ownerNombre: key,
+          total: 0,
+          contacted: 0,
+          qualified: 0,
+          won: 0,
+          lost: 0,
+        });
+      const row = map.get(key)!;
+      row.total++;
+      if (r.etapa !== "Nuevo") row.contacted++;
+      if (r.etapa === "Calificado") row.qualified++;
+      if (r.etapa === "Ganado") row.won++;
+      if (r.etapa === "Perdido") row.lost++;
+    }
+    return { rows: Array.from(map.values()), totalOwners: map.size };
   }, [rows]);
 
   const normalizeUrl = (s?: string) => {
@@ -203,20 +265,32 @@ function CrmContent() {
       Array.from(new Set(rows.map((r) => r.canal).filter(Boolean))) as string[],
     [rows]
   );
-  const owners = useMemo(
-    () =>
-      Array.from(new Set(rows.map((r) => r.owner).filter(Boolean))) as string[],
-    [rows]
-  );
+  const owners: string[] = []; // Owner eliminado
+
+  const saleStatusClass = (s?: string) => {
+    const v = String(s || "").toLowerCase();
+    if (["active", "contract_signed", "payment_confirmed"].includes(v))
+      return "bg-emerald-100 text-emerald-700";
+    if (
+      [
+        "contract_sent",
+        "payment_verification_pending",
+        "active_provisional",
+      ].includes(v)
+    )
+      return "bg-amber-100 text-amber-700";
+    if (["operational_closure", "cancelled", "lost"].includes(v))
+      return "bg-red-100 text-red-700";
+    return "bg-slate-100 text-slate-700";
+  };
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header */}
       <div className="border-b bg-white px-6 py-5">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-indigo-600" />
+              <span className="inline-block w-2 h-2 rounded-full bg-indigo-600" />{" "}
               CRM
             </h1>
             <p className="text-sm text-slate-600">
@@ -248,28 +322,15 @@ function CrmContent() {
             >
               Kanban
             </Button>
-            <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-              <DialogTrigger asChild>
-                <Button
-                  size="sm"
-                  className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
-                >
-                  <Plus className="h-4 w-4" />
-                  Cierre de venta
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Registrar cierre de venta</DialogTitle>
-                </DialogHeader>
-                <CrmCloseSaleForm
-                  onDone={() => {
-                    setOpenCreate(false);
-                    reload();
-                  }}
-                />
-              </DialogContent>
-            </Dialog>
+            <Button
+              size="sm"
+              className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+              asChild
+            >
+              <Link href="/admin/crm/sales">
+                <Plus className="h-4 w-4" /> Cierre de venta
+              </Link>
+            </Button>
             <Dialog open={openCreateLead} onOpenChange={setOpenCreateLead}>
               <DialogTrigger asChild>
                 <Button
@@ -277,8 +338,7 @@ function CrmContent() {
                   variant="outline"
                   className="gap-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
                 >
-                  <Plus className="h-4 w-4" />
-                  Nuevo lead
+                  <Plus className="h-4 w-4" /> Nuevo lead
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-lg">
@@ -296,8 +356,7 @@ function CrmContent() {
           </div>
         </div>
       </div>
-      {/* Contenido en pestañas */}
-      {/* Scroll interno habilitado sin fondos degradados */}
+
       <div className="flex-1 min-h-0 p-6 overflow-y-auto bg-white">
         <CrmTabsLayout
           value={activeTab}
@@ -330,8 +389,8 @@ function CrmContent() {
                     <div className="col-span-2">Contacto</div>
                     <div className="col-span-2">Canal</div>
                     <div className="col-span-2">Etapa</div>
-                    <div className="col-span-2">Owner</div>
-                    <div className="col-span-1 text-right">Acción</div>
+                    <div className="col-span-1">Venta</div>
+                    <div className="col-span-2 text-right">Acción</div>
                   </div>
                   <div>
                     {filtrados.length === 0 ? (
@@ -385,24 +444,34 @@ function CrmContent() {
                           <div className="col-span-2">
                             <StageBadge stage={p.etapa} />
                           </div>
-                          <div className="col-span-2 text-xs flex items-center">
-                            {p.owner || (
-                              <span className="text-slate-400">—</span>
+                          <div className="col-span-1 flex items-center">
+                            {p.saleStatus ? (
+                              <span
+                                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ${saleStatusClass(
+                                  p.saleStatus
+                                )}`}
+                                title={p.saleStatus}
+                              >
+                                {p.saleStatus}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-xs">—</span>
                             )}
                           </div>
-                          <div className="col-span-1 flex items-center justify-end">
+                          <div className="col-span-2 flex items-center justify-end">
                             <Button
+                              asChild
                               size="sm"
                               variant="outline"
-                              onClick={() => setDrawerId(p.id)}
-                              disabled={p.remote}
-                              title={
-                                p.remote
-                                  ? "Detalle no disponible para leads remotos aún"
-                                  : "Detalle"
-                              }
+                              title="Ver detalle"
                             >
-                              Detalle
+                              <Link
+                                href={`/admin/crm/booking/${encodeURIComponent(
+                                  p.id
+                                )}`}
+                              >
+                                Detalle
+                              </Link>
                             </Button>
                           </div>
                         </div>
@@ -418,38 +487,58 @@ function CrmContent() {
                     email: p.email,
                     telefono: p.telefono,
                     canalFuente: p.canal,
-                    ownerNombre: p.owner,
+                    ownerNombre: undefined,
                     etapa: p.etapa,
+                    saleStatus: p.saleStatus,
                   }))}
-                  onOpenDetail={(p) => setDrawerId(p.id)}
+                  onOpenDetail={(p) =>
+                    router.push(
+                      `/admin/crm/booking/${encodeURIComponent(p.id)}`
+                    )
+                  }
                   onMoved={() => reload()}
                   onStageChange={async (id, newStage) => {
                     const row = rows.find((r) => r.id === id);
-                    const toLeadStatus: Record<string, string> = {
-                      nuevo: "new",
-                      contactado: "contacted",
-                      calificado: "qualified",
-                      ganado: "won",
-                      perdido: "lost",
-                    };
                     if (row?.remote) {
+                      // Mapear la etapa del Kanban (pipeline) al status del payload de metadata
+                      const statusMap: Record<string, string> = {
+                        nuevo: "new",
+                        contactado: "contacted",
+                        calificado: "qualified",
+                        ganado: "won",
+                        perdido: "lost",
+                      };
+                      const newStatus = statusMap[newStage] || "new";
                       try {
-                        await updateLead(id, {
-                          status: toLeadStatus[newStage],
-                        });
+                        await updateLead(id, { status: newStatus });
                         toast({
-                          title: "Lead actualizado",
-                          description: `Estado: ${toLeadStatus[newStage]}`,
+                          title: "Etapa actualizada",
+                          description: `${row.nombre} → ${newStage}`,
                         });
+                        reload();
                       } catch (e) {
-                        toast({ title: "Error al actualizar lead" });
+                        toast({
+                          title: "Error",
+                          description: "No se pudo actualizar la etapa",
+                        });
                       }
-                    } else {
-                      crmService.updateProspectStage(id, newStage);
+                      return;
                     }
+                    // Fallback: actualizar en mock local
+                    crmService.updateProspectStage(id, newStage);
                   }}
                 />
               )}
+            </div>
+          }
+          forms={
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold mb-2">
+                  Registrar cierre de venta
+                </h2>
+                <CloseSaleForm />
+              </div>
             </div>
           }
           metrics={
@@ -467,21 +556,48 @@ function CrmContent() {
                   Ejecutar automatizaciones
                 </Button>
               </div>
-              <MetricsOverview gm={computeGlobalMetrics()} />
+              <MetricsOverview gm={gmFromRows} />
               <SellerMetricsTable data={sellerMetrics} />
-              <MetricsTabs />
+              <MetricsTabs
+                items={rows.map((p) => ({
+                  id: p.id,
+                  nombre: p.nombre,
+                  email: p.email || null,
+                  telefono: p.telefono || null,
+                  canalFuente: p.canal || null,
+                  etapaPipeline:
+                    p.etapa === "Nuevo"
+                      ? "nuevo"
+                      : p.etapa === "Contactado"
+                      ? "contactado"
+                      : p.etapa === "Calificado"
+                      ? "calificado"
+                      : p.etapa === "Ganado"
+                      ? "ganado"
+                      : "perdido",
+                  ownerId: null,
+                  ownerNombre: "(Sin owner)",
+                  pais: null,
+                  ciudad: null,
+                  tags: [],
+                  score: null,
+                  notasResumen: null,
+                  creadoAt: p.creado || new Date().toISOString(),
+                  actualizadoAt:
+                    p.actualizado || p.creado || new Date().toISOString(),
+                  nextActionAt: null,
+                  origenCampaignId: null,
+                  convertedStudentId: null,
+                  fechaConversion: null,
+                }))}
+              />
+              <SalesPersonalMetrics />
             </div>
           }
         />
       </div>
 
-      {/* Drawer de detalle */}
-      <ProspectDetailDrawer
-        open={!!drawerId}
-        onOpenChange={(v) => !v && setDrawerId(null)}
-        prospectId={drawerId || undefined}
-        onSaved={() => reload()}
-      />
+      {/* Drawer deshabilitado */}
     </div>
   );
 }
@@ -493,158 +609,6 @@ export default function CrmPage() {
         <CrmContent />
       </DashboardLayout>
     </ProtectedRoute>
-  );
-}
-
-// Formulario cierre de venta
-function CrmCloseSaleForm({ onDone }: { onDone: () => void }) {
-  const [nombre, setNombre] = useState("");
-  const [email, setEmail] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [programa, setPrograma] = useState("");
-  const [bonos, setBonos] = useState("");
-  const [modalidad, setModalidad] = useState("contado");
-  const [monto, setMonto] = useState(0);
-  const [moneda, setMoneda] = useState("USD");
-  const [plataforma, setPlataforma] = useState("");
-  const [primeraCuota, setPrimeraCuota] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    try {
-      setLoading(true);
-      const base = crmService.createProspect({
-        nombre,
-        email,
-        telefono,
-        etapaPipeline: "nuevo",
-      });
-      crmService.updateProspect(base.id, {
-        canalFuente: "Venta",
-        notasResumen: "Cierre registrado",
-      });
-      const cuotas =
-        modalidad === "cuotas" && primeraCuota
-          ? [{ monto: monto, dueAt: new Date(primeraCuota).toISOString() }]
-          : [];
-      crmService.closeSale(base.id, {
-        programa,
-        modalidadPago: modalidad,
-        montoTotal: monto,
-        moneda,
-        plataformaPago: plataforma,
-        bonosOfrecidos: bonos
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        cuotas,
-      });
-      // Registrar también el lead en la API remota (si está disponible)
-      try {
-        const lead = await createLead({
-          name: nombre,
-          email: email || undefined,
-          phone: telefono || undefined,
-          source: "crm_sale",
-          status: "new",
-          // owner_codigo podría establecerse si lo tuviéramos
-        });
-        // Guardar el código del lead remoto como referencia en el prospecto local
-        crmService.updateProspect(base.id, {
-          notasResumen: `Cierre registrado · lead_codigo: ${lead.codigo}`,
-        });
-      } catch (apiErr) {
-        // No bloquear el flujo si falla la API; solo informamos
-        console.warn("No se pudo registrar el lead en la API", apiErr);
-      }
-      toast({ title: "Cierre registrado", description: nombre });
-      onDone();
-    } catch (e) {
-      toast({ title: "Error", description: "No se pudo registrar" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-2 gap-4">
-      <div className="space-y-2">
-        <Label>Nombre completo</Label>
-        <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Correo</Label>
-        <Input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Teléfono</Label>
-        <Input value={telefono} onChange={(e) => setTelefono(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Programa adquirido</Label>
-        <Input value={programa} onChange={(e) => setPrograma(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Bonos ofrecidos</Label>
-        <Input
-          value={bonos}
-          onChange={(e) => setBonos(e.target.value)}
-          placeholder="Separar por comas"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Modalidad pago</Label>
-        <Input
-          value={modalidad}
-          onChange={(e) => setModalidad(e.target.value)}
-          placeholder="contado | cuotas"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Monto total</Label>
-        <Input
-          type="number"
-          value={monto}
-          onChange={(e) => setMonto(parseFloat(e.target.value || "0"))}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Moneda</Label>
-        <Input value={moneda} onChange={(e) => setMoneda(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Plataforma pago</Label>
-        <Input
-          value={plataforma}
-          onChange={(e) => setPlataforma(e.target.value)}
-          placeholder="Hotmart / PayPal"
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Fecha 1ra cuota (si aplica)</Label>
-        <Input
-          type="date"
-          value={primeraCuota}
-          onChange={(e) => setPrimeraCuota(e.target.value)}
-        />
-      </div>
-      <div className="col-span-2 flex justify-end gap-2 mt-2">
-        <Button variant="outline" onClick={onDone}>
-          Cancelar
-        </Button>
-        <Button
-          onClick={submit}
-          disabled={loading || !nombre || !programa || !plataforma}
-        >
-          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Registrar
-        </Button>
-      </div>
-    </div>
   );
 }
 

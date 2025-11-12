@@ -33,8 +33,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export function MetricsTabs() {
-  const all = crmService.listProspects({}).items;
+import type { ProspectCore } from "@/lib/crm-types";
+
+export function MetricsTabs({ items }: { items?: ProspectCore[] }) {
+  // Permite inyectar items desde el padre (metadata ya mapeada). Si no vienen, usa mock.
+  const all = (
+    items && items.length ? items : crmService.listProspects({}).items
+  ) as ProspectCore[];
   const owners = Array.from(
     new Set(all.map((p) => p.ownerNombre).filter(Boolean))
   ) as string[];

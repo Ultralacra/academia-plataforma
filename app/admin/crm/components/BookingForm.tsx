@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ChevronLeft, ChevronRight, Clock, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
-import { createLead } from "@/app/admin/crm/api";
+import { createMetadata } from "@/lib/metadata";
 
 export interface BookingFormProps {
   eventTitle?: string;
@@ -142,17 +142,49 @@ export function BookingForm({
         }`.replace(/\s+/g, "");
 
     try {
-      await createLead({
+      const metadataPayload = {
         name: formData.name.trim(),
         email: formData.email.trim(),
         phone,
         source: "booking_form",
         status: "new",
+        instagramUser: formData.instagramUser,
+        monthlyBudget: formData.monthlyBudget,
+        mainObstacle: formData.mainObstacle,
+        commitment: formData.commitment,
+        inviteOthers: formData.inviteOthers,
+        confirmado: formData.confirmado,
+        textMessages: formData.textMessages,
+        selectedDate: selectedDate ? selectedDate.toISOString() : null,
+        selectedTime: selectedTime,
+        timezone,
+        countryCode,
+        countryFlag,
+        created_at: new Date().toISOString(),
+        trace: {
+          userAgent:
+            typeof window !== "undefined"
+              ? window.navigator.userAgent
+              : "server",
+          ts: Date.now(),
+        },
+      };
+      const entityId =
+        (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) ||
+        `booking-${Date.now()}`;
+      console.log("POST /v1/metadata ->", {
+        entity: "booking",
+        entity_id: entityId,
+        payload: metadataPayload,
+      });
+      const saved = await createMetadata({
+        entity: "booking",
+        entity_id: entityId,
+        payload: metadataPayload,
       });
       toast({
-        title: "¡Enviado!",
-        description:
-          "Tu solicitud ha sido registrada. Te contactaremos por WhatsApp para confirmar.",
+        title: "Registro creado",
+        description: `ID: ${String(saved.id)}`,
       });
       // Opcional: reset y volver a calendario
       setFormData({
@@ -172,8 +204,8 @@ export function BookingForm({
       setStep("calendar");
     } catch (err: any) {
       toast({
-        title: "No se pudo enviar",
-        description: err?.message || "Intenta de nuevo en unos minutos.",
+        title: "Error",
+        description: err?.message || "No se pudo registrar.",
         variant: "destructive",
       });
     } finally {

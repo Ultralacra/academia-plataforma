@@ -37,6 +37,31 @@ export interface LeadUpdateInput {
   owner_codigo?: string;
 }
 
+// Tipos para registro de venta (sale)
+export type PaymentPlatform =
+  | "hotmart"
+  | "paypal"
+  | "binance"
+  | "payoneer"
+  | "zelle"
+  | "bancolombia"
+  | "boa"
+  | "otra";
+
+export interface SaleCreateInput {
+  fullName: string;
+  email: string;
+  phone: string;
+  program: string;
+  bonuses?: string;
+  paymentMode: string; // pago total / cuotas
+  paymentAmount: string; // monto USD
+  paymentPlatform: PaymentPlatform;
+  nextChargeDate?: string; // ISO
+  contractThirdParty?: boolean;
+  notes?: string;
+}
+
 // Respuesta genérica de listado (adaptable al backend real)
 export interface LeadsListResponse {
   code?: number;
@@ -50,6 +75,22 @@ export interface LeadsListResponse {
 
 // Normaliza el objeto raw del backend al tipo Lead
 function mapLead(raw: any): Lead {
+  const isMetadata = raw && typeof raw === "object" && "payload" in raw;
+  if (isMetadata) {
+    const p = raw.payload || {};
+    return {
+      // Usar el ID real del registro de metadata para poder consultar /v1/metadata/:id
+      codigo: String(raw?.id ?? raw?.codigo ?? raw?.entity_id ?? ""),
+      name: p?.name || "(Sin nombre)",
+      email: p?.email ?? null,
+      phone: p?.phone ?? null,
+      source: p?.source ?? "metadata",
+      status: p?.status ?? "new",
+      owner_codigo: null,
+      created_at: raw?.created_at ?? p?.created_at ?? null,
+      updated_at: raw?.updated_at ?? null,
+    };
+  }
   return {
     codigo: raw?.codigo || raw?.id || "",
     name: raw?.name || raw?.nombre || "(Sin nombre)",
@@ -64,84 +105,174 @@ function mapLead(raw: any): Lead {
 }
 
 // Listar todos los leads
-export async function listLeads(params?: { page?: number; pageSize?: number; status?: string; owner?: string; search?: string }) {
+export async function listLeads(params?: { page?: number; pageSize?: number; status?: string; owner?: string; search?: string; entity?: string }) {
+  // Ahora consultamos /v1/metadata en vez de /v1/leads
+  // El backend envuelve en { code, status, data }
   const qs = new URLSearchParams();
   if (params?.page) qs.set("page", String(params.page));
   if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
-  if (params?.status) qs.set("status", params.status);
-  if (params?.owner) qs.set("owner", params.owner);
-  if (params?.search) qs.set("search", params.search);
   const query = qs.toString();
-  const url = `/leads${query ? `?${query}` : ""}`;
-  const json = await apiFetch<LeadsListResponse>(url, { method: "GET" });
-  const rows = Array.isArray(json?.data) ? json.data : [];
+  const url = `/metadata${query ? `?${query}` : ""}`;
+  const raw = await apiFetch<any>(url, { method: "GET" });
+  const data = raw && typeof raw === "object" && Array.isArray(raw.data) ? raw.data : Array.isArray(raw) ? raw : [];
+  // Filtrar por entidad si se solicita (por defecto 'booking')
+  const entity = params?.entity || "booking";
+  const rows = data.filter((r: any) => !entity || r?.entity === entity);
   const leads: Lead[] = rows.map(mapLead);
   return {
     items: leads,
-    total: json.total ?? leads.length,
-    page: json.page ?? 1,
-    pageSize: json.pageSize ?? leads.length,
-    totalPages: json.totalPages ?? 1,
+    total: leads.length,
+    page: params?.page ?? 1,
+    pageSize: params?.pageSize ?? leads.length,
+    totalPages: 1,
   } as const;
 }
 
 // Obtener un lead por código
 export async function getLead(codigo: string) {
   if (!codigo) throw new Error("codigo requerido");
-  const url = `/leads/${encodeURIComponent(codigo)}`;
-  const raw = await apiFetch<any>(url, { method: "GET" });
-  // El backend podría devolver { data: {...} } o directamente el objeto
-  const data = (raw as any)?.data ?? raw;
-  return mapLead(data);
+  // Buscar en metadata por id OR filtrar todos y encontrar entity_id
+  // Primero intentamos /metadata/:id
+  try {
+    const one = await apiFetch<any>(`/metadata/${encodeURIComponent(codigo)}`, { method: "GET" });
+    const data = (one as any)?.data ?? one;
+    if (data && data.entity) return mapLead(data);
+  } catch {}
+  // Fallback: listar y filtrar
+  try {
+    const raw = await apiFetch<any>(`/metadata`, { method: "GET" });
+    const arr = raw?.data ?? [];
+    const found = Array.isArray(arr) ? arr.find((r: any) => r?.entity_id === codigo || r?.id === codigo) : null;
+    if (found) return mapLead(found);
+  } catch {}
+  throw new Error("Lead/metadata no encontrado");
 }
 
 // Crear un lead
 export async function createLead(input: LeadCreateInput) {
   if (!input?.name) throw new Error("name requerido");
-  const body = {
+  // Crear registro en metadata como 'booking' (o general 'lead')
+  const payload = {
     name: input.name,
     email: input.email,
     phone: input.phone,
-    source: input.source,
+    source: input.source ?? "manual_form",
     status: input.status ?? "new",
-    owner_codigo: input.owner_codigo,
+    owner_codigo: input.owner_codigo ?? null,
+    created_at: new Date().toISOString(),
   };
-  const url = `/leads`;
-  const raw = await apiFetch<any>(url, {
+  const entityId = (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) || `lead-${Date.now()}`;
+  const raw = await apiFetch<any>(`/metadata`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ entity: "booking", entity_id: entityId, payload }),
   });
   const data = (raw as any)?.data ?? raw;
+  return mapLead(data);
+}
+
+// Crear una venta (sale) en metadata
+export async function createSale(input: SaleCreateInput) {
+  const entityId = (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) || `sale-${Date.now()}`;
+  const payload = {
+    type: "sale",
+    name: input.fullName,
+    email: input.email,
+    phone: input.phone,
+    program: input.program,
+    bonuses: input.bonuses ?? null,
+    payment: {
+      mode: input.paymentMode,
+      amount: input.paymentAmount,
+      platform: input.paymentPlatform,
+      nextChargeDate: input.nextChargeDate || null,
+    },
+    contract: {
+      thirdParty: !!input.contractThirdParty,
+      status: "pending",
+    },
+    status: "payment_verification_pending",
+    notes: input.notes ?? null,
+    events: [
+      {
+        type: "created",
+        at: new Date().toISOString(),
+        trigger: "trigger#1",
+        message: "Registro de venta creado. Notificar ATC y Finanzas.",
+      },
+    ],
+    created_at: new Date().toISOString(),
+  };
+
+  const raw = await apiFetch<any>(`/metadata`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entity: "sale", entity_id: entityId, payload }),
+  });
+  const data = (raw as any)?.data ?? raw;
+  // Reusar mapLead por conveniencia, aunque no se listará en listLeads (filtra booking)
   return mapLead(data);
 }
 
 // Actualizar un lead
 export async function updateLead(codigo: string, input: LeadUpdateInput) {
   if (!codigo) throw new Error("codigo requerido");
-  const body: Record<string, any> = {};
-  if (typeof input.name !== "undefined") body.name = input.name;
-  if (typeof input.email !== "undefined") body.email = input.email;
-  if (typeof input.phone !== "undefined") body.phone = input.phone;
-  if (typeof input.source !== "undefined") body.source = input.source;
-  if (typeof input.status !== "undefined") body.status = input.status;
-  if (typeof input.owner_codigo !== "undefined") body.owner_codigo = input.owner_codigo;
-  const url = `/leads/${encodeURIComponent(codigo)}`;
-  const raw = await apiFetch<any>(url, {
+  // Hacemos read-modify-write contra /v1/metadata/:codigo
+  // 1) Traer registro actual (raw) para conocer entity, entity_id y payload
+  const detailResp = await apiFetch<any>(`/metadata/${encodeURIComponent(codigo)}`, { method: "GET" });
+  const curr = (detailResp as any)?.data ?? detailResp;
+  if (!curr || !curr.id) throw new Error("No existe metadata para actualizar");
+
+  const currPayload = (curr as any)?.payload ?? {};
+  const mergedPayload = {
+    ...currPayload,
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.email !== undefined ? { email: input.email } : {}),
+    ...(input.phone !== undefined ? { phone: input.phone } : {}),
+    ...(input.source !== undefined ? { source: input.source } : {}),
+    ...(input.status !== undefined ? { status: input.status } : {}),
+    ...(input.owner_codigo !== undefined ? { owner_codigo: input.owner_codigo } : {}),
+    updated_at: new Date().toISOString(),
+  };
+
+  // 2) Enviar PUT a /metadata/:codigo con entity y entity_id para mantener consistencia
+  const body = {
+    entity: curr.entity,
+    entity_id: curr.entity_id,
+    payload: mergedPayload,
+  };
+
+  const updateResp = await apiFetch<any>(`/metadata/${encodeURIComponent(codigo)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (raw as any)?.data ?? raw;
-  return mapLead(data);
+  const updated = (updateResp as any)?.data ?? updateResp;
+  return mapLead(updated);
 }
 
 // Eliminar un lead
 export async function deleteLead(codigo: string) {
-  if (!codigo) throw new Error("codigo requerido");
-  const url = `/leads/${encodeURIComponent(codigo)}`;
-  await apiFetch<any>(url, { method: "DELETE" });
-  return { ok: true } as const;
+  // No se define delete en metadata; dejar notificación.
+  throw new Error("Eliminar metadata no soportado aún");
+}
+
+// Actualizar payload arbitrario de metadata (helper genérico)
+export async function updateMetadataPayload(
+  id: string | number,
+  patch: Record<string, any>
+) {
+  const detailResp = await apiFetch<any>(`/metadata/${encodeURIComponent(String(id))}`, { method: "GET" });
+  const curr = (detailResp as any)?.data ?? detailResp;
+  if (!curr || !curr.id) throw new Error("No existe metadata para actualizar");
+  const mergedPayload = { ...(curr as any).payload, ...patch, updated_at: new Date().toISOString() };
+  const body = { entity: curr.entity, entity_id: curr.entity_id, payload: mergedPayload };
+  const updateResp = await apiFetch<any>(`/metadata/${encodeURIComponent(String(id))}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return (updateResp as any)?.data ?? updateResp;
 }
 
 // Helpers para mutaciones optimistas (opcional)
