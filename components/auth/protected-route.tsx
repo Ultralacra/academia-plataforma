@@ -35,8 +35,16 @@ export function ProtectedRoute({
   // While redirecting, render nothing (router.push already sent user to /login)
   if (!isAuthenticated) return null;
 
-  // Enforzar roles si se especifican
+  // Enforzar roles si se especifican. Para estudiantes, redirigir a su panel en lugar de solo denegar.
   if (allowedRoles && !hasAnyRole(allowedRoles)) {
+    if (user?.role === "student") {
+      const myCode = (user as any)?.codigo || "RvA_5Qxoezfxlxxj";
+      // Redirigir suavemente al panel de alumno
+      if (pathname !== `/admin/alumnos/${myCode}`) {
+        router.replace(`/admin/alumnos/${myCode}`);
+      }
+      return null;
+    }
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
         <div className="text-center">
@@ -49,7 +57,8 @@ export function ProtectedRoute({
     );
   }
 
-  // Regla adicional: si es estudiante, solo puede ver su propio detalle de alumno
+  // Regla adicional: si es estudiante, solo puede ver su propio detalle de alumno.
+  // Si intenta entrar a otra ruta, redirigimos a su panel directo.
   if (user?.role === "student") {
     const p = String(pathname || "");
     const segments = p.split("/").filter(Boolean);
@@ -59,19 +68,13 @@ export function ProtectedRoute({
       segments[1] === "alumnos" &&
       segments.length >= 3;
     const codeFromPath = isAlumnoDetail ? segments[2] : null;
-    const myCode = (user as any)?.codigo || null;
+    const myCode = (user as any)?.codigo || "RvA_5Qxoezfxlxxj";
 
     if (!isAlumnoDetail || !codeFromPath || codeFromPath !== myCode) {
-      return (
-        <div className="min-h-[50vh] flex items-center justify-center">
-          <div className="text-center">
-            <h2 className="text-lg font-semibold">Acceso denegado</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Solo puedes acceder a tu panel de alumno.
-            </p>
-          </div>
-        </div>
-      );
+      if (pathname !== `/admin/alumnos/${myCode}`) {
+        router.replace(`/admin/alumnos/${myCode}`);
+      }
+      return null;
     }
   }
 

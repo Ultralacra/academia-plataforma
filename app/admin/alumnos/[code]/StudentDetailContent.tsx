@@ -51,6 +51,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 
 export default function StudentDetailContent({ code }: { code: string }) {
   const [loading, setLoading] = useState(true);
@@ -926,6 +927,14 @@ function AdsMetricsForm({
     interv_sugerida?: string;
     auto_roas?: boolean;
     auto_eff?: boolean;
+    adjuntos?: Array<{
+      id: string;
+      kind: "link" | "file";
+      name: string;
+      url?: string;
+      type?: string;
+      size?: number;
+    }>;
   };
 
   const [data, setData] = useState<Metrics>({
@@ -933,6 +942,7 @@ function AdsMetricsForm({
     auto_eff: true,
     pauta_activa: false,
     requiere_interv: false,
+    adjuntos: [],
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -1063,6 +1073,221 @@ function AdsMetricsForm({
     persist({ ...data, [k]: v });
   }
 
+  // Notas y Adjuntos (link y archivos de sesión)
+  const [newLinkName, setNewLinkName] = useState<string>("");
+  const [newLinkUrl, setNewLinkUrl] = useState<string>("");
+  const [sessionFiles, setSessionFiles] = useState<
+    Array<{ id: string; name: string; type: string; size: number; url: string }>
+  >([]);
+
+  function addLinkAttachment() {
+    const url = (newLinkUrl || "").trim();
+    const name = (newLinkName || "").trim() || url;
+    if (!url) return;
+    try {
+      // validación básica de URL
+      const u = new URL(url);
+      const item = {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        kind: "link" as const,
+        name,
+        url: u.toString(),
+      };
+      const next = [...(data.adjuntos || []), item];
+      onChange("adjuntos", next as any);
+      setNewLinkName("");
+      setNewLinkUrl("");
+    } catch {}
+  }
+
+  function removeSavedAttachment(id: string) {
+    const next = (data.adjuntos || []).filter((a) => a.id !== id);
+    onChange("adjuntos", next as any);
+  }
+
+  function onPickSessionFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const add = files.map((f) => ({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      name: f.name,
+      type: f.type || "application/octet-stream",
+      size: f.size,
+      url: URL.createObjectURL(f),
+    }));
+    setSessionFiles((prev) => [...prev, ...add]);
+    try {
+      e.target.value = "";
+    } catch {}
+  }
+
+  function removeSessionFile(id: string) {
+    setSessionFiles((prev) => {
+      const it = prev.find((x) => x.id === id);
+      if (it?.url) URL.revokeObjectURL(it.url);
+      return prev.filter((x) => x.id !== id);
+    });
+  }
+
+  function NotesAndAttachments({
+    data,
+    onChange,
+  }: {
+    data: Metrics;
+    onChange: <K extends keyof Metrics>(k: K, v: Metrics[K]) => void;
+  }) {
+    useEffect(() => {
+      return () => {
+        // liberar URLs al desmontar
+        sessionFiles.forEach((f) => {
+          try {
+            if (f.url) URL.revokeObjectURL(f.url);
+          } catch {}
+        });
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    return (
+      <Card>
+        <CardHeader className="py-3">
+          <CardTitle className="text-sm">Notas y adjuntos</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label>Observaciones</Label>
+            <Textarea
+              rows={3}
+              placeholder="Notas, comentarios, enlaces…"
+              value={data.obs || ""}
+              onChange={(e) => onChange("obs", e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Intervención sugerida</Label>
+            <Textarea
+              rows={3}
+              placeholder="Descripción de la intervención"
+              value={data.interv_sugerida || ""}
+              onChange={(e) => onChange("interv_sugerida", e.target.value)}
+            />
+          </div>
+
+          <div className="pt-2 space-y-2">
+            <div className="text-xs text-muted-foreground">
+              Adjuntar enlaces
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+              <Input
+                className="md:col-span-2"
+                placeholder="Nombre (opcional)"
+                value={newLinkName}
+                onChange={(e) => setNewLinkName(e.target.value)}
+              />
+              <Input
+                className="md:col-span-3"
+                placeholder="https://…"
+                value={newLinkUrl}
+                onChange={(e) => setNewLinkUrl(e.target.value)}
+              />
+            </div>
+            <div>
+              <Button type="button" size="sm" onClick={addLinkAttachment}>
+                Agregar enlace
+              </Button>
+            </div>
+            {(data.adjuntos || []).filter((a) => a.kind === "link").length >
+              0 && (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">
+                  Enlaces guardados
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(data.adjuntos || [])
+                    .filter((a) => a.kind === "link")
+                    .map((a) => (
+                      <div
+                        key={a.id}
+                        className="flex items-center gap-2 rounded border px-2 py-1"
+                      >
+                        <a
+                          href={a.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-blue-600 hover:underline"
+                          title={a.url}
+                        >
+                          {a.name || a.url}
+                        </a>
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted-foreground hover:text-red-600"
+                          onClick={() => removeSavedAttachment(a.id)}
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-3 space-y-2">
+            <div className="text-xs text-muted-foreground">
+              Adjuntar archivos (solo esta sesión)
+            </div>
+            <input type="file" multiple onChange={onPickSessionFiles} />
+            {sessionFiles.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs text-muted-foreground">
+                  Archivos de la sesión
+                </div>
+                <div className="flex flex-col gap-1">
+                  {sessionFiles.map((f) => (
+                    <div
+                      key={f.id}
+                      className="flex items-center justify-between text-xs rounded border px-2 py-1"
+                    >
+                      <div className="truncate">
+                        {f.name}{" "}
+                        <span className="text-muted-foreground">
+                          ({(f.size / 1024).toFixed(0)} KB)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={f.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-blue-600 hover:underline"
+                        >
+                          Ver
+                        </a>
+                        <button
+                          type="button"
+                          className="hover:text-red-600"
+                          onClick={() => removeSessionFile(f.id)}
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  Nota: los archivos no se guardan en el servidor ni en
+                  localStorage. Usa enlaces para persistir referencias (Drive,
+                  YouTube, etc.).
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Auto-calcular "Carga de página (%)" = visitas/clics*100
   useEffect(() => {
     // parse numbers de strings con helper toNum
@@ -1155,55 +1380,59 @@ function AdsMetricsForm({
             </div>
           </div>
 
-          {/* Solo rendimiento arriba */}
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Rendimiento</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label>Inversión (USD)</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={data.inversion || ""}
-                  onChange={(e) => onChange("inversion", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Facturación (USD)</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={data.facturacion || ""}
-                  onChange={(e) => onChange("facturacion", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <Label>ROAS</Label>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>Auto</span>
-                    <Switch
-                      checked={!!data.auto_roas}
-                      onCheckedChange={(v) => onChange("auto_roas", v)}
-                    />
-                  </div>
+          {/* Fila superior: Rendimiento (1/2) y Notas/Adjuntos (1/2) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Rendimiento</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Inversión (USD)</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={data.inversion || ""}
+                    onChange={(e) => onChange("inversion", e.target.value)}
+                  />
                 </div>
-                <Input
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  disabled={data.auto_roas}
-                  value={data.auto_roas ? view.roas || "" : data.roas || ""}
-                  onChange={(e) => onChange("roas", e.target.value)}
-                />
-              </div>
-            </CardContent>
-          </Card>
+                <div className="space-y-1.5">
+                  <Label>Facturación (USD)</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={data.facturacion || ""}
+                    onChange={(e) => onChange("facturacion", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label>ROAS</Label>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>Auto</span>
+                      <Switch
+                        checked={!!data.auto_roas}
+                        onCheckedChange={(v) => onChange("auto_roas", v)}
+                      />
+                    </div>
+                  </div>
+                  <Input
+                    inputMode="decimal"
+                    placeholder="0.00"
+                    disabled={data.auto_roas}
+                    value={data.auto_roas ? view.roas || "" : data.roas || ""}
+                    onChange={(e) => onChange("roas", e.target.value)}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <NotesAndAttachments data={data} onChange={onChange} />
+          </div>
 
           {/* Compras moved below Embudo + Efectividades */}
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card>
               <CardHeader className="py-3">
                 <CardTitle className="text-sm">Embudo</CardTitle>
@@ -1288,13 +1517,8 @@ function AdsMetricsForm({
                       onChange("eff_ads", sanitizePercentInput(e.target.value))
                     }
                   />
-                  {!data.auto_eff && (
-                    <div className="text-[11px] text-muted-foreground">
-                      Ingresa porcentaje (0-100)
-                    </div>
-                  )}
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   <Label>Pago iniciado (pagos/visitas)</Label>
                   <Input
                     inputMode="decimal"
@@ -1309,14 +1533,9 @@ function AdsMetricsForm({
                       onChange("eff_pago", sanitizePercentInput(e.target.value))
                     }
                   />
-                  {!data.auto_eff && (
-                    <div className="text-[11px] text-muted-foreground">
-                      Ingresa porcentaje (0-100)
-                    </div>
-                  )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Compra (%)</Label>
+                <div className="space-y-1">
+                  <Label>Compra (carnada/visitas)</Label>
                   <Input
                     inputMode="decimal"
                     placeholder="0%"
@@ -1333,98 +1552,91 @@ function AdsMetricsForm({
                       )
                     }
                   />
-                  {data.auto_eff ? (
-                    <div className="text-[11px] text-muted-foreground">
-                      Se calcula: compras (carnada) / visitas × 100
-                    </div>
-                  ) : (
-                    <div className="text-[11px] text-muted-foreground">
-                      Ingresa porcentaje (0-100)
-                    </div>
-                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Compras ahora en la misma fila */}
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Compras</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Carnada</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={data.compra_carnada || ""}
+                    onChange={(e) => onChange("compra_carnada", e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Bump 1</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={data.compra_bump1 || ""}
+                    onChange={(e) => onChange("compra_bump1", e.target.value)}
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Efectividad: {pctOf(data.compra_bump1, data.compra_carnada)}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Bump 2</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={data.compra_bump2 || ""}
+                    onChange={(e) => onChange("compra_bump2", e.target.value)}
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Efectividad: {pctOf(data.compra_bump2, data.compra_carnada)}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>OTO 1</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={data.compra_oto1 || ""}
+                    onChange={(e) => onChange("compra_oto1", e.target.value)}
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Efectividad: {pctOf(data.compra_oto1, data.compra_carnada)}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>OTO 2</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={data.compra_oto2 || ""}
+                    onChange={(e) => onChange("compra_oto2", e.target.value)}
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Efectividad: {pctOf(data.compra_oto2, data.compra_carnada)}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Downsell</Label>
+                  <Input
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={data.compra_downsell || ""}
+                    onChange={(e) =>
+                      onChange("compra_downsell", e.target.value)
+                    }
+                  />
+                  <div className="text-[11px] text-muted-foreground">
+                    Efectividad:{" "}
+                    {pctOf(data.compra_downsell, data.compra_carnada)}
+                  </div>
                 </div>
               </CardContent>
             </Card>
           </div>
-
-          {/* Compras: colocado debajo de Embudo y Efectividades */}
-          <Card className="mt-2">
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Compras</CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="space-y-1.5">
-                <Label>Carnada</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={data.compra_carnada || ""}
-                  onChange={(e) => onChange("compra_carnada", e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Bump 1</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={data.compra_bump1 || ""}
-                  onChange={(e) => onChange("compra_bump1", e.target.value)}
-                />
-                <div className="text-[11px] text-muted-foreground">
-                  Efectividad: {pctOf(data.compra_bump1, data.compra_carnada)}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Bump 2</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={data.compra_bump2 || ""}
-                  onChange={(e) => onChange("compra_bump2", e.target.value)}
-                />
-                <div className="text-[11px] text-muted-foreground">
-                  Efectividad: {pctOf(data.compra_bump2, data.compra_carnada)}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>OTO 1</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={data.compra_oto1 || ""}
-                  onChange={(e) => onChange("compra_oto1", e.target.value)}
-                />
-                <div className="text-[11px] text-muted-foreground">
-                  Efectividad: {pctOf(data.compra_oto1, data.compra_carnada)}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>OTO 2</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={data.compra_oto2 || ""}
-                  onChange={(e) => onChange("compra_oto2", e.target.value)}
-                />
-                <div className="text-[11px] text-muted-foreground">
-                  Efectividad: {pctOf(data.compra_oto2, data.compra_carnada)}
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Downsell</Label>
-                <Input
-                  inputMode="numeric"
-                  placeholder="0"
-                  value={data.compra_downsell || ""}
-                  onChange={(e) => onChange("compra_downsell", e.target.value)}
-                />
-                <div className="text-[11px] text-muted-foreground">
-                  Efectividad:{" "}
-                  {pctOf(data.compra_downsell, data.compra_carnada)}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
@@ -1498,33 +1710,7 @@ function AdsMetricsForm({
               </CardContent>
             </Card>
 
-            <Card className="lg:row-span-1">
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Notas</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Observaciones</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder="Notas"
-                    value={data.obs || ""}
-                    onChange={(e) => onChange("obs", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Intervención sugerida</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder="Descripción"
-                    value={data.interv_sugerida || ""}
-                    onChange={(e) =>
-                      onChange("interv_sugerida", e.target.value)
-                    }
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            {/* Notas movidas arriba junto a Rendimiento */}
           </div>
         </CardContent>
       </Card>
@@ -1533,73 +1719,41 @@ function AdsMetricsForm({
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Vista previa</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-4">
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Rendimiento</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1.5 text-sm">
-                <div>
-                  ROAS: <b>{view.roas ?? "—"}</b>
-                </div>
-                <div>
-                  Inversión: <b>{fmtMoney(data.inversion)}</b>
-                </div>
-                <div>
-                  Facturación: <b>{fmtMoney(data.facturacion)}</b>
-                </div>
-              </CardContent>
-            </Card>
+        <CardContent className="space-y-5 text-sm">
+          <div className="space-y-1.5">
+            <div className="font-medium text-muted-foreground">Rendimiento</div>
+            <div>ROAS: <b>{view.roas ?? "—"}</b></div>
+            <div>Inversión: <b>{fmtMoney(data.inversion)}</b></div>
+            <div>Facturación: <b>{fmtMoney(data.facturacion)}</b></div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Embudo</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                  <div>
-                    Alcance: <b>{fmtNum(data.alcance)}</b>
-                  </div>
-                  <div>
-                    Clics: <b>{fmtNum(data.clics)}</b>
-                  </div>
-                  <div>
-                    Visitas: <b>{fmtNum(data.visitas)}</b>
-                  </div>
-                  <div>
-                    Pagos: <b>{fmtNum(data.pagos)}</b>
-                  </div>
-                  <div className="col-span-2">
-                    Carga pág: <b>{fmtPct(data.carga_pagina)}</b>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Efectividades</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-1.5 text-sm">
-                  <div>
-                    Ads: <b>{fmtPct(view.eff_ads)}</b>
-                  </div>
-                  <div>
-                    Pago iniciado: <b>{fmtPct(view.eff_pago)}</b>
-                  </div>
-                  <div>
-                    Compra: <b>{fmtPct(view.eff_compra)}</b>
-                  </div>
-                </CardContent>
-              </Card>
+          <Separator />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <div className="font-medium text-muted-foreground">Embudo</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <div>Alcance: <b>{fmtNum(data.alcance)}</b></div>
+                <div>Clics: <b>{fmtNum(data.clics)}</b></div>
+                <div>Visitas: <b>{fmtNum(data.visitas)}</b></div>
+                <div>Pagos: <b>{fmtNum(data.pagos)}</b></div>
+                <div className="col-span-2">Carga pág: <b>{fmtPct(data.carga_pagina)}</b></div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="font-medium text-muted-foreground">Efectividades</div>
+              <div>Ads: <b>{fmtPct(view.eff_ads)}</b></div>
+              <div>Pago iniciado: <b>{fmtPct(view.eff_pago)}</b></div>
+              <div>Compra: <b>{fmtPct(view.eff_compra)}</b></div>
             </div>
           </div>
 
+          <Separator />
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Compras</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
+            <div>
+              <div className="font-medium text-muted-foreground mb-2">Compras</div>
+              <div className="flex flex-wrap gap-2">
                 {(
                   [
                     ["Carnada", data.compra_carnada],
@@ -1626,14 +1780,11 @@ function AdsMetricsForm({
                       Sin registros
                     </span>
                   )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Estado y fase</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap items-center gap-2 text-sm">
+              </div>
+            </div>
+            <div>
+              <div className="font-medium text-muted-foreground mb-2">Estado y fase</div>
+              <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={data.pauta_activa ? "default" : "outline"}>
                   {data.pauta_activa ? "Pauta activa" : "Pauta inactiva"}
                 </Badge>
@@ -1645,46 +1796,36 @@ function AdsMetricsForm({
                     : "Sin intervención"}
                 </Badge>
                 <Badge variant="outline">{data.fase || "Sin fase"}</Badge>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Coaches</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 gap-1 text-sm">
+              </div>
+            </div>
+            <div>
+              <div className="font-medium text-muted-foreground mb-2">Coaches</div>
+              <div className="grid grid-cols-1 gap-1">
                 <div>
                   Copy: <b>{data.coach_copy || "—"}</b>
                 </div>
                 <div>
                   Plataformas: <b>{data.coach_plat || "—"}</b>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
+          <Separator />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Observaciones</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm whitespace-pre-wrap">
-                {data.obs || "—"}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Intervención sugerida</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm whitespace-pre-wrap">
-                {data.interv_sugerida || "—"}
-              </CardContent>
-            </Card>
+            <div>
+              <div className="font-medium text-muted-foreground mb-2">Observaciones</div>
+              <div className="whitespace-pre-wrap">{data.obs || "—"}</div>
+            </div>
+            <div>
+              <div className="font-medium text-muted-foreground mb-2">Intervención sugerida</div>
+              <div className="whitespace-pre-wrap">{data.interv_sugerida || "—"}</div>
+            </div>
           </div>
 
           <div className="text-[11px] text-muted-foreground">
-            Guardado local automáticamente. Esta vista no envía datos al
-            servidor.
+            Guardado local automáticamente. Esta vista no envía datos al servidor.
           </div>
         </CardContent>
       </Card>
