@@ -23,6 +23,7 @@ import {
 } from "./_parts/detail-utils";
 import TicketsPanel from "./_parts/TicketsPanel";
 import SessionsStudentPanel from "./_parts/SessionsStudentPanel";
+import BonosPanel from "./_parts/BonosPanel";
 import ChatPanel from "./_parts/ChatPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
 import { getStudentTickets } from "../api";
@@ -36,9 +37,6 @@ import {
   getClienteEstatus,
   getClienteTareas,
   updateClientLastTask,
-  createAdsMetric,
-  updateAdsMetric,
-  getAdsMetricByStudentCode,
 } from "../api";
 import {
   Select,
@@ -188,7 +186,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     };
   }, [code]);
 
-  // Polling sencillo para refrescar historial en tiempo real (cada 10s)
+  // Cargar historial de etapas una vez y bajo demanda
   async function fetchPhaseHistory(codeToFetch: string) {
     try {
       const histUrl = `/client/get/cliente-etapas/${encodeURIComponent(
@@ -208,37 +206,6 @@ export default function StudentDetailContent({ code }: { code: string }) {
       setPhaseHistory(null);
     }
   }
-  useEffect(() => {
-    if (!student?.code) return;
-    let mounted = true;
-    const pollingRef = { busy: false };
-    const id = setInterval(async () => {
-      if (pollingRef.busy) return;
-      pollingRef.busy = true;
-      try {
-        await fetchPhaseHistory(student.code);
-        try {
-          const [eh, th] = await Promise.all([
-            getClienteEstatus(student.code),
-            getClienteTareas(student.code),
-          ]);
-          if (!mounted) return;
-          setStatusHistory(eh);
-          setTasksHistory(th);
-        } catch {
-          // falla silenciosa de historial/estatus/tareas
-        }
-      } catch (e) {
-        // falla silenciosa de etapas
-      } finally {
-        pollingRef.busy = false;
-      }
-    }, 10000);
-    return () => {
-      mounted = false;
-      clearInterval(id);
-    };
-  }, [student?.code]);
 
   async function loadCoaches(alumnoCode: string) {
     try {
@@ -423,9 +390,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
     created_at: string;
   }> | null>(null);
 
-  const [topTab, setTopTab] = useState<"detalle" | "chat" | "ads" | "sesiones">(
-    "detalle"
-  );
+  const [topTab, setTopTab] = useState<
+    "detalle" | "chat" | "ads" | "sesiones" | "bonos"
+  >("detalle");
 
   if (loading) {
     return (
@@ -484,6 +451,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
         >
           Sesiones
         </TabBtn>
+        <TabBtn active={topTab === "bonos"} onClick={() => setTopTab("bonos")}>
+          Bonos
+        </TabBtn>
       </div>
 
       {topTab === "chat" ? (
@@ -521,6 +491,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
               area: (c as any).area ?? undefined,
             }))}
           />
+        </div>
+      ) : topTab === "bonos" ? (
+        <div className="mt-2">
+          <BonosPanel studentCode={student.code || code} />
         </div>
       ) : (
         <>
@@ -883,148 +857,29 @@ function AdsMetricsForm({
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
-  const [created, setCreated] = useState<boolean>(false);
-  const [metricId, setMetricId] = useState<string | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const didInitRef = useRef<boolean>(false);
-  const creatingRef = useRef<boolean>(false);
-
-  // Helpers de mapeo server <-> form
-  function mapServerToForm(d: any): Metrics {
-    const safeNum = (v: any): string | undefined => {
-      const n = Number(v);
-      return Number.isFinite(n) ? String(v) : undefined;
-    };
-    return {
-      fecha_inicio: d?.periodo?.inicio || "",
-      fecha_asignacion: d?.periodo?.asignacion || "",
-      fecha_fin: d?.periodo?.fin || "",
-
-      inversion: safeNum(d?.rendimiento?.inversion) || "",
-      facturacion: safeNum(d?.rendimiento?.facturacion) || "",
-      roas: safeNum(d?.rendimiento?.roas) || "",
-
-      alcance: safeNum(d?.embudo?.alcance) || "",
-      clics: safeNum(d?.embudo?.clics) || "",
-      visitas: safeNum(d?.embudo?.visitas) || "",
-      pagos: safeNum(d?.embudo?.pagos) || "",
-      carga_pagina: safeNum(d?.embudo?.carga_pagina) || "",
-
-      eff_ads: safeNum(d?.efectividades?.ads) || "",
-      eff_pago: safeNum(d?.efectividades?.pago) || "",
-      eff_compra: safeNum(d?.efectividades?.compra) || "",
-
-      compra_carnada: safeNum(d?.compras?.carnada) || "",
-      compra_bump1: safeNum(d?.compras?.bump1) || "",
-      compra_bump2: safeNum(d?.compras?.bump2) || "",
-      compra_oto1: safeNum(d?.compras?.oto1) || "",
-      compra_oto2: safeNum(d?.compras?.oto2) || "",
-      compra_downsell: safeNum(d?.compras?.downsell) || "",
-
-      pauta_activa: !!(
-        d?.estado?.pauta_activa ??
-        d?.metrics_raw?.pauta_activa ??
-        false
-      ),
-      requiere_interv: !!(
-        d?.estado?.requiere_interv ??
-        d?.metrics_raw?.requiere_interv ??
-        false
-      ),
-      fase: d?.estado?.fase || "",
-
-      coach_copy: d?.coaches?.copy || "",
-      coach_plat: d?.coaches?.plataformas || "",
-      obs: d?.notas?.observaciones || "",
-      interv_sugerida: d?.notas?.intervencion_sugerida || "",
-
-      auto_roas: !!(
-        d?.rendimiento?.roas_auto ??
-        d?.metrics_raw?.auto_roas ??
-        true
-      ),
-      auto_eff: !!(d?.efectividades?.auto ?? d?.metrics_raw?.auto_eff ?? true),
-    };
-  }
-
-  function extractMetricId(d: any): string | null {
-    const id = d?.id ?? d?.codigo ?? d?.metric_id ?? d?._id ?? null;
-    return id != null ? String(id) : null;
-  }
 
   function toNumOrNull(s?: string): number | null {
     if (s == null || s === "") return null;
     const n = Number(s);
     return Number.isFinite(n) ? n : null;
   }
-
-  function mapFormToServer(form: Metrics) {
-    return {
-      estudiante: {
-        codigo: studentCode,
-        nombre: studentName || studentCode,
-      },
-      periodo: {
-        inicio: form.fecha_inicio || null,
-        asignacion: form.fecha_asignacion || null,
-        fin: form.fecha_fin || null,
-      },
-      rendimiento: {
-        inversion: toNumOrNull(form.inversion),
-        facturacion: toNumOrNull(form.facturacion),
-        roas: toNumOrNull(form.roas),
-        roas_auto: !!form.auto_roas,
-      },
-      embudo: {
-        alcance: toNumOrNull(form.alcance),
-        clics: toNumOrNull(form.clics),
-        visitas: toNumOrNull(form.visitas),
-        pagos: toNumOrNull(form.pagos),
-        carga_pagina: toNumOrNull(form.carga_pagina),
-      },
-      efectividades: {
-        ads: toNumOrNull(form.eff_ads),
-        pago: toNumOrNull(form.eff_pago),
-        compra: toNumOrNull(form.eff_compra),
-        auto: !!form.auto_eff,
-      },
-      compras: {
-        carnada: toNumOrNull(form.compra_carnada),
-        bump1: toNumOrNull(form.compra_bump1),
-        bump2: toNumOrNull(form.compra_bump2),
-        oto1: toNumOrNull(form.compra_oto1),
-        oto2: toNumOrNull(form.compra_oto2),
-        downsell: toNumOrNull(form.compra_downsell),
-      },
-      estado: {
-        pauta_activa: !!form.pauta_activa,
-        requiere_interv: !!form.requiere_interv,
-        fase: form.fase || null,
-      },
-      coaches: {
-        copy: form.coach_copy || null,
-        plataformas: form.coach_plat || null,
-      },
-      notas: {
-        observaciones: form.obs || null,
-        intervencion_sugerida: form.interv_sugerida || null,
-      },
-      metrics_raw: {
-        auto_roas: !!form.auto_roas,
-        auto_eff: !!form.auto_eff,
-        pauta_activa: !!form.pauta_activa,
-        requiere_interv: !!form.requiere_interv,
-      },
-      calculados: {
-        roas: toNumOrNull(form.roas),
-        eff_ads: toNumOrNull(form.eff_ads),
-        eff_pago: toNumOrNull(form.eff_pago),
-      },
-      meta: {
-        generado_en: new Date().toISOString(),
-        version: 1,
-      },
-    };
+  function fmtPercentNoScale(n?: number | null): string {
+    if (n == null || !Number.isFinite(Number(n))) return "—";
+    const v = Number(n);
+    const s = v.toFixed(2);
+    return `${s.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1")}%`;
+  }
+  function pctOf(
+    part?: string | number | null,
+    total?: string | number | null
+  ): string {
+    const p = toNum(part as any);
+    const t = toNum(total as any);
+    if (p == null || !t || t <= 0) return "—";
+    // Para bumps/OTO: mostrar porcentaje sin escalar (1 => 1%, no 100%)
+    return fmtPercentNoScale(p / t);
   }
 
   // Cargar métrica existente por estudiante
@@ -1033,15 +888,23 @@ function AdsMetricsForm({
     (async () => {
       setLoading(true);
       try {
-        const existing = await getAdsMetricByStudentCode(studentCode);
-        if (mounted && existing) {
-          setData(mapServerToForm(existing));
-          setCreated(true);
-        } else if (mounted) {
-          setCreated(false);
+        const key = `ads-metrics:${studentCode}`;
+        const raw =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(key)
+            : null;
+        if (mounted && raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            // Por compatibilidad, si hay payloads antiguos, guardar solo el objeto de formulario
+            const maybeForm = parsed?.form ?? parsed;
+            setData({ ...data, ...maybeForm });
+          } catch {
+            // si falla parseo, ignoramos y arrancamos vacío
+          }
         }
       } catch (e) {
-        console.error("ADS metrics load error", e);
+        console.error("ADS metrics local load error", e);
       } finally {
         if (mounted) setLoading(false);
         didInitRef.current = true;
@@ -1061,61 +924,22 @@ function AdsMetricsForm({
     saveTimerRef.current = window.setTimeout(async () => {
       try {
         setSaving(true);
-        const payload = mapFormToServer(data);
-        if (created) {
-          // Actualiza usando el ID de la métrica; si aún no lo tenemos, intenta obtenerlo
-          let id = metricId;
-          if (!id) {
-            try {
-              const fresh = await getAdsMetricByStudentCode(studentCode);
-              if (fresh) {
-                id = extractMetricId(fresh);
-                setMetricId(id);
-              }
-            } catch {}
-          }
-          if (id) {
-            await updateAdsMetric(id, payload);
-          } else {
-            // Fallback: crear si por alguna razón no hay id todavía
-            if (!creatingRef.current) {
-              creatingRef.current = true;
-              await createAdsMetric(payload);
-              setCreated(true);
-              try {
-                const fresh = await getAdsMetricByStudentCode(studentCode);
-                if (fresh) {
-                  setData(mapServerToForm(fresh));
-                  setMetricId(extractMetricId(fresh));
-                }
-              } catch {}
-              creatingRef.current = false;
-            }
-          }
-        } else {
-          // Crear solo una vez
-          if (creatingRef.current) return;
-          creatingRef.current = true;
-          await createAdsMetric(payload);
-          setCreated(true);
-          // refrescar una vez para alinear con servidor y capturar metricId
-          try {
-            const fresh = await getAdsMetricByStudentCode(studentCode);
-            if (fresh) {
-              setData(mapServerToForm(fresh));
-              setMetricId(extractMetricId(fresh));
-            }
-          } catch {}
-          creatingRef.current = false;
+        const key = `ads-metrics:${studentCode}`;
+        const payload = {
+          savedAt: new Date().toISOString(),
+          form: data,
+        };
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(key, JSON.stringify(payload));
         }
       } catch (e) {
-        console.error(e);
+        console.error("ADS metrics local save error", e);
       } finally {
         setSaving(false);
       }
     }, 600);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(data), created]);
+  }, [JSON.stringify(data)]);
 
   function persist(next: Metrics) {
     setData(next);
@@ -1140,15 +964,73 @@ function AdsMetricsForm({
     if (p != null && v && v > 0) return String(p / v);
     return undefined;
   }, [data.pagos, data.visitas]);
+  const effCompraCalc = useMemo(() => {
+    const comp = toNum(data.compra_carnada);
+    const v = toNum(data.visitas);
+    if (comp != null && v && v > 0) return String(comp / v);
+    return undefined;
+  }, [data.compra_carnada, data.visitas]);
 
   const view = {
     roas: data.auto_roas ? roasCalc ?? data.roas : data.roas,
     eff_ads: data.auto_eff ? effAdsCalc ?? data.eff_ads : data.eff_ads,
     eff_pago: data.auto_eff ? effPagoCalc ?? data.eff_pago : data.eff_pago,
+    eff_compra: data.auto_eff
+      ? effCompraCalc ?? data.eff_compra
+      : data.eff_compra,
   } as const;
 
   function onChange<K extends keyof Metrics>(k: K, v: Metrics[K]) {
     persist({ ...data, [k]: v });
+  }
+
+  // Auto-calcular "Carga de página (%)" = visitas/clics*100
+  useEffect(() => {
+    // parse numbers de strings con helper toNum
+    const v = toNum(data.visitas);
+    const c = toNum(data.clics);
+    let calc = "0";
+    if (c && c > 0 && v != null) {
+      const pct = (v / c) * 100;
+      // 1 decimal, sin .0 innecesario
+      const s = pct.toFixed(1);
+      calc = /\.0$/.test(s) ? s.replace(/\.0$/, "") : s;
+    }
+    if ((data.carga_pagina || "0") !== calc) {
+      setData((prev) => ({ ...prev, carga_pagina: calc }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.visitas, data.clics]);
+
+  // Helpers de presentación para porcentajes sin símbolo
+  function toPercentNoSymbol(x?: string | number | null): string {
+    const v = toNum(x);
+    if (v == null) return "";
+    // Si el valor es > 1, asumimos que es un % (ej: 25) y lo normalizamos a ratio (0.25)
+    const ratio = v > 1 ? v / 100 : v;
+    const pct = ratio * 100;
+    const s = pct.toFixed(1);
+    return /\.0$/.test(s) ? s.replace(/\.0$/, "") : s;
+  }
+  // Variante sin escalar: ratio 1 -> "1" (mostrado como 1%)
+  function toPercentNoSymbolNoScale(x?: string | number | null): string {
+    const v = toNum(x);
+    if (v == null) return "";
+    const s = Number(v).toFixed(2);
+    return s.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+  }
+  function sanitizePercentInput(s: string): string {
+    try {
+      const t = s.replace(/%/g, "").trim();
+      // normaliza comas a punto y elimina caracteres no numéricos salvo el punto
+      const norm = t.replace(/,/g, ".").replace(/[^0-9.\-]/g, "");
+      // evita múltiples puntos: conserva el primero
+      const parts = norm.split(".");
+      if (parts.length <= 2) return norm;
+      return parts[0] + "." + parts.slice(1).join("").replace(/\./g, "");
+    } catch {
+      return s;
+    }
   }
 
   return (
@@ -1194,53 +1076,56 @@ function AdsMetricsForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card className="col-span-1">
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Rendimiento</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Inversión (USD)</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.inversion || ""}
-                    onChange={(e) => onChange("inversion", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Facturación (USD)</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.facturacion || ""}
-                    onChange={(e) => onChange("facturacion", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label>ROAS</Label>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>Auto</span>
-                      <Switch
-                        checked={!!data.auto_roas}
-                        onCheckedChange={(v) => onChange("auto_roas", v)}
-                      />
-                    </div>
+          {/* Solo rendimiento arriba */}
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm">Rendimiento</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>Inversión (USD)</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={data.inversion || ""}
+                  onChange={(e) => onChange("inversion", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Facturación (USD)</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={data.facturacion || ""}
+                  onChange={(e) => onChange("facturacion", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label>ROAS</Label>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Auto</span>
+                    <Switch
+                      checked={!!data.auto_roas}
+                      onCheckedChange={(v) => onChange("auto_roas", v)}
+                    />
                   </div>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    disabled={data.auto_roas}
-                    value={data.auto_roas ? view.roas || "" : data.roas || ""}
-                    onChange={(e) => onChange("roas", e.target.value)}
-                  />
                 </div>
-              </CardContent>
-            </Card>
+                <Input
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  disabled={data.auto_roas}
+                  value={data.auto_roas ? view.roas || "" : data.roas || ""}
+                  onChange={(e) => onChange("roas", e.target.value)}
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-            <Card className="col-span-1">
+          {/* Compras moved below Embudo + Efectividades */}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Card>
               <CardHeader className="py-3">
                 <CardTitle className="text-sm">Embudo</CardTitle>
               </CardHeader>
@@ -1285,17 +1170,19 @@ function AdsMetricsForm({
                   <Label>Carga de página (%)</Label>
                   <Input
                     inputMode="decimal"
-                    placeholder="82.5"
-                    value={data.carga_pagina || ""}
-                    onChange={(e) => onChange("carga_pagina", e.target.value)}
+                    placeholder="0%"
+                    disabled
+                    value={`${data.carga_pagina || "0"}%`}
                   />
+                  <div className="text-[11px] text-muted-foreground">
+                    Se calcula: visitas / clics × 100
+                  </div>
                 </div>
               </CardContent>
             </Card>
-
-            <Card className="col-span-1">
+            <Card>
               <CardHeader className="py-3">
-                <CardTitle className="text-sm">Efectividades</CardTitle>
+                <CardTitle className="text-sm">Efectividades (%)</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 gap-3">
                 <div className="space-y-1">
@@ -1311,40 +1198,78 @@ function AdsMetricsForm({
                   </div>
                   <Input
                     inputMode="decimal"
-                    placeholder="0.0"
+                    placeholder="0%"
                     disabled={data.auto_eff}
-                    value={
-                      data.auto_eff ? view.eff_ads || "" : data.eff_ads || ""
+                    value={`${
+                      data.auto_eff
+                        ? toPercentNoSymbol(view.eff_ads)
+                        : toPercentNoSymbol(data.eff_ads)
+                    }%`}
+                    onChange={(e) =>
+                      onChange("eff_ads", sanitizePercentInput(e.target.value))
                     }
-                    onChange={(e) => onChange("eff_ads", e.target.value)}
                   />
+                  {!data.auto_eff && (
+                    <div className="text-[11px] text-muted-foreground">
+                      Ingresa porcentaje (0-100)
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Pago iniciado (pagos/visitas)</Label>
                   <Input
                     inputMode="decimal"
-                    placeholder="0.0"
+                    placeholder="0%"
                     disabled={data.auto_eff}
-                    value={
-                      data.auto_eff ? view.eff_pago || "" : data.eff_pago || ""
+                    value={`${
+                      data.auto_eff
+                        ? toPercentNoSymbol(view.eff_pago)
+                        : toPercentNoSymbol(data.eff_pago)
+                    }%`}
+                    onChange={(e) =>
+                      onChange("eff_pago", sanitizePercentInput(e.target.value))
                     }
-                    onChange={(e) => onChange("eff_pago", e.target.value)}
                   />
+                  {!data.auto_eff && (
+                    <div className="text-[11px] text-muted-foreground">
+                      Ingresa porcentaje (0-100)
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Compra</Label>
+                  <Label>Compra (%)</Label>
                   <Input
                     inputMode="decimal"
-                    placeholder="0.0"
-                    value={data.eff_compra || ""}
-                    onChange={(e) => onChange("eff_compra", e.target.value)}
+                    placeholder="0%"
+                    disabled={data.auto_eff}
+                    value={`${
+                      data.auto_eff
+                        ? toPercentNoSymbol(view.eff_compra)
+                        : toPercentNoSymbol(data.eff_compra)
+                    }%`}
+                    onChange={(e) =>
+                      onChange(
+                        "eff_compra",
+                        sanitizePercentInput(e.target.value)
+                      )
+                    }
                   />
+                  {data.auto_eff ? (
+                    <div className="text-[11px] text-muted-foreground">
+                      Se calcula: compras (carnada) / visitas × 100
+                    </div>
+                  ) : (
+                    <div className="text-[11px] text-muted-foreground">
+                      Ingresa porcentaje (0-100)
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
           </div>
 
-          <Card>
+          {/* Compras: colocado debajo de Embudo y Efectividades */}
+          <Card className="mt-2">
             <CardHeader className="py-3">
               <CardTitle className="text-sm">Compras</CardTitle>
             </CardHeader>
@@ -1366,6 +1291,9 @@ function AdsMetricsForm({
                   value={data.compra_bump1 || ""}
                   onChange={(e) => onChange("compra_bump1", e.target.value)}
                 />
+                <div className="text-[11px] text-muted-foreground">
+                  Efectividad: {pctOf(data.compra_bump1, data.compra_carnada)}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Bump 2</Label>
@@ -1375,6 +1303,9 @@ function AdsMetricsForm({
                   value={data.compra_bump2 || ""}
                   onChange={(e) => onChange("compra_bump2", e.target.value)}
                 />
+                <div className="text-[11px] text-muted-foreground">
+                  Efectividad: {pctOf(data.compra_bump2, data.compra_carnada)}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>OTO 1</Label>
@@ -1384,6 +1315,9 @@ function AdsMetricsForm({
                   value={data.compra_oto1 || ""}
                   onChange={(e) => onChange("compra_oto1", e.target.value)}
                 />
+                <div className="text-[11px] text-muted-foreground">
+                  Efectividad: {pctOf(data.compra_oto1, data.compra_carnada)}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>OTO 2</Label>
@@ -1393,6 +1327,9 @@ function AdsMetricsForm({
                   value={data.compra_oto2 || ""}
                   onChange={(e) => onChange("compra_oto2", e.target.value)}
                 />
+                <div className="text-[11px] text-muted-foreground">
+                  Efectividad: {pctOf(data.compra_oto2, data.compra_carnada)}
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Downsell</Label>
@@ -1402,11 +1339,15 @@ function AdsMetricsForm({
                   value={data.compra_downsell || ""}
                   onChange={(e) => onChange("compra_downsell", e.target.value)}
                 />
+                <div className="text-[11px] text-muted-foreground">
+                  Efectividad:{" "}
+                  {pctOf(data.compra_downsell, data.compra_carnada)}
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="py-3">
                 <CardTitle className="text-sm">Estado</CardTitle>
@@ -1514,7 +1455,7 @@ function AdsMetricsForm({
           <CardTitle className="text-base">Vista previa</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-4">
             <Card>
               <CardHeader className="py-3">
                 <CardTitle className="text-sm">Rendimiento</CardTitle>
@@ -1532,45 +1473,46 @@ function AdsMetricsForm({
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Embudo</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                <div>
-                  Alcance: <b>{fmtNum(data.alcance)}</b>
-                </div>
-                <div>
-                  Clics: <b>{fmtNum(data.clics)}</b>
-                </div>
-                <div>
-                  Visitas: <b>{fmtNum(data.visitas)}</b>
-                </div>
-                <div>
-                  Pagos: <b>{fmtNum(data.pagos)}</b>
-                </div>
-                <div className="col-span-2">
-                  Carga pág: <b>{fmtPct(data.carga_pagina)}</b>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Efectividades</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-1.5 text-sm">
-                <div>
-                  Ads: <b>{fmtPct(view.eff_ads)}</b>
-                </div>
-                <div>
-                  Pago iniciado: <b>{fmtPct(view.eff_pago)}</b>
-                </div>
-                <div>
-                  Compra: <b>{fmtPct(data.eff_compra)}</b>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Embudo</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <div>
+                    Alcance: <b>{fmtNum(data.alcance)}</b>
+                  </div>
+                  <div>
+                    Clics: <b>{fmtNum(data.clics)}</b>
+                  </div>
+                  <div>
+                    Visitas: <b>{fmtNum(data.visitas)}</b>
+                  </div>
+                  <div>
+                    Pagos: <b>{fmtNum(data.pagos)}</b>
+                  </div>
+                  <div className="col-span-2">
+                    Carga pág: <b>{fmtPct(data.carga_pagina)}</b>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Efectividades</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-1.5 text-sm">
+                  <div>
+                    Ads: <b>{fmtPct(view.eff_ads)}</b>
+                  </div>
+                  <div>
+                    Pago iniciado: <b>{fmtPct(view.eff_pago)}</b>
+                  </div>
+                  <div>
+                    Compra: <b>{fmtPct(view.eff_compra)}</b>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -11,6 +11,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
+import { SalePreview } from "@/app/admin/crm/components/SalePreview";
 
 export default function SaleEditPage({ params }: { params: { id: string } }) {
   return (
@@ -25,6 +26,9 @@ export default function SaleEditPage({ params }: { params: { id: string } }) {
 function Content({ id }: { id: string }) {
   const [loading, setLoading] = React.useState(true);
   const [record, setRecord] = React.useState<MetadataRecord<any> | null>(null);
+  const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
+    null
+  );
   const router = useRouter();
 
   const load = async () => {
@@ -97,12 +101,21 @@ function Content({ id }: { id: string }) {
           Volver al CRM
         </Button>
       </div>
+      <SalePreview
+        payload={salePayload}
+        draft={draft || undefined}
+        id={record.id}
+        entity={isSale ? "sale" : "booking"}
+        onUpdated={() => router.refresh()}
+      />
       <Card className="p-4">
         <CloseSaleForm
           mode="edit"
           recordId={record.id}
           entity={isSale ? "sale" : "booking"}
           initial={initial}
+          autoSave
+          onChange={(f) => setDraft({ ...f })}
           onDone={() => router.refresh()}
         />
       </Card>

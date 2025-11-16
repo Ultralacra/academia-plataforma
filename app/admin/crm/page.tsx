@@ -16,6 +16,8 @@ import {
   Link as LinkIcon,
   X,
   Loader2,
+  List,
+  LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -293,44 +295,8 @@ function CrmContent() {
               <span className="inline-block w-2 h-2 rounded-full bg-indigo-600" />{" "}
               CRM
             </h1>
-            <p className="text-sm text-slate-600">
-              Prospectos que luego serán alumnos
-            </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button
-              variant={view === "lista" ? "default" : "outline"}
-              size="sm"
-              className={
-                view === "lista"
-                  ? "bg-indigo-600 hover:bg-indigo-700 text-white border-0"
-                  : ""
-              }
-              onClick={() => setView("lista")}
-            >
-              Lista
-            </Button>
-            <Button
-              variant={view === "kanban" ? "default" : "outline"}
-              size="sm"
-              className={
-                view === "kanban"
-                  ? "bg-indigo-600 hover:bg-indigo-700 text-white border-0"
-                  : ""
-              }
-              onClick={() => setView("kanban")}
-            >
-              Kanban
-            </Button>
-            <Button
-              size="sm"
-              className="gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
-              asChild
-            >
-              <Link href="/admin/crm/sales">
-                <Plus className="h-4 w-4" /> Cierre de venta
-              </Link>
-            </Button>
             <Dialog open={openCreateLead} onOpenChange={setOpenCreateLead}>
               <DialogTrigger asChild>
                 <Button
@@ -382,6 +348,35 @@ function CrmContent() {
                   setOwnerFiltro("all");
                 }}
               />
+              {/* Toggle de vista compacto con iconos, arriba a la derecha */}
+              <div className="flex items-center justify-end -mt-2">
+                <div className="inline-flex overflow-hidden rounded-md border border-slate-200 bg-white">
+                  <button
+                    type="button"
+                    onClick={() => setView("lista")}
+                    className={`px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 ${
+                      view === "lista"
+                        ? "bg-indigo-600 text-white hover:bg-indigo-600"
+                        : ""
+                    }`}
+                    title="Vista de lista"
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setView("kanban")}
+                    className={`px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 border-l border-slate-200 ${
+                      view === "kanban"
+                        ? "bg-indigo-600 text-white hover:bg-indigo-600"
+                        : ""
+                    }`}
+                    title="Vista Kanban"
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
               {view === "lista" ? (
                 <div className="rounded-xl border bg-white">
                   <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium text-slate-600 border-b bg-slate-50/50">
@@ -529,16 +524,6 @@ function CrmContent() {
                   }}
                 />
               )}
-            </div>
-          }
-          forms={
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-lg font-semibold mb-2">
-                  Registrar cierre de venta
-                </h2>
-                <CloseSaleForm />
-              </div>
             </div>
           }
           metrics={

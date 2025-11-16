@@ -35,9 +35,45 @@ export function ProtectedRoute({
   // While redirecting, render nothing (router.push already sent user to /login)
   if (!isAuthenticated) return null;
 
-  // Política temporal: todos los usuarios autenticados pueden acceder a todas las vistas.
-  // Ignoramos la verificación de allowedRoles para evitar estados de "Acceso Denegado".
-  // if (allowedRoles && !hasAnyRole(allowedRoles)) { ... }
+  // Enforzar roles si se especifican
+  if (allowedRoles && !hasAnyRole(allowedRoles)) {
+    return (
+      <div className="min-h-[50vh] flex items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-lg font-semibold">Acceso denegado</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            No tienes permisos para ver esta página.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Regla adicional: si es estudiante, solo puede ver su propio detalle de alumno
+  if (user?.role === "student") {
+    const p = String(pathname || "");
+    const segments = p.split("/").filter(Boolean);
+    // Esperamos /admin/alumnos/[code]
+    const isAlumnoDetail =
+      segments[0] === "admin" &&
+      segments[1] === "alumnos" &&
+      segments.length >= 3;
+    const codeFromPath = isAlumnoDetail ? segments[2] : null;
+    const myCode = (user as any)?.codigo || null;
+
+    if (!isAlumnoDetail || !codeFromPath || codeFromPath !== myCode) {
+      return (
+        <div className="min-h-[50vh] flex items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-lg font-semibold">Acceso denegado</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Solo puedes acceder a tu panel de alumno.
+            </p>
+          </div>
+        </div>
+      );
+    }
+  }
 
   return <>{children}</>;
 }

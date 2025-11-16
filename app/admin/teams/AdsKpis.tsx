@@ -15,11 +15,10 @@ function fmtMoney(n: number | null | undefined): string {
     maximumFractionDigits: 0,
   }).format(Number(n));
 }
-function fmtPercent(n: number | null | undefined): string {
+function fmtPercent(n: number | null | undefined, digits: number = 2): string {
   if (n == null || !Number.isFinite(Number(n))) return "—";
-  // asume 0..1 o 0..100: normaliza a %
   const v = Number(n) <= 1 ? Number(n) * 100 : Number(n);
-  return `${v.toFixed(1)}%`;
+  return `${v.toFixed(digits)}%`;
 }
 
 function toPct(a?: number | null, b?: number | null): string {
@@ -78,33 +77,26 @@ export default function AdsKpis({ metrics }: { metrics: AdsMetrics }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-      {/* Rendimiento: ROAS / Inversión / Facturación */}
+      {/* Rendimiento (solo arriba) */}
       <Card className="border-blue-200 col-span-12">
         <CardHeader className="py-2">
           <CardTitle className="text-xs text-blue-700">Rendimiento</CardTitle>
         </CardHeader>
         <CardContent className="py-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Stat label="ROAS" value={fmtNumber(metrics.roas)} />
-            <Stat
-              label="Inversión en pauta"
-              value={fmtMoney(metrics.inversion)}
-            />
-            <Stat
-              label="Facturación"
-              value={fmtMoney(metrics.facturacion)}
-              align="right"
-            />
+            <Stat label="Inversión" value={fmtMoney(metrics.inversion)} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Embudo superior y Efectividades lado a lado */}
-      <Card className="col-span-12 lg:col-span-7">
+      {/* Bloque inferior combinado: Embudo + Efectividades + Compras */}
+      <Card className="col-span-12">
         <CardHeader className="py-2">
-          <CardTitle className="text-xs">Embudo</CardTitle>
+          <CardTitle className="text-xs">Embudo y Efectividad</CardTitle>
         </CardHeader>
-        <CardContent className="py-3">
+        <CardContent className="py-3 space-y-6">
+          {/* Embudo */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Stat label="Alcance" value={fmtNumber(metrics.alcance)} />
             <Stat
@@ -129,14 +121,8 @@ export default function AdsKpis({ metrics }: { metrics: AdsMetrics }) {
               chip={<Badge variant="secondary">PI rate</Badge>}
             />
           </div>
-        </CardContent>
-      </Card>
 
-      <Card className="col-span-12 lg:col-span-5">
-        <CardHeader className="py-2">
-          <CardTitle className="text-xs">Efectividades</CardTitle>
-        </CardHeader>
-        <CardContent className="py-3">
+          {/* Efectividades */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Stat
               label="Efectividad Ads"
@@ -151,16 +137,14 @@ export default function AdsKpis({ metrics }: { metrics: AdsMetrics }) {
               value={fmtPercent(metrics.efectividad_compra)}
             />
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Estado compacto */}
-      <Card className="col-span-12">
-        <CardHeader className="py-2">
-          <CardTitle className="text-xs">Estado</CardTitle>
-        </CardHeader>
-        <CardContent className="py-3">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Compras (Facturación) + Estado */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Stat
+              label="Facturación"
+              value={fmtMoney(metrics.facturacion)}
+              helper="USD bruto"
+            />
             <div className="space-y-0.5">
               <div className="text-[11px] text-muted-foreground">
                 Pauta activa
@@ -177,6 +161,13 @@ export default function AdsKpis({ metrics }: { metrics: AdsMetrics }) {
                     No
                   </Badge>
                 )}
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              <div className="text-[11px] text-muted-foreground">Notas</div>
+              <div className="text-[11px] text-muted-foreground leading-snug">
+                ROAS vs inversión para ajustar presupuesto. Validar anomalías en
+                pago iniciado / compra.
               </div>
             </div>
           </div>

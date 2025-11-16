@@ -73,9 +73,9 @@ export function GET(req: Request) {
             )
           : undefined;
         if (!text && !(attachments && attachments.length)) return;
-        // Límite sencillo: max 10MB por mensaje
+        // Límite sencillo: max 25MB por mensaje
         const totalSize = (attachments || []).reduce((acc, a) => acc + (a.size || 0), 0);
-        if (totalSize > 10 * 1024 * 1024) return;
+        if (totalSize > 25 * 1024 * 1024) return;
         const msg: Message = {
           id: String(payload.id || Math.random().toString(36).slice(2)),
           room: roomIn,

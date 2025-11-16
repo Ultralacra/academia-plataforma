@@ -115,8 +115,8 @@ export default function CoachChatInline({
     () => (room || "").trim().toLowerCase(),
     [room]
   );
-  // Límite de tamaño por archivo: 10MB
-  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  // Límite de tamaño por archivo: 25MB
+  const MAX_FILE_SIZE = 25 * 1024 * 1024;
 
   const [connected, setConnected] = React.useState(false);
   const [items, setItems] = React.useState<Message[]>([]);
@@ -499,7 +499,7 @@ export default function CoachChatInline({
           .join(", ");
         const more = tooBig.length > 3 ? ` y ${tooBig.length - 3} más` : "";
         setUploadError(
-          `Se omitieron ${tooBig.length} archivo(s) por exceder 10MB: ${names}${more}.`
+          `Se omitieron ${tooBig.length} archivo(s) por exceder 25MB: ${names}${more}.`
         );
         arr = arr.filter((f) => (f?.size || 0) <= MAX_FILE_SIZE);
       }
@@ -635,7 +635,7 @@ export default function CoachChatInline({
         .join(", ");
       const more = rejected.length > 3 ? ` y ${rejected.length - 3} más` : "";
       setUploadError(
-        `No se pueden adjuntar archivos mayores a 10MB. Se omitieron: ${names}${more}.`
+        `No se pueden adjuntar archivos mayores a 25MB. Se omitieron: ${names}${more}.`
       );
     }
     if (!valid.length) return;
@@ -3290,7 +3290,7 @@ export default function CoachChatInline({
                           });
                           if ((file.size || 0) > MAX_FILE_SIZE) {
                             setUploadError(
-                              "El audio grabado excede el límite de 10MB y no se adjuntará."
+                              "El audio grabado excede el límite de 25MB y no se adjuntará."
                             );
                           } else {
                             addPendingAttachments([file] as any);

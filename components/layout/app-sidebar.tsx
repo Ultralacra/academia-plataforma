@@ -96,12 +96,20 @@ export function AppSidebar() {
         return adminItems;
       case "coach":
         return coachItems;
-      case "student":
-        return studentItems;
+      case "student": {
+        const code = (user as any)?.codigo || "RvA_5Qxoezfxlxxj";
+        return [
+          {
+            title: "Alumnos",
+            url: `/admin/alumnos/${code}`,
+            icon: GraduationCap,
+          },
+        ];
+      }
       default:
         return [];
     }
-  }, [user?.role]);
+  }, [user?.role, (user as any)?.codigo]);
 
   const roleLabel =
     user?.role === "admin"
@@ -210,6 +218,14 @@ export function AppSidebar() {
               >
                 {roleLabel}
               </Badge>
+              {user?.role === "student" && (user as any)?.codigo && (
+                <div className="mt-1 text-[10px] text-neutral-500 truncate">
+                  Código:{" "}
+                  <code className="text-neutral-700">
+                    {(user as any).codigo}
+                  </code>
+                </div>
+              )}
             </div>
           </div>
         </div>

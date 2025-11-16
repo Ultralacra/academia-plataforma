@@ -146,8 +146,8 @@ export default function ChatRealtime({
     () => (room || "").trim().toLowerCase(),
     [room]
   );
-  // Límite de tamaño por archivo: 10MB
-  const MAX_FILE_SIZE = 10 * 1024 * 1024;
+  // Límite de tamaño por archivo: 25MB
+  const MAX_FILE_SIZE = 25 * 1024 * 1024;
   const [currentRole, setCurrentRole] = React.useState<Sender>(role);
   const [items, setItems] = React.useState<Message[]>([]);
   const [text, setText] = React.useState("");
@@ -2138,7 +2138,7 @@ export default function ChatRealtime({
         .join(", ");
       const more = rejected.length > 3 ? ` y ${rejected.length - 3} más` : "";
       setAttachError(
-        `No se pueden adjuntar archivos mayores a 10MB. Se omitieron: ${names}${more}.`
+        `No se pueden adjuntar archivos mayores a 25MB. Se omitieron: ${names}${more}.`
       );
     }
     if (!valid.length) {

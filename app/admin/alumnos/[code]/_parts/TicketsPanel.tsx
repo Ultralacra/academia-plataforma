@@ -34,6 +34,7 @@ import {
   Eye,
   User,
   Paperclip,
+  Check,
 } from "lucide-react";
 import {
   Dialog,
@@ -60,6 +61,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Drawer,
   DrawerContent,
@@ -69,6 +71,7 @@ import {
 } from "@/components/ui/drawer";
 import { Separator } from "@/components/ui/separator";
 import { getAuthToken } from "@/lib/auth";
+import { BONOS_CONTRACTUALES, BONOS_EXTRA } from "@/lib/bonos";
 
 function fmtDate(iso?: string | null) {
   if (!iso) return "—";
@@ -101,26 +104,19 @@ function shortenFileName(name: string, max = 42) {
   return base.slice(0, keep) + "…" + ext;
 }
 
-type StatusKey =
-  | "EN_PROGRESO"
-  | "PENDIENTE"
-  | "PENDIENTE_DE_ENVIO"
-  | "RESUELTO";
+type StatusKey = "PENDIENTE" | "PAUSADO" | "RESUELTO";
 
 const STATUS_LABEL: Record<StatusKey, string> = {
-  EN_PROGRESO: "En progreso",
   PENDIENTE: "Pendiente",
-  PENDIENTE_DE_ENVIO: "Pendiente de envío",
+  PAUSADO: "Pausado",
   RESUELTO: "Resuelto",
 };
 
 const STATUS_STYLE: Record<StatusKey, string> = {
   PENDIENTE:
     "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20",
-  EN_PROGRESO:
+  PAUSADO:
     "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
-  PENDIENTE_DE_ENVIO:
-    "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20",
   RESUELTO:
     "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
 };
@@ -128,17 +124,8 @@ const STATUS_STYLE: Record<StatusKey, string> = {
 function coerceStatus(raw?: string | null): StatusKey {
   const s = (raw ?? "").toUpperCase();
   if (s.includes("RESUELTO") || s.includes("COMPLETO")) return "RESUELTO";
-  if (s.includes("ENVIO") || s.includes("ENVÍO") || s.includes("ENVIO"))
-    return "PENDIENTE_DE_ENVIO";
-  if (
-    s.includes("EN_PROGRES") ||
-    s.includes("EN_PROCESO") ||
-    s.includes("PROCES") ||
-    s.includes("CURSO") ||
-    s.includes("EN_CURSO")
-  )
-    return "EN_PROGRESO";
-  if (s.includes("PENDIENTE")) return "PENDIENTE";
+  if (s.includes("PAUS")) return "PAUSADO"; // PAUSADO / EN_PAUSA
+  // Todo lo demás cae en PENDIENTE (incluye EN_PROGRESO, PENDIENTE_DE_ENVIO, EN_CURSO, etc.)
   return "PENDIENTE";
 }
 
@@ -154,15 +141,19 @@ export default function TicketsPanel({
   const [loading, setLoading] = useState(true);
   const [all, setAll] = useState<StudentTicket[]>([]);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<string>("ALL");
+  const [status, setStatus] = useState<"ALL" | StatusKey>("ALL");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [tipos, setTipos] = useState<
     { id: string; key: string; value: string }[]
   >([]);
   const [estadoOpts, setEstadoOpts] = useState<
-    { key: string; value: string }[]
-  >([]);
+    { key: StatusKey; value: string }[]
+  >([
+    { key: "PENDIENTE", value: "Pendiente" },
+    { key: "PAUSADO", value: "Pausado" },
+    { key: "RESUELTO", value: "Resuelto" },
+  ]);
   const [allFull, setAllFull] = useState<StudentTicket[]>([]);
   const [openFiles, setOpenFiles] = useState<null | string>(null);
   const [filesLoading, setFilesLoading] = useState(false);
@@ -195,9 +186,14 @@ export default function TicketsPanel({
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<"general" | "detalle">("general");
+  // Bonos tab state
+  const [detailTabBonosReady, setDetailTabBonosReady] = useState(false);
+  const [bonosSelected, setBonosSelected] = useState<string[]>([]);
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
-  const [ticketDetailError, setTicketDetailError] = useState<string | null>(null);
+  const [ticketDetailError, setTicketDetailError] = useState<string | null>(
+    null
+  );
 
   // New state variables for ticket creation
   const [openCreate, setOpenCreate] = useState(false);
@@ -228,12 +224,13 @@ export default function TicketsPanel({
             .filter((x) => x.key && x.value);
           if (alive) setTipos(mapped);
         } catch {}
+        // Forzamos 3 estados fijos en orden: Pendiente, Pausado, Resuelto
         try {
-          const estRes = await getOpciones("estado_tickets");
-          const estList = estRes
-            .map((o) => ({ key: o.key, value: o.value }))
-            .filter((x) => x.key);
-          if (alive && estList.length) setEstadoOpts(estList);
+          setEstadoOpts([
+            { key: "PENDIENTE", value: "Pendiente" },
+            { key: "PAUSADO", value: "Pausado" },
+            { key: "RESUELTO", value: "Resuelto" },
+          ]);
         } catch {}
 
         const fetchedAll = await getStudentTickets(student.code || "");
@@ -257,32 +254,9 @@ export default function TicketsPanel({
     };
   }, [student]);
 
+  // No filtramos en el servidor por estado; usamos los 3 estados forzados y filtramos en cliente
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      if (status === "ALL") {
-        setAll(allFull);
-        return;
-      }
-      setLoading(true);
-      try {
-        const fetched = await getStudentTickets(student.code || "", [status]);
-        if (!alive) return;
-        const normalized = fetched
-          .slice()
-          .sort((a, b) => (a.creacion > b.creacion ? -1 : 1));
-        setAll(normalized);
-      } catch (e) {
-        console.error(e);
-        if (!alive) return;
-        setAll([]);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
+    setAll(allFull);
   }, [status, student.code, allFull]);
 
   useEffect(() => {
@@ -299,10 +273,13 @@ export default function TicketsPanel({
   }, [createFiles]);
 
   const counts = useMemo(() => {
-    const acc: Record<string, number> = {};
+    const acc: Record<StatusKey, number> = {
+      PENDIENTE: 0,
+      PAUSADO: 0,
+      RESUELTO: 0,
+    };
     allFull.forEach((t) => {
-      const key = String(t.estado ?? "").toUpperCase();
-      if (!key) return;
+      const key = coerceStatus(t.estado);
       acc[key] = (acc[key] || 0) + 1;
     });
     return acc;
@@ -312,7 +289,7 @@ export default function TicketsPanel({
     let rows = all;
     if (status !== "ALL") {
       rows = rows.filter(
-        (t) => String(t.estado ?? "").toUpperCase() === String(status)
+        (t) => coerceStatus(t.estado) === (status as StatusKey)
       );
     }
     if (query.trim()) {
@@ -652,7 +629,9 @@ export default function TicketsPanel({
     setSelectedTicket(ticket);
     setDrawerOpen(true);
     setDetailTab("general");
-    const codigo = (ticket as any)?.codigo || (ticket as any)?.id_externo || null;
+    setDetailTabBonosReady(false);
+    const codigo =
+      (ticket as any)?.codigo || (ticket as any)?.id_externo || null;
     if (codigo) loadTicketDetail(String(codigo));
   }
 
@@ -661,7 +640,9 @@ export default function TicketsPanel({
       setTicketDetailLoading(true);
       setTicketDetailError(null);
       setTicketDetail(null);
-      const url = `https://v001.vercel.app/v1/ticket/get/ticket/${encodeURIComponent(codigo)}`;
+      const url = `https://v001.vercel.app/v1/ticket/get/ticket/${encodeURIComponent(
+        codigo
+      )}`;
       const token = typeof window !== "undefined" ? getAuthToken() : null;
       const res = await fetch(url, {
         method: "GET",
@@ -675,18 +656,23 @@ export default function TicketsPanel({
       const json = await res.json().catch(() => ({}));
       setTicketDetail(json?.data ?? json ?? null);
     } catch (e: any) {
-      setTicketDetailError(String(e?.message || e || "Error al cargar detalle"));
+      setTicketDetailError(
+        String(e?.message || e || "Error al cargar detalle")
+      );
     } finally {
       setTicketDetailLoading(false);
     }
   }
 
   // Helpers: URLs y formato
-  const isLikelyUrl = (s: string) => /^(https?:\/\/|www\.)\S+$/i.test(String(s || "").trim());
+  const isLikelyUrl = (s: string) =>
+    /^(https?:\/\/|www\.)\S+$/i.test(String(s || "").trim());
   const normalizeUrl = (s: string) => {
     const str = String(s || "").trim();
     if (!str) return "";
-    return str.startsWith("http://") || str.startsWith("https://") ? str : `https://${str}`;
+    return str.startsWith("http://") || str.startsWith("https://")
+      ? str
+      : `https://${str}`;
   };
   const extractUrlsFromDescription = (desc?: string | null) => {
     const text = String(desc || "");
@@ -705,6 +691,55 @@ export default function TicketsPanel({
     }
     return uniq;
   };
+
+  // Bonos disponibles (centralizados en lib/bonos)
+
+  // Persistencia local (temporal) de bonos por alumno
+  const bonosStorageKey = student?.code
+    ? `bonos:${String(student.code)}`
+    : null;
+
+  useEffect(() => {
+    if (!drawerOpen || !student?.code) return;
+    // Cargar bonos guardados la primera vez que abrimos el drawer en esta sesión
+    if (!detailTabBonosReady) {
+      try {
+        const raw = bonosStorageKey
+          ? localStorage.getItem(bonosStorageKey)
+          : null;
+        const parsed: string[] = raw ? JSON.parse(raw) : [];
+        if (Array.isArray(parsed)) setBonosSelected(parsed);
+      } catch {}
+      setDetailTabBonosReady(true);
+    }
+  }, [drawerOpen, student?.code, bonosStorageKey, detailTabBonosReady]);
+
+  function toggleBono(key: string, checked: boolean) {
+    setBonosSelected((prev) => {
+      const set = new Set(prev);
+      if (checked) set.add(key);
+      else set.delete(key);
+      return Array.from(set);
+    });
+  }
+
+  function handleSaveBonos() {
+    if (!bonosStorageKey) return;
+    try {
+      localStorage.setItem(bonosStorageKey, JSON.stringify(bonosSelected));
+      toast({
+        title: "Bonos guardados",
+        description: "La selección se guardó para este alumno.",
+      });
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "No se pudieron guardar los bonos",
+        description: "Intenta de nuevo o contacta al equipo.",
+        variant: "destructive",
+      });
+    }
+  }
 
   return (
     <>
@@ -764,7 +799,7 @@ export default function TicketsPanel({
                 Todos
               </button>
               {estadoOpts.map((opt) => {
-                const k = opt.key.toUpperCase();
+                const k = opt.key as StatusKey;
                 const count = counts[k] ?? 0;
                 return (
                   <button
@@ -807,92 +842,87 @@ export default function TicketsPanel({
               No hay tickets en este filtro
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {(
-                [
-                  "PENDIENTE",
-                  "EN_PROGRESO",
-                  "PENDIENTE_DE_ENVIO",
-                  "RESUELTO",
-                ] as StatusKey[]
-              ).map((col) => {
-                const itemsForCol = filtered.filter(
-                  (t) => coerceStatus(t.estado) === col
-                );
-                return (
-                  <div
-                    key={col}
-                    className="min-h-[200px] rounded-lg border border-slate-200 bg-slate-50/50 p-4"
-                  >
-                    <div className="mb-4 flex items-center justify-between">
-                      <Badge
-                        variant="outline"
-                        className={`${STATUS_STYLE[col]} border`}
-                      >
-                        {STATUS_LABEL[col]}
-                      </Badge>
-                      <span className="text-sm font-medium text-slate-500">
-                        {itemsForCol.length}
-                      </span>
-                    </div>
-
-                    <div className="space-y-3">
-                      {itemsForCol.map((t) => (
-                        <div
-                          key={t.id}
-                          onClick={() => openTicketDetail(t)}
-                          className="group cursor-pointer rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:border-slate-300"
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {(["PENDIENTE", "PAUSADO", "RESUELTO"] as StatusKey[]).map(
+                (col) => {
+                  const itemsForCol = filtered.filter(
+                    (t) => coerceStatus(t.estado) === col
+                  );
+                  return (
+                    <div
+                      key={col}
+                      className="min-h-[200px] rounded-lg border border-slate-200 bg-slate-50/50 p-4"
+                    >
+                      <div className="mb-4 flex items-center justify-between">
+                        <Badge
+                          variant="outline"
+                          className={`${STATUS_STYLE[col]} border`}
                         >
-                          <div className="space-y-3">
-                            <div className="font-medium text-slate-900 leading-snug">
-                              {t.nombre ?? "Ticket"}
-                            </div>
-                            <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                              {t.tipo && (
-                                <div className="flex items-center gap-1">
-                                  <TicketIcon className="h-3 w-3" />
-                                  {t.tipo}
-                                </div>
-                              )}
-                              {t.creacion && (
-                                <div className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {fmtDate(t.creacion)}
-                                </div>
-                              )}
-                              {t.deadline && (
-                                <div className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {fmtDate(t.deadline)}
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <button
-                                className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openFilesFor(
-                                    (t as any).codigo ||
-                                      (t as any).id_externo ||
-                                      t.id
-                                  );
-                                }}
-                                type="button"
-                              >
-                                <FileIcon className="h-3.5 w-3.5" />
-                                <span className="underline decoration-slate-300 hover:decoration-slate-900">
-                                  Ver archivos
-                                </span>
-                              </button>
+                          {STATUS_LABEL[col]}
+                        </Badge>
+                        <span className="text-sm font-medium text-slate-500">
+                          {itemsForCol.length}
+                        </span>
+                      </div>
+
+                      <div className="space-y-3">
+                        {itemsForCol.map((t) => (
+                          <div
+                            key={t.id}
+                            onClick={() => openTicketDetail(t)}
+                            className="group cursor-pointer rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:border-slate-300"
+                          >
+                            <div className="space-y-3">
+                              <div className="font-medium text-slate-900 leading-snug">
+                                {t.nombre ?? "Ticket"}
+                              </div>
+                              <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                                {t.tipo && (
+                                  <div className="flex items-center gap-1">
+                                    <TicketIcon className="h-3 w-3" />
+                                    {t.tipo}
+                                  </div>
+                                )}
+                                {t.creacion && (
+                                  <div className="flex items-center gap-1">
+                                    <Calendar className="h-3 w-3" />
+                                    {fmtDate(t.creacion)}
+                                  </div>
+                                )}
+                                {t.deadline && (
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {fmtDate(t.deadline)}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <button
+                                  className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openFilesFor(
+                                      (t as any).codigo ||
+                                        (t as any).id_externo ||
+                                        t.id
+                                    );
+                                  }}
+                                  type="button"
+                                >
+                                  <FileIcon className="h-3.5 w-3.5" />
+                                  <span className="underline decoration-slate-300 hover:decoration-slate-900">
+                                    Ver archivos
+                                  </span>
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                }
+              )}
             </div>
           )}
         </div>
@@ -939,7 +969,9 @@ export default function TicketsPanel({
                   type="button"
                   onClick={() => setDetailTab("general")}
                   className={`px-3 py-1.5 text-xs ${
-                    detailTab === "general" ? "bg-slate-900 text-white" : "hover:bg-gray-50"
+                    detailTab === "general"
+                      ? "bg-slate-900 text-white"
+                      : "hover:bg-gray-50"
                   }`}
                   title="Información general"
                 >
@@ -947,9 +979,23 @@ export default function TicketsPanel({
                 </button>
                 <button
                   type="button"
+                  onClick={() => setDetailTab("bonos" as any)}
+                  className={`px-3 py-1.5 text-xs border-l ${
+                    (detailTab as any) === "bonos"
+                      ? "bg-slate-900 text-white"
+                      : "hover:bg-gray-50"
+                  }`}
+                  title="Bonos del alumno"
+                >
+                  Bonos
+                </button>
+                <button
+                  type="button"
                   onClick={() => setDetailTab("detalle")}
                   className={`px-3 py-1.5 text-xs border-l ${
-                    detailTab === "detalle" ? "bg-slate-900 text-white" : "hover:bg-gray-50"
+                    detailTab === "detalle"
+                      ? "bg-slate-900 text-white"
+                      : "hover:bg-gray-50"
                   }`}
                   title="Detalle del ticket (API)"
                 >
@@ -961,77 +1007,229 @@ export default function TicketsPanel({
             <div className={detailTab === "general" ? "block" : "hidden"}>
               <div className="p-6 space-y-6">
                 <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium text-slate-500">
-                    Título del ticket
-                  </Label>
-                  <p className="text-base text-slate-900">
-                    {selectedTicket?.nombre || "—"}
-                  </p>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <User className="h-4 w-4 text-slate-500" />
-                  Personas involucradas
-                </div>
-                <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-sm text-slate-500">Informante</Label>
-                    <p className="text-base text-slate-900">
-                      {(selectedTicket as any)?.informante || "—"}
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-slate-500">
-                      Resuelto por
+                    <Label className="text-sm font-medium text-slate-500">
+                      Título del ticket
                     </Label>
                     <p className="text-base text-slate-900">
-                      {(selectedTicket as any)?.resuelto_por || "—"}
+                      {selectedTicket?.nombre || "—"}
                     </p>
                   </div>
                 </div>
-              </div>
 
-              <Separator />
+                <Separator />
 
-              {/* Files section */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div className="space-y-4">
                   <div className="flex items-center gap-2 text-sm font-medium">
-                    <Paperclip className="h-4 w-4 text-slate-500" />
-                    Archivos adjuntos
+                    <User className="h-4 w-4 text-slate-500" />
+                    Personas involucradas
                   </div>
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm text-slate-500">
+                        Informante
+                      </Label>
+                      <p className="text-base text-slate-900">
+                        {(selectedTicket as any)?.informante || "—"}
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-sm text-slate-500">
+                        Resuelto por
+                      </Label>
+                      <p className="text-base text-slate-900">
+                        {(selectedTicket as any)?.resuelto_por || "—"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Files section */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Paperclip className="h-4 w-4 text-slate-500" />
+                      Archivos adjuntos
+                    </div>
+                    {selectedTicket && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          openFilesFor(
+                            (selectedTicket as any).codigo ||
+                              (selectedTicket as any).id_externo ||
+                              selectedTicket.id
+                          )
+                        }
+                      >
+                        Ver todos
+                      </Button>
+                    )}
+                  </div>
+
                   {selectedTicket && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        openFilesFor(
-                          (selectedTicket as any).codigo ||
-                            (selectedTicket as any).id_externo ||
-                            selectedTicket.id
-                        )
-                      }
-                    >
-                      Ver todos
-                    </Button>
+                    <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+                      <p>
+                        Haz clic en "Ver todos" para ver los archivos adjuntos a
+                        este ticket.
+                      </p>
+                    </div>
                   )}
                 </div>
+              </div>
+            </div>
 
-                {selectedTicket && (
-                  <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
-                    <p>
-                      Haz clic en "Ver todos" para ver los archivos adjuntos a
-                      este ticket.
-                    </p>
+            {/* Bonos */}
+            <div
+              className={(detailTab as any) === "bonos" ? "block" : "hidden"}
+            >
+              <div className="p-6 space-y-6">
+                {!isStudent && (
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={handleSaveBonos}>
+                      Guardar selección
+                    </Button>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Detalles de bonos acordados con el cliente a nivel
+                    contractual
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Selecciona los bonos aplicables a este alumno. Estos bonos
+                    forman parte del contrato y algunos son de una sola vez.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {BONOS_CONTRACTUALES.map((b) => {
+                    const isSel = bonosSelected.includes(b.key);
+                    return (
+                      <div
+                        key={b.key}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() =>
+                          !isStudent ? toggleBono(b.key, !isSel) : undefined
+                        }
+                        onKeyDown={(e) => {
+                          if (isStudent) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleBono(b.key, !isSel);
+                          }
+                        }}
+                        className={`relative rounded-lg border p-4 transition-all cursor-pointer ${
+                          isSel
+                            ? "border-sky-400 bg-sky-50/60 ring-2 ring-sky-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={isSel}
+                            onClick={(e) => e.stopPropagation()}
+                            onCheckedChange={(v) =>
+                              !isStudent && toggleBono(b.key, Boolean(v))
+                            }
+                            disabled={isStudent}
+                            aria-label={`Seleccionar ${b.title}`}
+                          />
+                          <div className="space-y-1 pr-8">
+                            <div className="text-sm font-medium text-slate-900">
+                              {b.title}
+                            </div>
+                            <div className="text-sm text-slate-700 leading-relaxed">
+                              {b.description}
+                            </div>
+                          </div>
+                        </div>
+                        {isSel && (
+                          <div className="absolute right-3 top-3 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-white">
+                            <Check className="h-3.5 w-3.5" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <Separator />
+
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Bonos extra que puede adquirir el cliente luego de haber
+                    ingresado
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Estos bonos se solicitan fuera de las cláusulas
+                    contractuales. Requieren pago, formulario con la información
+                    y un acuerdo mutuo con el alcance del servicio.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  {BONOS_EXTRA.map((b) => {
+                    const isSel = bonosSelected.includes(b.key);
+                    return (
+                      <div
+                        key={b.key}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() =>
+                          !isStudent ? toggleBono(b.key, !isSel) : undefined
+                        }
+                        onKeyDown={(e) => {
+                          if (isStudent) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleBono(b.key, !isSel);
+                          }
+                        }}
+                        className={`relative rounded-lg border p-4 transition-all cursor-pointer ${
+                          isSel
+                            ? "border-sky-400 bg-sky-50/60 ring-2 ring-sky-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={isSel}
+                            onClick={(e) => e.stopPropagation()}
+                            onCheckedChange={(v) =>
+                              !isStudent && toggleBono(b.key, Boolean(v))
+                            }
+                            disabled={isStudent}
+                            aria-label={`Seleccionar ${b.title}`}
+                          />
+                          <div className="space-y-1 pr-8">
+                            <div className="text-sm font-medium text-slate-900">
+                              {b.title}
+                            </div>
+                            <div className="text-sm text-slate-700 leading-relaxed">
+                              {b.description}
+                            </div>
+                          </div>
+                        </div>
+                        {isSel && (
+                          <div className="absolute right-3 top-3 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-white">
+                            <Check className="h-3.5 w-3.5" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {isStudent && (
+                  <div className="text-xs text-slate-500">
+                    Solo administradores pueden modificar los bonos asignados.
                   </div>
                 )}
               </div>
-            </div>
             </div>
 
             <div className={detailTab === "detalle" ? "block" : "hidden"}>
@@ -1054,34 +1252,64 @@ export default function TicketsPanel({
                             {ticketDetail?.nombre || "Ticket"}
                           </div>
                           {ticketDetail?.codigo && (
-                            <div className="text-xs text-slate-500 break-all">Código: {ticketDetail.codigo}</div>
+                            <div className="text-xs text-slate-500 break-all">
+                              Código: {ticketDetail.codigo}
+                            </div>
                           )}
                         </div>
                         {ticketDetail?.estado && (
-                          <span className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[coerceStatus(ticketDetail.estado as any)]}`}>
-                            {STATUS_LABEL[coerceStatus(ticketDetail.estado as any)]}
+                          <span
+                            className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
+                              STATUS_STYLE[
+                                coerceStatus(ticketDetail.estado as any)
+                              ]
+                            }`}
+                          >
+                            {
+                              STATUS_LABEL[
+                                coerceStatus(ticketDetail.estado as any)
+                              ]
+                            }
                           </span>
                         )}
                       </div>
                       <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
                         <div className="space-y-1">
                           <div className="text-slate-500 text-xs">Alumno</div>
-                          <div className="font-medium break-all">{ticketDetail?.alumno_nombre || student.name || "—"}</div>
+                          <div className="font-medium break-all">
+                            {ticketDetail?.alumno_nombre || student.name || "—"}
+                          </div>
                           {ticketDetail?.id_alumno && (
-                            <div className="text-xs text-slate-500 break-all">ID: {ticketDetail.id_alumno}</div>
+                            <div className="text-xs text-slate-500 break-all">
+                              ID: {ticketDetail.id_alumno}
+                            </div>
                           )}
                         </div>
                         <div className="space-y-1">
                           <div className="text-slate-500 text-xs">Tipo</div>
-                          <div className="font-medium">{ticketDetail?.tipo || selectedTicket?.tipo || "—"}</div>
+                          <div className="font-medium">
+                            {ticketDetail?.tipo || selectedTicket?.tipo || "—"}
+                          </div>
                         </div>
                         <div className="space-y-1">
                           <div className="text-slate-500 text-xs">Creado</div>
-                          <div>{ticketDetail?.created_at ? new Date(ticketDetail.created_at).toLocaleString("es-ES") : fmtDate(selectedTicket?.creacion)}</div>
+                          <div>
+                            {ticketDetail?.created_at
+                              ? new Date(
+                                  ticketDetail.created_at
+                                ).toLocaleString("es-ES")
+                              : fmtDate(selectedTicket?.creacion)}
+                          </div>
                         </div>
                         <div className="space-y-1">
                           <div className="text-slate-500 text-xs">Deadline</div>
-                          <div>{ticketDetail?.deadline ? new Date(ticketDetail.deadline).toLocaleString("es-ES") : "—"}</div>
+                          <div>
+                            {ticketDetail?.deadline
+                              ? new Date(ticketDetail.deadline).toLocaleString(
+                                  "es-ES"
+                                )
+                              : "—"}
+                          </div>
                         </div>
                         {ticketDetail?.plazo && (
                           <div className="space-y-1">
@@ -1100,8 +1328,12 @@ export default function TicketsPanel({
                       </div>
                       {(() => {
                         const urlList: string[] = [
-                          ...extractUrlsFromDescription(ticketDetail?.descripcion),
-                          ...((Array.isArray(ticketDetail?.links) ? ticketDetail.links : []) as string[]),
+                          ...extractUrlsFromDescription(
+                            ticketDetail?.descripcion
+                          ),
+                          ...((Array.isArray(ticketDetail?.links)
+                            ? ticketDetail.links
+                            : []) as string[]),
                         ];
                         const seen = new Set<string>();
                         const links = urlList.filter((u) => {
@@ -1116,7 +1348,13 @@ export default function TicketsPanel({
                             <div className="text-sm font-medium">Links</div>
                             <div className="mt-1 flex flex-col gap-1">
                               {links.map((u, i) => (
-                                <a key={i} href={normalizeUrl(u)} target="_blank" rel="noreferrer" className="text-sky-600 underline break-all text-sm">
+                                <a
+                                  key={i}
+                                  href={normalizeUrl(u)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sky-600 underline break-all text-sm"
+                                >
                                   {u}
                                 </a>
                               ))}
@@ -1127,48 +1365,77 @@ export default function TicketsPanel({
                     </div>
 
                     {/* Coaches */}
-                    {Array.isArray(ticketDetail?.coaches) && ticketDetail.coaches.length > 0 && (
-                      <div className="rounded-lg border border-slate-200 bg-white p-4">
-                        <div className="text-sm font-medium mb-2">Coaches</div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {ticketDetail.coaches.map((c: any, idx: number) => (
-                            <span
-                              key={`${c.codigo_equipo ?? c.nombre ?? idx}`}
-                              className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                              title={`${c.nombre ?? "Coach"}${c.area ? ` · ${c.area}` : ""}${c.puesto ? ` · ${c.puesto}` : ""}`}
-                            >
-                              {(c.nombre ?? "Coach").slice(0, 20)}{c.area ? ` · ${String(c.area).slice(0, 10)}` : ""}
-                            </span>
-                          ))}
+                    {Array.isArray(ticketDetail?.coaches) &&
+                      ticketDetail.coaches.length > 0 && (
+                        <div className="rounded-lg border border-slate-200 bg-white p-4">
+                          <div className="text-sm font-medium mb-2">
+                            Coaches
+                          </div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {ticketDetail.coaches.map((c: any, idx: number) => (
+                              <span
+                                key={`${c.codigo_equipo ?? c.nombre ?? idx}`}
+                                className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                                title={`${c.nombre ?? "Coach"}${
+                                  c.area ? ` · ${c.area}` : ""
+                                }${c.puesto ? ` · ${c.puesto}` : ""}`}
+                              >
+                                {(c.nombre ?? "Coach").slice(0, 20)}
+                                {c.area
+                                  ? ` · ${String(c.area).slice(0, 10)}`
+                                  : ""}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
                     {/* Estados */}
                     <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
                       <div className="text-sm font-medium">Estados</div>
                       {ticketDetail?.ultimo_estado?.estatus && (
                         <div className="text-xs text-slate-600">
-                          Último: {STATUS_LABEL[coerceStatus(ticketDetail.ultimo_estado.estatus)]}
+                          Último:{" "}
+                          {
+                            STATUS_LABEL[
+                              coerceStatus(ticketDetail.ultimo_estado.estatus)
+                            ]
+                          }
                           {ticketDetail?.ultimo_estado?.fecha && (
                             <>
                               {" · "}
-                              {new Date(ticketDetail.ultimo_estado.fecha).toLocaleString("es-ES")}
+                              {new Date(
+                                ticketDetail.ultimo_estado.fecha
+                              ).toLocaleString("es-ES")}
                             </>
                           )}
                         </div>
                       )}
-                      {Array.isArray(ticketDetail?.estados) && ticketDetail.estados.length > 0 ? (
+                      {Array.isArray(ticketDetail?.estados) &&
+                      ticketDetail.estados.length > 0 ? (
                         <div className="mt-1 space-y-1">
                           {ticketDetail.estados.map((e: any) => (
-                            <div key={e.id} className="flex items-center gap-2 text-xs text-slate-700">
-                              <span className={`inline-flex items-center rounded px-1.5 py-0.5 border ${STATUS_STYLE[coerceStatus(e.estatus_id)]}`}>{STATUS_LABEL[coerceStatus(e.estatus_id)]}</span>
-                              <span>{new Date(e.created_at).toLocaleString("es-ES")}</span>
+                            <div
+                              key={e.id}
+                              className="flex items-center gap-2 text-xs text-slate-700"
+                            >
+                              <span
+                                className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
+                                  STATUS_STYLE[coerceStatus(e.estatus_id)]
+                                }`}
+                              >
+                                {STATUS_LABEL[coerceStatus(e.estatus_id)]}
+                              </span>
+                              <span>
+                                {new Date(e.created_at).toLocaleString("es-ES")}
+                              </span>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <div className="text-xs text-slate-500">Sin historial</div>
+                        <div className="text-xs text-slate-500">
+                          Sin historial
+                        </div>
                       )}
                     </div>
                   </>

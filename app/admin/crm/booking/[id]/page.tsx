@@ -7,10 +7,12 @@ import {
   CloseSaleForm,
   type CloseSaleInput,
 } from "@/app/admin/crm/components/CloseSaleForm2";
+import { CallFlowManager } from "@/app/admin/crm/components/CallFlowManager";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, Mail, Phone, Tags, Calendar } from "lucide-react";
 import Link from "next/link";
+import { SalePreview } from "@/app/admin/crm/components/SalePreview";
 
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   return (
@@ -25,6 +27,9 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
 function Content({ id }: { id: string }) {
   const [loading, setLoading] = React.useState(true);
   const [record, setRecord] = React.useState<MetadataRecord<any> | null>(null);
+  const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
+    null
+  );
 
   const load = async () => {
     setLoading(true);
@@ -111,13 +116,6 @@ function Content({ id }: { id: string }) {
           <Button asChild variant="outline">
             <Link href="/admin/crm">Volver al CRM</Link>
           </Button>
-          <Button asChild variant="outline">
-            <Link
-              href={`/admin/crm/sales/${encodeURIComponent(String(record.id))}`}
-            >
-              Abrir vista de venta
-            </Link>
-          </Button>
         </div>
       </div>
 
@@ -144,6 +142,13 @@ function Content({ id }: { id: string }) {
         </div>
       </Card>
 
+      {/* Flujo de llamada según diagrama (recordatorios, resultado, reagenda) */}
+      <CallFlowManager
+        recordId={record.id}
+        payload={p}
+        onSaved={() => load()}
+      />
+
       <Card className="p-4">
         <div className="text-sm font-medium mb-2">
           Cierre de venta dentro del lead
@@ -153,13 +158,23 @@ function Content({ id }: { id: string }) {
           recordId={record.id}
           entity="booking"
           initial={initial}
+          autoSave
+          onChange={(f) => setDraft({ ...f })}
           onDone={() => {
-            // tras guardar, refrescamos para ver cambios en pantalla
-            // usando navegación básica
-            window.location.reload();
+            // tras guardar, refrescamos la data sin recargar la página
+            load();
           }}
         />
       </Card>
+      {draft || (salePayload && Object.keys(salePayload).length > 0) ? (
+        <SalePreview
+          payload={salePayload}
+          draft={draft || undefined}
+          id={record.id}
+          entity="booking"
+          onUpdated={() => load()}
+        />
+      ) : null}
     </div>
   );
 }

@@ -31,6 +31,7 @@ import { updateLead, updateMetadataPayload } from "../api";
 import type { ProspectCore } from "@/lib/crm-types";
 import { ProspectEditor } from "./ProspectEditor";
 import { toast } from "@/components/ui/use-toast";
+import { BONOS_BY_KEY } from "@/lib/bonos";
 
 export function ProspectDetailDrawer({
   open,
@@ -409,7 +410,24 @@ export function ProspectDetailDrawer({
                           </div>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                             <div>Programa adquirido: {p.program || "—"}</div>
-                            <div>Bonos ofrecidos: {p.bonuses || "—"}</div>
+                            <div>
+                              Bonos ofrecidos:{" "}
+                              {(() => {
+                                const list = Array.isArray(p.bonuses)
+                                  ? (p.bonuses as string[])
+                                  : p.bonuses
+                                  ? String(p.bonuses)
+                                      .split(",")
+                                      .map((s) => s.trim())
+                                      .filter(Boolean)
+                                  : [];
+                                if (!list || list.length === 0) return "—";
+                                const labels = list.map(
+                                  (k) => BONOS_BY_KEY[k]?.title || k
+                                );
+                                return labels.join(", ");
+                              })()}
+                            </div>
                           </div>
                         </div>
 

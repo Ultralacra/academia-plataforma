@@ -5,6 +5,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  codigo?: string;
 }
 
 export interface AuthState {
@@ -97,6 +98,7 @@ class AuthService {
         email: json.email,
         name: json.name,
         role: this.normalizeRole(json.role, json.tipo),
+        codigo: json.codigo,
       };
 
       this.setAuthState({ user, isAuthenticated: true, token: json.token });
@@ -147,6 +149,7 @@ class AuthService {
         email: json.email,
         name: json.name,
         role: this.normalizeRole(json.role, json.tipo),
+        codigo: json.codigo,
       };
     } catch (e) {
       if (e instanceof Error) throw e;

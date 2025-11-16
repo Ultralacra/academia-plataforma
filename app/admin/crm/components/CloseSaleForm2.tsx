@@ -10,6 +10,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { updateMetadataPayload } from "@/app/admin/crm/api";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Check } from "lucide-react";
+import { BONOS_CONTRACTUALES, BONOS_EXTRA } from "@/lib/bonos";
 import {
   Select,
   SelectContent,
@@ -17,6 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+// Programa fijo de la oferta actual
+const STATIC_PROGRAM = "Hotselling Lite";
 
 export type PaymentPlatform =
   | "hotmart"
@@ -39,9 +45,18 @@ export interface CloseSaleInput {
   paymentPlatform: PaymentPlatform;
   nextChargeDate?: string;
   contractThirdParty?: boolean;
+  contractIsCompany?: boolean;
   contractPartyName?: string;
   contractPartyEmail?: string;
   contractPartyPhone?: string;
+  contractPartyAddress?: string;
+  contractPartyCity?: string;
+  contractPartyCountry?: string;
+  contractCompanyName?: string;
+  contractCompanyTaxId?: string;
+  contractCompanyAddress?: string;
+  contractCompanyCity?: string;
+  contractCompanyCountry?: string;
   contractParties?: Array<{
     name?: string;
     email?: string;
@@ -54,16 +69,22 @@ type Mode = "create" | "edit";
 
 export function CloseSaleForm({
   onDone,
+  onChange,
   initial,
   mode = "create",
   recordId,
   entity = "sale",
+  autoSave = false,
+  autoSaveDelay = 600,
 }: {
   onDone?: () => void;
+  onChange?: (form: CloseSaleInput) => void;
   initial?: Partial<CloseSaleInput> & { status?: string };
   mode?: Mode;
   recordId?: string | number;
   entity?: "sale" | "booking";
+  autoSave?: boolean;
+  autoSaveDelay?: number;
 }) {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -72,16 +93,25 @@ export function CloseSaleForm({
     fullName: initial?.fullName || "",
     email: initial?.email || "",
     phone: initial?.phone || "",
-    program: initial?.program || "",
+    program: STATIC_PROGRAM,
     bonuses: (initial?.bonuses as string[] | undefined) || [],
     paymentMode: initial?.paymentMode || "",
     paymentAmount: initial?.paymentAmount || "",
     paymentPlatform: (initial?.paymentPlatform as PaymentPlatform) || "hotmart",
     nextChargeDate: initial?.nextChargeDate || "",
     contractThirdParty: !!initial?.contractThirdParty,
+    contractIsCompany: (initial as any)?.contractIsCompany || false,
     contractPartyName: initial?.contractPartyName || initial?.fullName || "",
     contractPartyEmail: initial?.contractPartyEmail || initial?.email || "",
     contractPartyPhone: initial?.contractPartyPhone || initial?.phone || "",
+    contractPartyAddress: (initial as any)?.contractPartyAddress || "",
+    contractPartyCity: (initial as any)?.contractPartyCity || "",
+    contractPartyCountry: (initial as any)?.contractPartyCountry || "",
+    contractCompanyName: (initial as any)?.contractCompanyName || "",
+    contractCompanyTaxId: (initial as any)?.contractCompanyTaxId || "",
+    contractCompanyAddress: (initial as any)?.contractCompanyAddress || "",
+    contractCompanyCity: (initial as any)?.contractCompanyCity || "",
+    contractCompanyCountry: (initial as any)?.contractCompanyCountry || "",
     contractParties:
       (initial?.contractParties as any) ||
       (initial?.contractPartyName || initial?.fullName
@@ -104,40 +134,143 @@ export function CloseSaleForm({
     size?: number;
   } | null>(null);
 
+  // Propagar cambios en vivo al padre para vista previa en tiempo real
   useEffect(() => {
-    setForm((prev) => ({
-      ...prev,
-      fullName: initial?.fullName ?? prev.fullName,
-      email: initial?.email ?? prev.email,
-      phone: initial?.phone ?? prev.phone,
-      program: initial?.program ?? prev.program,
-      bonuses: (initial?.bonuses as string[] | undefined) ?? prev.bonuses,
-      paymentMode: initial?.paymentMode ?? prev.paymentMode,
-      paymentAmount: initial?.paymentAmount ?? prev.paymentAmount,
-      paymentPlatform:
-        (initial?.paymentPlatform as PaymentPlatform) ?? prev.paymentPlatform,
-      nextChargeDate: initial?.nextChargeDate ?? prev.nextChargeDate,
-      contractThirdParty:
-        initial?.contractThirdParty ?? prev.contractThirdParty,
-      contractPartyName: initial?.contractPartyName ?? prev.contractPartyName,
-      contractPartyEmail:
-        initial?.contractPartyEmail ?? prev.contractPartyEmail,
-      contractPartyPhone:
-        initial?.contractPartyPhone ?? prev.contractPartyPhone,
-      contractParties:
-        (initial?.contractParties as any) ??
-        prev.contractParties ??
-        (initial?.contractPartyName || initial?.fullName
-          ? [
-              {
-                name: initial?.contractPartyName || initial?.fullName,
-                email: initial?.contractPartyEmail || initial?.email,
-                phone: initial?.contractPartyPhone || initial?.phone,
-              },
-            ]
-          : []),
-      notes: initial?.notes ?? prev.notes,
-    }));
+    try {
+      onChange?.(form);
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(form)]);
+
+  // Helper para construir payload compatible con metadata
+  const buildSalePayload = (withProof = true) => {
+    const closer = user
+      ? {
+          id: (user as any).id ?? user.email ?? user.name ?? "",
+          name: user.name ?? "",
+          email: user.email ?? "",
+        }
+      : null;
+    const p: any = {
+      type: "sale",
+      name: form.fullName,
+      email: form.email,
+      phone: form.phone,
+      program: form.program,
+      bonuses: form.bonuses || [],
+      closer,
+      payment: {
+        mode: form.paymentMode,
+        amount: form.paymentAmount,
+        platform: form.paymentPlatform,
+        nextChargeDate: form.nextChargeDate || null,
+      },
+      contract: {
+        thirdParty: !!form.contractThirdParty,
+        isCompany: !!form.contractIsCompany,
+        status: "pending",
+        parties: Array.isArray(form.contractParties)
+          ? form.contractParties
+          : [],
+        party: {
+          name: form.contractPartyName || null,
+          email: form.contractPartyEmail || null,
+          phone: form.contractPartyPhone || null,
+          address: form.contractPartyAddress || null,
+          city: form.contractPartyCity || null,
+          country: form.contractPartyCountry || null,
+        },
+        company: form.contractIsCompany
+          ? {
+              name: form.contractCompanyName || null,
+              taxId: form.contractCompanyTaxId || null,
+              address: form.contractCompanyAddress || null,
+              city: form.contractCompanyCity || null,
+              country: form.contractCompanyCountry || null,
+            }
+          : null,
+      },
+      status: initial?.status || "payment_verification_pending",
+      notes: form.notes || null,
+    };
+    if (withProof && paymentProof?.dataUrl) {
+      p.payment.proof = {
+        name: paymentProof.name,
+        type: paymentProof.type,
+        size: paymentProof.size,
+        dataUrl: paymentProof.dataUrl,
+      };
+    }
+    return p;
+  };
+
+  // Autosave: persistir cambios en modo edición sin recargar
+  useEffect(() => {
+    if (!autoSave) return;
+    if (mode !== "edit" || !recordId) return;
+    const handle = setTimeout(async () => {
+      try {
+        const salePayload = buildSalePayload(false);
+        if (entity === "sale") {
+          await updateMetadataPayload(String(recordId), salePayload as any);
+        } else {
+          await updateMetadataPayload(String(recordId), {
+            sale: salePayload,
+          } as any);
+        }
+      } catch (e) {
+        // silencioso para no molestar al usuario mientras escribe
+      }
+    }, Math.max(200, autoSaveDelay || 600));
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSave, autoSaveDelay, mode, recordId, entity, JSON.stringify(form)]);
+
+  useEffect(() => {
+    // Evitar actualizaciones redundantes que puedan generar loops
+    setForm((prev) => {
+      const next: CloseSaleInput = {
+        ...prev,
+        fullName: initial?.fullName ?? prev.fullName,
+        email: initial?.email ?? prev.email,
+        phone: initial?.phone ?? prev.phone,
+        // Programa siempre fijo a la oferta actual
+        program: STATIC_PROGRAM,
+        bonuses: (initial?.bonuses as string[] | undefined) ?? prev.bonuses,
+        paymentMode: initial?.paymentMode ?? prev.paymentMode,
+        paymentAmount: initial?.paymentAmount ?? prev.paymentAmount,
+        paymentPlatform:
+          (initial?.paymentPlatform as PaymentPlatform) ?? prev.paymentPlatform,
+        nextChargeDate: initial?.nextChargeDate ?? prev.nextChargeDate,
+        contractThirdParty:
+          initial?.contractThirdParty ?? prev.contractThirdParty,
+        contractPartyName: initial?.contractPartyName ?? prev.contractPartyName,
+        contractPartyEmail:
+          initial?.contractPartyEmail ?? prev.contractPartyEmail,
+        contractPartyPhone:
+          initial?.contractPartyPhone ?? prev.contractPartyPhone,
+        contractParties:
+          (initial?.contractParties as any) ??
+          prev.contractParties ??
+          (initial?.contractPartyName || initial?.fullName
+            ? [
+                {
+                  name: initial?.contractPartyName || initial?.fullName,
+                  email: initial?.contractPartyEmail || initial?.email,
+                  phone: initial?.contractPartyPhone || initial?.phone,
+                },
+              ]
+            : []),
+        notes: initial?.notes ?? prev.notes,
+      };
+      // Si nada cambió, devolver prev para no re-renderizar
+      try {
+        const a = JSON.stringify(prev);
+        const b = JSON.stringify(next);
+        if (a === b) return prev;
+      } catch {}
+      return next;
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(initial)]);
 
@@ -157,50 +290,7 @@ export function CloseSaleForm({
     setSubmitting(true);
     try {
       if (mode === "edit" && recordId) {
-        const closer = user
-          ? {
-              id: (user as any).id ?? user.email ?? user.name ?? "",
-              name: user.name ?? "",
-              email: user.email ?? "",
-            }
-          : null;
-        const salePayload: any = {
-          type: "sale",
-          name: form.fullName,
-          email: form.email,
-          phone: form.phone,
-          program: form.program,
-          bonuses: form.bonuses || [],
-          closer,
-          payment: {
-            mode: form.paymentMode,
-            amount: form.paymentAmount,
-            platform: form.paymentPlatform,
-            nextChargeDate: form.nextChargeDate || null,
-          },
-          contract: {
-            thirdParty: !!form.contractThirdParty,
-            status: initial?.status || "pending",
-            parties: Array.isArray(form.contractParties)
-              ? form.contractParties
-              : [],
-            party: {
-              name: form.contractPartyName || null,
-              email: form.contractPartyEmail || null,
-              phone: form.contractPartyPhone || null,
-            },
-          },
-          status: initial?.status || "payment_verification_pending",
-          notes: form.notes || null,
-        };
-        if (paymentProof?.dataUrl) {
-          salePayload.payment.proof = {
-            name: paymentProof.name,
-            type: paymentProof.type,
-            size: paymentProof.size,
-            dataUrl: paymentProof.dataUrl,
-          };
-        }
+        const salePayload: any = buildSalePayload(true);
         if (entity === "sale") {
           await updateMetadataPayload(String(recordId), salePayload as any);
         } else {
@@ -284,12 +374,16 @@ export function CloseSaleForm({
           title: "Venta registrada",
           description: `ID: ${String(saved.id)} · URL: ${path}`,
         });
+        try {
+          // Abrir vista previa/edición en una nueva pestaña para verificación inmediata
+          if (typeof window !== "undefined") window.open(path, "_blank");
+        } catch {}
         onDone?.();
         setForm({
           fullName: "",
           email: "",
           phone: "",
-          program: "",
+          program: STATIC_PROGRAM,
           bonuses: [],
           paymentMode: "",
           paymentAmount: "",
@@ -316,6 +410,10 @@ export function CloseSaleForm({
   };
 
   const submitLabel = mode === "edit" ? "Guardar cambios" : "Registrar venta";
+  // Paleta más neutra: remove azul y usa slate/neutral para inputs
+  const inputAccent =
+    "border-slate-300 focus-visible:ring-slate-200 focus-visible:border-slate-400";
+  const selectAccent = "focus-visible:ring-slate-200";
   const PAYMENT_MODE_OPTIONS = [
     { value: "pago_total", label: "Pago total" },
     { value: "2_cuotas", label: "2 cuotas" },
@@ -333,33 +431,22 @@ export function CloseSaleForm({
     { value: "boa", label: "BoA" },
     { value: "otra", label: "Otra" },
   ];
-  const BONUS_OPTIONS = [
-    {
-      value: "mentoria_1a1",
-      label: "Mentoría 1:1",
-      description: "Sesiones personalizadas con un mentor.",
-    },
-    {
-      value: "grupo_vip",
-      label: "Grupo VIP",
-      description: "Acceso a comunidad cerrada y soporte prioritario.",
-    },
-    {
-      value: "plantillas",
-      label: "Plantillas",
-      description: "Pack de plantillas listas para usar.",
-    },
-    {
-      value: "acceso_anticipado",
-      label: "Acceso anticipado",
-      description: "Entradas tempranas a nuevos módulos y features.",
-    },
-    {
-      value: "garantia_extendida",
-      label: "Garantía extendida",
-      description: "Período de garantía ampliado.",
-    },
-  ];
+  // Bonos centralizados (usamos las claves para persistir en metadata)
+
+  // Toggle robusto para bonos, evitando updates innecesarios
+  const toggleBonus = (key: string, forced?: boolean) => {
+    setForm((prev) => {
+      const current = new Set(prev.bonuses || []);
+      const has = current.has(key);
+      const shouldAdd = forced !== undefined ? forced : !has;
+      if (shouldAdd && has) return prev; // sin cambios
+      if (!shouldAdd && !has) return prev; // sin cambios
+      if (shouldAdd) current.add(key);
+      else current.delete(key);
+      const next = { ...prev, bonuses: Array.from(current) } as CloseSaleInput;
+      return next;
+    });
+  };
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -373,11 +460,12 @@ export function CloseSaleForm({
         </TabsList>
         <div className="mt-4">
           <TabsContent value="datos" className="m-0">
-            <Card className="p-4">
+            <Card className="p-4 border-indigo-100">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Nombre completo *</Label>
                   <Input
+                    className={inputAccent}
                     value={form.fullName}
                     onChange={(e) =>
                       setForm({ ...form, fullName: e.target.value })
@@ -389,6 +477,7 @@ export function CloseSaleForm({
                   <Label>Correo *</Label>
                   <Input
                     type="email"
+                    className={inputAccent}
                     value={form.email}
                     onChange={(e) =>
                       setForm({ ...form, email: e.target.value })
@@ -399,6 +488,7 @@ export function CloseSaleForm({
                 <div>
                   <Label>Teléfono *</Label>
                   <Input
+                    className={inputAccent}
                     value={form.phone}
                     onChange={(e) =>
                       setForm({ ...form, phone: e.target.value })
@@ -407,51 +497,170 @@ export function CloseSaleForm({
                   />
                 </div>
                 <div>
-                  <Label>Programa adquirido *</Label>
+                  <Label>Programa (fijo)</Label>
                   <Input
+                    className={inputAccent}
                     value={form.program}
-                    onChange={(e) =>
-                      setForm({ ...form, program: e.target.value })
-                    }
-                    required
+                    readOnly
                   />
+                  <p className="text-xs text-slate-600 mt-1">
+                    Este programa es estático: Hotselling Lite
+                  </p>
                 </div>
               </div>
             </Card>
           </TabsContent>
 
           <TabsContent value="bonos" className="m-0">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {BONUS_OPTIONS.map((b) => {
-                const selected = (form.bonuses || []).includes(b.value);
-                return (
-                  <Card
-                    key={b.value}
-                    className={
-                      "p-3 cursor-pointer border transition-colors " +
-                      (selected
-                        ? "border-indigo-500 bg-indigo-50"
-                        : "hover:bg-slate-50")
-                    }
-                    onClick={() => {
-                      const cur = new Set(form.bonuses || []);
-                      if (cur.has(b.value)) cur.delete(b.value);
-                      else cur.add(b.value);
-                      setForm({ ...form, bonuses: Array.from(cur) });
-                    }}
-                  >
-                    <div className="font-medium text-sm">{b.label}</div>
-                    <div className="text-xs text-slate-600">
-                      {b.description}
-                    </div>
-                  </Card>
-                );
-              })}
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Selecciona los bonos ofrecidos a este lead.
+                </div>
+              </div>
+
+              <section className="space-y-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Bonos contractuales
+                    {form.bonuses && form.bonuses.length > 0
+                      ? ` (${
+                          form.bonuses.filter((k) =>
+                            BONOS_CONTRACTUALES.some((b) => b.key === k)
+                          ).length
+                        })`
+                      : ""}
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Forman parte del contrato. Algunos son aplicables por única
+                    vez.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {BONOS_CONTRACTUALES.map((b) => {
+                    const isSel = (form.bonuses || []).includes(b.key);
+                    return (
+                      <Card
+                        key={b.key}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleBonus(b.key)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleBonus(b.key);
+                          }
+                        }}
+                        className={`relative p-4 cursor-pointer transition-all border ${
+                          isSel
+                            ? "border-sky-400 bg-sky-50/60 ring-2 ring-sky-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={!!isSel}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) =>
+                              toggleBonus(b.key, e.target.checked)
+                            }
+                            aria-label={`Seleccionar ${b.title}`}
+                            className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-300"
+                          />
+                          <div className="space-y-1 pr-8">
+                            <div className="text-sm font-medium text-slate-900">
+                              {b.title}
+                            </div>
+                            <div className="text-sm text-slate-700 leading-relaxed">
+                              {b.description}
+                            </div>
+                          </div>
+                        </div>
+                        {isSel && (
+                          <div className="absolute right-3 top-3 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-white">
+                            <Check className="h-3.5 w-3.5" />
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-slate-900">
+                    Bonos extra
+                    {form.bonuses && form.bonuses.length > 0
+                      ? ` (${
+                          form.bonuses.filter((k) =>
+                            BONOS_EXTRA.some((b) => b.key === k)
+                          ).length
+                        })`
+                      : ""}
+                  </div>
+                  <p className="text-xs text-slate-600">
+                    Se solicitan fuera de las cláusulas contractuales. Requieren
+                    pago y acuerdo mutuo.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  {BONOS_EXTRA.map((b) => {
+                    const isSel = (form.bonuses || []).includes(b.key);
+                    return (
+                      <Card
+                        key={b.key}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => toggleBonus(b.key)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleBonus(b.key);
+                          }
+                        }}
+                        className={`relative p-4 cursor-pointer transition-all border ${
+                          isSel
+                            ? "border-sky-400 bg-sky-50/60 ring-2 ring-sky-100"
+                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={!!isSel}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) =>
+                              toggleBonus(b.key, e.target.checked)
+                            }
+                            aria-label={`Seleccionar ${b.title}`}
+                            className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-300"
+                          />
+                          <div className="space-y-1 pr-8">
+                            <div className="text-sm font-medium text-slate-900">
+                              {b.title}
+                            </div>
+                            <div className="text-sm text-slate-700 leading-relaxed">
+                              {b.description}
+                            </div>
+                          </div>
+                        </div>
+                        {isSel && (
+                          <div className="absolute right-3 top-3 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-white">
+                            <Check className="h-3.5 w-3.5" />
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
           </TabsContent>
 
           <TabsContent value="pago" className="m-0">
-            <Card className="p-4">
+            <Card className="p-4 border-indigo-100">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label>Modalidad de pago *</Label>
@@ -459,7 +668,7 @@ export function CloseSaleForm({
                     value={form.paymentMode}
                     onValueChange={(v) => setForm({ ...form, paymentMode: v })}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className={`w-full ${selectAccent}`}>
                       <SelectValue placeholder="Selecciona…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -475,6 +684,7 @@ export function CloseSaleForm({
                   <Label>Monto de pago (USD) *</Label>
                   <Input
                     placeholder="$"
+                    className={inputAccent}
                     value={form.paymentAmount}
                     onChange={(e) =>
                       setForm({ ...form, paymentAmount: e.target.value })
@@ -493,7 +703,7 @@ export function CloseSaleForm({
                       })
                     }
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className={`w-full ${selectAccent}`}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -509,6 +719,7 @@ export function CloseSaleForm({
                   <Label>Fecha prevista de cobro futuro</Label>
                   <Input
                     type="date"
+                    className={inputAccent}
                     value={form.nextChargeDate || ""}
                     onChange={(e) =>
                       setForm({ ...form, nextChargeDate: e.target.value })
@@ -520,6 +731,7 @@ export function CloseSaleForm({
                   <Input
                     type="file"
                     accept="image/*"
+                    className={inputAccent}
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) return setPaymentProof(null);
@@ -561,25 +773,41 @@ export function CloseSaleForm({
           </TabsContent>
 
           <TabsContent value="contrato" className="m-0">
-            <Card className="p-4 space-y-4">
-              <div className="flex items-center gap-2">
-                <input
-                  id="thirdParty"
-                  type="checkbox"
-                  checked={!!form.contractThirdParty}
-                  onChange={(e) =>
-                    setForm({ ...form, contractThirdParty: e.target.checked })
-                  }
-                />
-                <Label htmlFor="thirdParty">
-                  Contrato a nombre de otra persona
-                </Label>
+            <Card className="p-4 space-y-4 border-indigo-100">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="thirdParty"
+                    type="checkbox"
+                    checked={!!form.contractThirdParty}
+                    onChange={(e) =>
+                      setForm({ ...form, contractThirdParty: e.target.checked })
+                    }
+                  />
+                  <Label htmlFor="thirdParty" className="select-none">
+                    Contrato a nombre de otra persona
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="isCompany"
+                    type="checkbox"
+                    checked={!!form.contractIsCompany}
+                    onChange={(e) =>
+                      setForm({ ...form, contractIsCompany: e.target.checked })
+                    }
+                  />
+                  <Label htmlFor="isCompany" className="select-none">
+                    El contratante es una empresa
+                  </Label>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label>Nombre para contrato</Label>
                   <Input
+                    className={inputAccent}
                     value={form.contractPartyName || ""}
                     onChange={(e) =>
                       setForm({ ...form, contractPartyName: e.target.value })
@@ -589,6 +817,7 @@ export function CloseSaleForm({
                 <div>
                   <Label>Email para contrato</Label>
                   <Input
+                    className={inputAccent}
                     type="email"
                     value={form.contractPartyEmail || ""}
                     onChange={(e) =>
@@ -599,13 +828,127 @@ export function CloseSaleForm({
                 <div>
                   <Label>Teléfono para contrato</Label>
                   <Input
+                    className={inputAccent}
                     value={form.contractPartyPhone || ""}
                     onChange={(e) =>
                       setForm({ ...form, contractPartyPhone: e.target.value })
                     }
                   />
                 </div>
+                <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label>Dirección</Label>
+                    <Input
+                      className={inputAccent}
+                      value={form.contractPartyAddress || ""}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          contractPartyAddress: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>Ciudad</Label>
+                    <Input
+                      className={inputAccent}
+                      value={form.contractPartyCity || ""}
+                      onChange={(e) =>
+                        setForm({ ...form, contractPartyCity: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <Label>País</Label>
+                    <Input
+                      className={inputAccent}
+                      value={form.contractPartyCountry || ""}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          contractPartyCountry: e.target.value,
+                        })
+                      }
+                    />
+                  </div>
+                </div>
               </div>
+
+              {form.contractIsCompany ? (
+                <div className="space-y-3">
+                  <div className="text-sm font-medium">Datos de la empresa</div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Razón social</Label>
+                      <Input
+                        className={inputAccent}
+                        value={form.contractCompanyName || ""}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            contractCompanyName: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <Label>RUC/NIT</Label>
+                      <Input
+                        className={inputAccent}
+                        value={form.contractCompanyTaxId || ""}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            contractCompanyTaxId: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label>Dirección fiscal</Label>
+                        <Input
+                          className={inputAccent}
+                          value={form.contractCompanyAddress || ""}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              contractCompanyAddress: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label>Ciudad</Label>
+                        <Input
+                          className={inputAccent}
+                          value={form.contractCompanyCity || ""}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              contractCompanyCity: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label>País</Label>
+                        <Input
+                          className={inputAccent}
+                          value={form.contractCompanyCountry || ""}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              contractCompanyCountry: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="space-y-3">
                 {(form.contractParties || []).map((party, idx) => (
@@ -657,6 +1000,7 @@ export function CloseSaleForm({
                       <div>
                         <Label>Nombre</Label>
                         <Input
+                          className={inputAccent}
                           value={party.name || ""}
                           onChange={(e) => {
                             const next = [...(form.contractParties || [])];
@@ -668,6 +1012,7 @@ export function CloseSaleForm({
                       <div>
                         <Label>Email</Label>
                         <Input
+                          className={inputAccent}
                           type="email"
                           value={party.email || ""}
                           onChange={(e) => {
@@ -680,6 +1025,7 @@ export function CloseSaleForm({
                       <div>
                         <Label>Teléfono</Label>
                         <Input
+                          className={inputAccent}
                           value={party.phone || ""}
                           onChange={(e) => {
                             const next = [...(form.contractParties || [])];
@@ -718,6 +1064,7 @@ export function CloseSaleForm({
               <div>
                 <Label>Notas</Label>
                 <Textarea
+                  className={inputAccent}
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 />
