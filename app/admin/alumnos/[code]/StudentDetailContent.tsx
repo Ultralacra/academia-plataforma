@@ -71,6 +71,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [ticketsCount, setTicketsCount] = useState<number | undefined>(
     undefined
   );
+  const [pauseInfo, setPauseInfo] = useState<{
+    start: string;
+    end: string;
+    daysElapsed: number;
+    totalDays: number;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -183,6 +189,74 @@ export default function StudentDetailContent({ code }: { code: string }) {
     })();
     return () => {
       alive = false;
+    };
+  }, [code]);
+
+  // Cargar/derivar pausa desde localStorage
+  // Función para calcular y actualizar la info de pausa desde localStorage
+  function computePauseFromStorage() {
+    try {
+      const key = `student-pause:${code}`;
+      const raw =
+        typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+      if (!raw) {
+        setPauseInfo(null);
+        return;
+      }
+      const { start, end } = JSON.parse(raw) || {};
+      if (!start || !end) {
+        setPauseInfo(null);
+        return;
+      }
+      const s = new Date(start);
+      const e = new Date(end);
+      s.setHours(0, 0, 0, 0);
+      e.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const msPerDay = 24 * 60 * 60 * 1000;
+      const totalDays = Math.max(
+        1,
+        Math.round((e.getTime() - s.getTime()) / msPerDay) + 1
+      );
+      const daysElapsed = Math.min(
+        totalDays,
+        Math.max(0, Math.round((today.getTime() - s.getTime()) / msPerDay) + 1)
+      );
+      setPauseInfo({
+        start: s.toISOString(),
+        end: e.toISOString(),
+        daysElapsed,
+        totalDays,
+      });
+    } catch {
+      setPauseInfo(null);
+    }
+  }
+
+  useEffect(() => {
+    computePauseFromStorage();
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.key === `student-pause:${code}`) computePauseFromStorage();
+    };
+    const onPauseChanged = (ev: Event) => {
+      try {
+        const anyEv = ev as CustomEvent<any>;
+        if (!anyEv?.detail) return;
+        if (anyEv.detail.code !== code) return;
+        // leer de storage para mantener una sola fuente
+        computePauseFromStorage();
+      } catch {}
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", onStorage);
+      window.addEventListener("student:pause-changed", onPauseChanged);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("storage", onStorage);
+        window.removeEventListener("student:pause-changed", onPauseChanged);
+      }
     };
   }, [code]);
 
@@ -513,6 +587,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
             faseActual={faseActual}
             ingreso={pIngreso}
             salida={salida}
+            pausedRange={pauseInfo}
             onSaveLastTask={async (localValue) => {
               try {
                 const iso = new Date(localValue).toISOString();
@@ -679,6 +754,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
               rows[0] ||
               null;
             setStudent(s as any);
+            // actualizar pausa en tiempo real tras guardar
+            try {
+              computePauseFromStorage();
+            } catch {}
             // refrescar historiales inmediatamente
             try {
               const targetCode = (s as any)?.code || code;

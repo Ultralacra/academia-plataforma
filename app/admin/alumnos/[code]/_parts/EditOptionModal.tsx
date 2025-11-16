@@ -19,6 +19,7 @@ import { getOpciones } from "../../api";
 import { toast } from "@/components/ui/use-toast";
 import { apiFetch } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
+import PauseDatesModal from "./PauseDatesModal";
 
 export default function EditOptionModal({
   open,
@@ -43,6 +44,11 @@ export default function EditOptionModal({
   const [etapa, setEtapa] = useState<string | undefined>(current?.etapa);
   const [nicho, setNicho] = useState<string | undefined>(current?.nicho);
   const [saving, setSaving] = useState(false);
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const [pauseRange, setPauseRange] = useState<{
+    start?: string;
+    end?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -61,6 +67,21 @@ export default function EditOptionModal({
     setEstado(current?.estado);
     setEtapa(current?.etapa);
     setNicho(current?.nicho);
+    // Cargar rango previo (si existe) de localStorage
+    try {
+      const key = clientCode ? `student-pause:${clientCode}` : null;
+      if (key && typeof window !== "undefined") {
+        const raw = window.localStorage.getItem(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          setPauseRange({ start: parsed.start, end: parsed.end });
+        } else {
+          setPauseRange(null);
+        }
+      }
+    } catch {
+      setPauseRange(null);
+    }
   }, [current, open]);
 
   async function save() {
@@ -91,6 +112,55 @@ export default function EditOptionModal({
         setSaving(false);
         return;
       }
+      // Si se selecciona PAUSADO y no tenemos rango, primero pedir rango
+      const isPaused = (() => {
+        // Detectar por etiqueta humana si existe en catálogo
+        const match = estados.find((x) => x.key === estado);
+        const label = String(match?.value || estado || "").toUpperCase();
+        return label.includes("PAUSADO");
+      })();
+      if (wantsEstado && isPaused && !pauseRange?.start && !pauseRange?.end) {
+        setPauseOpen(true);
+        setSaving(false);
+        return; // esperar confirmación del modal; el usuario pulsará Guardar de nuevo
+      }
+
+      // Guardar en localStorage el rango si estamos en pausado y existe rango
+      try {
+        const key = `student-pause:${clientCode}`;
+        if (
+          isPaused &&
+          pauseRange?.start &&
+          pauseRange?.end &&
+          typeof window !== "undefined"
+        ) {
+          window.localStorage.setItem(
+            key,
+            JSON.stringify({ start: pauseRange.start, end: pauseRange.end })
+          );
+          try {
+            // Notificar a la vista para actualizar en tiempo real
+            const detail: any = {
+              code: clientCode,
+              start: pauseRange.start,
+              end: pauseRange.end,
+            };
+            window.dispatchEvent(
+              new CustomEvent("student:pause-changed", { detail })
+            );
+          } catch {}
+        } else if (!isPaused && typeof window !== "undefined") {
+          // si se sale de PAUSADO, limpiar rango
+          window.localStorage.removeItem(key);
+          try {
+            const detail: any = { code: clientCode, start: null, end: null };
+            window.dispatchEvent(
+              new CustomEvent("student:pause-changed", { detail })
+            );
+          } catch {}
+        }
+      } catch {}
+
       // El endpoint acepta form-data y ahora también soporta estado
       const url = `/client/update/client/${encodeURIComponent(clientCode)}`;
       const token = typeof window !== "undefined" ? getAuthToken() : null;
@@ -124,115 +194,143 @@ export default function EditOptionModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Editar alumno</DialogTitle>
-        </DialogHeader>
-        <div className="space-y-4 py-2">
-          {(mode === "estado" || mode === "all") && (
-            <div>
-              <label className="block text-xs text-muted-foreground">
-                Estado
-              </label>
-              <Select value={estado} onValueChange={(v) => setEstado(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecciona estado">
-                    {estado && (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-amber-400" />
-                        {estados.find((x) => x.key === estado)?.value ?? estado}
-                      </span>
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {estados.map((o) => (
-                    <SelectItem key={o.id} value={o.key}>
-                      <div className="inline-flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-amber-400" />
-                        <span>{o.value}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar alumno</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {(mode === "estado" || mode === "all") && (
+              <div>
+                <label className="block text-xs text-muted-foreground">
+                  Estado
+                </label>
+                <Select
+                  value={estado}
+                  onValueChange={(v) => {
+                    setEstado(v);
+                    const match = estados.find((x) => x.key === v);
+                    const label = String(match?.value || v || "").toUpperCase();
+                    if (label.includes("PAUSADO")) {
+                      setPauseOpen(true);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecciona estado">
+                      {estado && (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-amber-400" />
+                          {estados.find((x) => x.key === estado)?.value ??
+                            estado}
+                        </span>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {estados.map((o) => (
+                      <SelectItem key={o.id} value={o.key}>
+                        <div className="inline-flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-amber-400" />
+                          <span>{o.value}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {pauseRange?.start && pauseRange?.end && (
+                  <div className="mt-2 text-[11px] text-muted-foreground">
+                    Pausa seleccionada:{" "}
+                    {new Date(pauseRange.start).toLocaleDateString()} –{" "}
+                    {new Date(pauseRange.end).toLocaleDateString()}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {(mode === "etapa" || mode === "all") && (
-            <div>
-              <label className="block text-xs text-muted-foreground">
-                Etapa
-              </label>
-              <Select value={etapa} onValueChange={(v) => setEtapa(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecciona etapa">
-                    {etapa && (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-blue-400" />
-                        {etapas.find((x) => x.key === etapa)?.value ?? etapa}
-                      </span>
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {etapas.map((o) => (
-                    <SelectItem key={o.id} value={o.key}>
-                      <div className="inline-flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-blue-400" />
-                        <span>{o.value}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+            {(mode === "etapa" || mode === "all") && (
+              <div>
+                <label className="block text-xs text-muted-foreground">
+                  Etapa
+                </label>
+                <Select value={etapa} onValueChange={(v) => setEtapa(v)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecciona etapa">
+                      {etapa && (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-blue-400" />
+                          {etapas.find((x) => x.key === etapa)?.value ?? etapa}
+                        </span>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {etapas.map((o) => (
+                      <SelectItem key={o.id} value={o.key}>
+                        <div className="inline-flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-blue-400" />
+                          <span>{o.value}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
-          {(mode === "nicho" || mode === "all") && (
-            <div>
-              <label className="block text-xs text-muted-foreground">
-                Nicho
-              </label>
-              <Select value={nicho} onValueChange={(v) => setNicho(v)}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecciona nicho">
-                    {nicho && (
-                      <span className="inline-flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-violet-400" />
-                        {nichos.find((x) => x.key === nicho)?.value ?? nicho}
-                      </span>
-                    )}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {nichos.map((o) => (
-                    <SelectItem key={o.id} value={o.key}>
-                      <div className="inline-flex items-center gap-2">
-                        <span className="h-2 w-2 rounded-full bg-violet-400" />
-                        <span>{o.value}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {(mode === "nicho" || mode === "all") && (
+              <div>
+                <label className="block text-xs text-muted-foreground">
+                  Nicho
+                </label>
+                <Select value={nicho} onValueChange={(v) => setNicho(v)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecciona nicho">
+                      {nicho && (
+                        <span className="inline-flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-violet-400" />
+                          {nichos.find((x) => x.key === nicho)?.value ?? nicho}
+                        </span>
+                      )}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {nichos.map((o) => (
+                      <SelectItem key={o.id} value={o.key}>
+                        <div className="inline-flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-violet-400" />
+                          <span>{o.value}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={saving}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={save} disabled={saving}>
+                Guardar
+              </Button>
             </div>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={saving}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={save} disabled={saving}>
-              Guardar
-            </Button>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <PauseDatesModal
+        open={pauseOpen}
+        onOpenChange={(v) => setPauseOpen(v)}
+        initialRange={pauseRange || undefined}
+        onConfirm={(r) => {
+          setPauseRange(r);
+        }}
+      />
+    </>
   );
 }

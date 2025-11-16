@@ -15,6 +15,7 @@ export default function MetricsStrip({
   coachCount,
   coachNames,
   onJumpToCoaches,
+  pausedRange,
 }: {
   statusLabel: string;
   permanencia: number;
@@ -27,6 +28,12 @@ export default function MetricsStrip({
   coachCount?: number;
   coachNames?: string[];
   onJumpToCoaches?: () => void;
+  pausedRange?: {
+    start: string;
+    end: string;
+    daysElapsed: number;
+    totalDays: number;
+  } | null;
 }) {
   function isoToLocalInput(v?: string | null) {
     if (!v) return "";
@@ -54,7 +61,16 @@ export default function MetricsStrip({
       icon: <TrendingUp className="h-4 w-4" />,
       label: "Estado",
       value: statusLabel || "",
-      sub: "",
+      sub: (() => {
+        const s = String(statusLabel || "").toUpperCase();
+        const isPause = s.includes("PAUSAD"); // robusto para variantes
+        if (!isPause || !pausedRange) return "";
+        return `Pausa: ${fmtES(pausedRange.start)} → ${fmtES(
+          pausedRange.end
+        )} • Han pasado ${pausedRange.daysElapsed} días (de ${
+          pausedRange.totalDays
+        })`;
+      })(),
       editable: true,
       mode: "estado",
       renderAsBadge: "estado",
