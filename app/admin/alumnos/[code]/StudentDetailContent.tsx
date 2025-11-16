@@ -1722,9 +1722,15 @@ function AdsMetricsForm({
         <CardContent className="space-y-5 text-sm">
           <div className="space-y-1.5">
             <div className="font-medium text-muted-foreground">Rendimiento</div>
-            <div>ROAS: <b>{view.roas ?? "—"}</b></div>
-            <div>Inversión: <b>{fmtMoney(data.inversion)}</b></div>
-            <div>Facturación: <b>{fmtMoney(data.facturacion)}</b></div>
+            <div>
+              ROAS: <b>{view.roas ?? "—"}</b>
+            </div>
+            <div>
+              Inversión: <b>{fmtMoney(data.inversion)}</b>
+            </div>
+            <div>
+              Facturación: <b>{fmtMoney(data.facturacion)}</b>
+            </div>
           </div>
 
           <Separator />
@@ -1733,18 +1739,36 @@ function AdsMetricsForm({
             <div className="space-y-1.5">
               <div className="font-medium text-muted-foreground">Embudo</div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                <div>Alcance: <b>{fmtNum(data.alcance)}</b></div>
-                <div>Clics: <b>{fmtNum(data.clics)}</b></div>
-                <div>Visitas: <b>{fmtNum(data.visitas)}</b></div>
-                <div>Pagos: <b>{fmtNum(data.pagos)}</b></div>
-                <div className="col-span-2">Carga pág: <b>{fmtPct(data.carga_pagina)}</b></div>
+                <div>
+                  Alcance: <b>{fmtNum(data.alcance)}</b>
+                </div>
+                <div>
+                  Clics: <b>{fmtNum(data.clics)}</b>
+                </div>
+                <div>
+                  Visitas: <b>{fmtNum(data.visitas)}</b>
+                </div>
+                <div>
+                  Pagos: <b>{fmtNum(data.pagos)}</b>
+                </div>
+                <div className="col-span-2">
+                  Carga pág: <b>{fmtPct(data.carga_pagina)}</b>
+                </div>
               </div>
             </div>
             <div className="space-y-1.5">
-              <div className="font-medium text-muted-foreground">Efectividades</div>
-              <div>Ads: <b>{fmtPct(view.eff_ads)}</b></div>
-              <div>Pago iniciado: <b>{fmtPct(view.eff_pago)}</b></div>
-              <div>Compra: <b>{fmtPct(view.eff_compra)}</b></div>
+              <div className="font-medium text-muted-foreground">
+                Efectividades
+              </div>
+              <div>
+                Ads: <b>{fmtPct(view.eff_ads)}</b>
+              </div>
+              <div>
+                Pago iniciado: <b>{fmtPct(view.eff_pago)}</b>
+              </div>
+              <div>
+                Compra: <b>{fmtPct(view.eff_compra)}</b>
+              </div>
             </div>
           </div>
 
@@ -1752,7 +1776,9 @@ function AdsMetricsForm({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <div className="font-medium text-muted-foreground mb-2">Compras</div>
+              <div className="font-medium text-muted-foreground mb-2">
+                Compras
+              </div>
               <div className="flex flex-wrap gap-2">
                 {(
                   [
@@ -1783,7 +1809,9 @@ function AdsMetricsForm({
               </div>
             </div>
             <div>
-              <div className="font-medium text-muted-foreground mb-2">Estado y fase</div>
+              <div className="font-medium text-muted-foreground mb-2">
+                Estado y fase
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={data.pauta_activa ? "default" : "outline"}>
                   {data.pauta_activa ? "Pauta activa" : "Pauta inactiva"}
@@ -1799,7 +1827,9 @@ function AdsMetricsForm({
               </div>
             </div>
             <div>
-              <div className="font-medium text-muted-foreground mb-2">Coaches</div>
+              <div className="font-medium text-muted-foreground mb-2">
+                Coaches
+              </div>
               <div className="grid grid-cols-1 gap-1">
                 <div>
                   Copy: <b>{data.coach_copy || "—"}</b>
@@ -1815,17 +1845,24 @@ function AdsMetricsForm({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <div className="font-medium text-muted-foreground mb-2">Observaciones</div>
+              <div className="font-medium text-muted-foreground mb-2">
+                Observaciones
+              </div>
               <div className="whitespace-pre-wrap">{data.obs || "—"}</div>
             </div>
             <div>
-              <div className="font-medium text-muted-foreground mb-2">Intervención sugerida</div>
-              <div className="whitespace-pre-wrap">{data.interv_sugerida || "—"}</div>
+              <div className="font-medium text-muted-foreground mb-2">
+                Intervención sugerida
+              </div>
+              <div className="whitespace-pre-wrap">
+                {data.interv_sugerida || "—"}
+              </div>
             </div>
           </div>
 
           <div className="text-[11px] text-muted-foreground">
-            Guardado local automáticamente. Esta vista no envía datos al servidor.
+            Guardado local automáticamente. Esta vista no envía datos al
+            servidor.
           </div>
         </CardContent>
       </Card>
