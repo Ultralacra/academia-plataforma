@@ -96,6 +96,88 @@ export function AppSidebar() {
         return adminItems;
       case "coach":
         return coachItems;
+      case "equipo": {
+        const code = (user as any)?.codigo || "";
+        return code
+          ? [
+              {
+                title: "Coachs",
+                url: "/admin/teamsv2",
+                icon: Users,
+              },
+              {
+                title: "Alumnos",
+                url: "/admin/alumnos",
+                icon: GraduationCap,
+              },
+              {
+                title: "Mi equipo",
+                url: `/admin/teamsv2/${code}`,
+                icon: Users,
+              },
+              {
+                title: "Métricas",
+                icon: BarChart3,
+                children: [
+                  {
+                    title: "Alumnos",
+                    url: "/admin/students",
+                    icon: GraduationCap,
+                  },
+                  { title: "Coachs", url: "/admin/teams", icon: Users },
+                  {
+                    title: "Tickets",
+                    url: "/admin/tickets",
+                    icon: MessageSquare,
+                  },
+                ],
+              },
+              {
+                title: "Tickets",
+                url: "/admin/tickets-board",
+                icon: MessageSquare,
+              },
+            ]
+          : [
+              {
+                title: "Coachs",
+                url: "/admin/teamsv2",
+                icon: Users,
+              },
+              {
+                title: "Alumnos",
+                url: "/admin/alumnos",
+                icon: GraduationCap,
+              },
+              {
+                title: "Equipos",
+                url: `/admin/teamsv2`,
+                icon: Users,
+              },
+              {
+                title: "Métricas",
+                icon: BarChart3,
+                children: [
+                  {
+                    title: "Alumnos",
+                    url: "/admin/students",
+                    icon: GraduationCap,
+                  },
+                  { title: "Coachs", url: "/admin/teams", icon: Users },
+                  {
+                    title: "Tickets",
+                    url: "/admin/tickets",
+                    icon: MessageSquare,
+                  },
+                ],
+              },
+              {
+                title: "Tickets",
+                url: "/admin/tickets-board",
+                icon: MessageSquare,
+              },
+            ];
+      }
       case "student": {
         const code = (user as any)?.codigo || "RvA_5Qxoezfxlxxj";
         return [
@@ -116,6 +198,8 @@ export function AppSidebar() {
       ? "Administrador"
       : user?.role === "coach"
       ? "Coach"
+      : user?.role === "equipo"
+      ? "Equipo"
       : user?.role === "student"
       ? "Estudiante"
       : "Invitado";
@@ -124,7 +208,7 @@ export function AppSidebar() {
   const roleKey = (
     user?.role === "student"
       ? "alumno"
-      : user?.role === "coach"
+      : user?.role === "coach" || user?.role === "equipo"
       ? "coach"
       : "admin"
   ) as "admin" | "alumno" | "coach";
@@ -218,14 +302,15 @@ export function AppSidebar() {
               >
                 {roleLabel}
               </Badge>
-              {user?.role === "student" && (user as any)?.codigo && (
-                <div className="mt-1 text-[10px] text-neutral-500 truncate">
-                  Código:{" "}
-                  <code className="text-neutral-700">
-                    {(user as any).codigo}
-                  </code>
-                </div>
-              )}
+              {(user?.role === "student" || user?.role === "equipo") &&
+                (user as any)?.codigo && (
+                  <div className="mt-1 text-[10px] text-neutral-500 truncate">
+                    Código:{" "}
+                    <code className="text-neutral-700">
+                      {(user as any).codigo}
+                    </code>
+                  </div>
+                )}
             </div>
           </div>
         </div>

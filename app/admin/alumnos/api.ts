@@ -459,12 +459,13 @@ export type ClienteTareaHist = {
   created_at: string;
 };
 
-export async function getClienteTareas(alumnoCode: string): Promise<ClienteTareaHist[]> {
-  const url = `https://v001.vercel.app/v1/client/get/cliente-tareas/${encodeURIComponent(alumnoCode)}`;
+export async function getClienteTareas(alumnoIdOrCode: string | number): Promise<ClienteTareaHist[]> {
+  const key = String(alumnoIdOrCode);
+  const url = `https://v001.vercel.app/v1/client/get/cliente-tareas/${encodeURIComponent(key)}`;
   const json = await fetchJson<any>(url);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   return rows.map((r) => ({
-    id: r.id ?? r.tarea_id ?? `${alumnoCode}-${r.created_at ?? ''}`,
+    id: r.id ?? r.tarea_id ?? `${key}-${r.created_at ?? ''}`,
     codigo_cliente: r.codigo_cliente ?? r.alumno ?? null,
     descripcion: r.descripcion ?? r.tarea ?? null,
     created_at: r.created_at ?? r.fecha ?? r.updated_at ?? new Date().toISOString(),

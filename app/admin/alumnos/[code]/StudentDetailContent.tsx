@@ -52,8 +52,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function StudentDetailContent({ code }: { code: string }) {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState<any | null>(null);
   const [coaches, setCoaches] = useState<CoachMember[]>([]);
@@ -145,9 +147,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
           // Cargar historial de estatus y tareas
           try {
+            const alumnoIdOrCode = (s as any)?.id ?? s.code;
             const [eh, th] = await Promise.all([
               getClienteEstatus(s.code),
-              getClienteTareas(s.code),
+              getClienteTareas(alumnoIdOrCode),
             ]);
             setStatusHistory(eh);
             setTasksHistory(th);
@@ -595,7 +598,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 await updateClientLastTask(student.code || code, iso);
                 setLastTaskAt(iso);
                 try {
-                  const th = await getClienteTareas(student.code || code);
+                  const th = await getClienteTareas(
+                    (student as any)?.id ?? student.code ?? code
+                  );
                   setTasksHistory(th);
                 } catch {}
                 toast({ title: "Última tarea actualizada" });
@@ -643,6 +648,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               <div id="coaches-card">
                 <CoachesCard
                   coaches={coaches}
+                  canManage={(user?.role ?? "").toLowerCase() !== "student"}
                   onAssign={(codes) => assignCoaches(codes)}
                   onRemove={(teamCode) => removeCoach(teamCode)}
                   onChangeMember={(idx, candidate) =>
@@ -764,9 +770,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
               const targetCode = (s as any)?.code || code;
               await fetchPhaseHistory(targetCode);
               try {
+                const alumnoIdOrCode = (s as any)?.id || targetCode;
                 const [eh, th] = await Promise.all([
                   getClienteEstatus(targetCode),
-                  getClienteTareas(targetCode),
+                  getClienteTareas(alumnoIdOrCode),
                 ]);
                 setStatusHistory(eh);
                 setTasksHistory(th);

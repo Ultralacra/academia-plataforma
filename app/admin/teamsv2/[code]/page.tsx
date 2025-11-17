@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Button } from "@/components/ui/button";
 import { Edit } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -43,12 +44,26 @@ import {
 } from "../api";
 import { useMemo } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import {
+  Accordion,
+  AccordionItem,
+  AccordionTrigger,
+  AccordionContent,
+} from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import PersonalMetrics from "../PersonalMetrics";
 import CoachStudentsTable from "../components/CoachStudentsTable";
 import { fetchMetrics } from "@/app/admin/teams/teamsApi";
 import SessionsPanel from "../components/SessionsPanel";
 import { Textarea } from "@/components/ui/textarea";
+
+// Tipo compacto para lista de alumnos en chat (evita genérico multilínea en TSX)
+type StudentMini = {
+  code: string;
+  name: string;
+  state?: string | null;
+  stage?: string | null;
+};
 
 export default function CoachDetailPage({
   params,
@@ -70,6 +85,12 @@ export default function CoachDetailPage({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [teamsList, setTeamsList] = useState<CoachMini[]>([]);
   const [targetTeamCode, setTargetTeamCode] = useState<string | null>(null);
+  const [studentsList, setStudentsList] = useState<StudentMini[]>([]);
+  const [studentsLoading, setStudentsLoading] = useState<boolean>(false);
+  const [targetStudentCode, setTargetStudentCode] = useState<string | null>(
+    null
+  );
+  const [targetStudentName, setTargetStudentName] = useState<string>("");
   const [chatList, setChatList] = useState<any[]>([]);
   const [requestListSignal, setRequestListSignal] = useState<number>(0);
   const [chatConnected, setChatConnected] = useState<boolean>(false);
@@ -81,6 +102,7 @@ export default function CoachDetailPage({
   const [chatsLoading, setChatsLoading] = useState<boolean>(true);
   const [decisionStamp, setDecisionStamp] = useState<string | null>(null);
   const [contactQuery, setContactQuery] = useState<string>("");
+  const [studentQuery, setStudentQuery] = useState<string>("");
   const [readsBump, setReadsBump] = useState<number>(0);
   // Bump para forzar re-render cuando cambian contadores persistentes de no leídos
   const [unreadBump, setUnreadBump] = useState<number>(0);
@@ -88,6 +110,16 @@ export default function CoachDetailPage({
   const [currentOpenChatId, setCurrentOpenChatId] = useState<
     string | number | null
   >(null);
+
+  // Pestañas de conversaciones abiertas (solo nombres, sin IDs)
+  type OpenTab = {
+    key: string; // team:CODE o student:CODE
+    type: "team" | "student";
+    code: string;
+    name: string;
+  };
+  const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
+  const [activeChatTab, setActiveChatTab] = useState<string | null>(null);
 
   // Tabs control + sessions prefill
   const [activeTab, setActiveTab] = useState<string>("tickets");
@@ -155,7 +187,20 @@ export default function CoachDetailPage({
     );
   }, [teamsList, contactQuery]);
 
+  const filteredStudents = useMemo(() => {
+    const q = (studentQuery || contactQuery || "").trim().toLowerCase();
+    const list = Array.isArray(studentsList) ? studentsList : [];
+    if (!q) return list;
+    return list.filter(
+      (s) =>
+        (s.name || "").toLowerCase().includes(q) ||
+        (s.code || "").toLowerCase().includes(q)
+    );
+  }, [studentsList, studentQuery, contactQuery]);
+
   function openContact(t: CoachMini) {
+    setTargetStudentCode(null);
+    setTargetStudentName("");
     setTargetTeamCode(t.codigo);
     setChatInfo({ chatId: null, myParticipantId: null });
     setChatsLoading(true);
@@ -202,6 +247,44 @@ export default function CoachDetailPage({
         const codeStr = String(val);
         if (codeStr.toLowerCase() !== String(myCode).toLowerCase())
           return codeStr;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+  function chatHasClienteEquipoPair(
+    it: any,
+    clienteId: string,
+    equipoId: string
+  ): boolean {
+    try {
+      const parts = itemParticipants(it);
+      let okCliente = false;
+      let okEquipo = false;
+      for (const p of parts) {
+        const tipo = normalizeTipo(p?.participante_tipo);
+        if (tipo === "cliente" && p?.id_cliente != null) {
+          if (String(p.id_cliente) === String(clienteId)) okCliente = true;
+        }
+        if (tipo === "equipo" && p?.id_equipo != null) {
+          if (String(p.id_equipo) === String(equipoId)) okEquipo = true;
+        }
+      }
+      return okCliente && okEquipo;
+    } catch {
+      return false;
+    }
+  }
+
+  function chatOtherStudentCode(it: any): string | null {
+    try {
+      const parts = itemParticipants(it);
+      for (const p of parts) {
+        if (normalizeTipo(p?.participante_tipo) !== "cliente") continue;
+        const val = p?.id_cliente ?? p?.id_alumno ?? p?.client_id;
+        if (val == null) continue;
+        return String(val);
       }
       return null;
     } catch {
@@ -289,6 +372,19 @@ export default function CoachDetailPage({
     return top?.id_chat ?? top?.id ?? null;
   }
 
+  function pickExistingChatIdForStudent(
+    alumnoCode: string
+  ): string | number | null {
+    const list = Array.isArray(chatList) ? chatList : [];
+    const matches = list.filter((it) =>
+      chatHasClienteEquipoPair(it, String(alumnoCode), String(code))
+    );
+    if (matches.length === 0) return null;
+    matches.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
+    const top = matches[0];
+    return top?.id_chat ?? top?.id ?? null;
+  }
+
   const chatsByContact = useMemo(() => {
     const list = Array.isArray(chatList) ? chatList : [];
     const map = new Map<string, any[]>();
@@ -352,6 +448,60 @@ export default function CoachDetailPage({
     );
   }, [chatsByContact, contactQuery]);
 
+  const chatsByStudent = useMemo(() => {
+    const list = Array.isArray(chatList) ? chatList : [];
+    const map = new Map<string, any[]>();
+    for (const it of list) {
+      const student = chatOtherStudentCode(it);
+      if (!student) continue;
+      const key = String(student).toLowerCase();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(it);
+    }
+    const arr = Array.from(map.entries()).map(([key, chats]) => {
+      chats.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
+      const targetCode = chats.find(() => true)
+        ? chatOtherStudentCode(chats[0])
+        : key;
+      const stu = studentsList.find(
+        (s) => (s.code || "").toLowerCase() === key
+      );
+      const targetName = stu?.name ?? targetCode ?? key;
+      const top = chats[0];
+      const topChatId = top?.id_chat ?? top?.id ?? null;
+      const lastAt = getChatTimestamp(top);
+      const last = getChatLastMessage(top);
+      const lastRead = topChatId != null ? getLastReadByChatId(topChatId) : 0;
+      const hasUnread = lastAt > (lastRead || 0);
+      return {
+        key,
+        targetCode: targetCode ?? key,
+        targetName,
+        chats,
+        topChatId,
+        lastAt,
+        lastText: (last.text || "").trim(),
+        hasUnread,
+      };
+    });
+    arr.sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+    return arr;
+  }, [chatList, studentsList, readsBump]);
+
+  const filteredChatsByStudent = useMemo(() => {
+    const q = (contactQuery || "").trim().toLowerCase();
+    if (!q) return chatsByStudent;
+    return chatsByStudent.filter(
+      (c) =>
+        String(c.targetName || "")
+          .toLowerCase()
+          .includes(q) ||
+        String(c.targetCode || "")
+          .toLowerCase()
+          .includes(q)
+    );
+  }, [chatsByStudent, contactQuery]);
+
   const contactsWithoutChat = useMemo(() => {
     const withChat = new Set(
       chatsByContact.map((c) => c.targetCode.toLowerCase())
@@ -368,6 +518,62 @@ export default function CoachDetailPage({
         (t.codigo || "").toLowerCase().includes(q)
     );
   }, [teamsList, chatsByContact, contactQuery]);
+
+  // Sincroniza la pestaña activa con la selección del chat (equipo/alumno)
+  useEffect(() => {
+    if (!activeChatTab) return;
+    const [type, ...rest] = activeChatTab.split(":");
+    const codeKey = rest.join(":");
+    if (type === "team") {
+      setTargetStudentCode(null);
+      setTargetStudentName("");
+      setTargetTeamCode(codeKey);
+      const existing = pickExistingChatIdForTarget(codeKey);
+      setChatInfo({ chatId: existing, myParticipantId: null });
+      setCurrentOpenChatId(existing ?? null);
+    } else if (type === "student") {
+      setTargetTeamCode(null);
+      setTargetStudentCode(codeKey);
+      const stu = studentsList.find(
+        (s) => (s.code || "").toLowerCase() === codeKey.toLowerCase()
+      );
+      setTargetStudentName(stu?.name || codeKey);
+      const existing = pickExistingChatIdForStudent(codeKey);
+      setChatInfo({ chatId: existing, myParticipantId: null });
+      setCurrentOpenChatId(existing ?? null);
+    }
+  }, [activeChatTab]);
+
+  // Cargar alumnos asignados para este coach/equipo (usando métricas v2)
+  useEffect(() => {
+    if (!code) return;
+    const ctrl = new AbortController();
+    (async () => {
+      try {
+        setStudentsLoading(true);
+        const res = await fetchMetrics(undefined, undefined, code);
+        const teams = (res?.data as any)?.teams;
+        const flat: any[] = Array.isArray(teams?.allClientsByCoachFlat)
+          ? teams.allClientsByCoachFlat
+          : [];
+        const detail: any[] = Array.isArray(teams?.clientsByCoachDetail)
+          ? teams.clientsByCoachDetail
+          : [];
+        const rows = (flat.length > 0 ? flat : detail).map((r: any) => ({
+          code: String(r.codigo ?? r.code ?? "").trim(),
+          name: String(r.nombre ?? r.name ?? "").trim(),
+          state: r.estado ?? r.state ?? null,
+          stage: r.etapa ?? r.stage ?? null,
+        }));
+        if (!ctrl.signal.aborted) setStudentsList(rows.filter((r) => r.code));
+      } catch {
+        if (!ctrl.signal.aborted) setStudentsList([]);
+      } finally {
+        if (!ctrl.signal.aborted) setStudentsLoading(false);
+      }
+    })();
+    return () => ctrl.abort();
+  }, [code]);
 
   const listRequestedRef = useMemo(() => ({ done: false }), []);
   useEffect(() => {
@@ -492,562 +698,958 @@ export default function CoachDetailPage({
   }, []);
 
   return (
-    <DashboardLayout>
-      {/* Evitar scroll del contenedor raíz en esta página */}
-      <div className="space-y-6 overflow-hidden">
-        <div className="flex items-start gap-6">
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-lg bg-neutral-100 grid place-items-center text-2xl font-bold text-neutral-800">
-              {(coach?.nombre
-                ? String(coach.nombre).slice(0, 1)
-                : String(code).slice(0, 1)
-              ).toUpperCase()}
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+      <DashboardLayout>
+        {/* Evitar scroll del contenedor raíz en esta página */}
+        <div className="space-y-6 overflow-hidden">
+          <div className="flex items-start gap-6">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-lg bg-neutral-100 grid place-items-center text-2xl font-bold text-neutral-800">
+                {(coach?.nombre
+                  ? String(coach.nombre).slice(0, 1)
+                  : String(code).slice(0, 1)
+                ).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-2xl font-semibold leading-tight">
+                  {coach?.nombre ?? code}
+                </h2>
+                <div className="text-sm text-neutral-500 flex items-center gap-3">
+                  <span>
+                    Código: <span className="font-mono">{code}</span>
+                  </span>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-neutral-100 text-neutral-700">
+                    {coach?.created_at
+                      ? new Date(coach.created_at).toLocaleDateString()
+                      : "—"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2 items-center mt-2">
+                  {coach?.puesto && (
+                    <Badge
+                      variant="outline"
+                      className="rounded-md border-sky-200 bg-sky-50 text-sky-700"
+                    >
+                      {coach.puesto}
+                    </Badge>
+                  )}
+                  {coach?.area && (
+                    <Badge
+                      variant="outline"
+                      className="rounded-md border-neutral-200 bg-neutral-50 text-neutral-700"
+                    >
+                      {coach.area}
+                    </Badge>
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h2 className="text-2xl font-semibold leading-tight">
-                {coach?.nombre ?? code}
-              </h2>
-              <div className="text-sm text-neutral-500 flex items-center gap-3">
-                <span>
-                  Código: <span className="font-mono">{code}</span>
-                </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-neutral-100 text-neutral-700">
-                  {coach?.created_at
-                    ? new Date(coach.created_at).toLocaleDateString()
-                    : "—"}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2 items-center mt-2">
-                {coach?.puesto && (
-                  <Badge
-                    variant="outline"
-                    className="rounded-md border-sky-200 bg-sky-50 text-sky-700"
-                  >
-                    {coach.puesto}
-                  </Badge>
-                )}
-                {coach?.area && (
-                  <Badge
-                    variant="outline"
-                    className="rounded-md border-neutral-200 bg-neutral-50 text-neutral-700"
-                  >
-                    {coach.area}
-                  </Badge>
-                )}
-              </div>
+
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditOpen((s) => !s)}
+                aria-label={editOpen ? "Cancelar" : "Editar"}
+                className="p-2"
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setDeleteOpen(true)}
+                className="bg-rose-100 text-rose-800 hover:bg-rose-200"
+              >
+                Eliminar
+              </Button>
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setEditOpen((s) => !s)}
-              aria-label={editOpen ? "Cancelar" : "Editar"}
-              className="p-2"
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={() => setDeleteOpen(true)}
-              className="bg-rose-100 text-rose-800 hover:bg-rose-200"
-            >
-              Eliminar
-            </Button>
-          </div>
-        </div>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
+            <TabsList>
+              <TabsTrigger value="tickets">Tickets</TabsTrigger>
+              <TabsTrigger value="metricas">Métricas</TabsTrigger>
+              <TabsTrigger value="alumnos">Alumnos</TabsTrigger>
+              <TabsTrigger value="chat">Chat</TabsTrigger>
+              <TabsTrigger value="sesiones">Sesiones</TabsTrigger>
+            </TabsList>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
-          <TabsList>
-            <TabsTrigger value="tickets">Tickets</TabsTrigger>
-            <TabsTrigger value="metricas">Métricas</TabsTrigger>
-            <TabsTrigger value="alumnos">Alumnos</TabsTrigger>
-            <TabsTrigger value="chat">Chat</TabsTrigger>
-            <TabsTrigger value="sesiones">Sesiones</TabsTrigger>
-          </TabsList>
-
-          {/* Pestaña Tickets: scroll interno, pantalla completa */}
-          <TabsContent value="tickets" className="mt-0">
-            <div className="h-[calc(100vh-180px)] overflow-auto rounded-lg border bg-white p-4">
-              {loading ? (
-                <div>Cargando...</div>
-              ) : error ? (
-                <div className="text-sm text-red-600">{error}</div>
-              ) : coach ? (
-                <TicketsPanelCoach
-                  student={{
-                    id: 0,
-                    code: coach?.codigo ?? String(code),
-                    name: coach?.nombre ?? String(code),
-                    teamMembers: [],
-                  }}
-                />
-              ) : (
-                <div className="text-sm text-neutral-500">
-                  No se encontró información del coach.
-                </div>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="metricas" className="mt-0">
-            {loading ? (
-              <div>Cargando...</div>
-            ) : error ? (
-              <div className="text-sm text-red-600">{error}</div>
-            ) : coach ? (
-              <PersonalMetrics
-                coachCode={coach.codigo}
-                coachName={coach.nombre}
-              />
-            ) : (
-              <div className="text-sm text-neutral-500">
-                No se encontró información del coach.
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="chat" className="mt-0">
-            {/* Altura fija basada en viewport para evitar scroll de la pestaña */}
-            <div className="h-[calc(100vh-260px)] overflow-hidden">
-              <div className="grid grid-cols-12 gap-4 h-full min-h-0">
-                {/* Sección: Chats creados */}
-                <div className="col-span-3 h-full flex flex-col overflow-hidden min-h-0">
-                  <div className="rounded-lg border bg-white shadow-sm h-full flex flex-col overflow-hidden">
-                    <div className="p-3 bg-slate-50 border-b flex-shrink-0">
-                      <input
-                        value={contactQuery}
-                        onChange={(e) => setContactQuery(e.target.value)}
-                        placeholder="Buscar o iniciar un chat"
-                        className="w-full h-9 px-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div className="flex-1 overflow-y-auto min-h-0">
-                      {chatsLoading && filteredChatsByContact.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-slate-500">
-                          Cargando…
-                        </div>
-                      ) : filteredChatsByContact.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-slate-500">
-                          Sin chats creados
-                        </div>
-                      ) : (
-                        <ul className="divide-y divide-slate-100">
-                          {filteredChatsByContact.map((c) => {
-                            const count = (
-                              Array.isArray(c.chats) ? c.chats : []
-                            ).reduce((acc: number, it: any) => {
-                              const id = it?.id_chat ?? it?.id;
-                              if (id == null) return acc;
-                              return acc + getUnreadCountByChatId(id);
-                            }, 0);
-                            const isActive =
-                              targetTeamCode?.toLowerCase() ===
-                              c.targetCode.toLowerCase();
-                            const highlight =
-                              (c.hasUnread || count > 0) && !isActive;
-                            return (
-                              <li key={`chat-${c.key}`}>
-                                <button
-                                  className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${
-                                    isActive
-                                      ? "bg-slate-100"
-                                      : highlight
-                                      ? "bg-teal-50"
-                                      : ""
-                                  }`}
-                                  onClick={() => {
-                                    setTargetTeamCode(c.targetCode);
-                                    setChatInfo({
-                                      chatId: c.topChatId,
-                                      myParticipantId: null,
-                                    });
-                                    setCurrentOpenChatId(c.topChatId ?? null);
-                                    try {
-                                      for (const it of c.chats || []) {
-                                        const id = it?.id_chat ?? it?.id;
-                                        if (id == null) continue;
-                                        const uKey = `chatUnreadById:coach:${String(
-                                          id
-                                        )}`;
-                                        localStorage.setItem(uKey, "0");
-                                        window.dispatchEvent(
-                                          new CustomEvent(
-                                            "chat:unread-count-updated",
-                                            {
-                                              detail: {
-                                                chatId: id,
-                                                role: "coach",
-                                                count: 0,
-                                              },
-                                            }
-                                          )
-                                        );
-                                      }
-                                      setUnreadBump((n) => n + 1);
-                                    } catch {}
-                                  }}
-                                >
-                                  <div className="h-11 w-11 rounded-full bg-teal-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
-                                    {(c.targetName || c.targetCode)
-                                      .slice(0, 1)
-                                      .toUpperCase()}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-baseline justify-between gap-2">
-                                      <div className="text-sm font-medium truncate text-slate-900">
-                                        {c.targetName}
-                                      </div>
-                                      <div className="text-xs text-slate-500 flex-shrink-0">
-                                        {formatTime(c.lastAt)}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <div
-                                        className={`text-xs truncate flex-1 ${
-                                          c.hasUnread || count > 0
-                                            ? "text-slate-900 font-medium"
-                                            : "text-slate-500"
-                                        }`}
-                                      >
-                                        {c.lastText || c.targetCode}
-                                      </div>
-                                      {(c.hasUnread || count > 0) && (
-                                        <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-teal-500 text-white text-xs font-semibold flex-shrink-0">
-                                          {count > 0 ? count : "•"}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-
-                      {/* Sección: Contactos sin chat */}
-                      <div className="px-3 py-2 mt-2 text-xs font-semibold text-slate-600 bg-slate-50 sticky top-0 z-10">
-                        CONTACTOS
-                      </div>
-                      {chatsLoading && contactsWithoutChat.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-slate-500">
-                          Cargando…
-                        </div>
-                      ) : contactsWithoutChat.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-slate-500">
-                          Sin contactos disponibles
-                        </div>
-                      ) : (
-                        <ul className="divide-y divide-slate-100">
-                          {contactsWithoutChat.map((t: CoachMini) => (
-                            <li key={`noc-${t.codigo}`}>
-                              <button
-                                className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${
-                                  targetTeamCode === t.codigo
-                                    ? "bg-slate-100"
-                                    : ""
-                                }`}
-                                onClick={() => openContact(t)}
-                              >
-                                <div className="h-11 w-11 rounded-full bg-teal-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
-                                  {(t.nombre || t.codigo)
-                                    .slice(0, 1)
-                                    .toUpperCase()}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium truncate text-slate-900">
-                                    {t.nombre}
-                                  </div>
-                                  <div className="text-xs text-slate-500">
-                                    {t.codigo}
-                                  </div>
-                                </div>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="col-span-9 h-full overflow-hidden flex flex-col min-h-0">
-                  <CoachChatInline
-                    key={`chat-${code}-${targetTeamCode ?? "inbox"}`}
-                    room={`${code}:equipo:${targetTeamCode ?? "inbox"}`}
-                    role="coach"
-                    title={
-                      coach?.nombre
-                        ? `Equipo: ${coach?.nombre}`
-                        : `Equipo ${code}`
-                    }
-                    subtitle={
-                      targetTeamCode ? `con ${targetTeamName}` : undefined
-                    }
-                    variant="card"
-                    className="h-full"
-                    precreateOnParticipants
-                    socketio={{
-                      url: "https://v001.onrender.com",
-                      idEquipo: String(code),
-                      participants: targetTeamCode
-                        ? [
-                            {
-                              participante_tipo: "equipo",
-                              id_equipo: String(code),
-                            },
-                            {
-                              participante_tipo: "equipo",
-                              id_equipo: String(targetTeamCode),
-                            },
-                          ]
-                        : undefined,
-                      autoCreate: true,
-                      autoJoin: chatInfo.chatId != null,
-                      chatId: chatInfo.chatId ?? undefined,
-                    }}
-                    onConnectionChange={setChatConnected}
-                    onChatInfo={(info) => {
-                      setChatInfo(info);
-                      setChatsLoading(false);
-                      setCurrentOpenChatId(info?.chatId ?? null);
-                      if (!chatInfo.chatId && info.chatId) {
-                        setChatsLoading(true);
-                        setRequestListSignal((n) => n + 1);
-                      }
-                      try {
-                        if (!targetTeamCode) return;
-                        const parts = Array.isArray(info.participants)
-                          ? info.participants
-                          : [];
-                        const set = new Set<string>();
-                        for (const p of parts) {
-                          const tipo = String(
-                            p?.participante_tipo || ""
-                          ).toLowerCase();
-                          if (tipo === "equipo" && p?.id_equipo)
-                            set.add(String(p.id_equipo).toLowerCase());
-                        }
-                        const hasPair =
-                          info.chatId != null &&
-                          set.has(String(code).toLowerCase()) &&
-                          set.has(String(targetTeamCode).toLowerCase());
-                        if (
-                          hasPair &&
-                          decisionStamp !== `exist:${targetTeamCode}`
-                        ) {
-                          setDecisionStamp(`exist:${targetTeamCode}`);
-                        }
-                      } catch {}
-                    }}
-                    requestListSignal={requestListSignal}
-                    listParams={{
-                      participante_tipo: "equipo",
-                      id_equipo: String(code),
-                      include_participants: true,
-                      with_participants: true,
-                    }}
-                    onChatsList={(list) => {
-                      setChatList(list);
-                      setChatsLoading(false);
-                      try {
-                        if (!targetTeamCode) return;
-                        const existing =
-                          pickExistingChatIdForTarget(targetTeamCode);
-                        if (existing != null) {
-                          if (decisionStamp !== `exist:${targetTeamCode}`) {
-                            setDecisionStamp(`exist:${targetTeamCode}`);
-                          }
-                          setChatInfo({
-                            chatId: existing,
-                            myParticipantId: null,
-                          });
-                        }
-                      } catch {}
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="alumnos" className="mt-0">
-            {/* Detalles: ocupar pantalla completa con scroll interno */}
-            <div className="h-[calc(100vh-180px)] overflow-auto">
-              <div className="p-4 bg-white border rounded-lg">
+            {/* Pestaña Tickets: scroll interno, pantalla completa */}
+            <TabsContent value="tickets" className="mt-0">
+              <div className="h-[calc(100vh-180px)] overflow-auto rounded-lg border bg-white p-4">
                 {loading ? (
                   <div>Cargando...</div>
                 ) : error ? (
                   <div className="text-sm text-red-600">{error}</div>
                 ) : coach ? (
-                  <div className="space-y-4">
-                    <div>
-                      <h3 className="text-sm font-medium mb-2">Alumnos</h3>
-                      <CoachStudentsInline coachCode={code} />
-                    </div>
-                  </div>
+                  <TicketsPanelCoach
+                    student={{
+                      id: 0,
+                      code: coach?.codigo ?? String(code),
+                      name: coach?.nombre ?? String(code),
+                      teamMembers: [],
+                    }}
+                  />
                 ) : (
                   <div className="text-sm text-neutral-500">
                     No se encontró información del coach.
                   </div>
                 )}
               </div>
-            </div>
-          </TabsContent>
+            </TabsContent>
 
-          <TabsContent value="sesiones" className="mt-0">
-            <div className="h-[calc(100vh-180px)] overflow-auto">
-              <div className="p-4 bg-white border rounded-lg">
-                {loading ? (
-                  <div>Cargando...</div>
-                ) : error ? (
-                  <div className="text-sm text-red-600">{error}</div>
-                ) : (
-                  <SessionsPanel coachCode={code} />
-                )}
+            <TabsContent value="metricas" className="mt-0">
+              {loading ? (
+                <div>Cargando...</div>
+              ) : error ? (
+                <div className="text-sm text-red-600">{error}</div>
+              ) : coach ? (
+                <PersonalMetrics
+                  coachCode={coach.codigo}
+                  coachName={coach.nombre}
+                />
+              ) : (
+                <div className="text-sm text-neutral-500">
+                  No se encontró información del coach.
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="chat" className="mt-0">
+              {/* Altura fija basada en viewport para evitar scroll de la pestaña */}
+              <div className="h-[calc(100vh-260px)] overflow-hidden">
+                <div className="grid grid-cols-12 gap-4 h-full min-h-0">
+                  {/* Sección: Chats creados */}
+                  <div className="col-span-3 h-full flex flex-col overflow-hidden min-h-0">
+                    <div className="rounded-lg border bg-white shadow-sm h-full flex flex-col overflow-hidden">
+                      <div className="p-3 bg-slate-50 border-b flex-shrink-0">
+                        <input
+                          value={contactQuery}
+                          onChange={(e) => setContactQuery(e.target.value)}
+                          placeholder="Buscar o iniciar un chat"
+                          className="w-full h-9 px-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div className="flex-1 overflow-y-auto min-h-0">
+                        <Accordion type="multiple" defaultValue={["teams","students","contacts"]}>
+                          <AccordionItem value="teams">
+                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">Chats entre equipos</AccordionTrigger>
+                            <AccordionContent className="pt-1">
+                              {chatsLoading && filteredChatsByContact.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">Cargando…</div>
+                              ) : filteredChatsByContact.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">Sin chats entre equipos</div>
+                              ) : (
+                                <ul className="divide-y divide-slate-100">
+                                  {filteredChatsByContact.map((c) => {
+                                    const count = (Array.isArray(c.chats) ? c.chats : []).reduce((acc: number, it: any) => {
+                                      const id = it?.id_chat ?? it?.id;
+                                      if (id == null) return acc;
+                                      return acc + getUnreadCountByChatId(id);
+                                    }, 0);
+                                    const isActive = targetTeamCode?.toLowerCase() === c.targetCode.toLowerCase();
+                                    const highlight = (c.hasUnread || count > 0) && !isActive;
+                                    return (
+                                      <li key={`chat-${c.key}`}>
+                                        <button
+                                          className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${isActive ? "bg-slate-100" : highlight ? "bg-teal-50" : ""}`}
+                                          onClick={() => {
+                                            setTargetTeamCode(c.targetCode);
+                                            setChatInfo({ chatId: c.topChatId, myParticipantId: null });
+                                            setCurrentOpenChatId(c.topChatId ?? null);
+                                            const tabKey = `team:${String(c.targetCode)}`;
+                                            setOpenTabs((prev) => {
+                                              const exists = prev.some((p) => p.key === tabKey);
+                                              return exists ? prev : [...prev, { key: tabKey, type: "team", code: String(c.targetCode), name: c.targetName || String(c.targetCode) }];
+                                            });
+                                            setActiveChatTab(tabKey);
+                                            try {
+                                              for (const it of c.chats || []) {
+                                                const id = it?.id_chat ?? it?.id;
+                                                if (id == null) continue;
+                                                const uKey = `chatUnreadById:coach:${String(id)}`;
+                                                localStorage.setItem(uKey, "0");
+                                                window.dispatchEvent(new CustomEvent("chat:unread-count-updated", { detail: { chatId: id, role: "coach", count: 0 } }));
+                                              }
+                                              setUnreadBump((n) => n + 1);
+                                            } catch {}
+                                          }}
+                                        >
+                                          <div className="h-11 w-11 rounded-full bg-teal-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
+                                            {(c.targetName || c.targetCode).slice(0, 1).toUpperCase()}
+                                          </div>
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-baseline justify-between gap-2">
+                                              <div className="text-sm font-medium truncate text-slate-900">{c.targetName}</div>
+                                              <div className="text-xs text-slate-500 flex-shrink-0">{formatTime(c.lastAt)}</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className={`text-xs truncate flex-1 ${c.hasUnread || count > 0 ? "text-slate-900 font-medium" : "text-slate-500"}`}>{c.lastText || "Conversación"}</div>
+                                              {(c.hasUnread || count > 0) && (
+                                                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-teal-500 text-white text-xs font-semibold flex-shrink-0">{count > 0 ? count : "•"}</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </AccordionContent>
+                          </AccordionItem>
+
+                          <AccordionItem value="students">
+                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">Chats con alumnos</AccordionTrigger>
+                            <AccordionContent className="pt-1">
+                              {chatsLoading && filteredChatsByStudent.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">Cargando…</div>
+                              ) : filteredChatsByStudent.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">Sin chats con alumnos</div>
+                              ) : (
+                                <ul className="divide-y divide-slate-100">
+                                  {filteredChatsByStudent.map((c) => {
+                                    const count = (Array.isArray(c.chats) ? c.chats : []).reduce((acc: number, it: any) => {
+                                      const id = it?.id_chat ?? it?.id;
+                                      if (id == null) return acc;
+                                      return acc + getUnreadCountByChatId(id);
+                                    }, 0);
+                                    const isActive = targetStudentCode?.toLowerCase() === c.targetCode.toLowerCase();
+                                    const highlight = (c.hasUnread || count > 0) && !isActive;
+                                    return (
+                                      <li key={`chat-stu-${c.key}`}>
+                                        <button
+                                          className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${isActive ? "bg-slate-100" : highlight ? "bg-emerald-50" : ""}`}
+                                          onClick={() => {
+                                            setTargetTeamCode(null);
+                                            setTargetStudentCode(c.targetCode);
+                                            setTargetStudentName(c.targetName || c.targetCode);
+                                            setChatInfo({ chatId: c.topChatId, myParticipantId: null });
+                                            setCurrentOpenChatId(c.topChatId ?? null);
+                                            const tabKey = `student:${String(c.targetCode)}`;
+                                            setOpenTabs((prev) => {
+                                              const exists = prev.some((p) => p.key === tabKey);
+                                              return exists ? prev : [...prev, { key: tabKey, type: "student", code: String(c.targetCode), name: c.targetName || String(c.targetCode) }];
+                                            });
+                                            setActiveChatTab(tabKey);
+                                            try {
+                                              for (const it of c.chats || []) {
+                                                const id = it?.id_chat ?? it?.id;
+                                                if (id == null) continue;
+                                                const uKey = `chatUnreadById:coach:${String(id)}`;
+                                                localStorage.setItem(uKey, "0");
+                                                window.dispatchEvent(new CustomEvent("chat:unread-count-updated", { detail: { chatId: id, role: "coach", count: 0 } }));
+                                              }
+                                              setUnreadBump((n) => n + 1);
+                                            } catch {}
+                                          }}
+                                        >
+                                          <div className="h-11 w-11 rounded-full bg-emerald-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
+                                            {(c.targetName || c.targetCode).slice(0, 1).toUpperCase()}
+                                          </div>
+                                          <div className="min-w-0 flex-1">
+                                            <div className="flex items-baseline justify-between gap-2">
+                                              <div className="text-sm font-medium truncate text-slate-900">{c.targetName}</div>
+                                              <div className="text-xs text-slate-500 flex-shrink-0">{formatTime(c.lastAt)}</div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <div className={`text-xs truncate flex-1 ${c.hasUnread || count > 0 ? "text-slate-900 font-medium" : "text-slate-500"}`}>{c.lastText || "Conversación"}</div>
+                                              {(c.hasUnread || count > 0) && (
+                                                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-white text-xs font-semibold flex-shrink-0">{count > 0 ? count : "•"}</span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </button>
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                              )}
+                            </AccordionContent>
+                          </AccordionItem>
+
+                          <AccordionItem value="contacts">
+                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">Contactos</AccordionTrigger>
+                            <AccordionContent className="pt-1">
+                              {chatsLoading && contactsWithoutChat.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">Cargando…</div>
+                              ) : contactsWithoutChat.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">Sin contactos disponibles</div>
+                              ) : (
+                                <ul className="divide-y divide-slate-100">
+                                  {contactsWithoutChat.map((t: CoachMini) => (
+                                    <li key={`noc-${t.codigo}`}>
+                                      <button
+                                        className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${targetTeamCode === t.codigo ? "bg-slate-100" : ""}`}
+                                        onClick={() => {
+                                          setTargetStudentCode(null);
+                                          setTargetStudentName("");
+                                          setTargetTeamCode(t.codigo);
+                                          setChatInfo({ chatId: null, myParticipantId: null });
+                                          setChatsLoading(true);
+                                          setRequestListSignal((n) => n + 1);
+                                          setDecisionStamp(null);
+                                          const key = `team:${String(t.codigo)}`;
+                                          setOpenTabs((prev) => {
+                                            const exists = prev.some((p) => p.key === key);
+                                            return exists ? prev : [...prev, { key, type: "team", code: String(t.codigo), name: t.nombre || String(t.codigo) }];
+                                          });
+                                          setActiveChatTab(key);
+                                        }}
+                                      >
+                                        <div className="h-11 w-11 rounded-full bg-teal-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
+                                          {(t.nombre || t.codigo).slice(0, 1).toUpperCase()}
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="text-sm font-medium truncate text-slate-900">{t.nombre}</div>
+                                        </div>
+                                      </button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      </div>
+
+                      {/* Sección: Alumnos asignados */}
+                      <div className="px-3 py-2 mt-2 text-[11px] font-semibold text-slate-600 bg-slate-50 border-t">
+                        ALUMNOS
+                      </div>
+                      <div className="p-3 border-t bg-white flex items-center gap-2">
+                        <input
+                          value={studentQuery}
+                          onChange={(e) => setStudentQuery(e.target.value)}
+                          placeholder="Buscar alumno por nombre o código"
+                          className="w-full h-8 px-2 text-xs bg-white border border-slate-300 rounded-md focus:outline-none"
+                        />
+                      </div>
+                      <div className="flex-1 overflow-y-auto min-h-0">
+                        {studentsLoading && filteredStudents.length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-slate-500">
+                            Cargando alumnos…
+                          </div>
+                        ) : filteredStudents.length === 0 ? (
+                          <div className="px-4 py-3 text-sm text-slate-500">
+                            Sin alumnos asignados
+                          </div>
+                        ) : (
+                          <ul className="divide-y divide-slate-100">
+                            {filteredStudents.map((s) => {
+                              // Calcular unread sum para este alumno
+                              const list = Array.isArray(chatList)
+                                ? chatList
+                                : [];
+                              const matches = list.filter((it) =>
+                                chatHasClienteEquipoPair(
+                                  it,
+                                  String(s.code),
+                                  String(code)
+                                )
+                              );
+                              const totalUnread = matches.reduce(
+                                (acc: number, it: any) => {
+                                  const id = it?.id_chat ?? it?.id;
+                                  if (id == null) return acc;
+                                  const key = `chatUnreadById:coach:${String(
+                                    id
+                                  )}`;
+                                  const raw = localStorage.getItem(key) || "0";
+                                  const n = Number.parseInt(raw, 10);
+                                  return acc + (isNaN(n) ? 0 : n);
+                                },
+                                0
+                              );
+                              const isActive =
+                                targetStudentCode?.toLowerCase() ===
+                                s.code.toLowerCase();
+                              return (
+                                <li key={`stu-${s.code}`}>
+                                  <button
+                                    className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${
+                                      isActive
+                                        ? "bg-slate-100"
+                                        : totalUnread > 0
+                                        ? "bg-emerald-50"
+                                        : ""
+                                    }`}
+                                    onClick={() => {
+                                      setTargetTeamCode(null);
+                                      setTargetStudentCode(s.code);
+                                      setTargetStudentName(s.name || s.code);
+                                      const existing =
+                                        pickExistingChatIdForStudent(s.code);
+                                      setChatInfo({
+                                        chatId: existing,
+                                        myParticipantId: null,
+                                      });
+                                      setCurrentOpenChatId(existing ?? null);
+                                      // Resetear contadores persistentes
+                                      try {
+                                        for (const it of matches) {
+                                          const id = it?.id_chat ?? it?.id;
+                                          if (id == null) continue;
+                                          const k = `chatUnreadById:coach:${String(
+                                            id
+                                          )}`;
+                                          localStorage.setItem(k, "0");
+                                          window.dispatchEvent(
+                                            new CustomEvent(
+                                              "chat:unread-count-updated",
+                                              {
+                                                detail: {
+                                                  chatId: id,
+                                                  role: "coach",
+                                                  count: 0,
+                                                },
+                                              }
+                                            )
+                                          );
+                                        }
+                                        setUnreadBump((n) => n + 1);
+                                      } catch {}
+                                      setChatsLoading(true);
+                                      setRequestListSignal((n) => n + 1);
+                                    }}
+                                  >
+                                    <div className="h-11 w-11 rounded-full bg-emerald-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
+                                      {(s.name || s.code)
+                                        .slice(0, 1)
+                                        .toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-baseline justify-between gap-2">
+                                        <div className="text-sm font-medium truncate text-slate-900">
+                                          {s.name || s.code}
+                                        </div>
+                                        {totalUnread > 0 && (
+                                          <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-white text-xs font-semibold flex-shrink-0">
+                                            {totalUnread > 99
+                                              ? "99+"
+                                              : totalUnread}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-xs text-slate-500 truncate"></div>
+                                    </div>
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-span-9 h-full overflow-hidden flex flex-col min-h-0">
+                    {/* Pestañas de contactos/alumnos abiertos */}
+                    {openTabs.length > 0 && (
+                      <div className="px-2 py-2 bg-slate-50 border border-slate-200 rounded-md mb-2 overflow-x-auto whitespace-nowrap">
+                        {openTabs.map((t) => {
+                          const active = activeChatTab === t.key;
+                          return (
+                            <button
+                              key={t.key}
+                              className={`inline-flex items-center h-8 px-2 mr-2 rounded-md border text-xs transition ${
+                                active
+                                  ? "bg-white text-slate-900 border-teal-500 shadow-sm"
+                                  : "bg-slate-100 text-slate-700 border-transparent hover:bg-slate-200"
+                              }`}
+                              onClick={() => setActiveChatTab(t.key)}
+                              title={t.name}
+                            >
+                              <span className="max-w-[180px] truncate">{t.name}</span>
+                              <span
+                                role="button"
+                                className={`ml-1 inline-flex items-center justify-center w-5 h-5 rounded ${
+                                  active ? "hover:bg-slate-100" : "hover:bg-slate-300"
+                                }`}
+                                title="Cerrar"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenTabs((prev) => {
+                                    const rest = prev.filter((p) => p.key !== t.key);
+                                    // Reasignar activa si cerramos la actual
+                                    if (active) {
+                                      if (rest.length > 0) setActiveChatTab(rest[rest.length - 1].key);
+                                      else {
+                                        setActiveChatTab(null);
+                                        setTargetTeamCode(null);
+                                        setTargetStudentCode(null);
+                                        setTargetStudentName("");
+                                        setChatInfo({ chatId: null, myParticipantId: null });
+                                        setCurrentOpenChatId(null);
+                                      }
+                                    }
+                                    return rest;
+                                  });
+                                }}
+                              >
+                                ×
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <CoachChatInline
+                      key={`chat-${code}-${
+                        targetTeamCode ?? targetStudentCode ?? "inbox"
+                      }`}
+                      room={`${code}:equipo:${
+                        targetTeamCode ?? targetStudentCode ?? "inbox"
+                      }`}
+                      role="coach"
+                      title={
+                        coach?.nombre
+                          ? `Equipo: ${coach?.nombre}`
+                          : `Equipo ${code}`
+                      }
+                      subtitle={
+                        targetTeamCode
+                          ? `con ${targetTeamName}`
+                          : targetStudentCode
+                          ? `con ${targetStudentName || targetStudentCode}`
+                          : undefined
+                      }
+                      variant="card"
+                      className="h-full"
+                      precreateOnParticipants
+                      socketio={{
+                        url: "https://v001.onrender.com",
+                        idEquipo: String(code),
+                        participants: targetTeamCode
+                          ? [
+                              {
+                                participante_tipo: "equipo",
+                                id_equipo: String(code),
+                              },
+                              {
+                                participante_tipo: "equipo",
+                                id_equipo: String(targetTeamCode),
+                              },
+                            ]
+                          : targetStudentCode
+                          ? [
+                              {
+                                participante_tipo: "equipo",
+                                id_equipo: String(code),
+                              },
+                              {
+                                participante_tipo: "cliente",
+                                id_cliente: String(targetStudentCode),
+                              },
+                            ]
+                          : undefined,
+                        autoCreate: true,
+                        autoJoin: chatInfo.chatId != null,
+                        chatId: chatInfo.chatId ?? undefined,
+                      }}
+                      resolveName={(tipo, id) => {
+                        const key = String(id || "");
+                        if (tipo === "equipo") {
+                          const t = teamsList.find(
+                            (x) =>
+                              (x.codigo || "").toLowerCase() ===
+                              key.toLowerCase()
+                          );
+                          return t?.nombre || key;
+                        }
+                        if (tipo === "cliente") {
+                          const s = studentsList.find(
+                            (x) =>
+                              (x.code || "").toLowerCase() === key.toLowerCase()
+                          );
+                          return s?.name || key;
+                        }
+                        return key;
+                      }}
+                      onConnectionChange={setChatConnected}
+                      onChatInfo={(info) => {
+                        setChatInfo(info);
+                        setChatsLoading(false);
+                        setCurrentOpenChatId(info?.chatId ?? null);
+                        if (!chatInfo.chatId && info.chatId) {
+                          setChatsLoading(true);
+                          setRequestListSignal((n) => n + 1);
+                        }
+                        try {
+                          const parts = Array.isArray(info.participants)
+                            ? info.participants
+                            : [];
+                          if (targetTeamCode) {
+                            const setEq = new Set<string>();
+                            for (const p of parts) {
+                              const tipo = String(
+                                p?.participante_tipo || ""
+                              ).toLowerCase();
+                              if (tipo === "equipo" && p?.id_equipo)
+                                setEq.add(String(p.id_equipo).toLowerCase());
+                            }
+                            const hasPair =
+                              info.chatId != null &&
+                              setEq.has(String(code).toLowerCase()) &&
+                              setEq.has(String(targetTeamCode).toLowerCase());
+                            if (
+                              hasPair &&
+                              decisionStamp !== `exist:${targetTeamCode}`
+                            ) {
+                              setDecisionStamp(`exist:${targetTeamCode}`);
+                            }
+                          } else if (targetStudentCode) {
+                            let okCli = false;
+                            let okEq = false;
+                            for (const p of parts) {
+                              const tipo = String(
+                                p?.participante_tipo || ""
+                              ).toLowerCase();
+                              if (tipo === "cliente" && p?.id_cliente) {
+                                if (
+                                  String(p.id_cliente).toLowerCase() ===
+                                  String(targetStudentCode).toLowerCase()
+                                )
+                                  okCli = true;
+                              }
+                              if (tipo === "equipo" && p?.id_equipo) {
+                                if (
+                                  String(p.id_equipo).toLowerCase() ===
+                                  String(code).toLowerCase()
+                                )
+                                  okEq = true;
+                              }
+                            }
+                            const hasPair =
+                              info.chatId != null && okCli && okEq;
+                            if (
+                              hasPair &&
+                              decisionStamp !== `exist-stu:${targetStudentCode}`
+                            ) {
+                              setDecisionStamp(
+                                `exist-stu:${targetStudentCode}`
+                              );
+                            }
+                          }
+                        } catch {}
+                      }}
+                      requestListSignal={requestListSignal}
+                      listParams={{
+                        participante_tipo: "equipo",
+                        id_equipo: String(code),
+                        include_participants: true,
+                        with_participants: true,
+                      }}
+                      onChatsList={(list) => {
+                        try {
+                          console.log("[CoachDetailPage] listParams =>", {
+                            participante_tipo: "equipo",
+                            id_equipo: String(code),
+                            include_participants: true,
+                            with_participants: true,
+                          });
+                          const sample =
+                            Array.isArray(list) && list.length > 0
+                              ? list[0]
+                              : null;
+                          console.log("[CoachDetailPage] onChatsList", {
+                            count: Array.isArray(list) ? list.length : 0,
+                            sample: sample
+                              ? {
+                                  id: sample?.id_chat ?? sample?.id ?? null,
+                                  last_message_at:
+                                    sample?.last_message_at ||
+                                    sample?.fecha_ultimo_mensaje ||
+                                    sample?.updated_at ||
+                                    sample?.fecha_actualizacion ||
+                                    sample?.created_at ||
+                                    sample?.fecha_creacion ||
+                                    null,
+                                  participants: Array.isArray(
+                                    sample?.participants ||
+                                      sample?.participantes
+                                  )
+                                    ? (
+                                        sample?.participants ||
+                                        sample?.participantes
+                                      ).length
+                                    : 0,
+                                }
+                              : null,
+                          });
+                          // Listar todas las conversaciones creadas (en español)
+                          const toLine = (it: any) => {
+                            const id = it?.id_chat ?? it?.id ?? null;
+                            const parts =
+                              it?.participants || it?.participantes || [];
+                            const equipos = (Array.isArray(parts) ? parts : [])
+                              .filter(
+                                (p: any) =>
+                                  String(
+                                    p?.participante_tipo || ""
+                                  ).toLowerCase() === "equipo"
+                              )
+                              .map((p: any) => {
+                                const codeEq = String(p?.id_equipo ?? "");
+                                const t = teamsList.find(
+                                  (x) =>
+                                    (x.codigo || "").toLowerCase() ===
+                                    codeEq.toLowerCase()
+                                );
+                                return t?.nombre || codeEq;
+                              })
+                              .filter(Boolean);
+                            const clientes = (Array.isArray(parts) ? parts : [])
+                              .filter(
+                                (p: any) =>
+                                  String(
+                                    p?.participante_tipo || ""
+                                  ).toLowerCase() === "cliente"
+                              )
+                              .map((p: any) => {
+                                const codeSt = String(p?.id_cliente ?? "");
+                                const s = studentsList.find(
+                                  (x) =>
+                                    (x.code || "").toLowerCase() ===
+                                    codeSt.toLowerCase()
+                                );
+                                return s?.name || codeSt;
+                              })
+                              .filter(Boolean);
+                            return `id=${id} | equipos=[${equipos.join(
+                              ", "
+                            )}] | clientes=[${clientes.join(", ")}]`;
+                          };
+                          console.log(
+                            "[CoachDetailPage] comversaciones del usuario — equipo:",
+                            String(code),
+                            "(total:",
+                            Array.isArray(list) ? list.length : 0,
+                            ")"
+                          );
+                          (Array.isArray(list) ? list : []).forEach((it: any) =>
+                            console.log(" -", toLine(it))
+                          );
+                        } catch {}
+                        setChatList(list);
+                        setChatsLoading(false);
+                        try {
+                          if (targetTeamCode) {
+                            const existing =
+                              pickExistingChatIdForTarget(targetTeamCode);
+                            if (existing != null) {
+                              if (decisionStamp !== `exist:${targetTeamCode}`) {
+                                setDecisionStamp(`exist:${targetTeamCode}`);
+                              }
+                              setChatInfo({
+                                chatId: existing,
+                                myParticipantId: null,
+                              });
+                            }
+                          } else if (targetStudentCode) {
+                            const existingStu =
+                              pickExistingChatIdForStudent(targetStudentCode);
+                            if (existingStu != null) {
+                              if (
+                                decisionStamp !==
+                                `exist-stu:${targetStudentCode}`
+                              ) {
+                                setDecisionStamp(
+                                  `exist-stu:${targetStudentCode}`
+                                );
+                              }
+                              setChatInfo({
+                                chatId: existingStu,
+                                myParticipantId: null,
+                              });
+                            }
+                          }
+                        } catch {}
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-      <CoachStudentsModal
-        open={open}
-        onOpenChange={setOpen}
-        coachCode={code}
-        coachName={coach?.nombre ?? null}
-      />
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar coach</DialogTitle>
-          </DialogHeader>
+            </TabsContent>
 
-          <div className="grid gap-3 py-2">
-            <div>
-              <Label className="text-xs">Nombre</Label>
-              <Input
-                value={draftNombre}
-                onChange={(e) => setDraftNombre(e.target.value)}
-              />
-            </div>
+            <TabsContent value="alumnos" className="mt-0">
+              {/* Detalles: ocupar pantalla completa con scroll interno */}
+              <div className="h-[calc(100vh-180px)] overflow-auto">
+                <div className="p-4 bg-white border rounded-lg">
+                  {loading ? (
+                    <div>Cargando...</div>
+                  ) : error ? (
+                    <div className="text-sm text-red-600">{error}</div>
+                  ) : coach ? (
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-sm font-medium mb-2">Alumnos</h3>
+                        <CoachStudentsInline coachCode={code} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-neutral-500">
+                      No se encontró información del coach.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
 
-            <div>
-              <Label className="text-xs">Puesto</Label>
-              <select
-                className="w-full h-9 rounded-md border px-3 text-sm"
-                value={draftPuesto ?? ""}
-                onChange={(e) => setDraftPuesto(e.target.value)}
-                disabled={optsLoading}
-              >
-                <option value="">-- Ninguno --</option>
-                {puestoOptionsApi.map((o) => (
-                  <option key={o.opcion_key} value={o.opcion_key}>
-                    {o.opcion_value}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <TabsContent value="sesiones" className="mt-0">
+              <div className="h-[calc(100vh-180px)] overflow-auto">
+                <div className="p-4 bg-white border rounded-lg">
+                  {loading ? (
+                    <div>Cargando...</div>
+                  ) : error ? (
+                    <div className="text-sm text-red-600">{error}</div>
+                  ) : (
+                    <SessionsPanel coachCode={code} />
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+        <CoachStudentsModal
+          open={open}
+          onOpenChange={setOpen}
+          coachCode={code}
+          coachName={coach?.nombre ?? null}
+        />
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar coach</DialogTitle>
+            </DialogHeader>
 
-            <div>
-              <Label className="text-xs">Área</Label>
-              <select
-                className="w-full h-9 rounded-md border px-3 text-sm"
-                value={draftArea ?? ""}
-                onChange={(e) => setDraftArea(e.target.value)}
-                disabled={optsLoading}
-              >
-                <option value="">-- Ninguno --</option>
-                {areaOptionsApi.map((o) => (
-                  <option key={o.opcion_key} value={o.opcion_key}>
-                    {o.opcion_value}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => setEditOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                disabled={saving}
-                onClick={async () => {
-                  try {
-                    setSaving(true);
-                    await updateCoach(coach!.codigo, {
-                      nombre: draftNombre || undefined,
-                      puesto: draftPuesto ?? undefined,
-                      area: draftArea ?? undefined,
-                    });
-                    toast({ title: "Coach actualizado" });
-                    const c = await getCoachByCode(code);
-                    setCoach(c);
-                    setEditOpen(false);
-                  } catch (err: any) {
-                    toast({
-                      title: err?.message ?? "Error al actualizar coach",
-                    });
-                  } finally {
-                    setSaving(false);
-                  }
-                }}
-              >
-                Guardar
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar eliminación</DialogTitle>
-          </DialogHeader>
-          <div className="py-2">
-            <p className="text-sm text-neutral-700">
-              Vas a eliminar el coach <strong>{coach?.nombre ?? code}</strong>.
-              Revisa los datos:
-            </p>
-            <div className="mt-3 text-sm">
+            <div className="grid gap-3 py-2">
               <div>
-                Área: <strong>{coach?.area ?? "—"}</strong>
+                <Label className="text-xs">Nombre</Label>
+                <Input
+                  value={draftNombre}
+                  onChange={(e) => setDraftNombre(e.target.value)}
+                />
               </div>
+
               <div>
-                Puesto: <strong>{coach?.puesto ?? "—"}</strong>
+                <Label className="text-xs">Puesto</Label>
+                <select
+                  className="w-full h-9 rounded-md border px-3 text-sm"
+                  value={draftPuesto ?? ""}
+                  onChange={(e) => setDraftPuesto(e.target.value)}
+                  disabled={optsLoading}
+                >
+                  <option value="">-- Ninguno --</option>
+                  {puestoOptionsApi.map((o) => (
+                    <option key={o.opcion_key} value={o.opcion_key}>
+                      {o.opcion_value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <Label className="text-xs">Área</Label>
+                <select
+                  className="w-full h-9 rounded-md border px-3 text-sm"
+                  value={draftArea ?? ""}
+                  onChange={(e) => setDraftArea(e.target.value)}
+                  disabled={optsLoading}
+                >
+                  <option value="">-- Ninguno --</option>
+                  {areaOptionsApi.map((o) => (
+                    <option key={o.opcion_key} value={o.opcion_key}>
+                      {o.opcion_value}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
-          </div>
-          <DialogFooter>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={async () => {
-                  try {
-                    await deleteCoach(coach!.codigo);
-                    toast({ title: "Coach eliminado" });
-                    setDeleteOpen(false);
-                    router.push("/admin/teamsv2");
-                  } catch (err: any) {
-                    toast({ title: err?.message ?? "Error al eliminar coach" });
-                  }
-                }}
-              >
-                Eliminar
-              </Button>
+
+            <DialogFooter>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" onClick={() => setEditOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={async () => {
+                    try {
+                      setSaving(true);
+                      await updateCoach(coach!.codigo, {
+                        nombre: draftNombre || undefined,
+                        puesto: draftPuesto ?? undefined,
+                        area: draftArea ?? undefined,
+                      });
+                      toast({ title: "Coach actualizado" });
+                      const c = await getCoachByCode(code);
+                      setCoach(c);
+                      setEditOpen(false);
+                    } catch (err: any) {
+                      toast({
+                        title: err?.message ?? "Error al actualizar coach",
+                      });
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  Guardar
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Confirmar eliminación</DialogTitle>
+            </DialogHeader>
+            <div className="py-2">
+              <p className="text-sm text-neutral-700">
+                Vas a eliminar el coach <strong>{coach?.nombre ?? code}</strong>
+                . Revisa los datos:
+              </p>
+              <div className="mt-3 text-sm">
+                <div>
+                  Área: <strong>{coach?.area ?? "—"}</strong>
+                </div>
+                <div>
+                  Puesto: <strong>{coach?.puesto ?? "—"}</strong>
+                </div>
+              </div>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </DashboardLayout>
+            <DialogFooter>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={async () => {
+                    try {
+                      await deleteCoach(coach!.codigo);
+                      toast({ title: "Coach eliminado" });
+                      setDeleteOpen(false);
+                      router.push("/admin/teamsv2");
+                    } catch (err: any) {
+                      toast({
+                        title: err?.message ?? "Error al eliminar coach",
+                      });
+                    }
+                  }}
+                >
+                  Eliminar
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }
 

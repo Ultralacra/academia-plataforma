@@ -22,12 +22,14 @@ export default function CoachesCard({
   onChangeMember = () => {},
   onAssign = () => {},
   onRemove = () => {},
+  canManage = true,
 }: {
   coaches?: Coach[];
   peopleIndex?: Person[];
   onChangeMember?: (idx: number, next: any) => void;
   onAssign?: (codes: string[]) => void;
   onRemove?: (coachId: string | number | null) => void;
+  canManage?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState<number | null>(null);
@@ -46,32 +48,36 @@ export default function CoachesCard({
           <Users className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Equipo asignado</h3>
         </div>
-        <div>
-          <button
-            onClick={() => {
-              setCurrentIndex(null);
-              setOpen(true);
-            }}
-            className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-          >
-            Asignar coach
-          </button>
-        </div>
+        {canManage && (
+          <div>
+            <button
+              onClick={() => {
+                setCurrentIndex(null);
+                setOpen(true);
+              }}
+              className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+            >
+              Asignar coach
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="space-y-2 p-3">
         {list.length === 0 && (
           <div className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
             <div>Sin coach</div>
-            <button
-              onClick={() => {
-                setCurrentIndex(0);
-                setOpen(true);
-              }}
-              className="ml-3 inline-flex items-center rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
-            >
-              Asignar coach
-            </button>
+            {canManage && (
+              <button
+                onClick={() => {
+                  setCurrentIndex(0);
+                  setOpen(true);
+                }}
+                className="ml-3 inline-flex items-center rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+              >
+                Asignar coach
+              </button>
+            )}
           </div>
         )}
         {list.map((c, idx) => (
@@ -126,81 +132,84 @@ export default function CoachesCard({
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setCurrentIndex(idx);
-                  setOpen(true);
-                }}
-                className="flex-none rounded-md border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted active:scale-[0.98]"
-              >
-                Cambiar
-              </button>
-              <button
-                onClick={() => {
-                  const coachId = (c as any).coachId ?? (c as any).id ?? null;
-                  setConfirmTarget({ id: coachId, name: c.name });
-                  setConfirmOpen(true);
-                }}
-                className="flex-none rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
-              >
-                Desvincular
-              </button>
-            </div>
+            {canManage && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setCurrentIndex(idx);
+                    setOpen(true);
+                  }}
+                  className="flex-none rounded-md border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted active:scale-[0.98]"
+                >
+                  Cambiar
+                </button>
+                <button
+                  onClick={() => {
+                    const coachId = (c as any).coachId ?? (c as any).id ?? null;
+                    setConfirmTarget({ id: coachId, name: c.name });
+                    setConfirmOpen(true);
+                  }}
+                  className="flex-none rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                >
+                  Desvincular
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      <Dialog open={confirmOpen} onOpenChange={(v) => setConfirmOpen(v)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirmar desvinculación</DialogTitle>
-            <DialogDescription>
-              ¿Seguro que quieres desvincular a {confirmTarget?.name} del
-              alumno? Esta acción no se puede deshacer.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              className="rounded-md border px-3 py-1.5 text-sm"
-              onClick={() => setConfirmOpen(false)}
-            >
-              Cancelar
-            </button>
-            <button
-              className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white"
-              onClick={() => {
-                setConfirmOpen(false);
-                if (confirmTarget) onRemove(confirmTarget.id);
-                setConfirmTarget(null);
-              }}
-            >
-              Desvincular
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {canManage && (
+        <Dialog open={confirmOpen} onOpenChange={(v) => setConfirmOpen(v)}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Confirmar desvinculación</DialogTitle>
+              <DialogDescription>
+                ¿Seguro que quieres desvincular a {confirmTarget?.name} del
+                alumno? Esta acción no se puede deshacer.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                className="rounded-md border px-3 py-1.5 text-sm"
+                onClick={() => setConfirmOpen(false)}
+              >
+                Cancelar
+              </button>
+              <button
+                className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  if (confirmTarget) onRemove(confirmTarget.id);
+                  setConfirmTarget(null);
+                }}
+              >
+                Desvincular
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
 
-      <CoachPickerModal
-        open={open}
-        onOpenChange={setOpen}
-        onPick={(p: CoachCandidate) => {
-          // Para compatibilidad: si se soporta selección rápida, aplicar cambio directo
-          if (currentIndex != null) onChangeMember(currentIndex, p);
-        }}
-        onConfirm={(selected) => {
-          // Si venimos de "Cambiar", aplicamos la lógica de reemplazo (desvincular -> asignar)
-          if (currentIndex != null) {
-            const first =
-              selected && selected.length > 0 ? selected[0] : undefined;
-            if (first) onChangeMember(currentIndex, first);
-          } else {
-            // Asignación múltiple cuando no hay índice actual (no hay coach o botón Asignar)
-            const codes = selected.map((s) => s.teamCode).filter(Boolean);
-            onAssign(codes as string[]);
-          }
-        }}
-      />
+      {canManage && (
+        <CoachPickerModal
+          open={open}
+          onOpenChange={setOpen}
+          onPick={(p: CoachCandidate) => {
+            if (currentIndex != null) onChangeMember(currentIndex, p);
+          }}
+          onConfirm={(selected) => {
+            if (currentIndex != null) {
+              const first =
+                selected && selected.length > 0 ? selected[0] : undefined;
+              if (first) onChangeMember(currentIndex, first);
+            } else {
+              const codes = selected.map((s) => s.teamCode).filter(Boolean);
+              onAssign(codes as string[]);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ export default function StudentDetailPage() {
   const code = decodeURIComponent(params?.code ?? "");
 
   return (
-    <ProtectedRoute allowedRoles={["admin", "coach", "student"]}>
+    <ProtectedRoute allowedRoles={["admin", "coach", "student", "equipo"]}>
       <DashboardLayout>
         <StudentDetailContent code={code} />
       </DashboardLayout>

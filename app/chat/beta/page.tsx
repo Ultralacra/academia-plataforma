@@ -1021,6 +1021,7 @@ export default function AdminChatPage() {
             </div>
 
             <div className="flex-1 bg-[#efeae2] relative flex flex-col min-h-0 overflow-hidden">
+              {/* Vista global: listar TODAS las conversaciones sin filtrar por equipo del admin */}
               <CoachChatInline
                 room={room}
                 role="coach"
@@ -1031,7 +1032,7 @@ export default function AdminChatPage() {
                 precreateOnParticipants
                 socketio={{
                   url: SOCKET_URL || undefined,
-                  idEquipo: String(ADMIN_COACH_ID),
+                  // No pasamos idEquipo para evitar filtrado; participantes solo cuando se inicia uno nuevo manualmente.
                   participants: participants,
                   autoCreate: true,
                   autoJoin: !!selectedChatId,
@@ -1039,10 +1040,8 @@ export default function AdminChatPage() {
                 }}
                 onConnectionChange={setConnected}
                 requestListSignal={listSignal}
-                listParams={{
-                  participante_tipo: "equipo",
-                  id_equipo: String(ADMIN_COACH_ID),
-                }}
+                // listParams vacío => el backend debe retornar todas las conversaciones accesibles (global admin view)
+                listParams={{}}
                 onChatsList={(list) =>
                   setAdminChats(Array.isArray(list) ? list : [])
                 }

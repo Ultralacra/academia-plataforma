@@ -6,7 +6,7 @@ import TicketsContent from "./components/tickets-content";
 
 export default function TicketsPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <TicketsContent />
       </DashboardLayout>

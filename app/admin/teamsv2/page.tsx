@@ -125,6 +125,8 @@ function toCsv(rows: TeamWithCounts[]) {
 /* =======================
    Page
 ======================= */
+import { ProtectedRoute } from "@/components/auth/protected-route";
+
 export default function TeamsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -337,455 +339,462 @@ export default function TeamsPage() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 grid place-items-center rounded-lg bg-neutral-100">
-            <Users className="h-5 w-5 text-neutral-700" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Equipo</h1>
-            <p className="text-xs text-neutral-500">Coachs, soporte y áreas</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setCreateOpen(true)}
-          >
-            Nuevo coach
-          </Button>
-          <Button variant="outline" size="sm" onClick={fetchData}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refrescar
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportCsv}>
-            <Download className="mr-2 h-4 w-4" />
-            CSV
-          </Button>
-        </div>
-      </div>
-
-      <Separator className="my-3" />
-
-      {/* Filtros */}
-      <Card className="border-neutral-200/70">
-        <CardContent className="pt-4">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            {/* Búsqueda */}
-            <div className="relative md:max-w-md w-full">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
-              <Input
-                value={q}
-                onChange={(e) => {
-                  setQ(e.target.value);
-                  setPage(1);
-                }}
-                placeholder="Buscar por nombre o código…"
-                className="pl-8"
-              />
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+      <DashboardLayout>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 grid place-items-center rounded-lg bg-neutral-100">
+              <Users className="h-5 w-5 text-neutral-700" />
             </div>
+            <div>
+              <h1 className="text-lg font-semibold tracking-tight">Equipo</h1>
+              <p className="text-xs text-neutral-500">
+                Coachs, soporte y áreas
+              </p>
+            </div>
+          </div>
 
-            <div className="flex items-center gap-2 flex-1 flex-wrap">
-              {/* Select Puesto (sin value="") */}
-              <Select
-                value={puestoSelectValue}
-                onValueChange={(val) => {
-                  setPuesto(val === ALL_PUESTO ? "" : val);
-                  setPage(1);
-                }}
-                disabled={optLoading}
-              >
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="Filtrar por puesto" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_PUESTO}>Todos los puestos</SelectItem>
-                  {puestoOptions.map((p) => (
-                    <SelectItem key={p} value={p}>
-                      {p}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCreateOpen(true)}
+            >
+              Nuevo coach
+            </Button>
+            <Button variant="outline" size="sm" onClick={fetchData}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refrescar
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportCsv}>
+              <Download className="mr-2 h-4 w-4" />
+              CSV
+            </Button>
+          </div>
+        </div>
+
+        <Separator className="my-3" />
+
+        {/* Filtros */}
+        <Card className="border-neutral-200/70">
+          <CardContent className="pt-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              {/* Búsqueda */}
+              <div className="relative md:max-w-md w-full">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
+                <Input
+                  value={q}
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Buscar por nombre o código…"
+                  className="pl-8"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-1 flex-wrap">
+                {/* Select Puesto (sin value="") */}
+                <Select
+                  value={puestoSelectValue}
+                  onValueChange={(val) => {
+                    setPuesto(val === ALL_PUESTO ? "" : val);
+                    setPage(1);
+                  }}
+                  disabled={optLoading}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Filtrar por puesto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_PUESTO}>
+                      Todos los puestos
                     </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Select Área (sin value="") */}
-              <Select
-                value={areaSelectValue}
-                onValueChange={(val) => {
-                  setArea(val === ALL_AREA ? "" : val);
-                  setPage(1);
-                }}
-                disabled={optLoading}
-              >
-                <SelectTrigger className="w-[220px]">
-                  <SelectValue placeholder="Filtrar por área" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ALL_AREA}>Todas las áreas</SelectItem>
-                  {areaOptions.map((a) => (
-                    <SelectItem key={a} value={a}>
-                      {a}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
-                Limpiar
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <select
-                className="h-9 rounded-md border px-2 text-sm"
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setPage(1);
-                }}
-              >
-                {[10, 12, 25, 50, 100].map((n) => (
-                  <option key={n} value={n}>
-                    {n}/pág
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Tabla */}
-      <div className="mt-4 rounded-sm border-2 bg-white">
-        <div className="max-h-[60vh] overflow-y-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[40%]">
-                  <button
-                    className="inline-flex items-center gap-1 text-left font-medium"
-                    onClick={() => toggleSort("nombre")}
-                  >
-                    Nombre / Código{" "}
-                    <ArrowUpDown className="h-4 w-4 opacity-60" />
-                  </button>
-                </TableHead>
-                <TableHead className="w-[18%]">
-                  <button
-                    className="inline-flex items-center gap-1 font-medium"
-                    onClick={() => toggleSort("puesto")}
-                  >
-                    Puesto <ArrowUpDown className="h-4 w-4 opacity-60" />
-                  </button>
-                </TableHead>
-                <TableHead className="w-[18%]">
-                  <button
-                    className="inline-flex items-center gap-1 font-medium"
-                    onClick={() => toggleSort("area")}
-                  >
-                    Área <ArrowUpDown className="h-4 w-4 opacity-60" />
-                  </button>
-                </TableHead>
-                <TableHead className="w-[12%]">
-                  <button
-                    className="inline-flex items-center gap-1 font-medium"
-                    onClick={() => toggleSort("nAlumnos")}
-                  >
-                    Alumnos <ArrowUpDown className="h-4 w-4 opacity-60" />
-                  </button>
-                </TableHead>
-                <TableHead className="min-w-[120px]">
-                  <button
-                    className="inline-flex items-center gap-1 font-medium"
-                    onClick={() => toggleSort("created_at")}
-                  >
-                    Creado <ArrowUpDown className="h-4 w-4 opacity-60" />
-                  </button>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-
-            <TableBody>
-              {loading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={`sk-${i}`}>
-                    <TableCell colSpan={5}>
-                      <div className="h-6 animate-pulse rounded bg-neutral-100" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : error ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-sm text-red-600">
-                    {error}
-                  </TableCell>
-                </TableRow>
-              ) : filteredSorted.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-sm text-neutral-500">
-                    Sin resultados.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredSorted.map((t) => (
-                  <TableRow key={t.id} className="hover:bg-neutral-50/60">
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 grid place-items-center rounded-md bg-neutral-100">
-                          <Users className="h-4 w-4 text-neutral-700" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="truncate font-medium text-neutral-900">
-                            <Link
-                              href={`/admin/teamsv2/${encodeURIComponent(
-                                String(t.codigo ?? "")
-                              )}`}
-                              className="hover:underline"
-                            >
-                              {t.nombre || "—"}
-                            </Link>
-                          </div>
-                          <div className="truncate text-xs text-neutral-500 flex items-center gap-2">
-                            <Link
-                              href={`/admin/teamsv2/${encodeURIComponent(
-                                String(t.codigo ?? "")
-                              )}`}
-                              className="font-mono hover:underline"
-                            >
-                              {t.codigo}
-                            </Link>
-                            <button
-                              type="button"
-                              title="Copiar código"
-                              onClick={async () => {
-                                try {
-                                  await navigator.clipboard.writeText(
-                                    String(t.codigo ?? "")
-                                  );
-                                  toast({ title: "Código copiado" });
-                                } catch {
-                                  toast({ title: "No se pudo copiar" });
-                                }
-                              }}
-                              className="ml-2 inline-flex items-center justify-center p-1 rounded text-neutral-500 hover:text-neutral-700"
-                            >
-                              <Clipboard className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="align-middle">
-                      {t.puesto ? (
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-md ${getPuestoColorClass(
-                            t.puesto
-                          )}`}
-                        >
-                          {t.puesto}
-                        </span>
-                      ) : (
-                        <span className="text-neutral-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="align-middle">
-                      {t.area ? (
-                        <span className="text-sm">{t.area}</span>
-                      ) : (
-                        <span className="text-neutral-400">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="align-middle">
-                      <Badge
-                        variant="secondary"
-                        className="bg-neutral-100 text-neutral-800"
-                      >
-                        {t.nAlumnos ?? 0}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="align-middle text-sm text-neutral-600">
-                      {formatDate(t.created_at)}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-
-      {/* Paginación */}
-      <div className="mt-4 flex items-center justify-between">
-        <p className="text-xs text-neutral-500">
-          Página {page} de {totalPages} — {total} registros
-        </p>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Anterior
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={page >= totalPages || loading}
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          >
-            Siguiente
-          </Button>
-        </div>
-      </div>
-      <CoachStudentsModal
-        open={studentsOpen}
-        onOpenChange={setStudentsOpen}
-        coachCode={currentCoach.code}
-        coachName={currentCoach.name}
-      />
-
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Crear nuevo coach</DialogTitle>
-          </DialogHeader>
-
-          <div className="grid gap-2 py-2">
-            <div>
-              <Label className="text-xs">Nombre</Label>
-              <Input
-                value={createNombre}
-                onChange={(e) => setCreateNombre(e.target.value)}
-                placeholder="Nombre"
-              />
-            </div>
-
-            <div>
-              <Label className="text-xs">Email</Label>
-              <Input
-                type="email"
-                value={createEmail}
-                onChange={(e) => setCreateEmail(e.target.value)}
-                placeholder="user@example.com"
-              />
-            </div>
-
-            <div>
-              <Label className="text-xs">Password</Label>
-              <Input
-                type="password"
-                value={createPassword}
-                onChange={(e) => setCreatePassword(e.target.value)}
-                placeholder="ContraseñaSegura123!"
-              />
-            </div>
-
-            <div>
-              <Label className="text-xs">Puesto</Label>
-              <select
-                className="w-full h-9 rounded-md border px-3 text-sm"
-                value={createPuesto}
-                onChange={(e) => setCreatePuesto(e.target.value)}
-                disabled={optsLoading}
-              >
-                <option value={NONE}>-- Ninguno --</option>
-                {puestoApiOptions.length > 0
-                  ? puestoApiOptions.map((o) => (
-                      <option key={o.opcion_key} value={o.opcion_key}>
-                        {o.opcion_value}
-                      </option>
-                    ))
-                  : puestoOptions.map((p) => (
-                      <option key={p} value={p}>
+                    {puestoOptions.map((p) => (
+                      <SelectItem key={p} value={p}>
                         {p}
-                      </option>
+                      </SelectItem>
                     ))}
-              </select>
-            </div>
+                  </SelectContent>
+                </Select>
 
-            <div>
-              <Label className="text-xs">Área</Label>
-              <select
-                className="w-full h-9 rounded-md border px-3 text-sm"
-                value={createArea}
-                onChange={(e) => setCreateArea(e.target.value)}
-                disabled={optsLoading}
-              >
-                <option value={NONE}>-- Ninguno --</option>
-                {areaApiOptions.length > 0
-                  ? areaApiOptions.map((o) => (
-                      <option key={o.opcion_key} value={o.opcion_key}>
-                        {o.opcion_value}
-                      </option>
-                    ))
-                  : areaOptions.map((a) => (
-                      <option key={a} value={a}>
+                {/* Select Área (sin value="") */}
+                <Select
+                  value={areaSelectValue}
+                  onValueChange={(val) => {
+                    setArea(val === ALL_AREA ? "" : val);
+                    setPage(1);
+                  }}
+                  disabled={optLoading}
+                >
+                  <SelectTrigger className="w-[220px]">
+                    <SelectValue placeholder="Filtrar por área" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ALL_AREA}>Todas las áreas</SelectItem>
+                    {areaOptions.map((a) => (
+                      <SelectItem key={a} value={a}>
                         {a}
-                      </option>
+                      </SelectItem>
                     ))}
-              </select>
-            </div>
-          </div>
+                  </SelectContent>
+                </Select>
 
-          <DialogFooter>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => setCreateOpen(false)}>
-                Cancelar
-              </Button>
-              <Button
-                disabled={creating}
-                onClick={async () => {
-                  if (!createNombre.trim()) {
-                    toast({ title: "El nombre es requerido" });
-                    return;
-                  }
-                  if (!createEmail.trim()) {
-                    toast({ title: "El email es requerido" });
-                    return;
-                  }
-                  if (!createPassword.trim()) {
-                    toast({ title: "La contraseña es requerida" });
-                    return;
-                  }
-                  try {
-                    setCreating(true);
-                    const payload: teamsApi.CreateCoachPayload = {
-                      name: createNombre.trim(),
-                      email: createEmail.trim(),
-                      password: createPassword,
-                      role: "manager",
-                      tipo: "equipo",
-                      puesto: createPuesto === NONE ? undefined : createPuesto,
-                      area: createArea === NONE ? undefined : createArea,
-                    };
-                    const resp = await teamsApi.createCoach(payload);
-                    toast({ title: "Coach creado correctamente" });
-                    setCreateOpen(false);
-                    setCreateNombre("");
-                    setCreateEmail("");
-                    setCreatePassword("");
-                    setCreatePuesto(NONE);
-                    setCreateArea(NONE);
-                    await fetchData();
-                  } catch (err: any) {
-                    toast({
-                      title: getSpanishApiError(err, "Error al crear coach"),
-                    });
-                  } finally {
-                    setCreating(false);
-                  }
-                }}
-              >
-                Crear
-              </Button>
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                  Limpiar
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  className="h-9 rounded-md border px-2 text-sm"
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                >
+                  {[10, 12, 25, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}/pág
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </DashboardLayout>
+          </CardContent>
+        </Card>
+
+        {/* Tabla */}
+        <div className="mt-4 rounded-sm border-2 bg-white">
+          <div className="max-h-[60vh] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="w-[40%]">
+                    <button
+                      className="inline-flex items-center gap-1 text-left font-medium"
+                      onClick={() => toggleSort("nombre")}
+                    >
+                      Nombre / Código{" "}
+                      <ArrowUpDown className="h-4 w-4 opacity-60" />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[18%]">
+                    <button
+                      className="inline-flex items-center gap-1 font-medium"
+                      onClick={() => toggleSort("puesto")}
+                    >
+                      Puesto <ArrowUpDown className="h-4 w-4 opacity-60" />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[18%]">
+                    <button
+                      className="inline-flex items-center gap-1 font-medium"
+                      onClick={() => toggleSort("area")}
+                    >
+                      Área <ArrowUpDown className="h-4 w-4 opacity-60" />
+                    </button>
+                  </TableHead>
+                  <TableHead className="w-[12%]">
+                    <button
+                      className="inline-flex items-center gap-1 font-medium"
+                      onClick={() => toggleSort("nAlumnos")}
+                    >
+                      Alumnos <ArrowUpDown className="h-4 w-4 opacity-60" />
+                    </button>
+                  </TableHead>
+                  <TableHead className="min-w-[120px]">
+                    <button
+                      className="inline-flex items-center gap-1 font-medium"
+                      onClick={() => toggleSort("created_at")}
+                    >
+                      Creado <ArrowUpDown className="h-4 w-4 opacity-60" />
+                    </button>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <TableRow key={`sk-${i}`}>
+                      <TableCell colSpan={5}>
+                        <div className="h-6 animate-pulse rounded bg-neutral-100" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : error ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-sm text-red-600">
+                      {error}
+                    </TableCell>
+                  </TableRow>
+                ) : filteredSorted.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-sm text-neutral-500">
+                      Sin resultados.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredSorted.map((t) => (
+                    <TableRow key={t.id} className="hover:bg-neutral-50/60">
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="h-8 w-8 grid place-items-center rounded-md bg-neutral-100">
+                            <Users className="h-4 w-4 text-neutral-700" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="truncate font-medium text-neutral-900">
+                              <Link
+                                href={`/admin/teamsv2/${encodeURIComponent(
+                                  String(t.codigo ?? "")
+                                )}`}
+                                className="hover:underline"
+                              >
+                                {t.nombre || "—"}
+                              </Link>
+                            </div>
+                            <div className="truncate text-xs text-neutral-500 flex items-center gap-2">
+                              <Link
+                                href={`/admin/teamsv2/${encodeURIComponent(
+                                  String(t.codigo ?? "")
+                                )}`}
+                                className="font-mono hover:underline"
+                              >
+                                {t.codigo}
+                              </Link>
+                              <button
+                                type="button"
+                                title="Copiar código"
+                                onClick={async () => {
+                                  try {
+                                    await navigator.clipboard.writeText(
+                                      String(t.codigo ?? "")
+                                    );
+                                    toast({ title: "Código copiado" });
+                                  } catch {
+                                    toast({ title: "No se pudo copiar" });
+                                  }
+                                }}
+                                className="ml-2 inline-flex items-center justify-center p-1 rounded text-neutral-500 hover:text-neutral-700"
+                              >
+                                <Clipboard className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="align-middle">
+                        {t.puesto ? (
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-md ${getPuestoColorClass(
+                              t.puesto
+                            )}`}
+                          >
+                            {t.puesto}
+                          </span>
+                        ) : (
+                          <span className="text-neutral-400">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="align-middle">
+                        {t.area ? (
+                          <span className="text-sm">{t.area}</span>
+                        ) : (
+                          <span className="text-neutral-400">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="align-middle">
+                        <Badge
+                          variant="secondary"
+                          className="bg-neutral-100 text-neutral-800"
+                        >
+                          {t.nAlumnos ?? 0}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="align-middle text-sm text-neutral-600">
+                        {formatDate(t.created_at)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+
+        {/* Paginación */}
+        <div className="mt-4 flex items-center justify-between">
+          <p className="text-xs text-neutral-500">
+            Página {page} de {totalPages} — {total} registros
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Anterior
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages || loading}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Siguiente
+            </Button>
+          </div>
+        </div>
+        <CoachStudentsModal
+          open={studentsOpen}
+          onOpenChange={setStudentsOpen}
+          coachCode={currentCoach.code}
+          coachName={currentCoach.name}
+        />
+
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Crear nuevo coach</DialogTitle>
+            </DialogHeader>
+
+            <div className="grid gap-2 py-2">
+              <div>
+                <Label className="text-xs">Nombre</Label>
+                <Input
+                  value={createNombre}
+                  onChange={(e) => setCreateNombre(e.target.value)}
+                  placeholder="Nombre"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">Email</Label>
+                <Input
+                  type="email"
+                  value={createEmail}
+                  onChange={(e) => setCreateEmail(e.target.value)}
+                  placeholder="user@example.com"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">Password</Label>
+                <Input
+                  type="password"
+                  value={createPassword}
+                  onChange={(e) => setCreatePassword(e.target.value)}
+                  placeholder="ContraseñaSegura123!"
+                />
+              </div>
+
+              <div>
+                <Label className="text-xs">Puesto</Label>
+                <select
+                  className="w-full h-9 rounded-md border px-3 text-sm"
+                  value={createPuesto}
+                  onChange={(e) => setCreatePuesto(e.target.value)}
+                  disabled={optsLoading}
+                >
+                  <option value={NONE}>-- Ninguno --</option>
+                  {puestoApiOptions.length > 0
+                    ? puestoApiOptions.map((o) => (
+                        <option key={o.opcion_key} value={o.opcion_key}>
+                          {o.opcion_value}
+                        </option>
+                      ))
+                    : puestoOptions.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                </select>
+              </div>
+
+              <div>
+                <Label className="text-xs">Área</Label>
+                <select
+                  className="w-full h-9 rounded-md border px-3 text-sm"
+                  value={createArea}
+                  onChange={(e) => setCreateArea(e.target.value)}
+                  disabled={optsLoading}
+                >
+                  <option value={NONE}>-- Ninguno --</option>
+                  {areaApiOptions.length > 0
+                    ? areaApiOptions.map((o) => (
+                        <option key={o.opcion_key} value={o.opcion_key}>
+                          {o.opcion_value}
+                        </option>
+                      ))
+                    : areaOptions.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                </select>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={creating}
+                  onClick={async () => {
+                    if (!createNombre.trim()) {
+                      toast({ title: "El nombre es requerido" });
+                      return;
+                    }
+                    if (!createEmail.trim()) {
+                      toast({ title: "El email es requerido" });
+                      return;
+                    }
+                    if (!createPassword.trim()) {
+                      toast({ title: "La contraseña es requerida" });
+                      return;
+                    }
+                    try {
+                      setCreating(true);
+                      const payload: teamsApi.CreateCoachPayload = {
+                        name: createNombre.trim(),
+                        email: createEmail.trim(),
+                        password: createPassword,
+                        role: "manager",
+                        tipo: "equipo",
+                        puesto:
+                          createPuesto === NONE ? undefined : createPuesto,
+                        area: createArea === NONE ? undefined : createArea,
+                      };
+                      const resp = await teamsApi.createCoach(payload);
+                      toast({ title: "Coach creado correctamente" });
+                      setCreateOpen(false);
+                      setCreateNombre("");
+                      setCreateEmail("");
+                      setCreatePassword("");
+                      setCreatePuesto(NONE);
+                      setCreateArea(NONE);
+                      await fetchData();
+                    } catch (err: any) {
+                      toast({
+                        title: getSpanishApiError(err, "Error al crear coach"),
+                      });
+                    } finally {
+                      setCreating(false);
+                    }
+                  }}
+                >
+                  Crear
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </DashboardLayout>
+    </ProtectedRoute>
   );
 }

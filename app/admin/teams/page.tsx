@@ -6,7 +6,7 @@ import TeamsMetricsContent from "./TeamsMetricsContent";
 
 export default function TeamsMetricsPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <TeamsMetricsContent />
       </DashboardLayout>

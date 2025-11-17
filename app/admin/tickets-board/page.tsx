@@ -6,7 +6,7 @@ import TicketsBoard from "./TicketsBoard";
 
 export default function TicketsBoardPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <TicketsBoard />
       </DashboardLayout>

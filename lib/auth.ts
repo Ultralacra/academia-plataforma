@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "coach" | "student";
+export type UserRole = "admin" | "coach" | "student" | "equipo";
 
 export interface User {
   id: string | number;
@@ -27,19 +27,21 @@ class AuthService {
     const t = String(rawTipo ?? "").trim().toLowerCase();
 
     const isAdmin = (s: string) => ["admin", "administrator", "superadmin"].includes(s);
-    const isCoachAsAdmin = (s: string) => ["equipo", "team", "manager"].includes(s);
+    const isEquipo = (s: string) => ["equipo", "team"].includes(s);
     const isStudent = (s: string) => ["alumno", "student", "cliente", "usuario", "user"].includes(s);
 
-    if (isAdmin(v) || isCoachAsAdmin(v)) return "admin"; // equipo => admin
+    if (isAdmin(v)) return "admin";
+    if (isEquipo(v)) return "equipo";
     if (isStudent(v)) return "student";
     if (v === "coach") return "coach";
 
-    if (isAdmin(t) || isCoachAsAdmin(t)) return "admin"; // equipo => admin
+    if (isAdmin(t)) return "admin";
+    if (isEquipo(t)) return "equipo";
     if (isStudent(t)) return "student";
     if (t === "coach") return "coach";
 
-    // Fallback temporal: dar acceso total para evitar bloqueos mientras se alinea backend
-    return "admin";
+    // Fallback seguro: tratar como equipo para minimizar privilegios
+    return "equipo";
   }
 
   getAuthState(): AuthState {

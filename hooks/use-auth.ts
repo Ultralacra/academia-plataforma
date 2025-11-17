@@ -52,6 +52,11 @@ export function useAuth() {
           // Ruta existente y útil para coaches
           router.push("/admin/teamsv2")
           break
+        case "equipo": {
+          const code = (user as any)?.codigo || "";
+          router.push(code ? `/admin/teamsv2/${code}` : "/admin/teamsv2");
+          break
+        }
         case "student": {
           const code = (user as any)?.codigo || "RvA_5Qxoezfxlxxj"
           router.push(`/admin/alumnos/${code}`)

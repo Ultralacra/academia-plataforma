@@ -15,7 +15,7 @@ function StudentsPage() {
 
 export default function StudentsPageWrapper() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <StudentsPage />
     </ProtectedRoute>
   );

@@ -6,7 +6,7 @@ import StudentsContent from "./StudentsContent";
 
 export default function AlumnosPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <StudentsContent />
       </DashboardLayout>
