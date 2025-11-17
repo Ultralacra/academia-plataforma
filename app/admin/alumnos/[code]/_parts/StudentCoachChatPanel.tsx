@@ -615,7 +615,11 @@ export default function StudentCoachChatPanel({
                               localStorage.setItem(k, "0");
                               window.dispatchEvent(
                                 new CustomEvent("chat:unread-count-updated", {
-                                  detail: { chatId: id, role: "alumno", count: 0 },
+                                  detail: {
+                                    chatId: id,
+                                    role: "alumno",
+                                    count: 0,
+                                  },
                                 })
                               );
                             } catch {}
@@ -788,7 +792,11 @@ export default function StudentCoachChatPanel({
                     localStorage.setItem(k, "0");
                     window.dispatchEvent(
                       new CustomEvent("chat:unread-count-updated", {
-                        detail: { chatId: info.chatId, role: "alumno", count: 0 },
+                        detail: {
+                          chatId: info.chatId,
+                          role: "alumno",
+                          count: 0,
+                        },
                       })
                     );
                   } catch {}

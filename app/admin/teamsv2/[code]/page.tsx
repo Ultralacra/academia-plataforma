@@ -832,62 +832,136 @@ export default function CoachDetailPage({
                         />
                       </div>
                       <div className="flex-1 overflow-y-auto min-h-0">
-                        <Accordion type="multiple" defaultValue={["teams","students","contacts"]}>
+                        <Accordion
+                          type="multiple"
+                          defaultValue={["teams", "students", "contacts"]}
+                        >
                           <AccordionItem value="teams">
-                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">Chats entre equipos</AccordionTrigger>
+                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">
+                              Chats entre equipos
+                            </AccordionTrigger>
                             <AccordionContent className="pt-1">
-                              {chatsLoading && filteredChatsByContact.length === 0 ? (
-                                <div className="px-4 py-3 text-sm text-slate-500">Cargando…</div>
+                              {chatsLoading &&
+                              filteredChatsByContact.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">
+                                  Cargando…
+                                </div>
                               ) : filteredChatsByContact.length === 0 ? (
-                                <div className="px-4 py-3 text-sm text-slate-500">Sin chats entre equipos</div>
+                                <div className="px-4 py-3 text-sm text-slate-500">
+                                  Sin chats entre equipos
+                                </div>
                               ) : (
                                 <ul className="divide-y divide-slate-100">
                                   {filteredChatsByContact.map((c) => {
-                                    const count = (Array.isArray(c.chats) ? c.chats : []).reduce((acc: number, it: any) => {
+                                    const count = (
+                                      Array.isArray(c.chats) ? c.chats : []
+                                    ).reduce((acc: number, it: any) => {
                                       const id = it?.id_chat ?? it?.id;
                                       if (id == null) return acc;
                                       return acc + getUnreadCountByChatId(id);
                                     }, 0);
-                                    const isActive = targetTeamCode?.toLowerCase() === c.targetCode.toLowerCase();
-                                    const highlight = (c.hasUnread || count > 0) && !isActive;
+                                    const isActive =
+                                      targetTeamCode?.toLowerCase() ===
+                                      c.targetCode.toLowerCase();
+                                    const highlight =
+                                      (c.hasUnread || count > 0) && !isActive;
                                     return (
                                       <li key={`chat-${c.key}`}>
                                         <button
-                                          className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${isActive ? "bg-slate-100" : highlight ? "bg-teal-50" : ""}`}
+                                          className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${
+                                            isActive
+                                              ? "bg-slate-100"
+                                              : highlight
+                                              ? "bg-teal-50"
+                                              : ""
+                                          }`}
                                           onClick={() => {
                                             setTargetTeamCode(c.targetCode);
-                                            setChatInfo({ chatId: c.topChatId, myParticipantId: null });
-                                            setCurrentOpenChatId(c.topChatId ?? null);
-                                            const tabKey = `team:${String(c.targetCode)}`;
+                                            setChatInfo({
+                                              chatId: c.topChatId,
+                                              myParticipantId: null,
+                                            });
+                                            setCurrentOpenChatId(
+                                              c.topChatId ?? null
+                                            );
+                                            const tabKey = `team:${String(
+                                              c.targetCode
+                                            )}`;
                                             setOpenTabs((prev) => {
-                                              const exists = prev.some((p) => p.key === tabKey);
-                                              return exists ? prev : [...prev, { key: tabKey, type: "team", code: String(c.targetCode), name: c.targetName || String(c.targetCode) }];
+                                              const exists = prev.some(
+                                                (p) => p.key === tabKey
+                                              );
+                                              return exists
+                                                ? prev
+                                                : [
+                                                    ...prev,
+                                                    {
+                                                      key: tabKey,
+                                                      type: "team",
+                                                      code: String(
+                                                        c.targetCode
+                                                      ),
+                                                      name:
+                                                        c.targetName ||
+                                                        String(c.targetCode),
+                                                    },
+                                                  ];
                                             });
                                             setActiveChatTab(tabKey);
                                             try {
                                               for (const it of c.chats || []) {
-                                                const id = it?.id_chat ?? it?.id;
+                                                const id =
+                                                  it?.id_chat ?? it?.id;
                                                 if (id == null) continue;
-                                                const uKey = `chatUnreadById:coach:${String(id)}`;
+                                                const uKey = `chatUnreadById:coach:${String(
+                                                  id
+                                                )}`;
                                                 localStorage.setItem(uKey, "0");
-                                                window.dispatchEvent(new CustomEvent("chat:unread-count-updated", { detail: { chatId: id, role: "coach", count: 0 } }));
+                                                window.dispatchEvent(
+                                                  new CustomEvent(
+                                                    "chat:unread-count-updated",
+                                                    {
+                                                      detail: {
+                                                        chatId: id,
+                                                        role: "coach",
+                                                        count: 0,
+                                                      },
+                                                    }
+                                                  )
+                                                );
                                               }
                                               setUnreadBump((n) => n + 1);
                                             } catch {}
                                           }}
                                         >
                                           <div className="h-11 w-11 rounded-full bg-teal-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
-                                            {(c.targetName || c.targetCode).slice(0, 1).toUpperCase()}
+                                            {(c.targetName || c.targetCode)
+                                              .slice(0, 1)
+                                              .toUpperCase()}
                                           </div>
                                           <div className="min-w-0 flex-1">
                                             <div className="flex items-baseline justify-between gap-2">
-                                              <div className="text-sm font-medium truncate text-slate-900">{c.targetName}</div>
-                                              <div className="text-xs text-slate-500 flex-shrink-0">{formatTime(c.lastAt)}</div>
+                                              <div className="text-sm font-medium truncate text-slate-900">
+                                                {c.targetName}
+                                              </div>
+                                              <div className="text-xs text-slate-500 flex-shrink-0">
+                                                {formatTime(c.lastAt)}
+                                              </div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                              <div className={`text-xs truncate flex-1 ${c.hasUnread || count > 0 ? "text-slate-900 font-medium" : "text-slate-500"}`}>{c.lastText || "Conversación"}</div>
+                                              <div
+                                                className={`text-xs truncate flex-1 ${
+                                                  c.hasUnread || count > 0
+                                                    ? "text-slate-900 font-medium"
+                                                    : "text-slate-500"
+                                                }`}
+                                              >
+                                                {c.lastText || "Conversación"}
+                                              </div>
                                               {(c.hasUnread || count > 0) && (
-                                                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-teal-500 text-white text-xs font-semibold flex-shrink-0">{count > 0 ? count : "•"}</span>
+                                                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-teal-500 text-white text-xs font-semibold flex-shrink-0">
+                                                  {count > 0 ? count : "•"}
+                                                </span>
                                               )}
                                             </div>
                                           </div>
@@ -901,62 +975,135 @@ export default function CoachDetailPage({
                           </AccordionItem>
 
                           <AccordionItem value="students">
-                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">Chats con alumnos</AccordionTrigger>
+                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">
+                              Chats con alumnos
+                            </AccordionTrigger>
                             <AccordionContent className="pt-1">
-                              {chatsLoading && filteredChatsByStudent.length === 0 ? (
-                                <div className="px-4 py-3 text-sm text-slate-500">Cargando…</div>
+                              {chatsLoading &&
+                              filteredChatsByStudent.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">
+                                  Cargando…
+                                </div>
                               ) : filteredChatsByStudent.length === 0 ? (
-                                <div className="px-4 py-3 text-sm text-slate-500">Sin chats con alumnos</div>
+                                <div className="px-4 py-3 text-sm text-slate-500">
+                                  Sin chats con alumnos
+                                </div>
                               ) : (
                                 <ul className="divide-y divide-slate-100">
                                   {filteredChatsByStudent.map((c) => {
-                                    const count = (Array.isArray(c.chats) ? c.chats : []).reduce((acc: number, it: any) => {
+                                    const count = (
+                                      Array.isArray(c.chats) ? c.chats : []
+                                    ).reduce((acc: number, it: any) => {
                                       const id = it?.id_chat ?? it?.id;
                                       if (id == null) return acc;
                                       return acc + getUnreadCountByChatId(id);
                                     }, 0);
-                                    const isActive = targetStudentCode?.toLowerCase() === c.targetCode.toLowerCase();
-                                    const highlight = (c.hasUnread || count > 0) && !isActive;
+                                    const isActive =
+                                      targetStudentCode?.toLowerCase() ===
+                                      c.targetCode.toLowerCase();
+                                    const highlight =
+                                      (c.hasUnread || count > 0) && !isActive;
                                     return (
                                       <li key={`chat-stu-${c.key}`}>
                                         <button
-                                          className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${isActive ? "bg-slate-100" : highlight ? "bg-emerald-50" : ""}`}
+                                          className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${
+                                            isActive
+                                              ? "bg-slate-100"
+                                              : highlight
+                                              ? "bg-emerald-50"
+                                              : ""
+                                          }`}
                                           onClick={() => {
                                             setTargetTeamCode(null);
                                             setTargetStudentCode(c.targetCode);
-                                            setTargetStudentName(c.targetName || c.targetCode);
-                                            setChatInfo({ chatId: c.topChatId, myParticipantId: null });
-                                            setCurrentOpenChatId(c.topChatId ?? null);
-                                            const tabKey = `student:${String(c.targetCode)}`;
+                                            setTargetStudentName(
+                                              c.targetName || c.targetCode
+                                            );
+                                            setChatInfo({
+                                              chatId: c.topChatId,
+                                              myParticipantId: null,
+                                            });
+                                            setCurrentOpenChatId(
+                                              c.topChatId ?? null
+                                            );
+                                            const tabKey = `student:${String(
+                                              c.targetCode
+                                            )}`;
                                             setOpenTabs((prev) => {
-                                              const exists = prev.some((p) => p.key === tabKey);
-                                              return exists ? prev : [...prev, { key: tabKey, type: "student", code: String(c.targetCode), name: c.targetName || String(c.targetCode) }];
+                                              const exists = prev.some(
+                                                (p) => p.key === tabKey
+                                              );
+                                              return exists
+                                                ? prev
+                                                : [
+                                                    ...prev,
+                                                    {
+                                                      key: tabKey,
+                                                      type: "student",
+                                                      code: String(
+                                                        c.targetCode
+                                                      ),
+                                                      name:
+                                                        c.targetName ||
+                                                        String(c.targetCode),
+                                                    },
+                                                  ];
                                             });
                                             setActiveChatTab(tabKey);
                                             try {
                                               for (const it of c.chats || []) {
-                                                const id = it?.id_chat ?? it?.id;
+                                                const id =
+                                                  it?.id_chat ?? it?.id;
                                                 if (id == null) continue;
-                                                const uKey = `chatUnreadById:coach:${String(id)}`;
+                                                const uKey = `chatUnreadById:coach:${String(
+                                                  id
+                                                )}`;
                                                 localStorage.setItem(uKey, "0");
-                                                window.dispatchEvent(new CustomEvent("chat:unread-count-updated", { detail: { chatId: id, role: "coach", count: 0 } }));
+                                                window.dispatchEvent(
+                                                  new CustomEvent(
+                                                    "chat:unread-count-updated",
+                                                    {
+                                                      detail: {
+                                                        chatId: id,
+                                                        role: "coach",
+                                                        count: 0,
+                                                      },
+                                                    }
+                                                  )
+                                                );
                                               }
                                               setUnreadBump((n) => n + 1);
                                             } catch {}
                                           }}
                                         >
                                           <div className="h-11 w-11 rounded-full bg-emerald-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
-                                            {(c.targetName || c.targetCode).slice(0, 1).toUpperCase()}
+                                            {(c.targetName || c.targetCode)
+                                              .slice(0, 1)
+                                              .toUpperCase()}
                                           </div>
                                           <div className="min-w-0 flex-1">
                                             <div className="flex items-baseline justify-between gap-2">
-                                              <div className="text-sm font-medium truncate text-slate-900">{c.targetName}</div>
-                                              <div className="text-xs text-slate-500 flex-shrink-0">{formatTime(c.lastAt)}</div>
+                                              <div className="text-sm font-medium truncate text-slate-900">
+                                                {c.targetName}
+                                              </div>
+                                              <div className="text-xs text-slate-500 flex-shrink-0">
+                                                {formatTime(c.lastAt)}
+                                              </div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                              <div className={`text-xs truncate flex-1 ${c.hasUnread || count > 0 ? "text-slate-900 font-medium" : "text-slate-500"}`}>{c.lastText || "Conversación"}</div>
+                                              <div
+                                                className={`text-xs truncate flex-1 ${
+                                                  c.hasUnread || count > 0
+                                                    ? "text-slate-900 font-medium"
+                                                    : "text-slate-500"
+                                                }`}
+                                              >
+                                                {c.lastText || "Conversación"}
+                                              </div>
                                               {(c.hasUnread || count > 0) && (
-                                                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-white text-xs font-semibold flex-shrink-0">{count > 0 ? count : "•"}</span>
+                                                <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-emerald-500 text-white text-xs font-semibold flex-shrink-0">
+                                                  {count > 0 ? count : "•"}
+                                                </span>
                                               )}
                                             </div>
                                           </div>
@@ -970,39 +1117,73 @@ export default function CoachDetailPage({
                           </AccordionItem>
 
                           <AccordionItem value="contacts">
-                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">Contactos</AccordionTrigger>
+                            <AccordionTrigger className="text-sm font-medium px-3 py-2 hover:no-underline">
+                              Contactos
+                            </AccordionTrigger>
                             <AccordionContent className="pt-1">
-                              {chatsLoading && contactsWithoutChat.length === 0 ? (
-                                <div className="px-4 py-3 text-sm text-slate-500">Cargando…</div>
+                              {chatsLoading &&
+                              contactsWithoutChat.length === 0 ? (
+                                <div className="px-4 py-3 text-sm text-slate-500">
+                                  Cargando…
+                                </div>
                               ) : contactsWithoutChat.length === 0 ? (
-                                <div className="px-4 py-3 text-sm text-slate-500">Sin contactos disponibles</div>
+                                <div className="px-4 py-3 text-sm text-slate-500">
+                                  Sin contactos disponibles
+                                </div>
                               ) : (
                                 <ul className="divide-y divide-slate-100">
                                   {contactsWithoutChat.map((t: CoachMini) => (
                                     <li key={`noc-${t.codigo}`}>
                                       <button
-                                        className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${targetTeamCode === t.codigo ? "bg-slate-100" : ""}`}
+                                        className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors ${
+                                          targetTeamCode === t.codigo
+                                            ? "bg-slate-100"
+                                            : ""
+                                        }`}
                                         onClick={() => {
                                           setTargetStudentCode(null);
                                           setTargetStudentName("");
                                           setTargetTeamCode(t.codigo);
-                                          setChatInfo({ chatId: null, myParticipantId: null });
+                                          setChatInfo({
+                                            chatId: null,
+                                            myParticipantId: null,
+                                          });
                                           setChatsLoading(true);
                                           setRequestListSignal((n) => n + 1);
                                           setDecisionStamp(null);
-                                          const key = `team:${String(t.codigo)}`;
+                                          const key = `team:${String(
+                                            t.codigo
+                                          )}`;
                                           setOpenTabs((prev) => {
-                                            const exists = prev.some((p) => p.key === key);
-                                            return exists ? prev : [...prev, { key, type: "team", code: String(t.codigo), name: t.nombre || String(t.codigo) }];
+                                            const exists = prev.some(
+                                              (p) => p.key === key
+                                            );
+                                            return exists
+                                              ? prev
+                                              : [
+                                                  ...prev,
+                                                  {
+                                                    key,
+                                                    type: "team",
+                                                    code: String(t.codigo),
+                                                    name:
+                                                      t.nombre ||
+                                                      String(t.codigo),
+                                                  },
+                                                ];
                                           });
                                           setActiveChatTab(key);
                                         }}
                                       >
                                         <div className="h-11 w-11 rounded-full bg-teal-500 text-white grid place-items-center text-sm font-semibold flex-shrink-0">
-                                          {(t.nombre || t.codigo).slice(0, 1).toUpperCase()}
+                                          {(t.nombre || t.codigo)
+                                            .slice(0, 1)
+                                            .toUpperCase()}
                                         </div>
                                         <div className="min-w-0">
-                                          <div className="text-sm font-medium truncate text-slate-900">{t.nombre}</div>
+                                          <div className="text-sm font-medium truncate text-slate-900">
+                                            {t.nombre}
+                                          </div>
                                         </div>
                                       </button>
                                     </li>
@@ -1161,26 +1342,38 @@ export default function CoachDetailPage({
                               onClick={() => setActiveChatTab(t.key)}
                               title={t.name}
                             >
-                              <span className="max-w-[180px] truncate">{t.name}</span>
+                              <span className="max-w-[180px] truncate">
+                                {t.name}
+                              </span>
                               <span
                                 role="button"
                                 className={`ml-1 inline-flex items-center justify-center w-5 h-5 rounded ${
-                                  active ? "hover:bg-slate-100" : "hover:bg-slate-300"
+                                  active
+                                    ? "hover:bg-slate-100"
+                                    : "hover:bg-slate-300"
                                 }`}
                                 title="Cerrar"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setOpenTabs((prev) => {
-                                    const rest = prev.filter((p) => p.key !== t.key);
+                                    const rest = prev.filter(
+                                      (p) => p.key !== t.key
+                                    );
                                     // Reasignar activa si cerramos la actual
                                     if (active) {
-                                      if (rest.length > 0) setActiveChatTab(rest[rest.length - 1].key);
+                                      if (rest.length > 0)
+                                        setActiveChatTab(
+                                          rest[rest.length - 1].key
+                                        );
                                       else {
                                         setActiveChatTab(null);
                                         setTargetTeamCode(null);
                                         setTargetStudentCode(null);
                                         setTargetStudentName("");
-                                        setChatInfo({ chatId: null, myParticipantId: null });
+                                        setChatInfo({
+                                          chatId: null,
+                                          myParticipantId: null,
+                                        });
                                         setCurrentOpenChatId(null);
                                       }
                                     }
