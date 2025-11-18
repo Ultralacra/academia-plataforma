@@ -161,7 +161,8 @@ export default function SessionsStudentPanel({
   const [requestOpen, setRequestOpen] = useState(false);
   const [coachSel, setCoachSel] = useState<string | "">("");
   const [fecha, setFecha] = useState<string>("");
-  const [duracion, setDuracion] = useState<number>(60);
+  // Duración fija: 45 minutos para solicitudes del alumno
+  const [duracion, setDuracion] = useState<number>(45);
   const [notas, setNotas] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
@@ -506,10 +507,10 @@ export default function SessionsStudentPanel({
               <Label className="text-xs">Duración (minutos)</Label>
               <Input
                 type="number"
-                min={15}
-                max={180}
+                min={45}
+                max={45}
                 value={String(duracion)}
-                onChange={(e) => setDuracion(Number(e.target.value) || 60)}
+                disabled
               />
             </div>
 
@@ -649,7 +650,7 @@ export default function SessionsStudentPanel({
                     setRequestOpen(false);
                     setCoachSel("");
                     setFecha("");
-                    setDuracion(60);
+                    setDuracion(45);
                     setNotas("");
                     fetchAll();
                   } catch (err: any) {

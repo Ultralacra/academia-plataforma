@@ -88,6 +88,7 @@ export default function SessionsPanel({
   const [formAlumno, setFormAlumno] = useState<string>("");
   const [formEtapa, setFormEtapa] = useState<string>("");
   const [formFecha, setFormFecha] = useState<string>(""); // datetime-local value
+  // Duración fija: 45 minutos (disabled en UI)
   const [formDuracion, setFormDuracion] = useState<number>(45);
   const [formNotas, setFormNotas] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -645,10 +646,10 @@ export default function SessionsPanel({
               <Label className="text-xs">Duración (minutos)</Label>
               <Input
                 type="number"
-                min={15}
-                max={180}
+                min={45}
+                max={45}
                 value={String(formDuracion)}
-                onChange={(e) => setFormDuracion(Number(e.target.value) || 45)}
+                disabled
               />
             </div>
 
