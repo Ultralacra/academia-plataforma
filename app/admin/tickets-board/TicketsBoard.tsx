@@ -56,6 +56,7 @@ import {
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 // Select removed for Estado/Prioridad (fields will be hidden)
 import {
   Tooltip,
@@ -258,6 +259,10 @@ export default function TicketsBoard() {
   const [deletingTicket, setDeletingTicket] = useState(false);
   // Control para expandir lista completa de archivos en el panel de edición
   const [showAllFiles, setShowAllFiles] = useState(false);
+  // Edición de descripción (pestaña Detalle)
+  const [descEditing, setDescEditing] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
+  const [savingDesc, setSavingDesc] = useState(false);
 
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("");
@@ -1999,10 +2004,69 @@ export default function TicketsBoard() {
 
                         {/* Descripción y links */}
                         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
-                          <div className="text-sm font-medium">Descripción</div>
-                          <div className="whitespace-pre-wrap text-sm text-slate-800">
-                            {ticketDetail?.descripcion || "—"}
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium">Descripción</div>
+                            {!descEditing && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setDescDraft(String(ticketDetail?.descripcion || ""));
+                                  setDescEditing(true);
+                                }}
+                              >
+                                Editar
+                              </Button>
+                            )}
                           </div>
+                          {!descEditing ? (
+                            <div className="whitespace-pre-wrap text-sm text-slate-800">
+                              {ticketDetail?.descripcion || "—"}
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <Textarea
+                                rows={8}
+                                value={descDraft}
+                                onChange={(e) => setDescDraft(e.target.value)}
+                                placeholder="Escribe la descripción del ticket..."
+                              />
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setDescEditing(false);
+                                    setDescDraft("");
+                                  }}
+                                  disabled={savingDesc}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  onClick={async () => {
+                                    if (!selectedTicket?.codigo) return;
+                                    setSavingDesc(true);
+                                    try {
+                                      await updateTicket(selectedTicket.codigo, {
+                                        descripcion: (descDraft || "").trim(),
+                                      } as any);
+                                      await loadTicketDetail(selectedTicket.codigo);
+                                      setDescEditing(false);
+                                      toast({ title: "Descripción actualizada" });
+                                    } catch (e) {
+                                      console.error(e);
+                                      toast({ title: "Error al actualizar descripción" });
+                                    } finally {
+                                      setSavingDesc(false);
+                                    }
+                                  }}
+                                  disabled={savingDesc}
+                                >
+                                  {savingDesc ? "Guardando..." : "Guardar"}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                           {(() => {
                             const urlList: string[] = [
                               ...extractUrlsFromDescription(

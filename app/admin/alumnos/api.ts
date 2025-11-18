@@ -305,6 +305,7 @@ export type TicketUpdatePayload = Partial<{
   resuelto_por: string | null;
   revision: string | null;
   tarea: string | null;
+  descripcion: string | null;
 }>;
 
 export async function updateTicket(ticketId: string, payload: TicketUpdatePayload): Promise<any> {

@@ -31,6 +31,7 @@ import {
   Eye,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -311,6 +312,10 @@ export default function TicketsPanelCoach({
       created_at: string | null;
     }[]
   >([]);
+  // Edición de descripción
+  const [descEditing, setDescEditing] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
+  const [savingDesc, setSavingDesc] = useState(false);
   // Confirmación de eliminación de ticket
   const [deleteTicketCodigo, setDeleteTicketCodigo] = useState<string | null>(
     null
@@ -1941,7 +1946,7 @@ export default function TicketsPanelCoach({
       </Dialog>
 
       <Drawer open={editOpen} onOpenChange={setEditOpen} direction="right">
-        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-xl md:max-w-2xl flex flex-col">
+        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl flex flex-col">
           <DrawerHeader className="border-b">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
@@ -2074,7 +2079,8 @@ export default function TicketsPanelCoach({
                               Informante
                             </span>
                             <span className="truncate">
-                              {(editTicket as any).informante_nombre ||
+                              {ticketDetail?.informante_nombre ||
+                                (editTicket as any).informante_nombre ||
                                 (editTicket as any).informante}
                             </span>
                           </div>
@@ -2086,7 +2092,8 @@ export default function TicketsPanelCoach({
                               Resuelto por
                             </span>
                             <span className="truncate">
-                              {(editTicket as any).resuelto_por_nombre ||
+                              {ticketDetail?.resuelto_por_nombre ||
+                                (editTicket as any).resuelto_por_nombre ||
                                 (editTicket as any).resuelto_por}
                             </span>
                           </div>
@@ -2128,7 +2135,12 @@ export default function TicketsPanelCoach({
                         <Input
                           id="edit-informante"
                           className="h-10"
-                          value={editForm.informante ?? ""}
+                          value={
+                            (ticketDetail?.informante_nombre as any) ??
+                            ((editTicket as any)?.informante_nombre as any) ??
+                            editForm.informante ??
+                            ""
+                          }
                           onChange={(e) =>
                             setEditForm((f) => ({
                               ...f,
@@ -2146,7 +2158,12 @@ export default function TicketsPanelCoach({
                         <Input
                           id="edit-resuelto-por"
                           className="h-10"
-                          value={editForm.resuelto_por ?? ""}
+                          value={
+                            (ticketDetail?.resuelto_por_nombre as any) ??
+                            ((editTicket as any)?.resuelto_por_nombre as any) ??
+                            editForm.resuelto_por ??
+                            ""
+                          }
                           onChange={(e) =>
                             setEditForm((f) => ({
                               ...f,
@@ -2263,10 +2280,76 @@ export default function TicketsPanelCoach({
                         </div>
 
                         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
-                          <div className="text-sm font-medium">Descripción</div>
-                          <div className="whitespace-pre-wrap text-sm text-slate-800">
-                            {ticketDetail?.descripcion || "—"}
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium">
+                              Descripción
+                            </div>
+                            {!descEditing ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setDescDraft(ticketDetail?.descripcion || "");
+                                  setDescEditing(true);
+                                }}
+                              >
+                                Editar
+                              </Button>
+                            ) : null}
                           </div>
+                          {!descEditing ? (
+                            <div className="whitespace-pre-wrap text-sm text-slate-800">
+                              {ticketDetail?.descripcion || "—"}
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={descDraft}
+                                onChange={(e) => setDescDraft(e.target.value)}
+                                rows={6}
+                                placeholder="Escribe la descripción del ticket..."
+                              />
+                              <div className="flex items-center gap-2 justify-end">
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => {
+                                    setDescEditing(false);
+                                    setDescDraft("");
+                                  }}
+                                  disabled={savingDesc}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  onClick={async () => {
+                                    if (!editTicket?.codigo) return;
+                                    setSavingDesc(true);
+                                    try {
+                                      await updateTicket(editTicket.codigo, {
+                                        descripcion: (descDraft || "").trim(),
+                                      });
+                                      await loadTicketDetail(editTicket.codigo);
+                                      setDescEditing(false);
+                                      toast({
+                                        title: "Descripción actualizada",
+                                      });
+                                    } catch (e) {
+                                      console.error(e);
+                                      toast({
+                                        title:
+                                          "Error al actualizar descripción",
+                                      });
+                                    } finally {
+                                      setSavingDesc(false);
+                                    }
+                                  }}
+                                  disabled={savingDesc}
+                                >
+                                  {savingDesc ? "Guardando..." : "Guardar"}
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                           {(() => {
                             const urlList: string[] = [
                               ...extractUrlsFromDescription(

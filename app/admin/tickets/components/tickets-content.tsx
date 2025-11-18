@@ -2,6 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService, type Ticket, type Team } from "@/lib/data-service";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "@/components/ui/use-toast";
+import { updateTicket } from "@/app/admin/alumnos/api";
+import { buildUrl } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
 import { Search, Filter, Calendar as CalendarIcon } from "lucide-react";
 import { Charts } from "./charts";
 import KPIs from "./kpis";
@@ -195,6 +201,15 @@ export default function TicketsContent() {
   // Paginación UI
   const [page, setPage] = useState(1);
 
+  // Modal de ticket para ver/editar descripción
+  const [ticketModalOpen, setTicketModalOpen] = useState(false);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [ticketDetail, setTicketDetail] = useState<any | null>(null);
+  const [ticketLoading, setTicketLoading] = useState(false);
+  const [descEditing, setDescEditing] = useState(false);
+  const [descDraft, setDescDraft] = useState("");
+  const [savingDesc, setSavingDesc] = useState(false);
+
   // Carga del backend (hasta 10k)
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -292,6 +307,44 @@ export default function TicketsContent() {
     const start = (page - 1) * PAGE_SIZE_UI;
     return arr.slice(start, start + PAGE_SIZE_UI);
   }, [filtered, page]);
+
+  // Cargar detalle del ticket cuando se abre el modal
+  useEffect(() => {
+    const codigo = selectedTicket?.id_externo ?? null;
+    if (!ticketModalOpen || !codigo) {
+      setTicketDetail(null);
+      return;
+    }
+    let alive = true;
+    (async () => {
+      try {
+        setTicketLoading(true);
+        const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(String(codigo))}`);
+        const token = typeof window !== "undefined" ? getAuthToken() : null;
+        const res = await fetch(url, {
+          method: "GET",
+          cache: "no-store",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        if (!alive) return;
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || `HTTP ${res.status}`);
+        }
+        const json = await res.json().catch(() => ({}));
+        if (!alive) return;
+        setTicketDetail(json?.data ?? json ?? null);
+      } catch (e) {
+        if (!alive) return;
+        setTicketDetail(null);
+      } finally {
+        if (alive) setTicketLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [ticketModalOpen, selectedTicket?.id_externo]);
 
   return (
     <div className="space-y-6">
@@ -411,7 +464,12 @@ export default function TicketsContent() {
               {(pageItems ?? []).map((t) => (
                 <tr
                   key={t.id}
-                  className="border-b hover:bg-muted/40 transition-colors"
+                  className="border-b hover:bg-muted/40 transition-colors cursor-pointer"
+                  onClick={() => {
+                    setSelectedTicket(t);
+                    setDescEditing(false);
+                    setTicketModalOpen(true);
+                  }}
                 >
                   <td className="px-4 py-2">{t.nombre ?? "-"}</td>
                   <td className="px-4 py-2">{t.alumno_nombre ?? "-"}</td>
@@ -470,6 +528,120 @@ export default function TicketsContent() {
           <div className="h-10 w-10 animate-spin rounded-full border-2 border-sky-600 border-b-transparent" />
         </div>
       )}
+
+      {/* Modal de Ticket: ver/editar descripción */}
+      <Dialog open={ticketModalOpen} onOpenChange={(v) => {
+        setTicketModalOpen(v);
+        if (!v) {
+          setSelectedTicket(null);
+          setTicketDetail(null);
+          setDescEditing(false);
+        }
+      }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedTicket?.nombre ?? "Ticket"}
+              {selectedTicket?.id_externo ? (
+                <span className="ml-2 text-xs text-muted-foreground">({selectedTicket.id_externo})</span>
+              ) : null}
+            </DialogTitle>
+          </DialogHeader>
+
+          {!selectedTicket ? (
+            <div className="text-sm text-muted-foreground">Sin selección</div>
+          ) : ticketLoading ? (
+            <div className="py-6 text-sm text-muted-foreground">Cargando detalle…</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-xl border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm text-muted-foreground">Alumno</div>
+                    <div className="text-sm font-medium">{selectedTicket.alumno_nombre ?? "—"}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-muted-foreground">Estado / Tipo</div>
+                    <div className="text-sm font-medium">
+                      {(selectedTicket.estado ?? "—").toUpperCase()} · {(selectedTicket.tipo ?? "—").toUpperCase()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold">Descripción</div>
+                  {!descEditing && (
+                    <button
+                      className="text-xs rounded-lg border px-3 py-1 hover:bg-gray-50"
+                      onClick={() => {
+                        setDescDraft(String(ticketDetail?.descripcion ?? ""));
+                        setDescEditing(true);
+                      }}
+                    >
+                      Editar
+                    </button>
+                  )}
+                </div>
+                {!descEditing ? (
+                  <div className="whitespace-pre-wrap text-sm">
+                    {String(ticketDetail?.descripcion ?? "—")}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Textarea
+                      rows={8}
+                      value={descDraft}
+                      onChange={(e) => setDescDraft(e.target.value)}
+                      placeholder="Escribe la descripción del ticket…"
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        className="text-xs rounded-lg px-3 py-1 hover:bg-gray-100"
+                        onClick={() => {
+                          setDescEditing(false);
+                          setDescDraft("");
+                        }}
+                        disabled={savingDesc}
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        className="text-xs rounded-lg bg-sky-600 px-3 py-1 text-white hover:bg-sky-700 disabled:opacity-60"
+                        onClick={async () => {
+                          if (!selectedTicket?.id_externo) return;
+                          setSavingDesc(true);
+                          try {
+                            await updateTicket(String(selectedTicket.id_externo), { descripcion: (descDraft || "").trim() });
+                            toast({ title: "Descripción actualizada" });
+                            // recargar detalle
+                            setTicketModalOpen(true); // mantener abierto
+                            const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(String(selectedTicket.id_externo))}`);
+                            const token = typeof window !== "undefined" ? getAuthToken() : null;
+                            const res = await fetch(url, { method: "GET", cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+                            const json = await res.json().catch(() => ({}));
+                            setTicketDetail(json?.data ?? json ?? null);
+                            setDescEditing(false);
+                          } catch (e) {
+                            console.error(e);
+                            toast({ title: "Error al actualizar descripción" });
+                          } finally {
+                            setSavingDesc(false);
+                          }
+                        }}
+                        disabled={savingDesc}
+                      >
+                        {savingDesc ? "Guardando…" : "Guardar"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
