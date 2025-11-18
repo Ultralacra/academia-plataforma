@@ -87,6 +87,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAuthToken } from "@/lib/auth";
+import { buildUrl } from "@/lib/api-config";
 
 type StatusKey =
   | "EN_PROGRESO"
@@ -587,9 +588,9 @@ export default function TicketsPanelCoach({
       setTicketDetailLoading(true);
       setTicketDetailError(null);
       setTicketDetail(null);
-      const url = `https://v001.vercel.app/v1/ticket/get/ticket/${encodeURIComponent(
-        String(codigo)
-      )}`;
+      const url = buildUrl(
+        `/ticket/get/ticket/${encodeURIComponent(String(codigo))}`
+      );
       const token = typeof window !== "undefined" ? getAuthToken() : null;
       const res = await fetch(url, {
         method: "GET",

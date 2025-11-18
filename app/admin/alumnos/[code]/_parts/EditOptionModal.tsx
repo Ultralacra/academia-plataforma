@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { getOpciones } from "../../api";
 import { toast } from "@/components/ui/use-toast";
-import { apiFetch } from "@/lib/api-config";
+import { buildUrl } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
 import PauseDatesModal from "./PauseDatesModal";
 
@@ -162,19 +162,15 @@ export default function EditOptionModal({
       } catch {}
 
       // El endpoint acepta form-data y ahora también soporta estado
-      const url = `/client/update/client/${encodeURIComponent(clientCode)}`;
-      const token = typeof window !== "undefined" ? getAuthToken() : null;
-      const res = await fetch(
-        url.startsWith("http")
-          ? url
-          : (process.env.NEXT_PUBLIC_API_HOST ?? "https://v001.vercel.app/v1") +
-              url,
-        {
-          method: "PUT",
-          body: fd,
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
+      const url = buildUrl(
+        `/client/update/client/${encodeURIComponent(clientCode)}`
       );
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const res = await fetch(url, {
+        method: "PUT",
+        body: fd,
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         throw new Error(text || `HTTP ${res.status}`);

@@ -339,7 +339,7 @@ export default function TeamsPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "coach"]}>
       <DashboardLayout>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

@@ -12,6 +12,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useTicketNotifications } from "@/components/hooks/useTicketNotifications";
+import { useSseNotifications } from "@/components/hooks/useSseNotifications";
 import { useMemo, useState } from "react";
 import {
   AlertDialog,
@@ -31,25 +32,56 @@ interface DashboardLayoutProps {
 }
 
 function NotificationsBadge() {
-  const { items, unread, markAllRead } = useTicketNotifications();
+  const {
+    items: ticketItems,
+    unread: ticketUnread,
+    markAllRead: ticketsMarkAll,
+  } = useTicketNotifications();
+  const {
+    items: sseItems,
+    unread: sseUnread,
+    markAllRead: sseMarkAll,
+  } = useSseNotifications();
   const [open, setOpen] = useState(false);
-  const list = useMemo(() => items.slice(0, 10), [items]);
+  // Fusionar notificaciones: primero las SSE (más recientes directas), luego tickets por orden de fecha
+  const merged = useMemo(() => {
+    const parseAt = (x: any) => {
+      const v = x?.at || x?.timestamp || null;
+      const t = Date.parse(String(v || ""));
+      return isNaN(t) ? 0 : t;
+    };
+    const normTicket = ticketItems.map((it) => ({
+      ...it,
+      _kind: "ticket",
+      _t: parseAt(it),
+    }));
+    const normSse = sseItems.map((it) => ({
+      ...it,
+      _kind: "sse",
+      _t: parseAt(it),
+    }));
+    return [...normSse, ...normTicket].sort((a, b) => b._t - a._t).slice(0, 20);
+  }, [ticketItems, sseItems]);
+  const totalUnread = ticketUnread + sseUnread;
 
   return (
     <Popover
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        // Al cerrar el popover, limpiar contador de no leídas
-        if (!v) markAllRead();
+        // Al cerrar, marcar todas como leídas
+        if (!v) {
+          ticketsMarkAll();
+          sseMarkAll();
+        }
       }}
     >
       <PopoverTrigger asChild>
         <button className="relative p-2 rounded-full hover:bg-muted/10">
           <Bell className="h-4 w-4" />
-          {unread > 0 && (
+          {totalUnread > 0 && (
             <span className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">
-              {unread}
+              {totalUnread > 99 ? "99+" : totalUnread}
             </span>
           )}
         </button>
@@ -57,20 +89,30 @@ function NotificationsBadge() {
       <PopoverContent className="w-80 p-2">
         <div className="text-sm font-semibold px-2 py-1">Notificaciones</div>
         <div className="max-h-56 overflow-y-auto">
-          {list.length === 0 ? (
+          {merged.length === 0 ? (
             <div className="p-3 text-xs text-muted-foreground">
               No hay notificaciones
             </div>
           ) : (
-            list.map((n) => (
+            merged.map((n: any) => (
               <div key={n.id} className="p-2 border-b last:border-b-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="text-sm font-medium leading-snug min-w-0">
                     <div className="truncate" title={n.title}>
                       {n.title}
                     </div>
-                    <div className="text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       {n.at ? new Date(n.at).toLocaleString() : ""}
+                      {n._kind === "sse" && (
+                        <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 px-1 py-[2px] border border-emerald-200 text-[10px]">
+                          SSE
+                        </span>
+                      )}
+                      {n._kind === "ticket" && (
+                        <span className="inline-flex items-center rounded bg-sky-50 text-sky-700 px-1 py-[2px] border border-sky-200 text-[10px]">
+                          Ticket
+                        </span>
+                      )}
                     </div>
                   </div>
                   {(() => {
@@ -117,12 +159,15 @@ function NotificationsBadge() {
         <div className="flex items-center justify-between mt-2">
           <button
             className="text-xs text-muted-foreground"
-            onClick={() => markAllRead()}
+            onClick={() => {
+              ticketsMarkAll();
+              sseMarkAll();
+            }}
           >
             Marcar leídas
           </button>
           <div className="text-xs text-muted-foreground">
-            {items.length} total
+            {ticketItems.length + sseItems.length} total
           </div>
         </div>
       </PopoverContent>

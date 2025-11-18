@@ -86,7 +86,7 @@ export function ProtectedRoute({
     }
   }
 
-  // Regla adicional: si es equipo, solo puede ver su vista de equipo por código
+  // Regla adicional: si es equipo, puede ver cualquier detalle de equipo (no sólo el propio)
   if (user?.role === "equipo") {
     const p = String(pathname || "");
     const segments = p.split("/").filter(Boolean);
@@ -121,7 +121,7 @@ export function ProtectedRoute({
     const target = myCode ? `/admin/teamsv2/${myCode}` : "/admin/teamsv2";
 
     if (
-      !(isTeamDetail && codeFromPath === myCode) &&
+      !isTeamDetail &&
       !isTeamsV2Root &&
       !isAlumnosPath &&
       !isTicketsBoard &&

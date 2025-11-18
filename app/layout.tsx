@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
+import { SseNotificationsProvider } from "@/components/hooks/useSseNotifications";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -33,7 +34,9 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
+        <SseNotificationsProvider>
+          <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
+        </SseNotificationsProvider>
         <Toaster />
         <Analytics />
       </body>

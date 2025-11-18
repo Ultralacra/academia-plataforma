@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { getTickets, type TicketBoardItem, reassignTicket } from "./api";
 import { Button } from "@/components/ui/button";
 import { getAuthToken } from "@/lib/auth";
+import { buildUrl } from "@/lib/api-config";
 import { toast } from "@/components/ui/use-toast";
 
 import {
@@ -676,9 +677,7 @@ export default function TicketsBoard() {
       setTicketDetailLoading(true);
       setTicketDetailError(null);
       setTicketDetail(null);
-      const url = `https://v001.vercel.app/v1/ticket/get/ticket/${encodeURIComponent(
-        codigo
-      )}`;
+      const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(codigo)}`);
       const token = typeof window !== "undefined" ? getAuthToken() : null;
       const res = await fetch(url, {
         method: "GET",

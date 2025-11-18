@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Eye } from "lucide-react";
 
@@ -123,34 +123,44 @@ export default function CoachStudentsTable({
   const fmt = useMemo(() => new Intl.DateTimeFormat("es-ES"), []);
   const data = Array.isArray(rows) ? rows : [];
 
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+  const total = data.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const start = (currentPage - 1) * pageSize;
+  const end = start + pageSize;
+  const pageRows = data.slice(start, end);
+
   return (
     <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
       <div className="border-b border-gray-100 px-5 py-4">
         <h3 className="text-base font-bold text-gray-900">{title}</h3>
-        <p className="text-sm text-gray-500">Listado compacto</p>
+        <p className="text-sm text-gray-500">
+          Listado compacto · {total.toLocaleString("es-ES")} alumnos
+        </p>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto pb-4">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
               <th className="px-3 py-2 text-left">Alumno</th>
-              <th className="px-3 py-2 text-left">Código</th>
               <th className="px-3 py-2 text-left">Estado</th>
               <th className="px-3 py-2 text-left">Fase</th>
               <th className="px-3 py-2 text-left">Ingreso</th>
               <th className="px-3 py-2 text-left">Última actividad</th>
               <th className="px-3 py-2 text-right">Inactividad (días)</th>
               <th className="px-3 py-2 text-right">Tickets</th>
-              {onView && <th className="px-3 py-2 text-right">Ver</th>}
+              {onView && <th className="px-3 py-2 text-right">Sesiones</th>}
               {onOffer && <th className="px-3 py-2 text-right">Sesión</th>}
             </tr>
           </thead>
           <tbody>
-            {data.length === 0 ? (
+            {pageRows.length === 0 ? (
               <tr>
                 <td
                   colSpan={(() => {
-                    let cols = 8;
+                    let cols = 7;
                     if (onView) cols += 1;
                     if (onOffer) cols += 1;
                     return cols;
@@ -161,7 +171,7 @@ export default function CoachStudentsTable({
                 </td>
               </tr>
             ) : (
-              data.map((r) => {
+              pageRows.map((r) => {
                 const st = badgeForState(r.state);
                 const ph = badgeForStage(r.stage);
                 return (
@@ -182,9 +192,6 @@ export default function CoachStudentsTable({
                       ) : (
                         r.name || r.code || "—"
                       )}
-                    </td>
-                    <td className="px-3 py-2 font-mono text-xs text-neutral-700 truncate max-w-[160px]">
-                      {r.code ?? "—"}
                     </td>
                     <td className="px-3 py-2">
                       <span className={st.className}>{st.label}</span>
@@ -218,7 +225,7 @@ export default function CoachStudentsTable({
                           title="Ver sesiones del alumno"
                           onClick={() => onView(r)}
                         >
-                          <Eye className="h-3.5 w-3.5 mr-1" /> Ver
+                          <Eye className="h-3.5 w-3.5 mr-1" /> Sesiones
                         </button>
                       </td>
                     )}
@@ -241,6 +248,35 @@ export default function CoachStudentsTable({
           </tbody>
         </table>
       </div>
+      {total > pageSize && (
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 text-xs text-gray-600">
+          <span>
+            Mostrando {start + 1}–{Math.min(end, total)} de{" "}
+            {total.toLocaleString("es-ES")} alumnos
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="px-2 py-1 rounded border text-xs disabled:opacity-40"
+              disabled={currentPage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Anterior
+            </button>
+            <span>
+              Página {currentPage} de {totalPages}
+            </span>
+            <button
+              type="button"
+              className="px-2 py-1 rounded border text-xs disabled:opacity-40"
+              disabled={currentPage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

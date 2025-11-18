@@ -2,7 +2,7 @@
 // Módulo API local y autocontenido para la vista de Alumnos.
 // Inyecta el token Bearer en todas las consultas.
 import { getAuthToken } from "@/lib/auth";
-import { apiFetch } from "@/lib/api-config";
+import { apiFetch, buildUrl } from "@/lib/api-config";
 
 export type TeamMember = { name: string; url?: string | null };
 
@@ -26,7 +26,8 @@ export type CoachTeam = {
   codigo?: string | null;
 };
 
-async function fetchJson<T>(url: string, init?: RequestInit, timeoutMs = 12000): Promise<T> {
+async function fetchJson<T>(pathOrUrl: string, init?: RequestInit, timeoutMs = 12000): Promise<T> {
+  const url = pathOrUrl.startsWith("http") ? pathOrUrl : buildUrl(pathOrUrl);
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const authHeaders: Record<string, string> = token
     ? { Authorization: `Bearer ${token}` }
@@ -87,8 +88,8 @@ function cleanClientName(raw: any): string {
 
 // 1) Alumnos — usa el endpoint directo con page=1&pageSize=1000
 export async function getAllStudents(): Promise<StudentRow[]> {
-  const url = 'https://v001.vercel.app/v1/client/get/clients?page=1&pageSize=1000';
-  const json = await fetchJson<any>(url);
+  const path = '/client/get/clients?page=1&pageSize=1000';
+  const json = await fetchJson<any>(path);
 
   // Puede venir como { data: [...] } o { clients: { data: [...] } } o { getClients: { data: [...] } }
   const rows: any[] = Array.isArray(json?.data)
@@ -123,8 +124,8 @@ export async function getAllStudents(): Promise<StudentRow[]> {
 
 // 2) Coaches (desde equipos)
 export async function getAllCoachesFromTeams(): Promise<CoachTeam[]> {
-  const url = 'https://v001.vercel.app/v1/team/get/team?page=1&pageSize=10000';
-  const json = await fetchJson<any>(url);
+  const path = '/team/get/team?page=1&pageSize=10000';
+  const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   const coaches: CoachTeam[] = rows.map((r) => ({ id: r.id, name: r.nombre, codigo: r.codigo ?? null }));
   // dedupe por nombre (por si acaso)
@@ -146,7 +147,7 @@ export async function createStudent(payload: {
   // tipo is always 'cliente' for alumnos
 }): Promise<{ id: number | string; codigo?: string | null; nombre: string }> {
   // Nuevo endpoint unificado de usuarios
-  const url = 'https://v001.vercel.app/v1/users';
+  const url = buildUrl('/users');
   const body = {
     name: payload.name,
     email: payload.email,
@@ -179,8 +180,8 @@ export async function createStudent(payload: {
 
 // 3) (Siguiente paso) alumnos de un coach por ID de coach
 export async function getCoachStudentsByCoachId(coachId: string): Promise<{ alumno: string; nombre: string }[]> {
-  const url = `https://v001.vercel.app/v1/client/get/clients-coaches?coach=${encodeURIComponent(coachId)}`;
-  const json = await fetchJson<any>(url);
+  const path = `/client/get/clients-coaches?coach=${encodeURIComponent(coachId)}`;
+  const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   const map = new Map<string, { alumno: string; nombre: string }>();
   rows.forEach((r) => {
@@ -212,10 +213,11 @@ export async function getStudentTickets(
   const qs = new URLSearchParams();
   qs.set('alumno', alumnoCode);
   if (estados && estados.length > 0) qs.set('estado', estados.join(','));
-  const url = `https://v001.vercel.app/v1/client/get/tickets/${encodeURIComponent(
-    alumnoCode
-  )}?${qs.toString()}`;
-  const json = await fetchJson<any>(url);
+  const query = qs.toString();
+  const path = `/client/get/tickets/${encodeURIComponent(alumnoCode)}${
+    query ? `?${query}` : ''
+  }`;
+  const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   return rows.map((r) => ({
     id: String(r.id),
@@ -244,7 +246,7 @@ export type CreateTicketForm = {
 };
 
 export async function createTicket(form: CreateTicketForm): Promise<any> {
-  const url = 'https://v001.vercel.app/v1/ticket/create/ticket';
+  const url = buildUrl('/ticket/create/ticket');
   const fd = new FormData();
   fd.set('nombre', form.nombre);
   fd.set('id_alumno', form.id_alumno);
@@ -307,13 +309,13 @@ export type TicketUpdatePayload = Partial<{
 
 export async function updateTicket(ticketId: string, payload: TicketUpdatePayload): Promise<any> {
   // El endpoint documentado usa PUT para actualizar un ticket
-  const url = `https://v001.vercel.app/v1/ticket/update/ticket/${encodeURIComponent(ticketId)}`;
+  const path = `/ticket/update/ticket/${encodeURIComponent(ticketId)}`;
   // Filtrar campos prohibidos y construir body limpio
   const rest: Record<string, any> = { ...(payload as any) };
   delete rest.alumno_url;
   delete rest.equipo;
 
-  return await fetchJson<any>(url, {
+  return await fetchJson<any>(path, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rest),
@@ -331,8 +333,8 @@ export type OpcionItem = {
 };
 
 export async function getOpciones(opcion: string): Promise<OpcionItem[]> {
-  const url = `https://v001.vercel.app/v1/opcion/get/opciones?opcion=${encodeURIComponent(opcion)}`;
-  const json = await fetchJson<any>(url);
+  const path = `/opcion/get/opciones?opcion=${encodeURIComponent(opcion)}`;
+  const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   return rows.map((r) => {
     const id = String(r.opcion_id ?? r.id ?? r.valor ?? r.clave ?? r.key ?? r.nombre ?? "");
@@ -359,8 +361,8 @@ export type TicketFile = {
 };
 
 export async function getTicketFiles(ticketId: string): Promise<TicketFile[]> {
-  const url = `https://v001.vercel.app/v1/ticket/get/archivos/${encodeURIComponent(ticketId)}`;
-  const json = await fetchJson<any>(url);
+  const path = `/ticket/get/archivos/${encodeURIComponent(ticketId)}`;
+  const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   return rows.map((r) => ({
     id: String(r.id),
@@ -380,8 +382,8 @@ export async function getTicketFile(fileId: string): Promise<{
   contenido_base64: string;
   created_at: string | null;
 }> {
-  const url = `https://v001.vercel.app/v1/ticket/get/archivo/${encodeURIComponent(fileId)}`;
-  const json = await fetchJson<any>(url);
+  const path = `/ticket/get/archivo/${encodeURIComponent(fileId)}`;
+  const json = await fetchJson<any>(path);
   const d = json?.data ?? {};
   return {
     id: String(d.id ?? fileId),
@@ -443,8 +445,8 @@ export async function deleteTicket(ticketCodigo: string): Promise<any> {
 
 // 9) Actualizar cliente (etapa / estado / nicho)
 export async function updateClient(clientCode: string, payload: Record<string, any>): Promise<any> {
-  const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
-  return await fetchJson<any>(url, {
+  const path = `/client/update/client/${encodeURIComponent(clientCode)}`;
+  return await fetchJson<any>(path, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -461,8 +463,8 @@ export type ClienteTareaHist = {
 
 export async function getClienteTareas(alumnoIdOrCode: string | number): Promise<ClienteTareaHist[]> {
   const key = String(alumnoIdOrCode);
-  const url = `https://v001.vercel.app/v1/client/get/cliente-tareas/${encodeURIComponent(key)}`;
-  const json = await fetchJson<any>(url);
+  const path = `/client/get/cliente-tareas/${encodeURIComponent(key)}`;
+  const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   return rows.map((r) => ({
     id: r.id ?? r.tarea_id ?? `${key}-${r.created_at ?? ''}`,
@@ -481,8 +483,8 @@ export type ClienteEstatusHist = {
 };
 
 export async function getClienteEstatus(alumnoCode: string): Promise<ClienteEstatusHist[]> {
-  const url = `https://v001.vercel.app/v1/client/get/cliente-estatus/${encodeURIComponent(alumnoCode)}`;
-  const json = await fetchJson<any>(url);
+  const path = `/client/get/cliente-estatus/${encodeURIComponent(alumnoCode)}`;
+  const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   return rows.map((r) => ({
     id: r.id ?? r.estatus_id ?? `${alumnoCode}-${r.created_at ?? ''}`,
@@ -495,7 +497,7 @@ export async function getClienteEstatus(alumnoCode: string): Promise<ClienteEsta
 
 // 14) Actualizar última tarea del cliente (form-data: ultima_tarea ISO)
 export async function updateClientLastTask(clientCode: string, isoDate: string): Promise<any> {
-  const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
   const fd = new FormData();
   // Se espera una fecha en formato ISO (UTC)
   fd.set('ultima_tarea', isoDate);
@@ -518,7 +520,7 @@ export async function uploadClientContract(
   clientCode: string,
   contrato: File
 ): Promise<any> {
-  const url = `https://v001.vercel.app/v1/client/update/client/${encodeURIComponent(clientCode)}`;
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
   const fd = new FormData();
   fd.set('contrato', contrato);
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
@@ -536,7 +538,7 @@ export async function downloadClientContractBlob(clientCode: string): Promise<{
   filename?: string;
   contentType?: string | null;
 }> {
-  const url = `https://v001.vercel.app/v1/client/download/contrato/${encodeURIComponent(clientCode)}`;
+  const url = buildUrl(`/client/download/contrato/${encodeURIComponent(clientCode)}`);
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const res = await fetch(url, { cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!res.ok) {

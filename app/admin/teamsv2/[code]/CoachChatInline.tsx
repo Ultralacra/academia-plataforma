@@ -23,7 +23,7 @@ import {
 } from "./chat-recent-upload";
 import { getEmitter, normalizeDateStr, normalizeTipo } from "./chat-core";
 import { getAuthToken } from "@/lib/auth";
-import { CHAT_HOST, apiFetch } from "@/lib/api-config";
+import { CHAT_HOST, apiFetch, buildUrl } from "@/lib/api-config";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -252,9 +252,8 @@ export default function CoachChatInline({
         if (chatIdRef.current != null) return;
         const parts = participantsRef.current ?? socketio?.participants;
         if (!Array.isArray(parts) || parts.length === 0) return;
-        // Para alumno queremos encontrar o crear automáticamente para cargar historial.
-        if (role === "alumno") await ensureChatReadyForSend();
-        else await ensureChatReadyForSend({ onlyFind: true });
+        // Alumno: solo localizar y hacer join si existe (no crear aquí)
+        await ensureChatReadyForSend({ onlyFind: true });
       } catch {}
     })();
   }, [connected, precreateOnParticipants, socketio?.participants]);
@@ -405,8 +404,6 @@ export default function CoachChatInline({
         }
       } catch {}
 
-      const baseUrl = "https://v001.vercel.app/v1/ai/compute/chat/";
-
       let res: Response | null = null;
       const { getAuthToken } = await import("@/lib/auth");
       const token = typeof window !== "undefined" ? getAuthToken() : null;
@@ -414,7 +411,9 @@ export default function CoachChatInline({
         ? { Authorization: `Bearer ${token}` }
         : undefined;
       const sendId = String(currentId).trim();
-      const urlWithParam = `${baseUrl}${encodeURIComponent(sendId)}`;
+      const urlWithParam = buildUrl(
+        `/ai/compute/chat/${encodeURIComponent(sendId)}`
+      );
       // logging eliminado
       res = await fetch(urlWithParam, {
         method: "POST",
@@ -568,18 +567,17 @@ export default function CoachChatInline({
             const res = await fetch(url, { method: "POST", headers, body: fd });
             ok = res.ok;
           } catch {}
-          // fallback to API_HOST
+          // fallback to API host
           if (!ok) {
             try {
-              const base2 = (
-                process.env.NEXT_PUBLIC_API_HOST || "https://v001.vercel.app/v1"
-              ).replace(/\/$/, "");
-              const url2 = `${base2}/ai/upload-file/${encodeURIComponent(id)}`;
+              const fallbackUrl = buildUrl(
+                `/ai/upload-file/${encodeURIComponent(id)}`
+              );
               const h2: Record<string, string> = {
                 ...headers,
                 // no fijamos Content-Type explícito para FormData
               };
-              const res2 = await fetch(url2, {
+              const res2 = await fetch(fallbackUrl, {
                 method: "POST",
                 headers: h2,
                 body: fd,
@@ -2662,6 +2660,8 @@ export default function CoachChatInline({
                     });
                     window.dispatchEvent(evt);
                     dbg("dispatch chat:list-refresh", { id_chat: cid });
+                    // Fuerza refresco inmediato para que la nueva conversación aparezca sin esperar eventos extra
+                    refreshListNow();
                   } catch {}
                   onChatInfo?.({
                     chatId: cid,

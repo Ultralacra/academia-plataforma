@@ -56,6 +56,7 @@ import CoachStudentsTable from "../components/CoachStudentsTable";
 import { fetchMetrics } from "@/app/admin/teams/teamsApi";
 import SessionsPanel from "../components/SessionsPanel";
 import { Textarea } from "@/components/ui/textarea";
+import { CHAT_HOST } from "@/lib/api-config";
 
 // Tipo compacto para lista de alumnos en chat (evita genérico multilínea en TSX)
 type StudentMini = {
@@ -72,6 +73,7 @@ export default function CoachDetailPage({
 }) {
   const code = params.code;
   const router = useRouter();
+  const chatServerUrl = (CHAT_HOST || "").replace(/\/$/, "");
 
   const [open, setOpen] = useState(false);
   const [coach, setCoach] = useState<CoachItem | null>(null);
@@ -698,10 +700,10 @@ export default function CoachDetailPage({
   }, []);
 
   return (
-    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "coach"]}>
       <DashboardLayout>
-        {/* Evitar scroll del contenedor raíz en esta página */}
-        <div className="space-y-6 overflow-hidden">
+        {/* Layout flexible: alto completo con scroll interno en tabs */}
+        <div className="flex flex-col h-full min-h-0 space-y-6 overflow-hidden">
           <div className="flex items-start gap-6">
             <div className="flex items-center gap-4">
               <div className="h-16 w-16 rounded-lg bg-neutral-100 grid place-items-center text-2xl font-bold text-neutral-800">
@@ -766,7 +768,11 @@ export default function CoachDetailPage({
             </div>
           </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
+          <Tabs
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="mt-2 flex flex-col flex-1 min-h-0"
+          >
             <TabsList>
               <TabsTrigger value="tickets">Tickets</TabsTrigger>
               <TabsTrigger value="metricas">Métricas</TabsTrigger>
@@ -776,8 +782,8 @@ export default function CoachDetailPage({
             </TabsList>
 
             {/* Pestaña Tickets: scroll interno, pantalla completa */}
-            <TabsContent value="tickets" className="mt-0">
-              <div className="h-[calc(100vh-180px)] overflow-auto rounded-lg border bg-white p-4">
+            <TabsContent value="tickets" className="mt-0 flex-1 min-h-0">
+              <div className="h-full overflow-auto rounded-lg border bg-white p-4">
                 {loading ? (
                   <div>Cargando...</div>
                 ) : error ? (
@@ -799,26 +805,28 @@ export default function CoachDetailPage({
               </div>
             </TabsContent>
 
-            <TabsContent value="metricas" className="mt-0">
-              {loading ? (
-                <div>Cargando...</div>
-              ) : error ? (
-                <div className="text-sm text-red-600">{error}</div>
-              ) : coach ? (
-                <PersonalMetrics
-                  coachCode={coach.codigo}
-                  coachName={coach.nombre}
-                />
-              ) : (
-                <div className="text-sm text-neutral-500">
-                  No se encontró información del coach.
-                </div>
-              )}
+            <TabsContent value="metricas" className="mt-0 flex-1 min-h-0">
+              <div className="h-full overflow-auto rounded-lg border bg-white p-4">
+                {loading ? (
+                  <div>Cargando...</div>
+                ) : error ? (
+                  <div className="text-sm text-red-600">{error}</div>
+                ) : coach ? (
+                  <PersonalMetrics
+                    coachCode={coach.codigo}
+                    coachName={coach.nombre}
+                  />
+                ) : (
+                  <div className="text-sm text-neutral-500">
+                    No se encontró información del coach.
+                  </div>
+                )}
+              </div>
             </TabsContent>
 
-            <TabsContent value="chat" className="mt-0">
+            <TabsContent value="chat" className="mt-0 flex-1 min-h-0">
               {/* Altura fija basada en viewport para evitar scroll de la pestaña */}
-              <div className="h-[calc(100vh-260px)] overflow-hidden">
+              <div className="h-full overflow-hidden rounded-lg border bg-white p-3">
                 <div className="grid grid-cols-12 gap-4 h-full min-h-0">
                   {/* Sección: Chats creados */}
                   <div className="col-span-3 h-full flex flex-col overflow-hidden min-h-0">
@@ -1412,7 +1420,7 @@ export default function CoachDetailPage({
                       className="h-full"
                       precreateOnParticipants
                       socketio={{
-                        url: "https://v001.onrender.com",
+                        url: chatServerUrl,
                         idEquipo: String(code),
                         participants: targetTeamCode
                           ? [
@@ -1666,10 +1674,10 @@ export default function CoachDetailPage({
               </div>
             </TabsContent>
 
-            <TabsContent value="alumnos" className="mt-0">
+            <TabsContent value="alumnos" className="mt-0 flex-1 min-h-0">
               {/* Detalles: ocupar pantalla completa con scroll interno */}
-              <div className="h-[calc(100vh-180px)] overflow-auto">
-                <div className="p-4 bg-white border rounded-lg">
+              <div className="h-full">
+                <div className="h-full overflow-auto p-4 bg-white border rounded-lg">
                   {loading ? (
                     <div>Cargando...</div>
                   ) : error ? (
@@ -1690,9 +1698,9 @@ export default function CoachDetailPage({
               </div>
             </TabsContent>
 
-            <TabsContent value="sesiones" className="mt-0">
-              <div className="h-[calc(100vh-180px)] overflow-auto">
-                <div className="p-4 bg-white border rounded-lg">
+            <TabsContent value="sesiones" className="mt-0 flex-1 min-h-0">
+              <div className="h-full">
+                <div className="h-full overflow-auto p-4 bg-white border rounded-lg">
                   {loading ? (
                     <div>Cargando...</div>
                   ) : error ? (

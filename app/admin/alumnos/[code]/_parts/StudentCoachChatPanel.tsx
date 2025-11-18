@@ -93,12 +93,27 @@ export default function StudentCoachChatPanel({
         setCoachRowsRaw(rows);
         const asignados = rows.map((r) => {
           const codigoEq =
-            r.codigo_equipo ?? r.codigo_coach ?? r.codigo ?? null;
-          const idEq = codigoEq ?? r.id ?? r.id_coach ?? r.id_equipo ?? null;
+            r.codigo_equipo ??
+            r.codigo_coach ??
+            r.coach_codigo ??
+            r.coach_code ??
+            r.coachCodigo ??
+            r.coachCode ??
+            r.codigoCoach ??
+            r.codigoEquipo ??
+            r.equipo_codigo ??
+            null;
+          const idEq =
+            r.id_equipo ??
+            r.id_coach ??
+            r.coach_id ??
+            r.equipo_id ??
+            r.id_relacion ??
+            r.id ??
+            null;
           return {
-            // Forzamos que id y codigo sean el CÓDIGO del equipo cuando exista
-            id: codigoEq ?? idEq,
-            codigo: codigoEq ?? idEq,
+            id: idEq ?? codigoEq ?? r.id ?? null,
+            codigo: codigoEq ?? null,
             nombre: r.coach_nombre ?? r.name ?? "",
             area: r.area ?? null,
             puesto: r.puesto ?? null,
@@ -185,49 +200,85 @@ export default function StudentCoachChatPanel({
   // Resolver código del equipo para el coach seleccionado.
   const resolvedEquipoCode = useMemo(() => {
     if (!targetCoachId) return null;
-    const v = String(targetCoachId);
-    // Si ya parece un código (contiene letras o guiones), úsalo tal cual
-    if (/[^0-9]/.test(v)) return v;
-    // Si es numérico, intentamos mapear usando las filas crudas de relaciones
+    const v = String(targetCoachId).trim();
+    const looksLikeCode = /[a-zA-Z]/.test(v) || v.includes("-");
+    if (looksLikeCode) return v;
+
+    const studentCodeStr = String(code ?? "");
+    const pickFirstString = (...vals: any[]) => {
+      for (const val of vals) {
+        if (val == null) continue;
+        const s = String(val).trim();
+        if (!s) continue;
+        if (s === studentCodeStr) continue;
+        if (/[a-zA-Z]/.test(s) || s.includes("-")) return s;
+      }
+      return null;
+    };
+
     try {
-      const rows = coachRowsRaw || [];
-      // Buscamos match por posibles claves de id
-      const r = rows.find((r: any) => {
-        const ids = [r.id, r.id_coach, r.id_equipo, r.id_relacion]
+      const rows = Array.isArray(coachRowsRaw) ? coachRowsRaw : [];
+      for (const r of rows) {
+        const ids = [
+          r?.id,
+          r?.id_coach,
+          r?.id_equipo,
+          r?.id_relacion,
+          r?.coach_id,
+          r?.equipo_id,
+        ]
           .map((x: any) => (x == null ? null : String(x)))
           .filter(Boolean);
-        return ids.includes(v);
-      });
-      const code = r?.codigo_equipo ?? r?.codigo_coach ?? r?.codigo ?? null;
-      if (code) return String(code);
-    } catch {}
-    // Fallback: si el catálogo de teams trae un código distinto al id, úsalo
-    try {
-      const t = teams.find(
-        (x) => String(x.id) === v || String((x as any).codigo) === v
-      );
-      if (t && (t as any).codigo && String((t as any).codigo) !== v) {
-        return String((t as any).codigo);
+        if (!ids.includes(v)) continue;
+        const code = pickFirstString(
+          r?.codigo_equipo,
+          r?.codigo_coach,
+          r?.coach_codigo,
+          r?.coach_code,
+          r?.equipo_codigo,
+          r?.codigoEquipo,
+          r?.codigoCoach
+        );
+        if (code) return code;
       }
     } catch {}
-    // Último recurso: devolver tal cual (provocará error en backend, pero dejamos log)
+
+    const catalogs = [teamsAll, teams, teamsGlobal];
+    for (const list of catalogs) {
+      try {
+        const arr = Array.isArray(list) ? list : [];
+        const match = arr.find((x: any) => {
+          const ids = [x?.id, x?.codigo, x?.code]
+            .map((n) => (n == null ? null : String(n)))
+            .filter(Boolean);
+          return ids.includes(v);
+        });
+        if (match) {
+          const code = pickFirstString(
+            match?.codigo,
+            match?.code,
+            match?.codigo_equipo,
+            match?.codigoCoach,
+            match?.codigo_coach
+          );
+          if (code) return code;
+        }
+      } catch {}
+    }
+
     return v;
-  }, [targetCoachId, coachRowsRaw, teams]);
+  }, [targetCoachId, coachRowsRaw, teamsAll, teams, teamsGlobal]);
 
   // Construir participantes cuando hay un coach seleccionado
   const participants = useMemo(() => {
     if (!targetCoachId) return undefined;
     const idEquipoVal = resolvedEquipoCode ? String(resolvedEquipoCode) : null;
-    const hasEquipoCode = !!idEquipoVal && /[^0-9]/.test(idEquipoVal);
     const arr: any[] = [
-      {
-        participante_tipo: "cliente",
-        id_cliente: String(code),
-      },
+      { participante_tipo: "cliente", id_cliente: String(code) },
     ];
-    if (hasEquipoCode) {
+    // Incluir siempre el equipo si se pudo resolver algún código/ID (permitir numéricos también)
+    if (idEquipoVal)
       arr.push({ participante_tipo: "equipo", id_equipo: idEquipoVal });
-    }
     try {
       console.log("[StudentCoachChatPanel] participants", arr, {
         targetCoachId,
@@ -698,17 +749,12 @@ export default function StudentCoachChatPanel({
               socketio={{
                 url: (CHAT_HOST || "").replace(/\/$/, ""),
                 idCliente: String(code),
-                idEquipo:
-                  resolvedEquipoCode &&
-                  /[^0-9]/.test(String(resolvedEquipoCode))
-                    ? String(resolvedEquipoCode)
-                    : undefined,
+                idEquipo: resolvedEquipoCode
+                  ? String(resolvedEquipoCode)
+                  : undefined,
                 participants: participants,
-                // Solo crear automáticamente si tenemos un CÓDIGO de equipo válido (no numérico)
-                autoCreate: !!(
-                  resolvedEquipoCode &&
-                  /[^0-9]/.test(String(resolvedEquipoCode))
-                ),
+                // Permitir creación automática siempre que tengamos algún código/ID de coach
+                autoCreate: !!resolvedEquipoCode,
                 autoJoin: !!selectedChatId,
                 chatId: selectedChatId ?? undefined,
               }}

@@ -29,7 +29,7 @@ export function LoginForm() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[radial-gradient(ellipse_at_top,theme(colors.slate.100),white)] p-4">
-      <Card className="w-full max-w-md border-0 shadow-xl">
+      <Card className="w-full max-w-md border border-slate-200 bg-white/90 shadow-[0_18px_45px_rgba(15,23,42,0.18)] backdrop-blur-sm rounded-2xl">
         <CardContent className="p-6 sm:p-8">
           {/* Logo centrado */}
           <div className="flex justify-center">
@@ -43,6 +43,16 @@ export function LoginForm() {
 
           {/* Línea decorativa con degradado (conservada) */}
           <div className="h-1 w-24 mx-auto mt-4 rounded-full bg-gradient-to-r from-slate-900 via-slate-700 to-amber-500" />
+
+          {/* Títulos */}
+          <div className="mt-5 text-center space-y-1">
+            <h1 className="text-lg sm:text-xl font-semibold text-slate-900">
+              Inicia sesión en la plataforma
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500">
+              Usa tu correo corporativo y contraseña asignada.
+            </p>
+          </div>
 
           {/* Formulario */}
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">

@@ -72,6 +72,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { getAuthToken } from "@/lib/auth";
 import { BONOS_CONTRACTUALES, BONOS_EXTRA } from "@/lib/bonos";
+import { buildUrl } from "@/lib/api-config";
 
 function fmtDate(iso?: string | null) {
   if (!iso) return "—";
@@ -640,9 +641,7 @@ export default function TicketsPanel({
       setTicketDetailLoading(true);
       setTicketDetailError(null);
       setTicketDetail(null);
-      const url = `https://v001.vercel.app/v1/ticket/get/ticket/${encodeURIComponent(
-        codigo
-      )}`;
+      const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(codigo)}`);
       const token = typeof window !== "undefined" ? getAuthToken() : null;
       const res = await fetch(url, {
         method: "GET",
