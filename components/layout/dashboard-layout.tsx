@@ -41,6 +41,8 @@ function NotificationsBadge() {
     items: sseItems,
     unread: sseUnread,
     markAllRead: sseMarkAll,
+    connected: sseConnected,
+    disabled: sseDisabled,
   } = useSseNotifications();
   const [open, setOpen] = useState(false);
   // Fusionar notificaciones: primero las SSE (más recientes directas), luego tickets por orden de fecha
@@ -77,11 +79,32 @@ function NotificationsBadge() {
       }}
     >
       <PopoverTrigger asChild>
-        <button className="relative p-2 rounded-full hover:bg-muted/10">
-          <Bell className="h-4 w-4" />
+        <button
+          className="relative p-2 rounded-full hover:bg-muted/10"
+          title={
+            sseDisabled || !sseConnected
+              ? "Alertas no conectadas"
+              : "Notificaciones"
+          }
+        >
+          <Bell
+            className={`h-4 w-4 ${
+              sseDisabled || !sseConnected
+                ? "text-muted-foreground opacity-60"
+                : ""
+            }`}
+          />
           {totalUnread > 0 && (
             <span className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">
               {totalUnread > 99 ? "99+" : totalUnread}
+            </span>
+          )}
+          {totalUnread === 0 && (sseDisabled || !sseConnected) && (
+            <span
+              className="absolute -top-1 -right-1 bg-neutral-300 text-neutral-700 rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+              title="SSE desconectado"
+            >
+              !
             </span>
           )}
         </button>
@@ -91,7 +114,9 @@ function NotificationsBadge() {
         <div className="max-h-56 overflow-y-auto">
           {merged.length === 0 ? (
             <div className="p-3 text-xs text-muted-foreground">
-              No hay notificaciones
+              {sseDisabled || !sseConnected
+                ? "Alertas no conectadas"
+                : "No hay notificaciones"}
             </div>
           ) : (
             merged.map((n: any) => (

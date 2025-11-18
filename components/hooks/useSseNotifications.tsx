@@ -7,6 +7,7 @@ import {
   createContext,
   useContext,
 } from "react";
+import { usePathname } from "next/navigation";
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
 
@@ -21,6 +22,8 @@ export interface SseNotificationItem {
 interface SseNotificationsContextValue {
   items: SseNotificationItem[];
   unread: number;
+  connected: boolean; // estado actual de la conexión SSE
+  disabled: boolean; // si está deshabilitado (ej. en /login)
   markAllRead: () => void;
   clear: () => void;
 }
@@ -50,10 +53,13 @@ export function useSseNotifications() {
 function useProvideSseNotifications(): SseNotificationsContextValue {
   const [items, setItems] = useState<SseNotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
+  const [connected, setConnected] = useState(false);
   const controllerRef = useRef<AbortController | null>(null);
   const retryRef = useRef<number>(0);
   const connectedRef = useRef<boolean>(false);
   const bufferRef = useRef<string>("");
+  const pathname = usePathname();
+  const disabled = pathname?.startsWith("/login");
 
   const parseEventBlocks = useCallback((chunk: string) => {
     bufferRef.current += chunk;
@@ -108,6 +114,15 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
   }, []);
 
   const start = useCallback(() => {
+    if (disabled) {
+      // Si está deshabilitado (login), aseguramos desconexión
+      try {
+        controllerRef.current?.abort();
+      } catch {}
+      connectedRef.current = false;
+      setConnected(false);
+      return;
+    }
     const token = getAuthToken();
     if (!token) return;
     // Abortar conexión previa
@@ -135,6 +150,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
           throw new Error(`HTTP ${res.status}`);
         }
         connectedRef.current = true;
+        setConnected(true);
         try {
           console.log("[SSE] conectado", { attempt });
         } catch {}
@@ -149,6 +165,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         // Si terminamos el stream sin abort manual, reconectar
         if (!signal.aborted) {
           connectedRef.current = false;
+          setConnected(false);
           try {
             console.log("[SSE] stream finalizado, reconectando...");
           } catch {}
@@ -157,6 +174,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       } catch (e: any) {
         if (signal.aborted) return; // cerrado manual
         connectedRef.current = false;
+        setConnected(false);
         const backoff = Math.min(30000, attempt * 1500);
         try {
           console.warn("[SSE] error de conexión", e?.message || e);
@@ -164,17 +182,19 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         setTimeout(() => start(), backoff);
       }
     })();
-  }, [parseEventBlocks]);
+  }, [parseEventBlocks, disabled]);
 
   // Auto iniciar cuando hay token y aún no estamos conectados
   useEffect(() => {
+    if (disabled) return; // no conectar en login
     const token = getAuthToken();
     if (token && !connectedRef.current) start();
-  }, [start]);
+  }, [start, disabled]);
 
   // Reintentar cuando token cambie (login/logout)
   useEffect(() => {
     const iv = setInterval(() => {
+      if (disabled) return; // ignora reconexión periódica en login
       const token = getAuthToken();
       if (token && !connectedRef.current) start();
       if (!token && connectedRef.current) {
@@ -182,12 +202,13 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
           controllerRef.current?.abort();
         } catch {}
         connectedRef.current = false;
+        setConnected(false);
         setItems([]);
         setUnread(0);
       }
-    }, 2500);
+    }, 3000);
     return () => clearInterval(iv);
-  }, [start]);
+  }, [start, disabled]);
 
   const markAllRead = useCallback(() => {
     setItems((prev) => prev.map((it) => ({ ...it, unread: false })));
@@ -199,5 +220,5 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     setUnread(0);
   }, []);
 
-  return { items, unread, markAllRead, clear };
+  return { items, unread, connected, disabled: !!disabled, markAllRead, clear };
 }

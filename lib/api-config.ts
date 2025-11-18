@@ -6,7 +6,7 @@ export const API_HOST =
 
 // Host del servidor de chat (Socket.IO + endpoints admin). Configurable por env.
 // Fallback: origen de API_HOST sin el path (si API_HOST tiene /v1, toma solo el dominio)
-const DEFAULT_API_HOST = "https://api-ax.valinkgroup.com/v1";
+const DEFAULT_API_HOST = "http://157.245.185.69:5685/v1";
 const DEFAULT_CHAT_HOST = "https://v001.onrender.com";
 
 export const CHAT_HOST = (() => {
