@@ -1,6 +1,6 @@
 "use client";
 
-import { TicketIcon, User } from "lucide-react";
+import { TicketIcon, Trash2, User } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -12,6 +12,18 @@ import {
   type StatusSint,
   getOptionBadgeClass,
 } from "./detail-utils";
+import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Header({
   name,
@@ -20,6 +32,8 @@ export default function Header({
   apiState,
   status,
   ticketsCount,
+  canDelete,
+  onDelete,
 }: {
   name: string;
   code: string;
@@ -27,6 +41,8 @@ export default function Header({
   apiState?: string;
   status: StatusSint;
   ticketsCount?: number;
+  canDelete?: boolean;
+  onDelete?: () => void | Promise<void>;
 }) {
   // Nota: el conteo real de tickets se muestra desde el padre para evitar fetch doble.
   return (
@@ -93,6 +109,30 @@ export default function Header({
               status.replace("_", " ")}
           </span>
         )}
+        {canDelete ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" className="h-7 px-2">
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Eliminar alumno</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Esta acción no se puede deshacer. Se eliminará el alumno
+                  <span className="font-medium"> {name}</span> (código {code}).
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete?.()}>
+                  Eliminar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null}
       </div>
     </div>
   );

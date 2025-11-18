@@ -557,6 +557,15 @@ export async function downloadClientContractBlob(clientCode: string): Promise<{
   return { blob, filename, contentType };
 }
 
+// Eliminar alumno por código (DELETE /v1/client/delete/client/:codigo)
+export async function deleteStudent(clientCode: string): Promise<any> {
+  if (!clientCode) throw new Error('clientCode requerido');
+  return await apiFetch<any>(
+    `/client/delete/client/${encodeURIComponent(clientCode)}`,
+    { method: 'DELETE' }
+  );
+}
+
 // ===== ADS METRICS =====
 // Tipos y helpers para CRUD básico de métricas de ADS
 

@@ -11,8 +11,8 @@ import { apiFetch } from "@/lib/api-config";
 
 export default function StudentChatInline({
   code,
-  title = "Chat",
-  subtitle,
+  title = "Soporte X Academy",
+  subtitle = "Atención al Cliente",
   coachEquipoId,
   className = "h-full",
 }: {
@@ -149,22 +149,20 @@ export default function StudentChatInline({
         return sid;
       }
       if (tipo === "equipo") {
-        if (sid === String(resolvedEquipoId)) return resolvedEquipoName || sid;
-        const found = coachMap[sid];
-        if (found?.name) return found.name;
-        return sid;
+        // En el chat del alumno, siempre mostrar el contacto como "Soporte X Academy"
+        return "Soporte X Academy";
       }
       return sid;
     },
-    [code, alumnoName, resolvedEquipoId, resolvedEquipoName, coachMap]
+    [code, alumnoName]
   );
 
   return (
     <CoachChatInline
       room={room}
       role="alumno"
-      title={title}
-      subtitle={subtitle}
+      title={"Soporte X Academy"}
+      subtitle={"Atención al Cliente"}
       variant="card"
       className={className}
       precreateOnParticipants

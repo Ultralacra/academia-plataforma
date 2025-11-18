@@ -53,9 +53,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
+import { deleteStudent } from "../api";
+import { useRouter } from "next/navigation";
 
 export default function StudentDetailContent({ code }: { code: string }) {
   const { user } = useAuth();
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState<any | null>(null);
   const [coaches, setCoaches] = useState<CoachMember[]>([]);
@@ -507,6 +510,18 @@ export default function StudentDetailContent({ code }: { code: string }) {
         apiState={student.state || student.raw?.estado || undefined}
         status={statusSint}
         ticketsCount={ticketsCount}
+        canDelete={(user?.role ?? "").toLowerCase() === "admin"}
+        onDelete={async () => {
+          try {
+            const codeToDelete = student.code || code;
+            await deleteStudent(codeToDelete);
+            toast({ title: "Alumno eliminado" });
+            router.push("/admin/alumnos");
+          } catch (e) {
+            console.error(e);
+            toast({ title: "No se pudo eliminar el alumno" });
+          }
+        }}
       />
 
       {/* Tabs superiores: Detalle / Chat a pantalla completa */}

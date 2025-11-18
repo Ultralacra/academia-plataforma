@@ -9,7 +9,7 @@ import { MessageSquare, X } from "lucide-react";
 export default function StudentChatWidget({
   initialOpen = true,
   initialCode,
-  title = "Chat con administración",
+  title = "Chat con Soporte X Academy",
 }: {
   initialOpen?: boolean;
   initialCode?: string;
@@ -101,8 +101,8 @@ export default function StudentChatWidget({
               <div className="h-full">
                 <StudentChatInline
                   code={room}
-                  title="Chat con administración"
-                  subtitle={`Código: ${room}`}
+                  title="Soporte X Academy"
+                  subtitle="Atención al Cliente"
                   className="h-full"
                 />
               </div>

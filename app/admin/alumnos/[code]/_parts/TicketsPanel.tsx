@@ -34,7 +34,6 @@ import {
   Eye,
   User,
   Paperclip,
-  Check,
 } from "lucide-react";
 import {
   Dialog,
@@ -61,7 +60,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Checkbox } from "@/components/ui/checkbox";
+// import { Checkbox } from "@/components/ui/checkbox";
 import {
   Drawer,
   DrawerContent,
@@ -71,7 +70,7 @@ import {
 } from "@/components/ui/drawer";
 import { Separator } from "@/components/ui/separator";
 import { getAuthToken } from "@/lib/auth";
-import { BONOS_CONTRACTUALES, BONOS_EXTRA } from "@/lib/bonos";
+// import { BONOS_CONTRACTUALES, BONOS_EXTRA } from "@/lib/bonos";
 import { buildUrl } from "@/lib/api-config";
 
 function fmtDate(iso?: string | null) {
@@ -187,9 +186,6 @@ export default function TicketsPanel({
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<"general" | "detalle">("general");
-  // Bonos tab state
-  const [detailTabBonosReady, setDetailTabBonosReady] = useState(false);
-  const [bonosSelected, setBonosSelected] = useState<string[]>([]);
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
   const [ticketDetailError, setTicketDetailError] = useState<string | null>(
@@ -630,7 +626,6 @@ export default function TicketsPanel({
     setSelectedTicket(ticket);
     setDrawerOpen(true);
     setDetailTab("general");
-    setDetailTabBonosReady(false);
     const codigo =
       (ticket as any)?.codigo || (ticket as any)?.id_externo || null;
     if (codigo) loadTicketDetail(String(codigo));
@@ -691,54 +686,7 @@ export default function TicketsPanel({
     return uniq;
   };
 
-  // Bonos disponibles (centralizados en lib/bonos)
-
-  // Persistencia local (temporal) de bonos por alumno
-  const bonosStorageKey = student?.code
-    ? `bonos:${String(student.code)}`
-    : null;
-
-  useEffect(() => {
-    if (!drawerOpen || !student?.code) return;
-    // Cargar bonos guardados la primera vez que abrimos el drawer en esta sesión
-    if (!detailTabBonosReady) {
-      try {
-        const raw = bonosStorageKey
-          ? localStorage.getItem(bonosStorageKey)
-          : null;
-        const parsed: string[] = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(parsed)) setBonosSelected(parsed);
-      } catch {}
-      setDetailTabBonosReady(true);
-    }
-  }, [drawerOpen, student?.code, bonosStorageKey, detailTabBonosReady]);
-
-  function toggleBono(key: string, checked: boolean) {
-    setBonosSelected((prev) => {
-      const set = new Set(prev);
-      if (checked) set.add(key);
-      else set.delete(key);
-      return Array.from(set);
-    });
-  }
-
-  function handleSaveBonos() {
-    if (!bonosStorageKey) return;
-    try {
-      localStorage.setItem(bonosStorageKey, JSON.stringify(bonosSelected));
-      toast({
-        title: "Bonos guardados",
-        description: "La selección se guardó para este alumno.",
-      });
-    } catch (e) {
-      console.error(e);
-      toast({
-        title: "No se pudieron guardar los bonos",
-        description: "Intenta de nuevo o contacta al equipo.",
-        variant: "destructive",
-      });
-    }
-  }
+  // Bonos eliminados de este panel: se gestionan solo en su pestaña dedicada
 
   return (
     <>
@@ -978,18 +926,6 @@ export default function TicketsPanel({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDetailTab("bonos" as any)}
-                  className={`px-3 py-1.5 text-xs border-l ${
-                    (detailTab as any) === "bonos"
-                      ? "bg-slate-900 text-white"
-                      : "hover:bg-gray-50"
-                  }`}
-                  title="Bonos del alumno"
-                >
-                  Bonos
-                </button>
-                <button
-                  type="button"
                   onClick={() => setDetailTab("detalle")}
                   className={`px-3 py-1.5 text-xs border-l ${
                     detailTab === "detalle"
@@ -1081,155 +1017,7 @@ export default function TicketsPanel({
               </div>
             </div>
 
-            {/* Bonos */}
-            <div
-              className={(detailTab as any) === "bonos" ? "block" : "hidden"}
-            >
-              <div className="p-6 space-y-6">
-                {!isStudent && (
-                  <div className="flex justify-end">
-                    <Button size="sm" onClick={handleSaveBonos}>
-                      Guardar selección
-                    </Button>
-                  </div>
-                )}
-                <div className="space-y-1">
-                  <div className="text-sm font-semibold text-slate-900">
-                    Detalles de bonos acordados con el cliente a nivel
-                    contractual
-                  </div>
-                  <p className="text-xs text-slate-600">
-                    Selecciona los bonos aplicables a este alumno. Estos bonos
-                    forman parte del contrato y algunos son de una sola vez.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  {BONOS_CONTRACTUALES.map((b) => {
-                    const isSel = bonosSelected.includes(b.key);
-                    return (
-                      <div
-                        key={b.key}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() =>
-                          !isStudent ? toggleBono(b.key, !isSel) : undefined
-                        }
-                        onKeyDown={(e) => {
-                          if (isStudent) return;
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleBono(b.key, !isSel);
-                          }
-                        }}
-                        className={`relative rounded-lg border p-4 transition-all cursor-pointer ${
-                          isSel
-                            ? "border-sky-400 bg-sky-50/60 ring-2 ring-sky-100"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <Checkbox
-                            checked={isSel}
-                            onClick={(e) => e.stopPropagation()}
-                            onCheckedChange={(v) =>
-                              !isStudent && toggleBono(b.key, Boolean(v))
-                            }
-                            disabled={isStudent}
-                            aria-label={`Seleccionar ${b.title}`}
-                          />
-                          <div className="space-y-1 pr-8">
-                            <div className="text-sm font-medium text-slate-900">
-                              {b.title}
-                            </div>
-                            <div className="text-sm text-slate-700 leading-relaxed">
-                              {b.description}
-                            </div>
-                          </div>
-                        </div>
-                        {isSel && (
-                          <div className="absolute right-3 top-3 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-white">
-                            <Check className="h-3.5 w-3.5" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <Separator />
-
-                <div className="space-y-1">
-                  <div className="text-sm font-semibold text-slate-900">
-                    Bonos extra que puede adquirir el cliente luego de haber
-                    ingresado
-                  </div>
-                  <p className="text-xs text-slate-600">
-                    Estos bonos se solicitan fuera de las cláusulas
-                    contractuales. Requieren pago, formulario con la información
-                    y un acuerdo mutuo con el alcance del servicio.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  {BONOS_EXTRA.map((b) => {
-                    const isSel = bonosSelected.includes(b.key);
-                    return (
-                      <div
-                        key={b.key}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() =>
-                          !isStudent ? toggleBono(b.key, !isSel) : undefined
-                        }
-                        onKeyDown={(e) => {
-                          if (isStudent) return;
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleBono(b.key, !isSel);
-                          }
-                        }}
-                        className={`relative rounded-lg border p-4 transition-all cursor-pointer ${
-                          isSel
-                            ? "border-sky-400 bg-sky-50/60 ring-2 ring-sky-100"
-                            : "border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm"
-                        }`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <Checkbox
-                            checked={isSel}
-                            onClick={(e) => e.stopPropagation()}
-                            onCheckedChange={(v) =>
-                              !isStudent && toggleBono(b.key, Boolean(v))
-                            }
-                            disabled={isStudent}
-                            aria-label={`Seleccionar ${b.title}`}
-                          />
-                          <div className="space-y-1 pr-8">
-                            <div className="text-sm font-medium text-slate-900">
-                              {b.title}
-                            </div>
-                            <div className="text-sm text-slate-700 leading-relaxed">
-                              {b.description}
-                            </div>
-                          </div>
-                        </div>
-                        {isSel && (
-                          <div className="absolute right-3 top-3 inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-600 text-white">
-                            <Check className="h-3.5 w-3.5" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {isStudent && (
-                  <div className="text-xs text-slate-500">
-                    Solo administradores pueden modificar los bonos asignados.
-                  </div>
-                )}
-              </div>
-            </div>
+            {/* Se eliminó la pestaña de Bonos en este panel */}
 
             <div className={detailTab === "detalle" ? "block" : "hidden"}>
               <div className="p-6 space-y-6">

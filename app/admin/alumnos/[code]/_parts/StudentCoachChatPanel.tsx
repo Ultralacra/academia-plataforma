@@ -297,8 +297,8 @@ export default function StudentCoachChatPanel({
 
   useEffect(() => {
     if (!targetCoachId) {
-      setTargetTitle(studentName || "Conversación");
-      setTargetSubtitle(undefined);
+      setTargetTitle("Soporte X Academy");
+      setTargetSubtitle("Atención al Cliente");
       return;
     }
     const t = teams.find(
@@ -306,10 +306,8 @@ export default function StudentCoachChatPanel({
         String(x.id) === String(targetCoachId) ||
         String(x.codigo) === String(targetCoachId)
     );
-    setTargetTitle(t?.nombre || String(targetCoachId));
-    setTargetSubtitle(
-      [t?.puesto, t?.area].filter(Boolean).join(" · ") || "Coach"
-    );
+    setTargetTitle("Soporte X Academy");
+    setTargetSubtitle("Atención al Cliente");
   }, [targetCoachId, teams, studentName]);
 
   // Al conectar, refrescar listado de mis chats (como alumno)
@@ -475,19 +473,12 @@ export default function StudentCoachChatPanel({
             <Badge
               variant="secondary"
               className="h-5 px-2 text-[10px] font-medium bg-gray-100 text-gray-700 border-gray-200"
-              title={[selectedCoach.puesto, selectedCoach.area]
-                .filter(Boolean)
-                .join(" · ")}
+              title="Soporte · Atención al Cliente"
             >
-              {selectedCoach.nombre}
-              {selectedCoach.puesto || selectedCoach.area ? (
-                <span className="ml-1 text-[10px] text-gray-500">
-                  ·{" "}
-                  {[selectedCoach.puesto, selectedCoach.area]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              ) : null}
+              Soporte X Academy
+              <span className="ml-1 text-[10px] text-gray-500">
+                · Atención al Cliente
+              </span>
             </Badge>
           </div>
         )}
@@ -535,9 +526,7 @@ export default function StudentCoachChatPanel({
                   const selected =
                     String(targetCoachId ?? "") ===
                     String((t as any).codigo ?? t.id);
-                  const subtitle = [t.puesto, t.area]
-                    .filter(Boolean)
-                    .join(" · ");
+                  const subtitle = "SOPORTE · ATENCIÓN AL CLIENTE";
                   return (
                     <li key={String(t.id)}>
                       <button
@@ -554,11 +543,11 @@ export default function StudentCoachChatPanel({
                       >
                         <div className="flex items-center gap-3 px-2 py-2">
                           <div className="h-9 w-9 rounded-full bg-neutral-200 text-neutral-700 grid place-items-center font-semibold">
-                            {initialFromText(t.nombre || t.codigo)}
+                            {initialFromText("Soporte X Academy")}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-medium">
-                              {t.nombre}
+                              Soporte X Academy
                             </div>
                             {subtitle && (
                               <div className="text-[11px] text-neutral-500 truncate">
@@ -613,11 +602,7 @@ export default function StudentCoachChatPanel({
                         String(t.id) === String(coach?.id_equipo ?? "") ||
                         String(t.codigo) === String(coach?.id_equipo ?? "")
                     );
-                  const title = coachInfo?.nombre
-                    ? String(coachInfo.nombre)
-                    : coach?.id_equipo
-                    ? `Coach ${coach.id_equipo}`
-                    : `Chat ${id}`;
+                  const title = "Soporte X Academy";
                   const lastObj =
                     it?.last_message ?? it?.ultimo_mensaje ?? null;
                   const last = (
@@ -626,11 +611,7 @@ export default function StudentCoachChatPanel({
                     it?.last?.text ??
                     ""
                   ).toString();
-                  const areaPuesto = coachInfo
-                    ? [coachInfo.puesto, coachInfo.area]
-                        .filter(Boolean)
-                        .join(" · ")
-                    : "";
+                  const areaPuesto = "Atención al Cliente";
                   const countKey = `chatUnreadById:alumno:${String(id ?? "")}`;
                   const storedCount = parseInt(
                     (typeof window !== "undefined" &&
@@ -733,16 +714,8 @@ export default function StudentCoachChatPanel({
                   return sid;
                 }
                 if (tipo === "equipo") {
-                  const t = (teamsAll.length ? teamsAll : teams).find(
-                    (x) =>
-                      String((x as any).codigo) === sid || String(x.id) === sid
-                  );
-                  if (t?.nombre) return String(t.nombre);
-                  const tg = teamsGlobal.find(
-                    (x) =>
-                      String((x as any).codigo) === sid || String(x.id) === sid
-                  );
-                  return tg?.nombre ? String(tg.nombre) : sid;
+                  // Mostrar siempre el contacto como "Soporte X Academy" en la vista del admin
+                  return "Soporte X Academy";
                 }
                 return sid;
               }}
@@ -819,16 +792,8 @@ export default function StudentCoachChatPanel({
                             String((x as any).codigo) === sid ||
                             String(x.id) === sid
                         );
-                      if (tg) {
-                        setTargetTitle(tg.nombre || sid);
-                        setTargetSubtitle(
-                          [tg.puesto, tg.area].filter(Boolean).join(" · ") ||
-                            "Coach"
-                        );
-                      } else {
-                        setTargetTitle(`Coach ${sid}`);
-                        setTargetSubtitle("Coach");
-                      }
+                      setTargetTitle("Soporte X Academy");
+                      setTargetSubtitle("Atención al Cliente");
                     }
                   }
                 } catch {}
