@@ -72,7 +72,10 @@ function MessageBubble({
     <div className={`flex items-end gap-2 ${isMine ? "justify-end" : ""}`}>
       {!isMine && (
         <Avatar className="w-8 h-8">
-          <AvatarImage />
+          <AvatarImage
+            src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
+            alt="Avatar"
+          />
           <AvatarFallback>
             {message.sender.charAt(0).toUpperCase()}
           </AvatarFallback>

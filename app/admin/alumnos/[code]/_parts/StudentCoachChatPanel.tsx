@@ -17,6 +17,7 @@ import CoachChatInline from "@/app/admin/teamsv2/[code]/CoachChatInline";
 import { CHAT_HOST } from "@/lib/api-config";
 import { apiFetch } from "@/lib/api-config";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function StudentCoachChatPanel({
   code,
@@ -527,6 +528,8 @@ export default function StudentCoachChatPanel({
                     String(targetCoachId ?? "") ===
                     String((t as any).codigo ?? t.id);
                   const subtitle = "SOPORTE · ATENCIÓN AL CLIENTE";
+                  const brandAvatarSrc =
+                    "https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg";
                   return (
                     <li key={String(t.id)}>
                       <button
@@ -542,9 +545,15 @@ export default function StudentCoachChatPanel({
                         }}
                       >
                         <div className="flex items-center gap-3 px-2 py-2">
-                          <div className="h-9 w-9 rounded-full bg-neutral-200 text-neutral-700 grid place-items-center font-semibold">
-                            {initialFromText("Soporte X Academy")}
-                          </div>
+                          <Avatar className="h-9 w-9">
+                            <AvatarImage
+                              src={brandAvatarSrc}
+                              alt="Soporte X Academy"
+                            />
+                            <AvatarFallback>
+                              {initialFromText("Soporte X Academy")}
+                            </AvatarFallback>
+                          </Avatar>
                           <div className="min-w-0 flex-1">
                             <div className="truncate font-medium">
                               Soporte X Academy
@@ -624,6 +633,8 @@ export default function StudentCoachChatPanel({
                     id != null &&
                     String(currentOpenChatId ?? "") === String(id);
                   const lastAt = getItemTimestamp(it);
+                  const brandAvatarSrc =
+                    "https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg";
                   return (
                     <li key={String(id)}>
                       <button
@@ -660,9 +671,12 @@ export default function StudentCoachChatPanel({
                         title={String(last || "")}
                       >
                         <div className="flex items-center gap-3 px-2 py-2">
-                          <div className="h-9 w-9 rounded-full bg-neutral-200 text-neutral-700 grid place-items-center font-semibold">
-                            {initialFromText(title)}
-                          </div>
+                          <Avatar className="h-9 w-9">
+                            <AvatarImage src={brandAvatarSrc} alt={title} />
+                            <AvatarFallback>
+                              {initialFromText(title)}
+                            </AvatarFallback>
+                          </Avatar>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-3">
                               <span className="truncate font-medium">

@@ -19,6 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export function ChatHeader({
   title,
@@ -34,18 +35,28 @@ export function ChatHeader({
   onDeleteChat: () => void;
 }) {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
+  const brandAvatarSrc =
+    "https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg";
 
   return (
     <>
       <div className="flex items-center p-4 border-b">
-        <div className="flex-1">
+        <div className="mr-3">
+          <Avatar className="h-9 w-9">
+            <AvatarImage src={brandAvatarSrc} alt={title} />
+            <AvatarFallback>
+              {(title || "?").slice(0, 1).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        </div>
+        <div className="flex-1 min-w-0">
           <h2 className="font-semibold text-lg flex items-center gap-2">
             <span
               className={`w-2.5 h-2.5 rounded-full ${
                 isConnected ? "bg-green-500" : "bg-red-500"
               }`}
             />
-            {title}
+            <span className="truncate">{title}</span>
           </h2>
           {subtitle && (
             <p className="text-sm text-muted-foreground">{subtitle}</p>
