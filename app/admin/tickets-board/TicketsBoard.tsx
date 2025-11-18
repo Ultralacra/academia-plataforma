@@ -2005,13 +2005,17 @@ export default function TicketsBoard() {
                         {/* Descripción y links */}
                         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
                           <div className="flex items-center justify-between">
-                            <div className="text-sm font-medium">Descripción</div>
+                            <div className="text-sm font-medium">
+                              Descripción
+                            </div>
                             {!descEditing && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  setDescDraft(String(ticketDetail?.descripcion || ""));
+                                  setDescDraft(
+                                    String(ticketDetail?.descripcion || "")
+                                  );
                                   setDescEditing(true);
                                 }}
                               >
@@ -2047,15 +2051,25 @@ export default function TicketsBoard() {
                                     if (!selectedTicket?.codigo) return;
                                     setSavingDesc(true);
                                     try {
-                                      await updateTicket(selectedTicket.codigo, {
-                                        descripcion: (descDraft || "").trim(),
-                                      } as any);
-                                      await loadTicketDetail(selectedTicket.codigo);
+                                      await updateTicket(
+                                        selectedTicket.codigo,
+                                        {
+                                          descripcion: (descDraft || "").trim(),
+                                        } as any
+                                      );
+                                      await loadTicketDetail(
+                                        selectedTicket.codigo
+                                      );
                                       setDescEditing(false);
-                                      toast({ title: "Descripción actualizada" });
+                                      toast({
+                                        title: "Descripción actualizada",
+                                      });
                                     } catch (e) {
                                       console.error(e);
-                                      toast({ title: "Error al actualizar descripción" });
+                                      toast({
+                                        title:
+                                          "Error al actualizar descripción",
+                                      });
                                     } finally {
                                       setSavingDesc(false);
                                     }

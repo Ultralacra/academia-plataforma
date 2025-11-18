@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService, type Ticket, type Team } from "@/lib/data-service";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
 import { updateTicket } from "@/app/admin/alumnos/api";
@@ -319,7 +324,9 @@ export default function TicketsContent() {
     (async () => {
       try {
         setTicketLoading(true);
-        const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(String(codigo))}`);
+        const url = buildUrl(
+          `/ticket/get/ticket/${encodeURIComponent(String(codigo))}`
+        );
         const token = typeof window !== "undefined" ? getAuthToken() : null;
         const res = await fetch(url, {
           method: "GET",
@@ -530,20 +537,25 @@ export default function TicketsContent() {
       )}
 
       {/* Modal de Ticket: ver/editar descripción */}
-      <Dialog open={ticketModalOpen} onOpenChange={(v) => {
-        setTicketModalOpen(v);
-        if (!v) {
-          setSelectedTicket(null);
-          setTicketDetail(null);
-          setDescEditing(false);
-        }
-      }}>
+      <Dialog
+        open={ticketModalOpen}
+        onOpenChange={(v) => {
+          setTicketModalOpen(v);
+          if (!v) {
+            setSelectedTicket(null);
+            setTicketDetail(null);
+            setDescEditing(false);
+          }
+        }}
+      >
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
               {selectedTicket?.nombre ?? "Ticket"}
               {selectedTicket?.id_externo ? (
-                <span className="ml-2 text-xs text-muted-foreground">({selectedTicket.id_externo})</span>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  ({selectedTicket.id_externo})
+                </span>
               ) : null}
             </DialogTitle>
           </DialogHeader>
@@ -551,19 +563,26 @@ export default function TicketsContent() {
           {!selectedTicket ? (
             <div className="text-sm text-muted-foreground">Sin selección</div>
           ) : ticketLoading ? (
-            <div className="py-6 text-sm text-muted-foreground">Cargando detalle…</div>
+            <div className="py-6 text-sm text-muted-foreground">
+              Cargando detalle…
+            </div>
           ) : (
             <div className="space-y-4">
               <div className="rounded-xl border p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm text-muted-foreground">Alumno</div>
-                    <div className="text-sm font-medium">{selectedTicket.alumno_nombre ?? "—"}</div>
+                    <div className="text-sm font-medium">
+                      {selectedTicket.alumno_nombre ?? "—"}
+                    </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Estado / Tipo</div>
+                    <div className="text-sm text-muted-foreground">
+                      Estado / Tipo
+                    </div>
                     <div className="text-sm font-medium">
-                      {(selectedTicket.estado ?? "—").toUpperCase()} · {(selectedTicket.tipo ?? "—").toUpperCase()}
+                      {(selectedTicket.estado ?? "—").toUpperCase()} ·{" "}
+                      {(selectedTicket.tipo ?? "—").toUpperCase()}
                     </div>
                   </div>
                 </div>
@@ -613,13 +632,29 @@ export default function TicketsContent() {
                           if (!selectedTicket?.id_externo) return;
                           setSavingDesc(true);
                           try {
-                            await updateTicket(String(selectedTicket.id_externo), { descripcion: (descDraft || "").trim() });
+                            await updateTicket(
+                              String(selectedTicket.id_externo),
+                              { descripcion: (descDraft || "").trim() }
+                            );
                             toast({ title: "Descripción actualizada" });
                             // recargar detalle
                             setTicketModalOpen(true); // mantener abierto
-                            const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(String(selectedTicket.id_externo))}`);
-                            const token = typeof window !== "undefined" ? getAuthToken() : null;
-                            const res = await fetch(url, { method: "GET", cache: "no-store", headers: token ? { Authorization: `Bearer ${token}` } : undefined });
+                            const url = buildUrl(
+                              `/ticket/get/ticket/${encodeURIComponent(
+                                String(selectedTicket.id_externo)
+                              )}`
+                            );
+                            const token =
+                              typeof window !== "undefined"
+                                ? getAuthToken()
+                                : null;
+                            const res = await fetch(url, {
+                              method: "GET",
+                              cache: "no-store",
+                              headers: token
+                                ? { Authorization: `Bearer ${token}` }
+                                : undefined,
+                            });
                             const json = await res.json().catch(() => ({}));
                             setTicketDetail(json?.data ?? json ?? null);
                             setDescEditing(false);

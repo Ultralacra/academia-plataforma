@@ -213,9 +213,19 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
             r.title ?? r.message ?? r.descripcion ?? r.subject ?? "Notificación"
           );
           const at =
-            r.at || r.created_at || r.fecha || r.timestamp || new Date().toISOString();
+            r.at ||
+            r.created_at ||
+            r.fecha ||
+            r.timestamp ||
+            new Date().toISOString();
           const read = Boolean(r.read ?? r.readed ?? r.leida ?? r.visto);
-          return { id, title, at, unread: !read, raw: r } as SseNotificationItem;
+          return {
+            id,
+            title,
+            at,
+            unread: !read,
+            raw: r,
+          } as SseNotificationItem;
         });
         setItems((prev) => {
           const byId = new Map(prev.map((x) => [x.id, x] as const));
@@ -231,7 +241,10 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
           return list.slice(0, 200);
         });
         setUnread((prev) => {
-          const extra = mapped.reduce((acc, it) => acc + (it.unread ? 1 : 0), 0);
+          const extra = mapped.reduce(
+            (acc, it) => acc + (it.unread ? 1 : 0),
+            0
+          );
           return Math.max(0, prev + extra);
         });
       } catch (e) {
