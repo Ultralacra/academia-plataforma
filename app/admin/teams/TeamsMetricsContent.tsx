@@ -24,6 +24,7 @@ import AdsKpis from "./AdsKpis";
 import { ADS_STATIC_METRICS } from "./ads-static";
 import AdsStudentsTable from "./AdsStudentsTable";
 import AdsPhaseMetrics from "./AdsPhaseMetrics";
+import SessionsMetrics from "@/app/admin/teamsv2/components/SessionsMetrics";
 
 type TicketsSeriesVM = {
   daily: Array<{ date: string; count: number }>;
@@ -234,6 +235,45 @@ export default function TeamsMetricsContent() {
       totals?: { coaches?: number; teams?: number; tickets?: number };
     } | null;
     ticketsByTeam: TicketsByTeamApiRow[];
+    // Sesiones
+    sessionsOverview?: Array<{ estado: string; cantidad: number }>;
+    sessionsByCoach?: Array<{
+      coach_codigo?: string | null;
+      coach_nombre?: string | null;
+      solicitadas?: number;
+      ofrecidas?: number;
+      aprobadas?: number;
+      aceptadas?: number;
+      completadas?: number;
+      promedio_min?: number | null;
+    }>;
+    sessionsByAlumno?: Array<{
+      alumno_codigo?: string | null;
+      alumno_nombre?: string | null;
+      solicitadas?: number;
+      ofrecidas?: number;
+      aprobadas?: number;
+      aceptadas?: number;
+      completadas?: number;
+    }>;
+    sessionsTrends?: Array<{ day: string; total: number }>;
+    sessionsConversion?: {
+      requested: number;
+      offered: number;
+      approved: number;
+      accepted: number;
+      completed: number;
+      total: number;
+      pct?: number | null;
+    } | null;
+    sessionsTopCoaches?: Array<{
+      coach: string;
+      solicitadas?: number;
+      ofrecidas?: number;
+      aprobadas?: number;
+      aceptadas?: number;
+      completadas?: number;
+    }>;
   }>({
     meta: undefined,
     totals: {
@@ -269,6 +309,12 @@ export default function TeamsMetricsContent() {
     clientsByCoachDetail: [],
     allClientsByCoach: [],
     allClientsByCoachFlat: [],
+    sessionsOverview: [],
+    sessionsByCoach: [],
+    sessionsByAlumno: [],
+    sessionsTrends: [],
+    sessionsConversion: null,
+    sessionsTopCoaches: [],
   });
 
   // Cargar coachs una sola vez
@@ -715,6 +761,36 @@ export default function TeamsMetricsContent() {
           slowestResponseTicket: (teams as any).slowestResponseTicket ?? null,
           createdBlock,
           ticketsByTeam: ticketsByTeamApi,
+          // Sesiones (desde payload normalizado en teamsApi)
+          sessionsOverview: Array.isArray((teams as any).sessionsOverview)
+            ? (teams as any).sessionsOverview
+            : Array.isArray((teams as any).sessions_overview)
+            ? (teams as any).sessions_overview
+            : [],
+          sessionsByCoach: Array.isArray((teams as any).sessionsByCoach)
+            ? (teams as any).sessionsByCoach
+            : Array.isArray((teams as any).sessions_by_coach)
+            ? (teams as any).sessions_by_coach
+            : [],
+          sessionsByAlumno: Array.isArray((teams as any).sessionsByAlumno)
+            ? (teams as any).sessionsByAlumno
+            : Array.isArray((teams as any).sessions_by_alumno)
+            ? (teams as any).sessions_by_alumno
+            : [],
+          sessionsTrends: Array.isArray((teams as any).sessionsTrends)
+            ? (teams as any).sessionsTrends
+            : Array.isArray((teams as any).sessions_trends)
+            ? (teams as any).sessions_trends
+            : [],
+          sessionsConversion:
+            (teams as any).sessionsConversion ??
+            (teams as any).sessions_conversion ??
+            null,
+          sessionsTopCoaches: Array.isArray((teams as any).sessionsTopCoaches)
+            ? (teams as any).sessionsTopCoaches
+            : Array.isArray((teams as any).sessions_top_coaches)
+            ? (teams as any).sessions_top_coaches
+            : [],
         });
       } catch (e) {
         console.error(e);
@@ -755,6 +831,12 @@ export default function TeamsMetricsContent() {
           allClientsByCoachFlat: [],
           createdBlock: null,
           ticketsByTeam: [],
+          sessionsOverview: [],
+          sessionsByCoach: [],
+          sessionsByAlumno: [],
+          sessionsTrends: [],
+          sessionsConversion: null,
+          sessionsTopCoaches: [],
         });
       } finally {
         alive && setLoading(false);
@@ -1320,6 +1402,23 @@ export default function TeamsMetricsContent() {
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <SkeletonBlock h={360} />
           <SkeletonBlock h={360} />
+        </div>
+      )}
+
+      {/* Sesiones: KPIs y tendencias (general/coach) */}
+      {tab === "general" && !loading && (
+        <div className="grid grid-cols-1 gap-6">
+          <SessionsMetrics
+            overview={displayVm.sessionsOverview}
+            trends={displayVm.sessionsTrends}
+            byCoach={displayVm.sessionsByCoach}
+            byAlumno={displayVm.sessionsByAlumno}
+            conversion={displayVm.sessionsConversion}
+            topCoaches={displayVm.sessionsTopCoaches}
+            titleText={
+              coach ? `Sesiones (${coachName || coach})` : "Sesiones (general)"
+            }
+          />
         </div>
       )}
 

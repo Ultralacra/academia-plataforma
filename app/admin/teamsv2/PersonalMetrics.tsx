@@ -10,6 +10,8 @@ import TicketsByPeriodBar from "./components/TicketsByPeriodBar";
 import TicketsByStudentBar from "./components/TicketsByStudentBar";
 import TicketsByStudentDonut from "./components/TicketsByStudentDonut";
 import SlowestResponseCard from "./components/SlowestResponseCard";
+import TicketsByInformanteBar from "@/app/admin/teams/TicketsByInformanteBar";
+import SessionsMetrics from "./components/SessionsMetrics";
 // Tabla completa se deja en pestaña Detalles; no se muestra en Métricas
 
 function currentMonthRange() {
@@ -95,6 +97,14 @@ export default function PersonalMetrics({
   const ticketsByNameRaw = useMemo(() => vm?.ticketsByName ?? [], [vm]);
   const avgResolutionByStudent = useMemo(
     () => vm?.avgResolutionByStudent ?? [],
+    [vm]
+  );
+  const ticketsByInformante = useMemo(
+    () => vm?.ticketsByInformante ?? [],
+    [vm]
+  );
+  const ticketsByInformanteByDay = useMemo(
+    () => vm?.ticketsByInformanteByDay ?? [],
     [vm]
   );
   // Normalized tickets array: { name, count }
@@ -241,6 +251,29 @@ export default function PersonalMetrics({
               initialLimit={25}
               showLimiter={true}
             />
+          </div>
+
+          {/* Informantes y Sesiones */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
+            <div className="space-y-3">
+              <TicketsByInformanteBar
+                data={{
+                  ticketsByInformante,
+                  ticketsByInformanteByDay,
+                }}
+              />
+            </div>
+            <div className="space-y-3">
+              <SessionsMetrics
+                overview={vm?.sessionsOverview}
+                trends={vm?.sessionsTrends}
+                byCoach={vm?.sessionsByCoach}
+                byAlumno={vm?.sessionsByAlumno}
+                conversion={vm?.sessionsConversion}
+                topCoaches={vm?.sessionsTopCoaches}
+                titleText="Sesiones (coach)"
+              />
+            </div>
           </div>
         </>
       )}

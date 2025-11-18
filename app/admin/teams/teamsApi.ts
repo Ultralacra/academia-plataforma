@@ -472,6 +472,79 @@ export async function fetchMetrics(
         }))
       : [],
 
+    // ==== Sessions metrics (passthrough / normalización ligera) ====
+    sessionsOverview: Array.isArray(d.sessions_overview)
+      ? (d.sessions_overview as any[]).map((it) => ({
+          estado: String(it.estado ?? it.status ?? ""),
+          count: Number(it.count ?? it.total ?? 0) || 0,
+        }))
+      : [],
+    sessionsByCoach: Array.isArray(d.sessions_by_coach)
+      ? (d.sessions_by_coach as any[]).map((it) => ({
+          coach_codigo: String(it.coach_codigo ?? it.codigo_coach ?? it.code ?? ""),
+          coach_nombre: String(it.coach_nombre ?? it.nombre_coach ?? it.name ?? ""),
+          total: Number(it.total ?? 0) || 0,
+          requested: String(it.requested ?? it.solicitadas ?? "0"),
+          offered: String(it.offered ?? it.ofrecidas ?? "0"),
+          approved: String(it.approved ?? it.aprobadas ?? "0"),
+          accepted: String(it.accepted ?? it.aceptadas ?? "0"),
+          completed: String(it.completed ?? it.completadas ?? "0"),
+          avg_seconds:
+            it.avg_seconds != null ? String(it.avg_seconds) : it.avg_seconds ?? null,
+          avg_human: String(it.avg_human ?? it.avg_time_hms ?? ""),
+        }))
+      : [],
+    sessionsByAlumno: Array.isArray(d.sessions_by_alumno)
+      ? (d.sessions_by_alumno as any[]).map((it) => ({
+          alumno_codigo: String(it.alumno_codigo ?? it.codigo_alumno ?? it.code ?? ""),
+          alumno_nombre: it.alumno_nombre != null ? String(it.alumno_nombre) : null,
+          total: Number(it.total ?? 0) || 0,
+          requested: String(it.requested ?? "0"),
+          offered: String(it.offered ?? "0"),
+          approved: String(it.approved ?? "0"),
+          accepted: String(it.accepted ?? "0"),
+          completed: String(it.completed ?? "0"),
+        }))
+      : [],
+    sessionsTrends: Array.isArray(d.sessions_trends)
+      ? (d.sessions_trends as any[]).map((it) => ({
+          day: String(it.day ?? it.date ?? ""),
+          total: Number(it.total ?? it.count ?? 0) || 0,
+        }))
+      : [],
+    sessionsConversion: d.sessions_conversion
+      ? {
+          requested: Number(d.sessions_conversion.requested ?? 0) || 0,
+          offered: Number(d.sessions_conversion.offered ?? 0) || 0,
+          approved: Number(d.sessions_conversion.approved ?? 0) || 0,
+          accepted: Number(d.sessions_conversion.accepted ?? 0) || 0,
+          completed: Number(d.sessions_conversion.completed ?? 0) || 0,
+          total: Number(d.sessions_conversion.total ?? 0) || 0,
+          pct: {
+            approved: Number(d.sessions_conversion?.pct?.approved ?? 0) || 0,
+            accepted: Number(d.sessions_conversion?.pct?.accepted ?? 0) || 0,
+            completed: Number(d.sessions_conversion?.pct?.completed ?? 0) || 0,
+          },
+        }
+      : {
+          requested: 0,
+          offered: 0,
+          approved: 0,
+          accepted: 0,
+          completed: 0,
+          total: 0,
+          pct: { approved: 0, accepted: 0, completed: 0 },
+        },
+    sessionsTopCoaches: Array.isArray(d.sessions_top_coaches)
+      ? (d.sessions_top_coaches as any[]).map((it) => ({
+          coach_codigo: String(it.coach_codigo ?? it.codigo_coach ?? it.code ?? ""),
+          coach_nombre: String(it.coach_nombre ?? it.nombre_coach ?? it.name ?? ""),
+          accepted: String(it.accepted ?? "0"),
+          completed: String(it.completed ?? "0"),
+          total: Number(it.total ?? 0) || 0,
+        }))
+      : [],
+
     // placeholders no provistos por v2:
     respByCoach: [] as any[],
     respByTeam: [] as any[],
