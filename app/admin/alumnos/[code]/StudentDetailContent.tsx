@@ -24,7 +24,6 @@ import {
 import TicketsPanel from "./_parts/TicketsPanel";
 import SessionsStudentPanel from "./_parts/SessionsStudentPanel";
 import BonosPanel from "./_parts/BonosPanel";
-import ChatPanel from "./_parts/ChatPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
 import { getStudentTickets } from "../api";
 import Link from "next/link";
@@ -471,9 +470,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     created_at: string;
   }> | null>(null);
 
-  const [topTab, setTopTab] = useState<
-    "detalle" | "chat" | "ads" | "sesiones" | "bonos"
-  >("detalle");
+  // Vista simplificada: solo "Mi perfil" (detalle). Otras secciones van en rutas aparte.
 
   if (loading) {
     return (
@@ -524,205 +521,137 @@ export default function StudentDetailContent({ code }: { code: string }) {
         }}
       />
 
-      {/* Tabs superiores: Detalle / Chat a pantalla completa */}
-      <div className="flex items-center gap-2">
-        <TabBtn
-          active={topTab === "detalle"}
-          onClick={() => setTopTab("detalle")}
-        >
-          Detalle
-        </TabBtn>
-        <TabBtn active={topTab === "chat"} onClick={() => setTopTab("chat")}>
-          Chat
-        </TabBtn>
-        <TabBtn active={topTab === "ads"} onClick={() => setTopTab("ads")}>
-          Métricas ADS
-        </TabBtn>
-        <TabBtn
-          active={topTab === "sesiones"}
-          onClick={() => setTopTab("sesiones")}
-        >
-          Sesiones
-        </TabBtn>
-        <TabBtn active={topTab === "bonos"} onClick={() => setTopTab("bonos")}>
-          Bonos
-        </TabBtn>
-      </div>
-
-      {topTab === "chat" ? (
-        // Chat a altura casi completa de la ventana (ajuste fijo para header y paddings)
-        <div className="mt-2 h-[calc(100vh-180px)]">
-          <ChatPanel
-            code={student.code || code}
-            studentName={student.name}
-            fullHeight
-          />
-        </div>
-      ) : topTab === "ads" ? (
-        <div className="mt-2">
-          <AdsMetricsForm
-            studentCode={student.code || code}
-            studentName={student.name}
-          />
-        </div>
-      ) : topTab === "sesiones" ? (
-        <div className="mt-2">
-          <SessionsStudentPanel
-            studentCode={student.code || code}
-            studentName={student.name}
-            studentStage={
-              (student.stage || student.raw?.etapa || faseActual) as string
-            }
-            assignedCoaches={(coaches || []).map((c) => ({
-              id: (c as any).coachId ?? (c as any).id ?? null,
-              code:
-                (c as any).teamCode ??
-                (c as any).codigo ??
-                (c as any).id ??
-                null,
-              name: c.name,
-              area: (c as any).area ?? undefined,
-            }))}
-          />
-        </div>
-      ) : topTab === "bonos" ? (
-        <div className="mt-2">
-          <BonosPanel studentCode={student.code || code} />
-        </div>
-      ) : (
-        <>
-          <MetricsStrip
-            statusLabel={
-              (student?.state ?? student?.raw?.estado ?? "").replace?.(
-                "_",
-                " "
-              ) ??
-              student?.state ??
-              student?.raw?.estado ??
-              ""
-            }
-            permanencia={permanencia}
-            lastTaskAt={lastTaskAt}
-            faseActual={faseActual}
-            ingreso={pIngreso}
-            salida={salida}
-            pausedRange={pauseInfo}
-            onSaveLastTask={async (localValue) => {
+      {/* Mi perfil (detalle) */}
+      <>
+        <MetricsStrip
+          statusLabel={
+            (student?.state ?? student?.raw?.estado ?? "").replace?.(
+              "_",
+              " "
+            ) ??
+            student?.state ??
+            student?.raw?.estado ??
+            ""
+          }
+          permanencia={permanencia}
+          lastTaskAt={lastTaskAt}
+          faseActual={faseActual}
+          ingreso={pIngreso}
+          salida={salida}
+          pausedRange={pauseInfo}
+          onSaveLastTask={async (localValue) => {
+            try {
+              const iso = new Date(localValue).toISOString();
+              await updateClientLastTask(student.code || code, iso);
+              setLastTaskAt(iso);
               try {
-                const iso = new Date(localValue).toISOString();
-                await updateClientLastTask(student.code || code, iso);
-                setLastTaskAt(iso);
-                try {
-                  const th = await getClienteTareas(
-                    (student as any)?.id ?? student.code ?? code
-                  );
-                  setTasksHistory(th);
-                } catch {}
-                toast({ title: "Última tarea actualizada" });
-              } catch (e) {
-                console.error(e);
-                toast({ title: "No se pudo actualizar la última tarea" });
-              }
-            }}
-            coachCount={(coaches || []).length}
-            coachNames={
-              (coaches || []).map((c) => c.name).filter(Boolean) as string[]
+                const th = await getClienteTareas(
+                  (student as any)?.id ?? student.code ?? code
+                );
+                setTasksHistory(th);
+              } catch {}
+              toast({ title: "Última tarea actualizada" });
+            } catch (e) {
+              console.error(e);
+              toast({ title: "No se pudo actualizar la última tarea" });
             }
-            onJumpToCoaches={() => {
-              if (typeof window === "undefined") return;
-              const el = document.getElementById("coaches-card");
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-            }}
-            onEdit={(mode) => {
-              setEditMode(mode ?? "all");
-              setEditOpen(true);
-            }}
-          />
+          }}
+          coachCount={(coaches || []).length}
+          coachNames={
+            (coaches || []).map((c) => c.name).filter(Boolean) as string[]
+          }
+          onJumpToCoaches={() => {
+            if (typeof window === "undefined") return;
+            const el = document.getElementById("coaches-card");
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          onEdit={(mode) => {
+            setEditMode(mode ?? "all");
+            setEditOpen(true);
+          }}
+        />
 
-          {/* Contrato se moverá a la columna derecha junto a otras tarjetas para evitar espacios en blanco */}
+        {/* Contrato se moverá a la columna derecha junto a otras tarjetas para evitar espacios en blanco */}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            {/* Columna principal: progreso, actividad y tickets */}
-            <div className="lg:col-span-8 space-y-4">
-              <PhasesTimelineAny steps={steps} />
-              <PhaseHistory
-                history={phaseHistory}
-                statusHistory={statusHistory}
-                tasksHistory={tasksHistory}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          {/* Columna principal: progreso, actividad y tickets */}
+          <div className="lg:col-span-8 space-y-4">
+            <PhasesTimelineAny steps={steps} />
+            <PhaseHistory
+              history={phaseHistory}
+              statusHistory={statusHistory}
+              tasksHistory={tasksHistory}
+            />
+            {/* Mover tickets aquí para aprovechar el espacio disponible */}
+            <div id="tickets">
+              <TicketsPanel
+                student={student}
+                onChangedTickets={setTicketsCount}
               />
-              {/* Mover tickets aquí para aprovechar el espacio disponible */}
-              <div id="tickets">
-                <TicketsPanel
-                  student={student}
-                  onChangedTickets={setTicketsCount}
-                />
-              </div>
-            </div>
-            {/* Columna lateral: equipo y contrato (sticky) */}
-            <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24 self-start">
-              <div id="coaches-card">
-                <CoachesCard
-                  coaches={coaches}
-                  canManage={(user?.role ?? "").toLowerCase() !== "student"}
-                  onAssign={(codes) => assignCoaches(codes)}
-                  onRemove={(teamCode) => removeCoach(teamCode)}
-                  onChangeMember={(idx, candidate) =>
-                    changeCoach(idx, candidate)
-                  }
-                />
-              </div>
-              {/* Contrato card */}
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
-                <h3 className="mb-2 text-sm font-medium">Contrato</h3>
-                <ContratoCard
-                  code={student.code || code}
-                  contratoRaw={student.contrato ?? student.raw?.contrato}
-                  onUpdated={async () => {
-                    try {
-                      const url = `/client/get/clients?page=1&search=${encodeURIComponent(
-                        student.code || code
-                      )}`;
-                      const json = await apiFetch<any>(url);
-                      const rows: any[] = Array.isArray(json?.data)
-                        ? json.data
-                        : Array.isArray(json?.clients?.data)
-                        ? json.clients.data
-                        : Array.isArray(json?.getClients?.data)
-                        ? json.getClients.data
-                        : [];
-                      const s =
-                        rows
-                          .map((r) => ({
-                            id: r.id,
-                            code: r.codigo ?? r.code ?? null,
-                            name: r.nombre ?? r.name ?? "-",
-                            stage: r.etapa ?? r.stage ?? null,
-                            state: r.estado ?? r.state ?? null,
-                            ingreso: r.ingreso ?? r.joinDate ?? null,
-                            lastActivity:
-                              r.ultima_actividad ?? r.lastActivity ?? null,
-                            teamMembers: Array.isArray(r.teamMembers)
-                              ? r.teamMembers
-                              : r.equipo ?? r.alumnos ?? [],
-                            contrato: r.contrato ?? null,
-                            raw: r,
-                          }))
-                          .find(
-                            (x) =>
-                              (x.code ?? "").toLowerCase() ===
-                              (student.code || code).toLowerCase()
-                          ) ||
-                        rows[0] ||
-                        null;
-                      setStudent(s as any);
-                    } catch {}
-                  }}
-                />
-              </div>
             </div>
           </div>
-        </>
-      )}
+          {/* Columna lateral: equipo y contrato (sticky) */}
+          <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24 self-start">
+            <div id="coaches-card">
+              <CoachesCard
+                coaches={coaches}
+                canManage={(user?.role ?? "").toLowerCase() !== "student"}
+                onAssign={(codes) => assignCoaches(codes)}
+                onRemove={(teamCode) => removeCoach(teamCode)}
+                onChangeMember={(idx, candidate) => changeCoach(idx, candidate)}
+              />
+            </div>
+            {/* Contrato card */}
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <h3 className="mb-2 text-sm font-medium">Contrato</h3>
+              <ContratoCard
+                code={student.code || code}
+                contratoRaw={student.contrato ?? student.raw?.contrato}
+                onUpdated={async () => {
+                  try {
+                    const url = `/client/get/clients?page=1&search=${encodeURIComponent(
+                      student.code || code
+                    )}`;
+                    const json = await apiFetch<any>(url);
+                    const rows: any[] = Array.isArray(json?.data)
+                      ? json.data
+                      : Array.isArray(json?.clients?.data)
+                      ? json.clients.data
+                      : Array.isArray(json?.getClients?.data)
+                      ? json.getClients.data
+                      : [];
+                    const s =
+                      rows
+                        .map((r) => ({
+                          id: r.id,
+                          code: r.codigo ?? r.code ?? null,
+                          name: r.nombre ?? r.name ?? "-",
+                          stage: r.etapa ?? r.stage ?? null,
+                          state: r.estado ?? r.state ?? null,
+                          ingreso: r.ingreso ?? r.joinDate ?? null,
+                          lastActivity:
+                            r.ultima_actividad ?? r.lastActivity ?? null,
+                          teamMembers: Array.isArray(r.teamMembers)
+                            ? r.teamMembers
+                            : r.equipo ?? r.alumnos ?? [],
+                          contrato: r.contrato ?? null,
+                          raw: r,
+                        }))
+                        .find(
+                          (x) =>
+                            (x.code ?? "").toLowerCase() ===
+                            (student.code || code).toLowerCase()
+                        ) ||
+                      rows[0] ||
+                      null;
+                    setStudent(s as any);
+                  } catch {}
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      </>
 
       {/* Eliminadas Tabs internas para chat; ahora chat es pestaña superior a pantalla completa */}
 

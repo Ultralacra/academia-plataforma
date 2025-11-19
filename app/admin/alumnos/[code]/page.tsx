@@ -1,19 +1,17 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { ProtectedRoute } from "@/components/auth/protected-route";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import StudentDetailContent from "./StudentDetailContent";
+import { useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 
-export default function StudentDetailPage() {
+export default function StudentDefaultRedirectPage() {
   const params = useParams<{ code: string }>();
+  const router = useRouter();
   const code = decodeURIComponent(params?.code ?? "");
 
-  return (
-    <ProtectedRoute allowedRoles={["admin", "coach", "student", "equipo"]}>
-      <DashboardLayout>
-        <StudentDetailContent code={code} />
-      </DashboardLayout>
-    </ProtectedRoute>
-  );
+  useEffect(() => {
+    if (code)
+      router.replace(`/admin/alumnos/${encodeURIComponent(code)}/inicio`);
+  }, [code, router]);
+
+  return null;
 }

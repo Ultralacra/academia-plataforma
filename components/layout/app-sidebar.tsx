@@ -10,6 +10,7 @@ import {
   BarChart3,
   ChevronDown,
   Settings,
+  CalendarClock,
 } from "lucide-react";
 import {
   Sidebar,
@@ -90,15 +91,54 @@ export function AppSidebar() {
   const { user } = useAuth();
   const pathname = usePathname();
 
-  const menuItems = useMemo(() => {
+  const menuItems: MenuItem[] = useMemo(() => {
+    // Detectar si estamos en la ficha de un alumno para añadir acceso directo al chat del alumno
+    const alumnoMatch = pathname?.match(/^\/admin\/alumnos\/([^\/?#]+)/i);
+    const alumnoCodeInPath = alumnoMatch?.[1];
     switch (user?.role) {
       case "admin":
-        return adminItems;
+        return (
+          alumnoCodeInPath
+            ? [
+                ...adminItems,
+                {
+                  title: "Inicio",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
+                  icon: Home,
+                },
+                {
+                  title: "Mi perfil",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
+                  icon: GraduationCap,
+                },
+                {
+                  title: "Métricas ADS",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
+                  icon: BarChart3,
+                },
+                {
+                  title: "Sesiones",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
+                  icon: CalendarClock,
+                },
+                {
+                  title: "Bonos",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
+                  icon: Users,
+                },
+                {
+                  title: "Chat soporte",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                  icon: MessageSquare,
+                },
+              ]
+            : adminItems
+        ) as MenuItem[];
       case "coach":
         return coachItems;
       case "equipo": {
         const code = (user as any)?.codigo || "";
-        return code
+        const base = code
           ? [
               {
                 title: "Coachs",
@@ -177,21 +217,76 @@ export function AppSidebar() {
                 icon: MessageSquare,
               },
             ];
+        // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
+        return (
+          alumnoCodeInPath
+            ? [
+                ...base,
+                {
+                  title: "Inicio",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
+                  icon: Home,
+                },
+                {
+                  title: "Mi perfil",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
+                  icon: GraduationCap,
+                },
+                {
+                  title: "Métricas ADS",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
+                  icon: BarChart3,
+                },
+                {
+                  title: "Sesiones",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
+                  icon: CalendarClock,
+                },
+                {
+                  title: "Bonos",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
+                  icon: Users,
+                },
+                {
+                  title: "Chat soporte",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                  icon: MessageSquare,
+                },
+              ]
+            : base
+        ) as MenuItem[];
       }
       case "student": {
         const code = (user as any)?.codigo || "RvA_5Qxoezfxlxxj";
         return [
+          { title: "Inicio", url: `/admin/alumnos/${code}/inicio`, icon: Home },
           {
-            title: "Alumnos",
-            url: `/admin/alumnos/${code}`,
+            title: "Mi perfil",
+            url: `/admin/alumnos/${code}/perfil`,
             icon: GraduationCap,
           },
-        ];
+          {
+            title: "Métricas ADS",
+            url: `/admin/alumnos/${code}/ads`,
+            icon: BarChart3,
+          },
+          {
+            title: "Sesiones",
+            url: `/admin/alumnos/${code}/sesiones`,
+            icon: CalendarClock,
+          },
+          { title: "Bonos", url: `/admin/alumnos/${code}/bonos`, icon: Users },
+          {
+            title: "Chat soporte",
+            url: `/admin/alumnos/${code}/chat`,
+            icon: MessageSquare,
+          },
+        ] as MenuItem[];
       }
       default:
-        return [];
+        return [] as MenuItem[];
     }
-  }, [user?.role, (user as any)?.codigo]);
+  }, [user?.role, (user as any)?.codigo, pathname]);
 
   const roleLabel =
     user?.role === "admin"
@@ -371,7 +466,7 @@ export function AppSidebar() {
                                   />
                                   <span className="truncate flex items-center gap-2">
                                     {item.title}
-                                    {item.title === "Chat" &&
+                                    {item.url?.includes("/chat") &&
                                       unreadGrandTotal > 0 && (
                                         <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold">
                                           {unreadGrandTotal > 99
