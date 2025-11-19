@@ -1397,7 +1397,7 @@ export default function TicketsBoard() {
           side="right"
           className="w-full sm:max-w-xl md:max-w-2xl flex flex-col overflow-hidden"
         >
-          <SheetHeader className="border-b pb-4">
+          <SheetHeader className="border-b pb-4 pr-12">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <SheetTitle className="text-lg">
@@ -1422,6 +1422,7 @@ export default function TicketsBoard() {
                     setReassignOpen(true);
                   }}
                   disabled={!selectedTicket?.codigo}
+                  className="relative z-10 mt-1"
                 >
                   Reasignar ticket
                 </Button>

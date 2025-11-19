@@ -243,6 +243,7 @@ export type CreateTicketForm = {
   urls?: string[]; // enlaces opcionales asociados al ticket (separadas por coma en descripcion y/o campo urls)
   ai_run_id?: string; // ID de la corrida de IA
   message_ids?: string[]; // IDs de mensajes (array)
+  estado?: string; // estado inicial opcional (ej: EN_PROGRESO)
 };
 
 export async function createTicket(form: CreateTicketForm): Promise<any> {
@@ -251,6 +252,9 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   fd.set('nombre', form.nombre);
   fd.set('id_alumno', form.id_alumno);
   fd.set('tipo', form.tipo);
+  if (form.estado) {
+    try { fd.set('estado', form.estado); } catch {}
+  }
   // Si vienen URLs, agregarlas a la descripcion en formato separado por comas
   let descripcion = form.descripcion || '';
   if (form.urls && form.urls.length > 0) {

@@ -41,7 +41,6 @@ import { simpleMarkdownToHtml } from "./chat-utils";
 import {
   getOpciones,
   createTicket,
-  updateTicket,
   type OpcionItem,
 } from "@/app/admin/alumnos/api";
 import { attachTicketFilesByIds } from "@/app/admin/alumnos/api";
@@ -208,16 +207,15 @@ export function TicketGenerationModal({
         const ops = await getOpciones("area");
         if (!alive) return;
         setAreaOptions(ops);
-        // Mapear el texto de `area` (si viene de IA) a una key de opción
-        const aiArea = area;
-        if (aiArea) {
-          const aim = normalize(aiArea);
+        // Mapear área sugerida: usar `area` si viene de IA; si no, intentar con `tipo`
+        let candidate = String(area || "").trim();
+        if (!candidate && tipo) candidate = String(tipo).trim();
+        if (candidate) {
+          const aim = normalize(candidate);
           const match = ops.find(
             (o) => normalize(o.key) === aim || normalize(o.value) === aim
           );
           if (match) setAreaKey(match.key);
-        } else if (!areaKey && ops.length) {
-          setAreaKey(ops[0].key);
         }
       } catch {
         // fallback: sin opciones
@@ -229,7 +227,17 @@ export function TicketGenerationModal({
     return () => {
       alive = false;
     };
-  }, [open, area, normalize, areaKey]);
+  }, [open, area, tipo, normalize, areaKey]);
+
+  // ¿El tipo coincide con alguna opción de Área? Si no, se oculta en la sugerencia.
+  const tipoMatchesArea = React.useMemo(() => {
+    const v = String(tipo || "").trim();
+    if (!v) return false;
+    const aim = normalize(v);
+    return areaOptions.some(
+      (o) => normalize(o.key) === aim || normalize(o.value) === aim
+    );
+  }, [tipo, areaOptions, normalize]);
 
   const buildMarkdown = React.useCallback(() => {
     const lines: string[] = [];
@@ -238,7 +246,7 @@ export function TicketGenerationModal({
     if (alumno) lines.push(`**Alumno:** ${alumno}`);
     {
       const selectedLabel =
-        areaOptions.find((x) => x.key === areaKey)?.value || area || "";
+        areaOptions.find((x) => x.key === areaKey)?.value || "";
       if (selectedLabel) lines.push(`**Área:** ${selectedLabel}`);
     }
     if (prioridad) lines.push(`**Prioridad:** ${prioridad}`);
@@ -702,6 +710,39 @@ export function TicketGenerationModal({
                                   </div>
                                 </div>
                               )}
+                              {!tipoMatchesArea && (
+                                <div className="pt-3">
+                                  <Label className="text-xs">
+                                    Área (ajustar si es necesario)
+                                  </Label>
+                                  <div className="mt-1 max-w-xs">
+                                    <Select
+                                      value={areaKey}
+                                      onValueChange={(v) => setAreaKey(v)}
+                                    >
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue
+                                          placeholder={
+                                            areasLoading
+                                              ? "Cargando…"
+                                              : "Selecciona un área"
+                                          }
+                                        />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {areaOptions.map((op) => (
+                                          <SelectItem
+                                            key={op.id}
+                                            value={op.key}
+                                          >
+                                            {op.value}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                              )}
                             </>
                           ) : (
                             <div className="space-y-1 text-sm">
@@ -734,7 +775,7 @@ export function TicketGenerationModal({
                                     Categoría: {categoria}
                                   </span>
                                 )}
-                                {tipo && (
+                                {tipo && tipoMatchesArea && (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 text-indigo-700 dark:text-indigo-300">
                                     Tipo: {tipo}
                                   </span>
@@ -769,9 +810,7 @@ export function TicketGenerationModal({
                                   Área:{" "}
                                   <span className="font-medium">
                                     {areaOptions.find((o) => o.key === areaKey)
-                                      ?.value ||
-                                      area ||
-                                      "—"}
+                                      ?.value || "—"}
                                   </span>
                                 </div>
 
@@ -788,6 +827,39 @@ export function TicketGenerationModal({
                                   </span>
                                 </div>
                               </div>
+                              {!tipoMatchesArea && (
+                                <div className="pt-3">
+                                  <Label className="text-xs">
+                                    Área (ajustar si es necesario)
+                                  </Label>
+                                  <div className="mt-1 max-w-xs">
+                                    <Select
+                                      value={areaKey}
+                                      onValueChange={(v) => setAreaKey(v)}
+                                    >
+                                      <SelectTrigger className="h-8">
+                                        <SelectValue
+                                          placeholder={
+                                            areasLoading
+                                              ? "Cargando…"
+                                              : "Selecciona un área"
+                                          }
+                                        />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {areaOptions.map((op) => (
+                                          <SelectItem
+                                            key={op.id}
+                                            value={op.key}
+                                          >
+                                            {op.value}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </ScrollArea>
@@ -1180,20 +1252,7 @@ export function TicketGenerationModal({
                     console.warn("Adjunto por IDs falló:", err);
                   }
 
-                  // Intentar asignar estado por defecto
-                  try {
-                    const estados = await getOpciones("estado_tickets");
-                    const prefer = ["PENDIENTE", "EN_PROGRESO"];
-                    let chosen = estados.find((e) =>
-                      prefer.includes(e.key)
-                    )?.key;
-                    if (!chosen) chosen = estados[0]?.key || undefined;
-                    const codigo = payload?.codigo
-                      ? String(payload.codigo)
-                      : undefined;
-                    if (codigo && chosen)
-                      await updateTicket(codigo, { estado: chosen });
-                  } catch {}
+                  // Estado inicial enviado directamente como EN_PROGRESO; no realizar actualización posterior.
 
                   setFlowStage("created");
                   // Mostrar confirmación un instante
