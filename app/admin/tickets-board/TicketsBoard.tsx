@@ -3,6 +3,7 @@
 import type React from "react";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import { getTickets, type TicketBoardItem, reassignTicket } from "./api";
 import { Button } from "@/components/ui/button";
 import { getAuthToken } from "@/lib/auth";
@@ -149,6 +150,8 @@ function mimeFromName(name?: string | null): string | null {
 }
 
 export default function TicketsBoard() {
+  const { user } = useAuth();
+  const isAdmin = (user?.role || "").toLowerCase() === "admin";
   const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
@@ -2216,7 +2219,7 @@ export default function TicketsBoard() {
 
           <SheetFooter className="border-t pt-4">
             <div className="flex items-center justify-end gap-2">
-              {selectedTicket?.codigo && (
+              {selectedTicket?.codigo && isAdmin && (
                 <Button
                   variant="destructive"
                   onClick={() => setDeleteConfirmOpen(true)}
@@ -2342,66 +2345,71 @@ export default function TicketsBoard() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Confirmación: eliminar ticket */}
-      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar ticket</AlertDialogTitle>
-            <AlertDialogDescription>
-              {`¿Deseas eliminar el ticket "${
-                selectedTicket?.nombre || "(sin título)"
-              }"? Esta acción no se puede deshacer.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={deletingTicket}>
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={async () => {
-                if (!selectedTicket?.codigo) return;
-                setDeletingTicket(true);
-                try {
-                  await deleteTicket(selectedTicket.codigo);
-                  // Notificación local
+      {/* Confirmación: eliminar ticket (sólo admin) */}
+      {isAdmin && (
+        <AlertDialog
+          open={deleteConfirmOpen}
+          onOpenChange={setDeleteConfirmOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Eliminar ticket</AlertDialogTitle>
+              <AlertDialogDescription>
+                {`¿Deseas eliminar el ticket "${
+                  selectedTicket?.nombre || "(sin título)"
+                }"? Esta acción no se puede deshacer.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deletingTicket}>
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={async () => {
+                  if (!selectedTicket?.codigo) return;
+                  setDeletingTicket(true);
                   try {
-                    if (typeof window !== "undefined") {
-                      window.dispatchEvent(
-                        new CustomEvent("ticket:notify", {
-                          detail: {
-                            title: `Ticket eliminado: ${
-                              selectedTicket?.nombre || selectedTicket.codigo
-                            }`,
-                            ticketId: selectedTicket.codigo,
-                            current: "ELIMINADO",
-                            at: new Date().toISOString(),
-                          },
-                        })
-                      );
-                    }
-                  } catch {}
-                  // Quitar de la lista y cerrar drawer
-                  setTickets((prev) =>
-                    prev.filter((t) => t.codigo !== selectedTicket.codigo)
-                  );
-                  setDrawerOpen(false);
-                  toast({ title: "Ticket eliminado" });
-                } catch (e) {
-                  console.error(e);
-                  toast({ title: "Error al eliminar ticket" });
-                } finally {
-                  setDeletingTicket(false);
-                  setDeleteConfirmOpen(false);
-                }
-              }}
-              disabled={deletingTicket}
-            >
-              {deletingTicket ? "Eliminando..." : "Eliminar"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+                    await deleteTicket(selectedTicket.codigo);
+                    // Notificación local
+                    try {
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(
+                          new CustomEvent("ticket:notify", {
+                            detail: {
+                              title: `Ticket eliminado: ${
+                                selectedTicket?.nombre || selectedTicket.codigo
+                              }`,
+                              ticketId: selectedTicket.codigo,
+                              current: "ELIMINADO",
+                              at: new Date().toISOString(),
+                            },
+                          })
+                        );
+                      }
+                    } catch {}
+                    // Quitar de la lista y cerrar drawer
+                    setTickets((prev) =>
+                      prev.filter((t) => t.codigo !== selectedTicket.codigo)
+                    );
+                    setDrawerOpen(false);
+                    toast({ title: "Ticket eliminado" });
+                  } catch (e) {
+                    console.error(e);
+                    toast({ title: "Error al eliminar ticket" });
+                  } finally {
+                    setDeletingTicket(false);
+                    setDeleteConfirmOpen(false);
+                  }
+                }}
+                disabled={deletingTicket}
+              >
+                {deletingTicket ? "Eliminando..." : "Eliminar"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }

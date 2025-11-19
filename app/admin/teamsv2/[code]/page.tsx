@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
@@ -76,6 +77,8 @@ export default function CoachDetailPage({
   const chatServerUrl = (CHAT_HOST || "").replace(/\/$/, "");
 
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = (user?.role || "").toLowerCase() === "admin";
   const [coach, setCoach] = useState<CoachItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -757,14 +760,16 @@ export default function CoachDetailPage({
               >
                 <Edit className="h-4 w-4" />
               </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setDeleteOpen(true)}
-                className="bg-rose-100 text-rose-800 hover:bg-rose-200"
-              >
-                Eliminar
-              </Button>
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => setDeleteOpen(true)}
+                  className="bg-rose-100 text-rose-800 hover:bg-rose-200"
+                >
+                  Eliminar
+                </Button>
+              )}
             </div>
           </div>
 
@@ -1731,6 +1736,7 @@ export default function CoachDetailPage({
                 <Input
                   value={draftNombre}
                   onChange={(e) => setDraftNombre(e.target.value)}
+                  disabled={!isAdmin}
                 />
               </div>
 
@@ -1740,7 +1746,7 @@ export default function CoachDetailPage({
                   className="w-full h-9 rounded-md border px-3 text-sm"
                   value={draftPuesto ?? ""}
                   onChange={(e) => setDraftPuesto(e.target.value)}
-                  disabled={optsLoading}
+                  disabled={optsLoading || !isAdmin}
                 >
                   <option value="">-- Ninguno --</option>
                   {puestoOptionsApi.map((o) => (
@@ -1757,7 +1763,7 @@ export default function CoachDetailPage({
                   className="w-full h-9 rounded-md border px-3 text-sm"
                   value={draftArea ?? ""}
                   onChange={(e) => setDraftArea(e.target.value)}
-                  disabled={optsLoading}
+                  disabled={optsLoading || !isAdmin}
                 >
                   <option value="">-- Ninguno --</option>
                   {areaOptionsApi.map((o) => (
@@ -1775,7 +1781,7 @@ export default function CoachDetailPage({
                   Cancelar
                 </Button>
                 <Button
-                  disabled={saving}
+                  disabled={saving || !isAdmin}
                   onClick={async () => {
                     try {
                       setSaving(true);
@@ -1804,51 +1810,56 @@ export default function CoachDetailPage({
           </DialogContent>
         </Dialog>
 
-        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Confirmar eliminación</DialogTitle>
-            </DialogHeader>
-            <div className="py-2">
-              <p className="text-sm text-neutral-700">
-                Vas a eliminar el coach <strong>{coach?.nombre ?? code}</strong>
-                . Revisa los datos:
-              </p>
-              <div className="mt-3 text-sm">
-                <div>
-                  Área: <strong>{coach?.area ?? "—"}</strong>
-                </div>
-                <div>
-                  Puesto: <strong>{coach?.puesto ?? "—"}</strong>
+        {isAdmin && (
+          <Dialog
+            open={deleteOpen}
+            onOpenChange={(o) => isAdmin && setDeleteOpen(o)}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Confirmar eliminación</DialogTitle>
+              </DialogHeader>
+              <div className="py-2">
+                <p className="text-sm text-neutral-700">
+                  Vas a eliminar el coach{" "}
+                  <strong>{coach?.nombre ?? code}</strong>. Revisa los datos:
+                </p>
+                <div className="mt-3 text-sm">
+                  <div>
+                    Área: <strong>{coach?.area ?? "—"}</strong>
+                  </div>
+                  <div>
+                    Puesto: <strong>{coach?.puesto ?? "—"}</strong>
+                  </div>
                 </div>
               </div>
-            </div>
-            <DialogFooter>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={async () => {
-                    try {
-                      await deleteCoach(coach!.codigo);
-                      toast({ title: "Coach eliminado" });
-                      setDeleteOpen(false);
-                      router.push("/admin/teamsv2");
-                    } catch (err: any) {
-                      toast({
-                        title: err?.message ?? "Error al eliminar coach",
-                      });
-                    }
-                  }}
-                >
-                  Eliminar
-                </Button>
-              </div>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={async () => {
+                      try {
+                        await deleteCoach(coach!.codigo);
+                        toast({ title: "Coach eliminado" });
+                        setDeleteOpen(false);
+                        router.push("/admin/teamsv2");
+                      } catch (err: any) {
+                        toast({
+                          title: err?.message ?? "Error al eliminar coach",
+                        });
+                      }
+                    }}
+                  >
+                    Eliminar
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </DashboardLayout>
     </ProtectedRoute>
   );
