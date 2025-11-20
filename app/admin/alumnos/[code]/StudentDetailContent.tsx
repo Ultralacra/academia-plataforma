@@ -507,6 +507,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
         apiState={student.state || student.raw?.estado || undefined}
         status={statusSint}
         ticketsCount={ticketsCount}
+        hideCodeAndTickets
         canDelete={(user?.role ?? "").toLowerCase() === "admin"}
         onDelete={async () => {
           try {

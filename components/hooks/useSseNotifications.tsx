@@ -11,6 +11,9 @@ import { usePathname } from "next/navigation";
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
 
+// Kill switch temporal para desactivar SSE por completo
+const SSE_TEMP_DISABLED = true;
+
 export interface SseNotificationItem {
   id: string;
   title: string;
@@ -59,7 +62,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
   const connectedRef = useRef<boolean>(false);
   const bufferRef = useRef<string>("");
   const pathname = usePathname();
-  const disabled = pathname?.startsWith("/login");
+  const disabled = SSE_TEMP_DISABLED || !!pathname?.startsWith("/login");
   const bootstrappedRef = useRef<boolean>(false);
 
   const parseEventBlocks = useCallback((chunk: string) => {
@@ -136,9 +139,9 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     connectedRef.current = false;
     retryRef.current += 1;
     const attempt = retryRef.current;
-    try {
+    /* try {
       console.log("[SSE] iniciando conexión", { attempt, url });
-    } catch {}
+    } catch {} */
 
     (async () => {
       try {

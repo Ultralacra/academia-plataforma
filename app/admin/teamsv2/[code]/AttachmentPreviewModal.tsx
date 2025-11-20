@@ -35,16 +35,27 @@ export function AttachmentPreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>{attachment.name}</DialogTitle>
+      <DialogContent
+        className={
+          isImage
+            ? "max-w-[95vw] h-[95vh] flex flex-col p-3"
+            : "max-w-4xl h-[90vh] flex flex-col"
+        }
+      >
+        <DialogHeader className="pb-2">
+          <DialogTitle
+            className="text-xs font-semibold truncate"
+            title={attachment.name}
+          >
+            {attachment.name}
+          </DialogTitle>
         </DialogHeader>
-        <div className="flex-1 min-h-0 flex items-center justify-center bg-muted/40 rounded-md">
+        <div className="flex-1 min-h-0 flex items-center justify-center bg-black/80 rounded-md overflow-hidden">
           {isImage && (
             <img
               src={url}
               alt={attachment.name}
-              className="max-w-full max-h-full object-contain"
+              className="w-full h-full object-contain"
             />
           )}
           {isVideo && (
@@ -64,14 +75,20 @@ export function AttachmentPreviewModal({
             />
           )}
           {isOther && (
-            <div className="text-center p-8">
-              <p className="text-lg font-semibold">
-                Vista previa no disponible
+            <div className="w-full h-full flex flex-col items-center justify-center px-6 py-8 text-center">
+              <div className="mb-4 h-12 w-12 rounded-xl bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-700">
+                DOC
+              </div>
+              <p
+                className="text-sm font-semibold mb-1 truncate max-w-[90%]"
+                title={attachment.name}
+              >
+                {attachment.name}
               </p>
-              <p className="text-muted-foreground">
-                {attachment.name} ({formatBytes(attachment.size)})
+              <p className="text-xs text-muted-foreground mb-4">
+                {formatBytes(attachment.size)}
               </p>
-              <Button asChild className="mt-4">
+              <Button asChild className="mt-1">
                 <a href={url} download={attachment.name}>
                   Descargar
                 </a>

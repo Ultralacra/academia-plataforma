@@ -151,6 +151,30 @@ export default function CoachChatInline({
   const [ticketLoading, setTicketLoading] = React.useState(false);
   const [ticketError, setTicketError] = React.useState<string | null>(null);
   const [ticketData, setTicketData] = React.useState<TicketData | null>(null);
+  // --- Selección manual para creación de ticket ---
+  const [selectionMode, setSelectionMode] = React.useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = React.useState<
+    Set<string>
+  >(new Set());
+  const [selectedAttachmentIds, setSelectedAttachmentIds] = React.useState<
+    Set<string>
+  >(new Set());
+  const toggleMessageSelection = React.useCallback((id: string) => {
+    setSelectedMessageIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const toggleAttachmentSelection = React.useCallback((id: string) => {
+    setSelectedAttachmentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
@@ -177,6 +201,44 @@ export default function CoachChatInline({
   const [previewAttachment, setPreviewAttachment] =
     React.useState<Attachment | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
+  const [fullImageSrc, setFullImageSrc] = React.useState<string | null>(null);
+
+  // Detectar URLs en texto y envolverlas en <a>
+  const renderTextWithLinks = React.useCallback((value?: string) => {
+    const text = (value || "").trim();
+    if (!text) return null;
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = urlRegex.exec(text))) {
+      const start = match.index;
+      const end = start + match[0].length;
+      if (start > lastIndex) {
+        parts.push(text.slice(lastIndex, start));
+      }
+      let href = match[0];
+      if (!/^https?:\/\//i.test(href)) {
+        href = `https://${href}`;
+      }
+      parts.push(
+        <a
+          key={`${href}-${start}`}
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="underline text-sky-700 hover:text-sky-900 break-all"
+        >
+          {match[0]}
+        </a>
+      );
+      lastIndex = end;
+    }
+    if (lastIndex < text.length) {
+      parts.push(text.slice(lastIndex));
+    }
+    return parts;
+  }, []);
 
   const sioRef = React.useRef<any>(null);
   const chatIdRef = React.useRef<string | number | null>(
@@ -364,6 +426,16 @@ export default function CoachChatInline({
 
   async function handleGenerateTicket() {
     try {
+      // Log de selección manual antes de cualquier acción IA
+      try {
+        const mensajes = Array.from(selectedMessageIds);
+        const adjuntos = Array.from(selectedAttachmentIds);
+        console.log("[Chat] selección para ticket", {
+          mensajes,
+          adjuntos,
+          vacio: mensajes.length === 0 && adjuntos.length === 0,
+        });
+      } catch {}
       const currentId = (chatIdRef.current ?? chatId) as any;
       // logging eliminado
       if (currentId == null) {
@@ -407,9 +479,23 @@ export default function CoachChatInline({
       let res: Response | null = null;
       const { getAuthToken } = await import("@/lib/auth");
       const token = typeof window !== "undefined" ? getAuthToken() : null;
-      const authHeaders = token
-        ? { Authorization: `Bearer ${token}` }
-        : undefined;
+      const authHeaders: Record<string, string> = token
+        ? {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          }
+        : { "Content-Type": "application/json" };
+
+      const payload = {
+        message_ids: Array.from(selectedMessageIds),
+        file_ids: Array.from(selectedAttachmentIds),
+      };
+
+      // Log explícito de lo que se envía al endpoint de compute
+      try {
+        console.log("[Chat] compute/chat payload", payload);
+      } catch {}
+
       const sendId = String(currentId).trim();
       const urlWithParam = buildUrl(
         `/ai/compute/chat/${encodeURIComponent(sendId)}`
@@ -418,6 +504,7 @@ export default function CoachChatInline({
       res = await fetch(urlWithParam, {
         method: "POST",
         headers: authHeaders,
+        body: JSON.stringify(payload),
       });
 
       if (!res || !res.ok) {
@@ -560,18 +647,18 @@ export default function CoachChatInline({
             ? { Authorization: `Bearer ${token}` }
             : {};
           let ok = false;
-          // try CHAT_HOST
+          // try CHAT_HOST usando el endpoint /v1/ai/upload-file/
           try {
             const base = (CHAT_HOST || "").replace(/\/$/, "");
-            const url = `${base}/ai/upload-file/${encodeURIComponent(id)}`;
+            const url = `${base}/v1/ai/upload-file/${encodeURIComponent(id)}`;
             const res = await fetch(url, { method: "POST", headers, body: fd });
             ok = res.ok;
           } catch {}
-          // fallback to API host
+          // fallback a API host con el mismo endpoint /v1/ai/upload-file/
           if (!ok) {
             try {
               const fallbackUrl = buildUrl(
-                `/ai/upload-file/${encodeURIComponent(id)}`
+                `/v1/ai/upload-file/${encodeURIComponent(id)}`
               );
               const h2: Record<string, string> = {
                 ...headers,
@@ -738,7 +825,6 @@ export default function CoachChatInline({
     },
     [resolveName]
   );
-
   const getTipoByParticipantId = React.useCallback(
     (pid: any): "cliente" | "equipo" | "admin" | "" => {
       try {
@@ -1806,6 +1892,17 @@ export default function CoachChatInline({
             (msg as any).__senderReason = ev.reason;
             return msg;
           });
+
+          // Log: IDs de mensajes al hacer JOIN (server y mapeados)
+          try {
+            const idsServer = (Array.isArray(msgsSrc) ? msgsSrc : []).map(
+              (m: any) => String(m?.id_mensaje ?? m?.id ?? "")
+            );
+            const idsMapped = mapped.map((mm) => String(mm.id));
+            console.log("[Chat] JOIN message ids (server)", idsServer);
+            console.log("[Chat] JOIN message ids (mapped)", idsMapped);
+            console.log("[Chat] JOIN messages count", mapped.length);
+          } catch {}
 
           {
             const reconciled = reconcilePreserveSender(mapped);
@@ -3206,6 +3303,32 @@ export default function CoachChatInline({
                 Generar ticket
               </button>
             )}
+            {role !== "alumno" && (
+              <button
+                onClick={() => {
+                  if (selectionMode) {
+                    setSelectionMode(false);
+                    setSelectedMessageIds(new Set());
+                    setSelectedAttachmentIds(new Set());
+                  } else {
+                    setSelectionMode(true);
+                  }
+                }}
+                className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition"
+                title={
+                  selectionMode
+                    ? "Cancelar selección"
+                    : "Activar selección de mensajes y archivos"
+                }
+              >
+                {selectionMode ? "Cancelar" : "Seleccionar"}
+              </button>
+            )}
+            {selectionMode && (
+              <span className="text-[11px] px-2 py-1 rounded bg-white/10 text-white">
+                {selectedMessageIds.size} msg / {selectedAttachmentIds.size} adj
+              </span>
+            )}
             {/* Menú de acciones (3 puntitos) */}
             <AlertDialog
               open={confirmDeleteOpen}
@@ -3283,6 +3406,7 @@ export default function CoachChatInline({
               const sameNext = next && next.sender === m.sender;
               const newGroup = !samePrev;
               const endGroup = !sameNext;
+              const isSelected = selectionMode && selectedMessageIds.has(m.id);
 
               let radius = "rounded-lg";
               if (isMine) {
@@ -3296,7 +3420,6 @@ export default function CoachChatInline({
                 if (!newGroup && !endGroup)
                   radius =
                     "rounded-tl-sm rounded-bl-sm rounded-tr-lg rounded-br-lg";
-                if (!newGroup && endGroup) radius = "rounded-lg rounded-tl-sm";
               }
 
               const wrapperMt = newGroup ? "mt-2" : "mt-0.5";
@@ -3315,16 +3438,32 @@ export default function CoachChatInline({
                   } ${wrapperMt}`}
                 >
                   <div
-                    className={`w-fit ${
+                    onClick={() => {
+                      if (selectionMode) toggleMessageSelection(m.id);
+                    }}
+                    className={`relative ${
+                      selectionMode ? "cursor-pointer" : "cursor-default"
+                    } w-fit ${
                       hasAudioOnly
                         ? "p-0 bg-transparent shadow-none"
                         : "max-w-[75%] px-3 py-2 shadow-sm " +
                           (isMine ? "bg-[#DCF8C6]" : "bg-white")
-                    } ${radius}`}
+                    } ${radius} ${isSelected ? "ring-2 ring-violet-500" : ""}`}
                   >
+                    {selectionMode && (
+                      <span
+                        className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
+                          isSelected
+                            ? "bg-violet-600 text-white"
+                            : "bg-gray-300 text-gray-700"
+                        }`}
+                      >
+                        {isSelected ? "✓" : "+"}
+                      </span>
+                    )}
                     {m.text?.trim() ? (
                       <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
-                        {m.text}
+                        {renderTextWithLinks(m.text)}
                       </div>
                     ) : null}
                     {Array.isArray(m.attachments) &&
@@ -3360,6 +3499,8 @@ export default function CoachChatInline({
                             const isImg = (a.mime || "").startsWith("image/");
                             const isVideo = (a.mime || "").startsWith("video/");
                             const isAudio = (a.mime || "").startsWith("audio/");
+                            const attSelected =
+                              selectionMode && selectedAttachmentIds.has(a.id);
                             if (isAudio) {
                               const timeLabel = formatTime(m.at);
                               return (
@@ -3376,13 +3517,32 @@ export default function CoachChatInline({
                               return (
                                 <div
                                   key={a.id}
-                                  className="rounded-md overflow-hidden bg-white/60"
+                                  onClick={() => {
+                                    if (selectionMode)
+                                      toggleAttachmentSelection(a.id);
+                                  }}
+                                  className={`rounded-md overflow-hidden bg-white/60 relative ${
+                                    selectionMode ? "cursor-pointer" : ""
+                                  } ${
+                                    attSelected ? "ring-2 ring-violet-500" : ""
+                                  }`}
                                 >
                                   <video
                                     src={url}
                                     controls
                                     className="h-full w-full max-h-40"
                                   />
+                                  {selectionMode && (
+                                    <span
+                                      className={`absolute top-1 left-1 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
+                                        attSelected
+                                          ? "bg-violet-600 text-white"
+                                          : "bg-gray-300 text-gray-700"
+                                      }`}
+                                    >
+                                      {attSelected ? "✓" : "+"}
+                                    </span>
+                                  )}
                                 </div>
                               );
                             }
@@ -3390,8 +3550,22 @@ export default function CoachChatInline({
                               <button
                                 key={a.id}
                                 type="button"
-                                onClick={() => openPreview(a)}
-                                className="relative rounded-md overflow-hidden bg-white/60 text-left"
+                                onClick={() => {
+                                  if (selectionMode) {
+                                    toggleAttachmentSelection(a.id);
+                                  } else if (isImg && url) {
+                                    setFullImageSrc(url);
+                                  } else {
+                                    openPreview(a);
+                                  }
+                                }}
+                                className={`relative rounded-md bg-white/60 text-left px-2 py-2 flex items-center gap-2 border border-gray-200 shadow-sm ${
+                                  selectionMode
+                                    ? "cursor-pointer"
+                                    : "cursor-default"
+                                } ${
+                                  attSelected ? "ring-2 ring-violet-500" : ""
+                                }`}
                                 title={a.name}
                                 style={{ width: 220 }}
                               >
@@ -3399,16 +3573,31 @@ export default function CoachChatInline({
                                   <img
                                     src={url || "/placeholder.svg"}
                                     alt={a.name}
-                                    className="w-full"
-                                    style={{
-                                      aspectRatio: "11 / 6",
-                                      objectFit: "cover",
-                                    }}
+                                    className="h-9 w-9 rounded object-cover flex-shrink-0"
                                   />
                                 ) : (
-                                  <div className="p-2 text-xs break-all underline">
+                                  <div className="h-9 w-9 rounded bg-gray-200 flex items-center justify-center text-[11px] font-medium text-gray-700 flex-shrink-0">
+                                    DOC
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-[11px] font-medium text-gray-800 truncate">
                                     {a.name}
                                   </div>
+                                  <div className="text-[10px] text-gray-500 truncate">
+                                    {(a.mime || "").split("/")[1] || "archivo"}
+                                  </div>
+                                </div>
+                                {selectionMode && (
+                                  <span
+                                    className={`absolute top-1 left-1 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
+                                      attSelected
+                                        ? "bg-violet-600 text-white"
+                                        : "bg-gray-300 text-gray-700"
+                                    }`}
+                                  >
+                                    {attSelected ? "✓" : "+"}
+                                  </span>
                                 )}
                               </button>
                             );
@@ -3850,6 +4039,19 @@ export default function CoachChatInline({
         getAttachmentUrl={getAttachmentUrl}
         formatBytes={formatBytes}
       />
+      {/* Vista a pantalla completa solo para imágenes */}
+      {fullImageSrc && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/90 flex items-center justify-center cursor-zoom-out"
+          onClick={() => setFullImageSrc(null)}
+        >
+          <img
+            src={fullImageSrc}
+            alt="Imagen adjunta"
+            className="max-w-full max-h-full object-contain"
+          />
+        </div>
+      )}
       {/* Modal: Ticket generado por IA (extraído) */}
       <TicketGenerationModal
         open={ticketModalOpen}

@@ -34,6 +34,7 @@ export default function Header({
   ticketsCount,
   canDelete,
   onDelete,
+  hideCodeAndTickets,
 }: {
   name: string;
   code: string;
@@ -43,6 +44,7 @@ export default function Header({
   ticketsCount?: number;
   canDelete?: boolean;
   onDelete?: () => void | Promise<void>;
+  hideCodeAndTickets?: boolean;
 }) {
   // Nota: el conteo real de tickets se muestra desde el padre para evitar fetch doble.
   return (
@@ -55,7 +57,7 @@ export default function Header({
           <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
             {name}
           </h1>
-          {code && (
+          {code && !hideCodeAndTickets && (
             <div className="mt-1.5 flex items-center gap-2">
               <TooltipProvider>
                 <Tooltip>
