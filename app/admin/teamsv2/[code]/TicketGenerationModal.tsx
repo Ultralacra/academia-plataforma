@@ -28,6 +28,7 @@ import {
   Wand2,
   RefreshCcw,
   CheckCircle2,
+  Paperclip,
 } from "lucide-react";
 import { TicketData, Attachment } from "./chat-types";
 import {
@@ -113,9 +114,9 @@ export function TicketGenerationModal({
       try {
         // Busca líneas del tipo **Campo:** valor
         // Escapes dobles para que la expresión regular sea válida en string
-        // Soporta fin de línea con \r?\n o fin de texto
+        // Soporta contenido multilínea hasta el siguiente campo (**Campo2:) o fin de texto
         const re = new RegExp(
-          String.raw`\*\*${field}\s*:\*\*\s*(.+?)(?:\r?\n|$)`,
+          String.raw`\*\*${field}\s*:\*\*\s*([\s\S]+?)(?=\r?\n\*\*|$)`,
           "i"
         );
         const m = content.match(re);
@@ -302,321 +303,433 @@ export function TicketGenerationModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {flowStage === "idle" && (
-        <DialogContent className="sm:max-w-[960px] max-h-[90vh] p-0 flex flex-col bg-white dark:bg-zinc-950">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b">
-            <DialogTitle className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-b from-violet-500 to-indigo-600 text-white">
-                <Wand2 className="h-4 w-4" />
-              </span>
-              Generar Ticket con IA
-            </DialogTitle>
-          </DialogHeader>
-          <div className="px-6 pb-6 pt-4 flex-1 min-h-0 overflow-y-auto">
-            {loading && (
-              <div className="relative grid place-items-center h-56 rounded-xl overflow-hidden bg-gradient-to-br from-violet-50 via-white to-indigo-50 dark:from-violet-950/30 dark:via-zinc-900 dark:to-indigo-950/30 border">
-                <div className="absolute inset-0 pointer-events-none">
-                  <div className="sparkle s1" />
-                  <div className="sparkle s2" />
-                  <div className="sparkle s3" />
-                  <div className="sparkle s4" />
+      {flowStage === "idle" ? (
+        <DialogContent className="sm:max-w-[1100px] max-h-[95vh] h-[90vh] p-0 flex flex-col bg-zinc-50 dark:bg-zinc-950 overflow-hidden border-zinc-200 dark:border-zinc-800 shadow-2xl">
+          {/* HEADER */}
+          <DialogHeader className="px-6 py-4 border-b bg-white dark:bg-zinc-900 flex-shrink-0 z-10">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-3 text-xl font-semibold text-zinc-800 dark:text-zinc-100">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-violet-200 dark:shadow-violet-900/20">
+                  <Wand2 className="h-5 w-5" />
                 </div>
-                <div className="flex flex-col items-center gap-3 relative z-10">
-                  <div className="relative">
-                    <span className="absolute -top-2 -right-2 text-yellow-500 animate-ping">
-                      ✦
-                    </span>
-                    <span className="absolute -bottom-2 -left-2 text-pink-500 animate-pulse">
-                      ✧
-                    </span>
-                    <div className="h-12 w-12 rounded-full bg-gradient-to-b from-violet-500 to-indigo-600 text-white grid place-items-center shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/30">
-                      <Sparkles className="h-6 w-6 animate-spin-slow" />
+                <div className="flex flex-col">
+                  <span>Generar Ticket con IA</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    Revisa el análisis y confirma los datos
+                  </span>
+                </div>
+              </DialogTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground hover:text-violet-600"
+                  onClick={() => {
+                    if (!data) return;
+                    // Lógica de restauración (mismo código que tenías, simplificado visualmente)
+                    const p = data.parsed || {};
+                    const c = data.content || "";
+                    setTitulo(
+                      p.titulo ||
+                        readFieldFromContent(c, "Título (obligatorio)") ||
+                        titulo
+                    );
+                    setDescripcion(
+                      p.descripcion ||
+                        readFieldFromContent(c, "Descripción") ||
+                        descripcion
+                    );
+                    setPrioridad(
+                      (
+                        p.prioridad ||
+                        readFieldFromContent(c, "Prioridad") ||
+                        prioridad
+                      ).trim()
+                    );
+                    setCategoria(
+                      p.categoria ||
+                        readFieldFromContent(c, "Categoría") ||
+                        categoria
+                    );
+                    setTipo(
+                      (
+                        data.tipo ||
+                        readFieldFromContent(c, "Tipo de ticket") ||
+                        tipo
+                      ).trim()
+                    );
+                    setAlumno(
+                      (p as any).alumno ||
+                        readFieldFromContent(c, "Alumno") ||
+                        readFieldFromContent(c, "Nombre de cliente asignado") ||
+                        alumno
+                    );
+                    setArea(
+                      (p as any).area || readFieldFromContent(c, "Área") || area
+                    );
+                    setCoachNombre(
+                      (p as any).coachNombre ||
+                        readFieldFromContent(c, "Nombre de coach asignado") ||
+                        coachNombre
+                    );
+                    setRecomendacion(
+                      (p as any).recomendacion ||
+                        readFieldFromContent(
+                          c,
+                          "Recomendación o siguiente paso"
+                        ) ||
+                        readFieldFromContent(c, "Recomendación") ||
+                        readFieldFromContent(c, "Siguiente paso") ||
+                        recomendacion
+                    );
+                    const lt =
+                      (p as any).links ||
+                      readFieldFromContent(c, "Links") ||
+                      "";
+                    setLinks(parseLinks(lt));
+                  }}
+                >
+                  <RefreshCcw className="h-3.5 w-3.5 mr-1.5" />
+                  Restaurar valores originales
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {/* BODY: SPLIT VIEW */}
+          <div className="flex-1 min-h-0 flex flex-col lg:flex-row overflow-hidden">
+            {/* LOADING STATE */}
+            {loading && (
+              <div className="absolute inset-0 z-50 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-sm flex items-center justify-center p-6">
+                <div className="relative grid place-items-center w-full max-w-md h-64 rounded-2xl overflow-hidden bg-gradient-to-br from-violet-50 via-white to-indigo-50 dark:from-violet-950/30 dark:via-zinc-900 dark:to-indigo-950/30 border border-zinc-200 dark:border-zinc-800 shadow-2xl">
+                  <div className="absolute inset-0 pointer-events-none">
+                    <div className="sparkle s1" />
+                    <div className="sparkle s2" />
+                    <div className="sparkle s3" />
+                    <div className="sparkle s4" />
+                  </div>
+                  <div className="flex flex-col items-center gap-4 relative z-10">
+                    <div className="relative">
+                      <span className="absolute -top-2 -right-2 text-yellow-500 animate-ping">
+                        ✦
+                      </span>
+                      <span className="absolute -bottom-2 -left-2 text-pink-500 animate-pulse">
+                        ✧
+                      </span>
+                      <div className="h-14 w-14 rounded-full bg-gradient-to-b from-violet-500 to-indigo-600 text-white grid place-items-center shadow-lg shadow-indigo-200/50 dark:shadow-indigo-900/30">
+                        <Sparkles className="h-7 w-7 animate-spin-slow" />
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <h3 className="font-medium text-lg text-zinc-900 dark:text-zinc-100">
+                        Analizando conversación
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Generando sugerencias y detectando archivos...
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Spinner size={18} />
-                    <span>Analizando conversación y generando ticket…</span>
-                  </div>
-                  <div className="text-[11px] text-muted-foreground/80">
-                    IA en curso — suele tardar pocos segundos
-                  </div>
+                  <style jsx>{`
+                    .sparkle {
+                      position: absolute;
+                      opacity: 0.6;
+                      filter: blur(0.2px);
+                    }
+                    .sparkle::after {
+                      content: "✦";
+                      font-size: 18px;
+                      color: #8b5cf6;
+                    }
+                    .sparkle.s1 {
+                      top: 16%;
+                      left: 22%;
+                      animation: float1 6s ease-in-out infinite;
+                    }
+                    .sparkle.s2 {
+                      top: 68%;
+                      left: 14%;
+                      animation: float2 7s ease-in-out infinite;
+                    }
+                    .sparkle.s3 {
+                      top: 28%;
+                      right: 18%;
+                      animation: float3 8s ease-in-out infinite;
+                    }
+                    .sparkle.s4 {
+                      bottom: 12%;
+                      right: 26%;
+                      animation: float4 5.5s ease-in-out infinite;
+                    }
+                    @keyframes float1 {
+                      0% {
+                        transform: translateY(0);
+                      }
+                      50% {
+                        transform: translateY(-8px);
+                      }
+                      100% {
+                        transform: translateY(0);
+                      }
+                    }
+                    @keyframes float2 {
+                      0% {
+                        transform: translateX(0);
+                      }
+                      50% {
+                        transform: translateX(10px);
+                      }
+                      100% {
+                        transform: translateX(0);
+                      }
+                    }
+                    @keyframes float3 {
+                      0% {
+                        transform: translate(0, 0);
+                      }
+                      50% {
+                        transform: translate(-10px, 6px);
+                      }
+                      100% {
+                        transform: translate(0, 0);
+                      }
+                    }
+                    @keyframes float4 {
+                      0% {
+                        transform: translate(0, 0);
+                      }
+                      50% {
+                        transform: translate(8px, -6px);
+                      }
+                      100% {
+                        transform: translate(0, 0);
+                      }
+                    }
+                    :global(.animate-spin-slow) {
+                      animation: spin 3.5s linear infinite;
+                    }
+                  `}</style>
                 </div>
-                <style jsx>{`
-                  .sparkle {
-                    position: absolute;
-                    opacity: 0.6;
-                    filter: blur(0.2px);
-                  }
-                  .sparkle::after {
-                    content: "✦";
-                    font-size: 18px;
-                    color: #8b5cf6;
-                  }
-                  .sparkle.s1 {
-                    top: 16%;
-                    left: 22%;
-                    animation: float1 6s ease-in-out infinite;
-                  }
-                  .sparkle.s2 {
-                    top: 68%;
-                    left: 14%;
-                    animation: float2 7s ease-in-out infinite;
-                  }
-                  .sparkle.s3 {
-                    top: 28%;
-                    right: 18%;
-                    animation: float3 8s ease-in-out infinite;
-                  }
-                  .sparkle.s4 {
-                    bottom: 12%;
-                    right: 26%;
-                    animation: float4 5.5s ease-in-out infinite;
-                  }
-                  @keyframes float1 {
-                    0% {
-                      transform: translateY(0);
-                    }
-                    50% {
-                      transform: translateY(-8px);
-                    }
-                    100% {
-                      transform: translateY(0);
-                    }
-                  }
-                  @keyframes float2 {
-                    0% {
-                      transform: translateX(0);
-                    }
-                    50% {
-                      transform: translateX(10px);
-                    }
-                    100% {
-                      transform: translateX(0);
-                    }
-                  }
-                  @keyframes float3 {
-                    0% {
-                      transform: translate(0, 0);
-                    }
-                    50% {
-                      transform: translate(-10px, 6px);
-                    }
-                    100% {
-                      transform: translate(0, 0);
-                    }
-                  }
-                  @keyframes float4 {
-                    0% {
-                      transform: translate(0, 0);
-                    }
-                    50% {
-                      transform: translate(8px, -6px);
-                    }
-                    100% {
-                      transform: translate(0, 0);
-                    }
-                  }
-                  :global(.animate-spin-slow) {
-                    animation: spin 3.5s linear infinite;
-                  }
-                `}</style>
               </div>
             )}
+
+            {/* ERROR STATE */}
             {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
+              <div className="p-6 w-full">
+                <Alert
+                  variant="destructive"
+                  className="border-red-200 bg-red-50 dark:bg-red-900/10 dark:border-red-900/50"
+                >
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Error en el análisis</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              </div>
             )}
-            {actionError && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{actionError}</AlertDescription>
-              </Alert>
-            )}
-            {data && (
-              <div className="space-y-4">
-                {/* Toggle Formulario / Vista previa */}
-                <div className="flex items-center justify-between">
-                  <div className="font-semibold text-sm">
-                    Generador de ticket
+
+            {data && !loading && (
+              <>
+                {/* LEFT COLUMN: AI CONTEXT (READ ONLY) */}
+                <div className="flex-1 lg:w-5/12 lg:border-r border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 flex flex-col min-h-0">
+                  <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-900 flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-violet-600" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                      Análisis de IA
+                    </span>
                   </div>
-                  <div className="inline-flex items-center rounded-md border bg-white overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => setMode("form")}
-                      className={`px-3 py-1.5 text-xs ${
-                        mode === "form"
-                          ? "bg-violet-600 text-white"
-                          : "hover:bg-gray-50"
-                      }`}
-                      title="Editar campos"
-                    >
-                      Formulario
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setMode("preview")}
-                      className={`px-3 py-1.5 text-xs border-l ${
-                        mode === "preview"
-                          ? "bg-violet-600 text-white"
-                          : "hover:bg-gray-50"
-                      }`}
-                      title="Vista previa del ticket"
-                    >
-                      Vista previa
-                    </button>
+                  <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+                    <div className="space-y-6">
+                      {/* AI Summary HTML */}
+                      <div className="prose prose-sm dark:prose-invert max-w-none bg-white dark:bg-zinc-900 p-4 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm break-words [&_*]:text-xs [&_pre]:whitespace-pre-wrap [&_pre]:break-all">
+                        {data.parsed?.html ? (
+                          <div
+                            dangerouslySetInnerHTML={{
+                              __html: data.parsed.html,
+                            }}
+                          />
+                        ) : (
+                          <p className="text-zinc-500 italic">
+                            Sin resumen HTML disponible.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Links Detected */}
+                      {links.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                            Links Detectados
+                          </h4>
+                          <div className="grid gap-2">
+                            {links.map((u, i) => (
+                              <a
+                                key={i}
+                                href={normalizeUrl(u)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-2 p-2 rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-violet-300 transition-colors group"
+                              >
+                                <div className="h-8 w-8 rounded-md bg-sky-50 dark:bg-sky-900/20 flex items-center justify-center text-sky-600 flex-shrink-0">
+                                  <span className="text-xs font-bold">URL</span>
+                                </div>
+                                <span className="text-xs text-zinc-600 dark:text-zinc-300 truncate flex-1 group-hover:text-violet-600">
+                                  {u}
+                                </span>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Attachments Detected */}
+                      {normalizedAttachments.length > 0 && (
+                        <div className="space-y-2">
+                          <h4 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">
+                            Adjuntos ({normalizedAttachments.length})
+                          </h4>
+                          <div className="grid grid-cols-1 gap-2">
+                            {normalizedAttachments.map((a) => {
+                              const url = getAttachmentUrl(a);
+                              const mime = resolveAttachmentMime(a);
+                              const isImg = isImage(mime);
+                              return (
+                                <a
+                                  key={a.id}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="group flex items-center gap-3 p-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-violet-300 transition-all hover:shadow-sm"
+                                >
+                                  <div className="h-10 w-10 flex-shrink-0 rounded-md overflow-hidden bg-zinc-100 dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-800 flex items-center justify-center">
+                                    {isImg ? (
+                                      <img
+                                        src={url}
+                                        alt={a.name}
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <Paperclip className="h-4 w-4 text-zinc-400" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <div
+                                      className="text-xs font-medium text-zinc-700 dark:text-zinc-200 truncate"
+                                      title={a.name}
+                                    >
+                                      {a.name}
+                                    </div>
+                                    <div className="text-[10px] text-zinc-400 truncate">
+                                      {isImg ? "Imagen" : "Archivo"}
+                                    </div>
+                                  </div>
+                                </a>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {mode === "form" ? (
-                  <>
-                    {/* Bloque de formulario + sugerencia + adjuntos (igual que antes) */}
-                    {/* BEGIN form block */}
-                    <div className="space-y-3 rounded-lg border bg-white dark:bg-zinc-900 p-3">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-sm">
-                          Datos del ticket
-                        </h3>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => {
-                            if (!data) return;
-                            const p = data.parsed || {};
-                            const c = data.content || "";
-                            setTitulo(
-                              p.titulo ||
-                                readFieldFromContent(
-                                  c,
-                                  "Título (obligatorio)"
-                                ) ||
-                                titulo
-                            );
-                            setDescripcion(
-                              p.descripcion ||
-                                readFieldFromContent(c, "Descripción") ||
-                                descripcion
-                            );
-                            setPrioridad(
-                              (
-                                p.prioridad ||
-                                readFieldFromContent(c, "Prioridad") ||
-                                prioridad
-                              ).trim()
-                            );
-                            setCategoria(
-                              p.categoria ||
-                                readFieldFromContent(c, "Categoría") ||
-                                categoria
-                            );
-                            setTipo(
-                              (
-                                data.tipo ||
-                                readFieldFromContent(c, "Tipo de ticket") ||
-                                tipo
-                              ).trim()
-                            );
-                            setAlumno(
-                              (p as any).alumno ||
-                                readFieldFromContent(c, "Alumno") ||
-                                readFieldFromContent(
-                                  c,
-                                  "Nombre de cliente asignado"
-                                ) ||
-                                alumno
-                            );
-                            setArea(
-                              (p as any).area ||
-                                readFieldFromContent(c, "Área") ||
-                                area
-                            );
-                            setCoachNombre(
-                              (p as any).coachNombre ||
-                                readFieldFromContent(
-                                  c,
-                                  "Nombre de coach asignado"
-                                ) ||
-                                coachNombre
-                            );
-                            setRecomendacion(
-                              (p as any).recomendacion ||
-                                readFieldFromContent(
-                                  c,
-                                  "Recomendación o siguiente paso"
-                                ) ||
-                                readFieldFromContent(c, "Recomendación") ||
-                                readFieldFromContent(c, "Siguiente paso") ||
-                                recomendacion
-                            );
-                            // Links (IA)
-                            {
-                              const lt =
-                                (p as any).links ||
-                                readFieldFromContent(c, "Links") ||
-                                "";
-                              setLinks(parseLinks(lt));
-                            }
-                          }}
-                          title="Rellenar desde la sugerencia de IA"
+                {/* RIGHT COLUMN: EDIT FORM */}
+                <div className="flex-1 lg:w-7/12 flex flex-col min-h-0 bg-white dark:bg-zinc-950">
+                  <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-violet-500 animate-pulse" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-zinc-800 dark:text-zinc-200">
+                      Editar Ticket Final
+                    </span>
+                  </div>
+
+                  <div className="flex-1 p-6 overflow-y-auto custom-scrollbar">
+                    <div className="space-y-5 max-w-3xl mx-auto">
+                      {/* Título */}
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="titulo"
+                          className="text-xs font-medium text-zinc-500 uppercase"
                         >
-                          <RefreshCcw className="h-3.5 w-3.5 mr-1" /> Rellenar
-                          desde IA
-                        </Button>
-                      </div>
-                      <div>
-                        <Label htmlFor="titulo">Título</Label>
+                          Título del Ticket
+                        </Label>
                         <Input
                           id="titulo"
                           value={titulo}
                           onChange={(e) => setTitulo(e.target.value)}
-                          placeholder="Título del ticket"
+                          className="font-medium text-lg border-zinc-200 dark:border-zinc-800 focus-visible:ring-violet-500 h-11"
+                          placeholder="Ej: Error en acceso a plataforma"
                         />
                       </div>
-                      <div>
-                        <Label htmlFor="descripcion">Descripción</Label>
-                        <Textarea
-                          id="descripcion"
-                          value={descripcion}
-                          onChange={(e) => setDescripcion(e.target.value)}
-                          rows={5}
-                          placeholder="Describe el problema o solicitud"
-                        />
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <Label htmlFor="alumno">Alumno</Label>
-                          <Input
-                            id="alumno"
-                            value={alumno}
-                            onChange={(e) => setAlumno(e.target.value)}
-                            placeholder="Nombre del alumno"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="area">Área</Label>
-                          <Select
-                            value={areaKey}
-                            onValueChange={(v) => setAreaKey(v)}
+
+                      {/* Grid de Metadatos */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <Label
+                            htmlFor="alumno"
+                            className="text-xs font-medium text-zinc-500 uppercase"
                           >
-                            <SelectTrigger id="area">
-                              <SelectValue
-                                placeholder={
-                                  areasLoading
-                                    ? "Cargando…"
-                                    : "Selecciona un área"
-                                }
+                            Alumno / Cliente
+                          </Label>
+                          <div className="relative">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                className="w-4 h-4"
                               >
-                                {areaOptions.find((o) => o.key === areaKey)
-                                  ?.value ||
-                                  area ||
-                                  (areasLoading
-                                    ? "Cargando…"
-                                    : "Selecciona un área")}
-                              </SelectValue>
+                                <path d="M10 8a3 3 0 100-6 3 3 0 000 6zM3.465 14.493a1.23 1.412A9.957 9.957 0 0010 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 00-13.074.003z" />
+                              </svg>
+                            </div>
+                            <Input
+                              id="alumno"
+                              value={alumno}
+                              onChange={(e) => setAlumno(e.target.value)}
+                              className="pl-9 border-zinc-200 dark:border-zinc-800"
+                              placeholder="Nombre del alumno"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label
+                            htmlFor="coach"
+                            className="text-xs font-medium text-zinc-500 uppercase"
+                          >
+                            Coach Asignado
+                          </Label>
+                          <div className="relative">
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                                className="w-4 h-4"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M10 2a1 1 0 00-1 1v1a1 1 0 002 0V3a1 1 0 00-1-1zM4 4h3a3 3 0 006 0h3a2 2 0 012 2v9a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2zm2.5 7a1.5 1.5 0 100-3 1.5 1.5 0 000 3zm2.45 4a2.5 2.5 0 10-4.9 0h4.9zM12 9a1 1 0 100 2h3a1 1 0 100-2h-3zm-1 4a1 1 0 011-1h2a1 1 0 110 2h-2a1 1 0 01-1-1z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                            </div>
+                            <Input
+                              id="coach"
+                              value={coachNombre}
+                              onChange={(e) => setCoachNombre(e.target.value)}
+                              className="pl-9 border-zinc-200 dark:border-zinc-800"
+                              placeholder="Nombre del coach"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-100 dark:border-zinc-800">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-zinc-500 uppercase">
+                            Área
+                          </Label>
+                          <Select value={areaKey} onValueChange={setAreaKey}>
+                            <SelectTrigger className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                              <SelectValue placeholder="Seleccionar..." />
                             </SelectTrigger>
                             <SelectContent>
                               {areaOptions.map((op) => (
@@ -627,706 +740,308 @@ export function TicketGenerationModal({
                             </SelectContent>
                           </Select>
                         </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <Label>Prioridad</Label>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-zinc-500 uppercase">
+                            Prioridad
+                          </Label>
                           <Select
                             value={prioridad}
                             onValueChange={setPrioridad}
                           >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecciona prioridad" />
+                            <SelectTrigger className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800">
+                              <SelectValue placeholder="Seleccionar..." />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Alta">Alta</SelectItem>
-                              <SelectItem value="Media">Media</SelectItem>
-                              <SelectItem value="Baja">Baja</SelectItem>
+                              <SelectItem
+                                value="Alta"
+                                className="text-rose-600 font-medium"
+                              >
+                                Alta 🔥
+                              </SelectItem>
+                              <SelectItem
+                                value="Media"
+                                className="text-amber-600 font-medium"
+                              >
+                                Media ⚠️
+                              </SelectItem>
+                              <SelectItem
+                                value="Baja"
+                                className="text-emerald-600 font-medium"
+                              >
+                                Baja 🟢
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        <div>
-                          <Label htmlFor="coachNombre">Nombre coach</Label>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-zinc-500 uppercase">
+                            Tipo
+                          </Label>
                           <Input
-                            id="coachNombre"
-                            value={coachNombre}
-                            onChange={(e) => setCoachNombre(e.target.value)}
-                            placeholder="Nombre y apellido"
+                            value={tipo}
+                            onChange={(e) => setTipo(e.target.value)}
+                            className="bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800"
+                            placeholder="Tipo de ticket"
                           />
                         </div>
                       </div>
-                      <div>
-                        <Label htmlFor="recomendacion">
-                          Recomendación o siguiente paso
+
+                      {/* Descripción */}
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="descripcion"
+                          className="text-xs font-medium text-zinc-500 uppercase"
+                        >
+                          Descripción Detallada
                         </Label>
                         <Textarea
-                          id="recomendacion"
-                          value={recomendacion}
-                          onChange={(e) => setRecomendacion(e.target.value)}
-                          rows={3}
-                          placeholder="Sugerencia o siguiente paso propuesto por la IA"
+                          id="descripcion"
+                          value={descripcion}
+                          onChange={(e) => setDescripcion(e.target.value)}
+                          rows={6}
+                          className="resize-none bg-zinc-50/50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 focus-visible:ring-violet-500"
+                          placeholder="Describe el problema o solicitud..."
                         />
                       </div>
-                    </div>
 
-                    <div className="space-y-3">
-                      <div className="rounded-lg border bg-white dark:bg-zinc-900 p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-semibold text-sm">
-                            Sugerencia de Ticket
-                          </h3>
-                          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                            <Sparkles className="h-3.5 w-3.5" /> IA
-                          </span>
-                        </div>
-                        <ScrollArea className="h-72 pr-3">
-                          {data.parsed?.html ? (
-                            <>
-                              <div
-                                className="prose prose-sm dark:prose-invert max-w-none"
-                                dangerouslySetInnerHTML={{
-                                  __html: data.parsed.html,
-                                }}
-                              />
-                              {links.length > 0 && (
-                                <div className="pt-2">
-                                  <span className="font-semibold text-sm">
-                                    Links:
-                                  </span>
-                                  <div className="flex flex-col gap-1 mt-1">
-                                    {links.map((u, i) => (
-                                      <a
-                                        key={i}
-                                        href={normalizeUrl(u)}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-sky-600 dark:text-sky-400 underline break-all text-sm"
-                                      >
-                                        {u}
-                                      </a>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {!tipoMatchesArea && (
-                                <div className="pt-3">
-                                  <Label className="text-xs">
-                                    Área (ajustar si es necesario)
-                                  </Label>
-                                  <div className="mt-1 max-w-xs">
-                                    <Select
-                                      value={areaKey}
-                                      onValueChange={(v) => setAreaKey(v)}
-                                    >
-                                      <SelectTrigger className="h-8">
-                                        <SelectValue
-                                          placeholder={
-                                            areasLoading
-                                              ? "Cargando…"
-                                              : "Selecciona un área"
-                                          }
-                                        />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {areaOptions.map((op) => (
-                                          <SelectItem
-                                            key={op.id}
-                                            value={op.key}
-                                          >
-                                            {op.value}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          ) : (
-                            <div className="space-y-1 text-sm">
-                              <div>
-                                <span className="font-semibold">Título:</span>{" "}
-                                {titulo || "—"}
-                              </div>
-                              <div>
-                                <span className="font-semibold">
-                                  Descripción:
-                                </span>{" "}
-                                {descripcion || "—"}
-                              </div>
-                              <div className="flex flex-wrap items-center gap-2 pt-1">
-                                {prioridad && (
-                                  <span
-                                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border ${
-                                      prioridad === "Alta"
-                                        ? "bg-rose-50 dark:bg-rose-900/20 border-rose-200 text-rose-700 dark:text-rose-300"
-                                        : prioridad === "Media"
-                                        ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 text-amber-700 dark:text-amber-300"
-                                        : "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 text-emerald-700 dark:text-emerald-300"
-                                    }`}
-                                  >
-                                    Prioridad: {prioridad}
-                                  </span>
-                                )}
-                                {categoria && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border bg-sky-50 dark:bg-sky-900/20 border-sky-200 text-sky-700 dark:text-sky-300">
-                                    Categoría: {categoria}
-                                  </span>
-                                )}
-                                {tipo && tipoMatchesArea && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] border bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 text-indigo-700 dark:text-indigo-300">
-                                    Tipo: {tipo}
-                                  </span>
-                                )}
-                              </div>
-                              {links.length > 0 && (
-                                <div className="pt-1">
-                                  <span className="font-semibold">Links:</span>
-                                  <div className="flex flex-col gap-1 mt-1">
-                                    {links.map((u, i) => (
-                                      <a
-                                        key={i}
-                                        href={normalizeUrl(u)}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-sky-600 dark:text-sky-400 underline break-all"
-                                      >
-                                        {u}
-                                      </a>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              <div className="grid grid-cols-2 gap-2 pt-1 text-[13px]">
-                                <div className="opacity-80">
-                                  Alumno:{" "}
-                                  <span className="font-medium">
-                                    {alumno || "—"}
-                                  </span>
-                                </div>
-                                <div className="opacity-80">
-                                  Área:{" "}
-                                  <span className="font-medium">
-                                    {areaOptions.find((o) => o.key === areaKey)
-                                      ?.value || "—"}
-                                  </span>
-                                </div>
-
-                                <div className="opacity-80">
-                                  Nombre coach:{" "}
-                                  <span className="font-medium">
-                                    {coachNombre || "—"}
-                                  </span>
-                                </div>
-                                <div className="col-span-2 opacity-80">
-                                  Recomendación:{" "}
-                                  <span className="font-medium">
-                                    {recomendacion || "—"}
-                                  </span>
-                                </div>
-                              </div>
-                              {!tipoMatchesArea && (
-                                <div className="pt-3">
-                                  <Label className="text-xs">
-                                    Área (ajustar si es necesario)
-                                  </Label>
-                                  <div className="mt-1 max-w-xs">
-                                    <Select
-                                      value={areaKey}
-                                      onValueChange={(v) => setAreaKey(v)}
-                                    >
-                                      <SelectTrigger className="h-8">
-                                        <SelectValue
-                                          placeholder={
-                                            areasLoading
-                                              ? "Cargando…"
-                                              : "Selecciona un área"
-                                          }
-                                        />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {areaOptions.map((op) => (
-                                          <SelectItem
-                                            key={op.id}
-                                            value={op.key}
-                                          >
-                                            {op.value}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </ScrollArea>
-                      </div>
-                      <div className="rounded-lg border bg-white dark:bg-zinc-900 p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="font-semibold text-sm">
-                            Archivos adjuntos
-                          </h3>
-                          <span className="text-[11px] text-muted-foreground">
-                            {normalizedAttachments.length} archivo(s)
-                          </span>
-                        </div>
-                        {normalizedAttachments.length === 0 ? (
-                          <div className="text-xs text-muted-foreground">
-                            No hay adjuntos
+                      {/* Recomendación */}
+                      <div className="space-y-1.5">
+                        <Label
+                          htmlFor="recomendacion"
+                          className="text-xs font-medium text-zinc-500 uppercase"
+                        >
+                          Recomendación / Siguiente Paso
+                        </Label>
+                        <div className="relative">
+                          <div className="absolute top-3 left-3 text-violet-500">
+                            <Sparkles className="h-4 w-4" />
                           </div>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-2">
-                            {normalizedAttachments.map((a) => {
-                              const url = getAttachmentUrl(a);
-                              const mime = resolveAttachmentMime(a);
-                              if (isImage(mime)) {
-                                return (
-                                  <div
-                                    key={a.id}
-                                    className="rounded border overflow-hidden bg-white dark:bg-zinc-950"
-                                  >
-                                    <img
-                                      src={url}
-                                      alt={a.name}
-                                      className="w-full h-auto object-cover"
-                                    />
-                                    <div
-                                      className="px-2 py-1 text-[11px] truncate"
-                                      title={a.name}
-                                    >
-                                      {a.name}
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              if (isVideo(mime)) {
-                                return (
-                                  <div
-                                    key={a.id}
-                                    className="rounded border overflow-hidden bg-white dark:bg-zinc-950"
-                                  >
-                                    <video
-                                      src={url}
-                                      controls
-                                      className="w-full max-h-40"
-                                    />
-                                    <div
-                                      className="px-2 py-1 text-[11px] truncate"
-                                      title={a.name}
-                                    >
-                                      {a.name}
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              if (isAudio(mime)) {
-                                return (
-                                  <div
-                                    key={a.id}
-                                    className="rounded border overflow-hidden bg-white dark:bg-zinc-950 p-2"
-                                  >
-                                    <audio
-                                      src={url}
-                                      controls
-                                      className="w-full"
-                                    />
-                                    <div
-                                      className="px-1 pt-1 text-[11px] truncate"
-                                      title={a.name}
-                                    >
-                                      {a.name}
-                                    </div>
-                                  </div>
-                                );
-                              }
-                              return (
-                                <a
-                                  key={a.id}
-                                  href={url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="rounded border bg-white dark:bg-zinc-950 p-2 text-xs underline break-words"
-                                  title={a.name}
-                                >
-                                  {a.name}
-                                </a>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {/* END form block */}
-                  </>
-                ) : (
-                  <div className="rounded-lg border bg-white dark:bg-zinc-900 p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-sm">Vista previa</h3>
-                      <span className="text-[11px] text-muted-foreground">
-                        {normalizedAttachments.length} archivo(s)
-                      </span>
-                    </div>
-                    <div className="prose prose-sm dark:prose-invert max-w-none mb-3">
-                      <div
-                        dangerouslySetInnerHTML={{
-                          __html: simpleMarkdownToHtml(buildMarkdown()),
-                        }}
-                      />
-                    </div>
-                    {links.length > 0 && (
-                      <div className="mb-3">
-                        <div className="font-semibold text-xs">Links</div>
-                        <div className="flex flex-col gap-1 mt-1">
-                          {links.map((u, i) => (
-                            <a
-                              key={i}
-                              href={normalizeUrl(u)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-sky-600 dark:text-sky-400 underline break-all text-xs"
-                            >
-                              {u}
-                            </a>
-                          ))}
+                          <Textarea
+                            id="recomendacion"
+                            value={recomendacion}
+                            onChange={(e) => setRecomendacion(e.target.value)}
+                            rows={3}
+                            className="pl-9 resize-none bg-violet-50/30 dark:bg-violet-900/10 border-violet-100 dark:border-violet-900/30 focus-visible:ring-violet-500"
+                            placeholder="Sugerencia de la IA..."
+                          />
                         </div>
                       </div>
-                    )}
-                    {normalizedAttachments.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="font-semibold text-xs">Adjuntos</div>
-                        <div className="grid grid-cols-2 gap-2">
-                          {normalizedAttachments.map((a) => {
-                            const url = getAttachmentUrl(a);
-                            const mime = resolveAttachmentMime(a);
-                            if (isImage(mime)) {
-                              return (
-                                <div
-                                  key={a.id}
-                                  className="rounded border overflow-hidden bg-white dark:bg-zinc-950"
-                                >
-                                  <img
-                                    src={url}
-                                    alt={a.name}
-                                    className="w-full h-auto object-cover"
-                                  />
-                                  <div
-                                    className="px-2 py-1 text-[11px] truncate"
-                                    title={a.name}
-                                  >
-                                    {a.name}
-                                  </div>
-                                </div>
-                              );
-                            }
-                            if (isVideo(mime)) {
-                              return (
-                                <div
-                                  key={a.id}
-                                  className="rounded border overflow-hidden bg-white dark:bg-zinc-950"
-                                >
-                                  <video
-                                    src={url}
-                                    controls
-                                    className="w-full max-h-40"
-                                  />
-                                  <div
-                                    className="px-2 py-1 text-[11px] truncate"
-                                    title={a.name}
-                                  >
-                                    {a.name}
-                                  </div>
-                                </div>
-                              );
-                            }
-                            if (isAudio(mime)) {
-                              return (
-                                <div
-                                  key={a.id}
-                                  className="rounded border overflow-hidden bg-white dark:bg-zinc-950 p-2"
-                                >
-                                  <audio
-                                    src={url}
-                                    controls
-                                    className="w-full"
-                                  />
-                                  <div
-                                    className="px-1 pt-1 text-[11px] truncate"
-                                    title={a.name}
-                                  >
-                                    {a.name}
-                                  </div>
-                                </div>
-                              );
-                            }
-                            return (
-                              <a
-                                key={a.id}
-                                href={url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="rounded border bg-white dark:bg-zinc-950 p-2 text-xs underline break-words"
-                                title={a.name}
-                              >
-                                {a.name}
-                              </a>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
+              </>
             )}
           </div>
-          <DialogFooter className="px-6 pb-6 pt-4 border-t bg-white dark:bg-zinc-950">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={async () => {
-                try {
-                  setActionError(null);
-                  if (!data) return;
-                  // Determinar id del alumno (código)
-                  const content = data.content || "";
-                  let alumnoCode = readFieldFromContent(
-                    content,
-                    "Código de cliente asignado"
-                  );
-                  if (!alumnoCode) {
-                    // fallback: intentar leer algún identificador alterno
-                    alumnoCode =
-                      readFieldFromContent(content, "ID cliente") ||
-                      readFieldFromContent(content, "Código de cliente");
-                  }
-                  if (!alumnoCode) {
-                    setActionError(
-                      "No se encontró el código del alumno en la sugerencia."
-                    );
-                    return;
-                  }
-                  // Determinar tipo
-                  let tipoToSend = (tipo || "").trim();
-                  if (!tipoToSend) {
+
+          {/* FOOTER */}
+          <DialogFooter className="px-6 py-4 border-t bg-white dark:bg-zinc-900 flex-shrink-0 z-10">
+            <div className="flex items-center justify-between w-full">
+              <div className="text-xs text-muted-foreground">
+                {data && !loading && (
+                  <span>
+                    Se crearán <strong>{links.length} links</strong> y{" "}
+                    <strong>{normalizedAttachments.length} adjuntos</strong>.
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  className="border-zinc-200 dark:border-zinc-800"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={async () => {
                     try {
-                      const tipos = await getOpciones("tipo_ticket");
-                      tipoToSend = tipos[0]?.key || "";
-                    } catch {}
-                  }
-                  if (!tipoToSend) {
-                    setActionError("No se encontró un tipo de ticket válido.");
-                    return;
-                  }
+                      setActionError(null);
+                      if (!data) return;
+                      const content = data.content || "";
+                      let alumnoCode = readFieldFromContent(
+                        content,
+                        "Código de cliente asignado"
+                      );
+                      if (!alumnoCode) {
+                        alumnoCode =
+                          readFieldFromContent(content, "ID cliente") ||
+                          readFieldFromContent(content, "Código de cliente");
+                      }
+                      if (!alumnoCode) {
+                        setActionError(
+                          "No se encontró el código del alumno en la sugerencia."
+                        );
+                        return;
+                      }
+                      let tipoToSend = (tipo || "").trim();
+                      if (!tipoToSend) {
+                        try {
+                          const tipos = await getOpciones("tipo_ticket");
+                          tipoToSend = tipos[0]?.key || "";
+                        } catch {}
+                      }
+                      if (!tipoToSend) {
+                        setActionError(
+                          "No se encontró un tipo de ticket válido."
+                        );
+                        return;
+                      }
+                      const selectedAreaLabel =
+                        areaOptions.find((x) => x.key === areaKey)?.value ||
+                        area ||
+                        "";
+                      const descParts: string[] = [];
+                      if (selectedAreaLabel)
+                        descParts.push(`Área: ${selectedAreaLabel}`);
+                      if (descripcion)
+                        descParts.push(`Sugerencia de Ticket: ${descripcion}`);
+                      if (recomendacion)
+                        descParts.push(
+                          `Recomendación o siguiente paso: ${recomendacion}`
+                        );
+                      if (links.length > 0)
+                        descParts.push(`Links: ${links.join(", ")}`);
+                      const finalDescripcion = descParts
+                        .join("\n\n")
+                        .slice(0, 4000);
 
-                  // Construir descripción: Área + Sugerencia + Siguiente paso + Links
-                  const selectedAreaLabel =
-                    areaOptions.find((x) => x.key === areaKey)?.value ||
-                    area ||
-                    "";
-                  const descParts: string[] = [];
-                  if (selectedAreaLabel)
-                    descParts.push(`Área: ${selectedAreaLabel}`);
-                  if (descripcion)
-                    descParts.push(`Sugerencia de Ticket: ${descripcion}`);
-                  if (recomendacion)
-                    descParts.push(
-                      `Recomendación o siguiente paso: ${recomendacion}`
-                    );
-                  if (links.length > 0)
-                    descParts.push(`Links: ${links.join(", ")}`);
-                  const finalDescripcion = descParts
-                    .join("\n\n")
-                    .slice(0, 4000);
-
-                  // IDs de archivos ya existentes devueltos por la IA (si aplica)
-                  const rawArch = Array.isArray(
-                    (data as any)?.archivos_cargados
-                  )
-                    ? (data as any).archivos_cargados
-                    : [];
-                  const idsFromAi: string[] = Array.from(
-                    new Set(
-                      rawArch
-                        .map(
-                          (x: any) =>
-                            x?.id_mensaje ||
-                            x?.id ||
-                            x?._id ||
-                            x?.codigo ||
-                            x?.code
+                      const rawArch = Array.isArray(
+                        (data as any)?.archivos_cargados
+                      )
+                        ? (data as any).archivos_cargados
+                        : [];
+                      const idsFromAi: string[] = Array.from(
+                        new Set(
+                          rawArch
+                            .map(
+                              (x: any) =>
+                                x?.id_mensaje ||
+                                x?.id ||
+                                x?._id ||
+                                x?.codigo ||
+                                x?.code
+                            )
+                            .filter(Boolean)
+                            .map((s: any) => String(s))
                         )
-                        .filter(Boolean)
-                        .map((s: any) => String(s))
-                    )
-                  );
+                      );
 
-                  // Preparar archivos a partir de adjuntos (descargar por URL si es posible)
-                  const files: File[] = [];
-                  // Si ya tenemos IDs de archivos existentes, evitamos subir duplicados;
-                  // si no hay IDs, intentamos subir archivos descargando por URL.
-                  if (idsFromAi.length === 0) {
-                    try {
-                      for (const a of normalizedAttachments) {
-                        const url = getAttachmentUrl(a);
-                        if (!url) continue;
-                        const mime =
-                          resolveAttachmentMime(a) ||
-                          "application/octet-stream";
-                        const res = await fetch(url);
-                        if (!res.ok) continue;
-                        const blob = await res.blob();
-                        const file = new File([blob], a.name || "adjunto", {
-                          type: mime,
-                        });
-                        files.push(file);
+                      const files: File[] = [];
+                      if (idsFromAi.length === 0) {
+                        try {
+                          for (const a of normalizedAttachments) {
+                            const url = getAttachmentUrl(a);
+                            if (!url) continue;
+                            const mime =
+                              resolveAttachmentMime(a) ||
+                              "application/octet-stream";
+                            const res = await fetch(url);
+                            if (!res.ok) continue;
+                            const blob = await res.blob();
+                            const file = new File([blob], a.name || "adjunto", {
+                              type: mime,
+                            });
+                            files.push(file);
+                          }
+                        } catch {}
                       }
-                    } catch {}
-                  }
 
-                  setFlowStage("creating");
-                  // Pequeño delay para mostrar el estado "creando"
-                  await new Promise((r) => setTimeout(r, 350));
+                      setFlowStage("creating");
+                      await new Promise((r) => setTimeout(r, 350));
 
-                  // Logs previos: confirmar qué vamos a enviar
-                  try {
-                    // eslint-disable-next-line no-console
-                    console.log(
-                      "[TicketGenerationModal] Enviando a createTicket:",
-                      {
-                        ai_run_id: (data as any)?.ai_run_id,
+                      const created = await createTicket({
+                        nombre: (titulo || "Ticket IA").slice(0, 120),
+                        id_alumno: alumnoCode,
+                        tipo: tipoToSend,
+                        descripcion: finalDescripcion,
+                        archivos: files,
+                        urls: links,
+                        ai_run_id: (data as any)?.ai_run_id || undefined,
                         message_ids: Array.isArray((data as any)?.message_ids)
-                          ? (data as any).message_ids
-                          : null,
+                          ? ((data as any).message_ids as any[]).map((s) =>
+                              String(s)
+                            )
+                          : undefined,
+                      });
+                      const payload = created?.data ?? created;
+                      try {
+                        const codigo = payload?.codigo
+                          ? String(payload.codigo)
+                          : undefined;
+                        if (codigo && idsFromAi.length > 0) {
+                          await attachTicketFilesByIds(codigo, idsFromAi);
+                        }
+                      } catch (err) {
+                        console.warn("Adjunto por IDs falló:", err);
                       }
-                    );
-                  } catch {}
 
-                  const created = await createTicket({
-                    nombre: (titulo || "Ticket IA").slice(0, 120),
-                    id_alumno: alumnoCode,
-                    tipo: tipoToSend,
-                    descripcion: finalDescripcion,
-                    archivos: files,
-                    urls: links,
-                    ai_run_id: (data as any)?.ai_run_id || undefined,
-                    message_ids: Array.isArray((data as any)?.message_ids)
-                      ? ((data as any).message_ids as any[]).map((s) =>
-                          String(s)
-                        )
-                      : undefined,
-                  });
-                  const payload = created?.data ?? created;
-                  try {
-                    // Logs de diagnóstico para confirmar que llegaron ai_run_id y message_ids al frontend y qué devolvió el backend
-                    // eslint-disable-next-line no-console
-                    console.debug(
-                      "[TicketGenerationModal] createTicket payload sent:",
-                      {
-                        ai_run_id: (data as any)?.ai_run_id,
-                        message_ids: Array.isArray((data as any)?.message_ids)
-                          ? (data as any).message_ids
-                          : null,
-                      }
-                    );
-                    // eslint-disable-next-line no-console
-                    console.debug(
-                      "[TicketGenerationModal] createTicket response:",
-                      payload
-                    );
-                  } catch {}
-
-                  // Adjuntar archivos existentes por ID si el backend lo soporta
-                  try {
-                    const codigo = payload?.codigo
-                      ? String(payload.codigo)
-                      : undefined;
-                    if (codigo && idsFromAi.length > 0) {
-                      await attachTicketFilesByIds(codigo, idsFromAi);
+                      setFlowStage("created");
+                      await new Promise((r) => setTimeout(r, 900));
+                      onConfirm({
+                        ...data,
+                        tipo: tipoToSend,
+                        content: buildMarkdown(),
+                      });
+                    } catch (e: any) {
+                      setActionError(
+                        String(e?.message || e || "Error creando ticket")
+                      );
+                      setFlowStage("idle");
                     }
-                  } catch (err) {
-                    // No bloquear el flujo si falla el adjunto por IDs
-                    console.warn("Adjunto por IDs falló:", err);
-                  }
-
-                  // Estado inicial enviado directamente como EN_PROGRESO; no realizar actualización posterior.
-
-                  setFlowStage("created");
-                  // Mostrar confirmación un instante
-                  await new Promise((r) => setTimeout(r, 900));
-                  onConfirm({
-                    ...data,
-                    tipo: tipoToSend,
-                    content: buildMarkdown(),
-                  });
-                } catch (e: any) {
-                  setActionError(
-                    String(e?.message || e || "Error creando ticket")
-                  );
-                  setFlowStage("idle");
-                }
-              }}
-              disabled={!data || loading || flowStage !== "idle"}
-              className="inline-flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white"
-            >
-              <Wand2 className="h-4 w-4" />
-              Confirmar y Crear Ticket
-            </Button>
+                  }}
+                  disabled={!data || loading || flowStage !== "idle"}
+                  className="bg-violet-600 hover:bg-violet-700 text-white px-6 shadow-lg shadow-violet-200 dark:shadow-violet-900/20"
+                >
+                  <Wand2 className="h-4 w-4 mr-2" /> Confirmar y Crear
+                </Button>
+              </div>
+            </div>
           </DialogFooter>
         </DialogContent>
-      )}
-      {/* Overlay de proceso de creación */}
-      <Dialog
-        open={flowStage !== "idle"}
-        onOpenChange={(o) => {
-          if (!o) {
-            setFlowStage("idle");
-            onOpenChange(false);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-[420px] p-6">
+      ) : (
+        <DialogContent className="sm:max-w-[420px] p-8 border-none shadow-2xl bg-white dark:bg-zinc-900">
           {flowStage === "creating" ? (
-            <div className="flex items-center gap-3">
-              <Spinner className="h-5 w-5 text-violet-600" />
-              <div>
-                <div className="font-medium">Creando ticket…</div>
+            <div className="flex flex-col items-center gap-4 py-8">
+              <div className="relative">
+                <div className="absolute inset-0 bg-violet-500 blur-xl opacity-20 animate-pulse" />
+                <Spinner className="h-12 w-12 text-violet-600 relative z-10" />
+              </div>
+              <div className="text-center">
+                <div className="font-semibold text-lg">Creando ticket...</div>
                 <div className="text-sm text-muted-foreground">
-                  Un momento, por favor.
+                  Conectando con el CRM
                 </div>
               </div>
             </div>
           ) : (
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 text-emerald-600">
-                <CheckCircle2 className="h-6 w-6" />
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center mb-2 animate-in zoom-in duration-300">
+                <CheckCircle2 className="h-8 w-8" />
               </div>
               <div className="space-y-1">
-                <div className="font-medium">Ticket creado con éxito</div>
-                <div className="text-sm text-muted-foreground">
-                  {`Alumno: ${alumno || "(sin nombre)"}. Coach: ${
-                    coachNombre || "(sin nombre)"
-                  }.`}
-                </div>
-                <div className="pt-1">
-                  <button
-                    className="mt-2 inline-flex items-center px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-sm"
-                    onClick={() => {
-                      setFlowStage("idle");
-                      onOpenChange(false);
-                    }}
-                  >
-                    Cerrar
-                  </button>
-                </div>
+                <h3 className="font-bold text-xl text-zinc-900 dark:text-zinc-100">
+                  ¡Ticket Creado!
+                </h3>
+                <p className="text-sm text-muted-foreground max-w-[260px] mx-auto">
+                  El ticket se ha registrado correctamente para{" "}
+                  <strong>{alumno}</strong>.
+                </p>
               </div>
+              <Button
+                className="mt-4 w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => {
+                  setFlowStage("idle");
+                  onOpenChange(false);
+                }}
+              >
+                Cerrar
+              </Button>
             </div>
           )}
         </DialogContent>
-      </Dialog>
+      )}
     </Dialog>
   );
 }
