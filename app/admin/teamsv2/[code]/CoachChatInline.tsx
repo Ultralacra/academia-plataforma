@@ -128,19 +128,19 @@ export default function CoachChatInline({
     itemsRef.current = items;
   }, [items]);
   // Debug opcional: imprimir un resumen solo si chatDebug=1
-  React.useEffect(() => {
-    if (!chatDebug()) return;
-    try {
-      const summary = items.map((m) => ({
-        id: m.id,
-        sender: m.sender,
-        textLen: (m.text || "").length,
-        at: m.at,
-        attCount: Array.isArray(m.attachments) ? m.attachments.length : 0,
-      }));
-      dbg("[CoachChat] items updated =>", summary);
-    } catch {}
-  }, [items]);
+  // React.useEffect(() => {
+  //   if (!chatDebug()) return;
+  //   try {
+  //     const summary = items.map((m) => ({
+  //       id: m.id,
+  //       sender: m.sender,
+  //       textLen: (m.text || "").length,
+  //       at: m.at,
+  //       attCount: Array.isArray(m.attachments) ? m.attachments.length : 0,
+  //     }));
+  //     dbg("[CoachChat] items updated =>", summary);
+  //   } catch {}
+  // }, [items]);
   const [text, setText] = React.useState("");
   const [isJoining, setIsJoining] = React.useState(false);
   const [chatId, setChatId] = React.useState<string | number | null>(
@@ -166,15 +166,26 @@ export default function CoachChatInline({
 
   // Log selection changes
   React.useEffect(() => {
-    console.log("Selected Message IDs:", Array.from(selectedMessageIds));
-  }, [selectedMessageIds]);
+    if (selectedMessageIds.size > 0 || selectedAttachmentIds.size > 0) {
+      console.log(
+        JSON.stringify(
+          {
+            message_ids: Array.from(selectedMessageIds),
+            file_ids: Array.from(selectedAttachmentIds),
+          },
+          null,
+          3
+        )
+      );
+    }
+  }, [selectedMessageIds, selectedAttachmentIds]);
 
   const toggleMessageSelection = React.useCallback((id: string) => {
-    console.log("[Chat] toggleMessageSelection", {
-      chatId: chatIdRef.current,
-      messageId: id,
-      action: "toggle",
-    });
+    // console.log("[Chat] toggleMessageSelection", {
+    //   chatId: chatIdRef.current,
+    //   messageId: id,
+    //   action: "toggle",
+    // });
     setSelectedMessageIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -183,11 +194,11 @@ export default function CoachChatInline({
     });
   }, []);
   const toggleAttachmentSelection = React.useCallback((id: string) => {
-    console.log("[Chat] toggleAttachmentSelection", {
-      chatId: chatIdRef.current,
-      attachmentId: id,
-      action: "toggle",
-    });
+    // console.log("[Chat] toggleAttachmentSelection", {
+    //   chatId: chatIdRef.current,
+    //   attachmentId: id,
+    //   action: "toggle",
+    // });
     setSelectedAttachmentIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -512,10 +523,10 @@ export default function CoachChatInline({
       };
 
       // Log solicitado: agrupación de IDs para el ticket
-      console.log({
-        message_ids: payload.message_ids,
-        file_ids: payload.file_ids,
-      });
+      // console.log({
+      //   message_ids: payload.message_ids,
+      //   file_ids: payload.file_ids,
+      // });
 
       const sendId = String(currentId).trim();
       const urlWithParam = buildUrl(
@@ -956,20 +967,20 @@ export default function CoachChatInline({
           }
         }
         if (chatDebug() && (ctx === "realtime" || ctx === "user")) {
-          dbg("[CoachChat] evalSenderForMapping", {
-            cid,
-            emitter,
-            myPid,
-            role,
-            ctx,
-            reason,
-            senderIsById,
-            senderIsBySession,
-            senderIsByOutbox,
-            senderIsByRecent,
-            senderIsByTipo,
-            final,
-          });
+          // dbg("[CoachChat] evalSenderForMapping", {
+          //   cid,
+          //   emitter,
+          //   myPid,
+          //   role,
+          //   ctx,
+          //   reason,
+          //   senderIsById,
+          //   senderIsBySession,
+          //   senderIsByOutbox,
+          //   senderIsByRecent,
+          //   senderIsByTipo,
+          //   final,
+          // });
         }
         return { sender: final, byId: senderIsById, reason };
       } catch {
@@ -992,7 +1003,10 @@ export default function CoachChatInline({
         const txt = String(obj?.contenido ?? obj?.texto ?? "").trim();
         if (!txt && atts.length === 0) return null;
         const id = String(
-          obj?.id_mensaje ?? obj?.id ?? `${Date.now()}-${Math.random()}`
+          obj?.id_mensaje ??
+            obj?.id ??
+            obj?.id_archivo ??
+            `${Date.now()}-${Math.random()}`
         );
         // Unificar determinación de remitente (isMine) utilizando
         // la función centralizada evalSenderForMapping para evitar
@@ -1237,7 +1251,7 @@ export default function CoachChatInline({
         // Log explícito del token cuando inicia el chat (coach/alumno/admin)
         try {
           if (chatDebug()) {
-            dbg("auth token", token);
+            // dbg("auth token", token);
           }
         } catch {}
         if (!token) {
@@ -1279,7 +1293,9 @@ export default function CoachChatInline({
                   const sender: Sender = ev.sender;
                   const msg: Message = {
                     id: String(
-                      m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                      m?.id_mensaje ??
+                        m?.id_archivo ??
+                        `${Date.now()}-${Math.random()}`
                     ),
                     room: normRoom,
                     sender,
@@ -1317,7 +1333,7 @@ export default function CoachChatInline({
           if (!alive) return;
           setConnected(true);
           onConnectionChange?.(true);
-          dbg("connect ok", { socketId: sio.id });
+          // dbg("connect ok", { socketId: sio.id });
         });
         // Fallback: algunos backends emiten eventos distintos al subir archivos.
         // Escuchamos cualquier evento y si parece relacionado a archivos/subidas del chat actual,
@@ -1381,16 +1397,16 @@ export default function CoachChatInline({
           if (!alive) return;
           setConnected(false);
           onConnectionChange?.(false);
-          dbg("disconnect");
+          // dbg("disconnect");
         });
         sio.on("connect_error", (err: any) => {
           try {
-            dbg("connect_error", { message: err?.message, name: err?.name });
+            // dbg("connect_error", { message: err?.message, name: err?.name });
           } catch {}
         });
         sio.on("error", (err: any) => {
           try {
-            dbg("socket error", err);
+            // dbg("socket error", err);
           } catch {}
         });
 
@@ -1398,13 +1414,13 @@ export default function CoachChatInline({
           try {
             lastRealtimeAtRef.current = Date.now();
             const currentChatId = chatIdRef.current;
-            dbg("event chat.message", {
-              id_chat: msg?.id_chat,
-              id_mensaje: msg?.id_mensaje ?? msg?.id,
-              texto: (msg?.contenido ?? msg?.texto ?? "").slice(0, 140),
-              emitter: getEmitter(msg),
-              currentChatId,
-            });
+            // dbg("event chat.message", {
+            //   id_chat: msg?.id_chat,
+            //   id_mensaje: msg?.id_mensaje ?? msg?.id,
+            //   texto: (msg?.contenido ?? msg?.texto ?? "").slice(0, 140),
+            //   emitter: getEmitter(msg),
+            //   currentChatId,
+            // });
             // Si el mensaje es de otro chat (o no hay chat unido aún), avisa para refrescar y sumar no leídos
             if (
               msg?.id_chat != null &&
@@ -1456,9 +1472,9 @@ export default function CoachChatInline({
                     );
                   } catch {}
                 }
-                dbg("message for other chat → refresh + bump unread", {
-                  target: msg?.id_chat,
-                });
+                // dbg("message for other chat → refresh + bump unread", {
+                //   target: msg?.id_chat,
+                // });
               } catch {}
               return;
             }
@@ -1570,13 +1586,13 @@ export default function CoachChatInline({
               window.dispatchEvent(evtRefresh);
             } catch {}
             markRead();
-            dbg("mapped incoming", {
-              id: newMsg.id,
-              sender,
-              at: newMsg.at,
-              textLen: (newMsg.text || "").length,
-              atts: (newMsg.attachments || []).length,
-            });
+            // dbg("mapped incoming", {
+            //   id: newMsg.id,
+            //   sender,
+            //   at: newMsg.at,
+            //   textLen: (newMsg.text || "").length,
+            //   atts: (newMsg.attachments || []).length,
+            // });
             // No actualizamos myParticipantId a partir de eventos entrantes para evitar desincronización;
             // se establece de forma confiable en JOIN o al ENVIAR un mensaje.
           } catch {}
@@ -1591,7 +1607,7 @@ export default function CoachChatInline({
                 },
               });
               window.dispatchEvent(evt);
-              dbg("event chat.created", data);
+              // dbg("event chat.created", data);
             } catch {}
           });
         } catch {}
@@ -1704,7 +1720,11 @@ export default function CoachChatInline({
               const ev = evalSenderForMapping(m, current, "poll");
               const sender: Sender = ev.sender;
               const msg: Message = {
-                id: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+                id: String(
+                  m?.id_mensaje ??
+                    m?.id_archivo ??
+                    `${Date.now()}-${Math.random()}`
+                ),
                 room: normRoom,
                 sender,
                 text: String(
@@ -1781,17 +1801,17 @@ export default function CoachChatInline({
         if (ack && ack.success) {
           const data = ack.data || {};
           const cid = data.id_chat ?? id;
-          dbg("JOIN ok", {
-            requested: id,
-            cid,
-            parts: Array.isArray(data?.participants || data?.participantes)
-              ? (data?.participants || data?.participantes).length
-              : 0,
-            my_participante: data?.my_participante ?? null,
-            msgs: Array.isArray(data?.messages || (data as any)?.mensajes)
-              ? (data?.messages || (data as any)?.mensajes).length
-              : 0,
-          });
+          // dbg("JOIN ok", {
+          //   requested: id,
+          //   cid,
+          //   parts: Array.isArray(data?.participants || data?.participantes)
+          //     ? (data?.participants || data?.participantes).length
+          //     : 0,
+          //   my_participante: data?.my_participante ?? null,
+          //   msgs: Array.isArray(data?.messages || (data as any)?.mensajes)
+          //     ? (data?.messages || (data as any)?.mensajes).length
+          //     : 0,
+          // });
           if (cid != null) {
             setChatId(cid);
             chatIdRef.current = cid;
@@ -1801,9 +1821,9 @@ export default function CoachChatInline({
             setMyParticipantId(data.my_participante);
             myParticipantIdRef.current = data.my_participante;
           }
-          dbg("JOIN participants resolved", {
-            myParticipantId: myParticipantIdRef.current,
-          });
+          // dbg("JOIN participants resolved", {
+          //   myParticipantId: myParticipantIdRef.current,
+          // });
           const parts = data.participants || data.participantes || [];
           joinedParticipantsRef.current = Array.isArray(parts) ? parts : [];
           joinDataRef.current = { participants: joinedParticipantsRef.current };
@@ -1894,7 +1914,11 @@ export default function CoachChatInline({
             const ev = evalSenderForMapping(m, cid, "join");
             const sender: Sender = ev.sender;
             const msg: Message = {
-              id: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
+              id: String(
+                m?.id_mensaje ??
+                  m?.id_archivo ??
+                  `${Date.now()}-${Math.random()}`
+              ),
               room: normRoom,
               sender,
               text: String(
@@ -1916,13 +1940,26 @@ export default function CoachChatInline({
 
           // Log: IDs de mensajes al hacer JOIN (server y mapeados)
           try {
-            const idsServer = (Array.isArray(msgsSrc) ? msgsSrc : []).map(
-              (m: any) => String(m?.id_mensaje ?? m?.id ?? "")
-            );
-            const idsMapped = mapped.map((mm) => String(mm.id));
-            console.log("[Chat] JOIN message ids (server)", idsServer);
-            console.log("[Chat] JOIN message ids (mapped)", idsMapped);
-            console.log("[Chat] JOIN messages count", mapped.length);
+            // const idsServer = (Array.isArray(msgsSrc) ? msgsSrc : []).map(
+            //   (m: any) => String(m?.id_mensaje ?? m?.id ?? "")
+            // );
+            // const idsMapped = mapped.map((mm) => String(mm.id));
+            // console.log("[Chat] JOIN message ids (server)", idsServer);
+            // console.log("[Chat] JOIN message ids (mapped)", idsMapped);
+            // console.log("[Chat] JOIN messages count", mapped.length);
+            // Log completo solicitado: imprimir todos los mensajes de la conversación al hacer JOIN
+            try {
+              // console.log("[Chat] JOIN full messages", mapped);
+              console.log(
+                "[Chat] JOIN messages IDs & Attachments",
+                mapped.map((m) => ({
+                  id: m.id,
+                  attachment_ids: Array.isArray(m.attachments)
+                    ? m.attachments.map((a) => a.id)
+                    : [],
+                }))
+              );
+            } catch {}
           } catch {}
 
           {
@@ -1940,7 +1977,7 @@ export default function CoachChatInline({
             });
           } catch {}
         } else {
-          dbg("JOIN fail", ack);
+          // dbg("JOIN fail", ack);
           setIsJoining(false);
         }
       } catch {
@@ -2598,7 +2635,9 @@ export default function CoachChatInline({
                       const sender: Sender = ev.sender;
                       const msg: Message = {
                         id: String(
-                          m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                          m?.id_mensaje ??
+                            m?.id_archivo ??
+                            `${Date.now()}-${Math.random()}`
                         ),
                         room: normRoom,
                         sender,
@@ -3181,6 +3220,12 @@ export default function CoachChatInline({
                   (a.mime || "").startsWith("audio/")
                 ) &&
                 (!m.text || m.text.trim() === "");
+
+              const isAttachmentOnly =
+                Array.isArray(m.attachments) &&
+                m.attachments.length > 0 &&
+                (!m.text || m.text.trim() === "");
+
               return (
                 <div
                   key={m.uiKey || m.id}
@@ -3190,10 +3235,13 @@ export default function CoachChatInline({
                 >
                   <div
                     onClick={() => {
-                      if (selectionMode) toggleMessageSelection(m.id);
+                      if (selectionMode && !isAttachmentOnly)
+                        toggleMessageSelection(m.id);
                     }}
                     className={`relative ${
-                      selectionMode ? "cursor-pointer" : "cursor-default"
+                      selectionMode && !isAttachmentOnly
+                        ? "cursor-pointer"
+                        : "cursor-default"
                     } w-fit ${
                       hasAudioOnly
                         ? "p-0 bg-transparent shadow-none"
@@ -3201,16 +3249,19 @@ export default function CoachChatInline({
                           (isMine ? "bg-[#DCF8C6]" : "bg-white")
                     } ${radius} ${isSelected ? "ring-2 ring-violet-500" : ""}`}
                   >
-                    {selectionMode && (
-                      <span
-                        className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
-                          isSelected
-                            ? "bg-violet-600 text-white"
-                            : "bg-gray-300 text-gray-700"
-                        }`}
-                      >
-                        {isSelected ? "✓" : "+"}
-                      </span>
+                    {selectionMode && !isAttachmentOnly && (
+                      <>
+                        <div className="absolute inset-0 z-10 bg-transparent" />
+                        <span
+                          className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                            isSelected
+                              ? "bg-violet-600 text-white"
+                              : "bg-gray-300 text-gray-700"
+                          }`}
+                        >
+                          {isSelected ? "✓" : "+"}
+                        </span>
+                      </>
                     )}
                     {m.text?.trim() ? (
                       <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
@@ -3226,13 +3277,38 @@ export default function CoachChatInline({
                             .map((a) => {
                               const url = getAttachmentUrl(a);
                               const timeLabel = formatTime(m.at);
+                              const attSelected =
+                                selectionMode &&
+                                selectedAttachmentIds.has(a.id);
                               return (
-                                <div key={a.id} className="rounded-md">
+                                <div
+                                  key={a.id}
+                                  className={`rounded-md relative ${
+                                    attSelected ? "ring-2 ring-violet-500" : ""
+                                  }`}
+                                  onClick={(e) => {
+                                    if (selectionMode) {
+                                      e.stopPropagation();
+                                      toggleAttachmentSelection(a.id);
+                                    }
+                                  }}
+                                >
                                   <AudioBubble
                                     src={url}
                                     isMine={isMine}
                                     timeLabel={timeLabel}
                                   />
+                                  {selectionMode && (
+                                    <span
+                                      className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                                        attSelected
+                                          ? "bg-violet-600 text-white"
+                                          : "bg-gray-300 text-gray-700"
+                                      }`}
+                                    >
+                                      {attSelected ? "✓" : "+"}
+                                    </span>
+                                  )}
                                 </div>
                               );
                             })}
@@ -3255,12 +3331,34 @@ export default function CoachChatInline({
                             if (isAudio) {
                               const timeLabel = formatTime(m.at);
                               return (
-                                <div key={a.id} className="rounded-md">
+                                <div
+                                  key={a.id}
+                                  className={`rounded-md relative ${
+                                    attSelected ? "ring-2 ring-violet-500" : ""
+                                  }`}
+                                  onClick={(e) => {
+                                    if (selectionMode) {
+                                      e.stopPropagation();
+                                      toggleAttachmentSelection(a.id);
+                                    }
+                                  }}
+                                >
                                   <AudioBubble
                                     src={url}
                                     isMine={isMine}
                                     timeLabel={timeLabel}
                                   />
+                                  {selectionMode && (
+                                    <span
+                                      className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                                        attSelected
+                                          ? "bg-violet-600 text-white"
+                                          : "bg-gray-300 text-gray-700"
+                                      }`}
+                                    >
+                                      {attSelected ? "✓" : "+"}
+                                    </span>
+                                  )}
                                 </div>
                               );
                             }
@@ -3268,9 +3366,11 @@ export default function CoachChatInline({
                               return (
                                 <div
                                   key={a.id}
-                                  onClick={() => {
-                                    if (selectionMode)
+                                  onClick={(e) => {
+                                    if (selectionMode) {
+                                      e.stopPropagation();
                                       toggleAttachmentSelection(a.id);
+                                    }
                                   }}
                                   className={`rounded-md overflow-hidden bg-white/60 relative ${
                                     selectionMode ? "cursor-pointer" : ""
@@ -3301,8 +3401,9 @@ export default function CoachChatInline({
                               <button
                                 key={a.id}
                                 type="button"
-                                onClick={() => {
+                                onClick={(e) => {
                                   if (selectionMode) {
+                                    e.stopPropagation();
                                     toggleAttachmentSelection(a.id);
                                   } else if (isImg && url) {
                                     setFullImageSrc(url);

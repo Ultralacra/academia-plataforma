@@ -243,6 +243,7 @@ export type CreateTicketForm = {
   urls?: string[]; // enlaces opcionales asociados al ticket (separadas por coma en descripcion y/o campo urls)
   ai_run_id?: string; // ID de la corrida de IA
   message_ids?: string[]; // IDs de mensajes (array)
+  file_ids?: string[]; // IDs de archivos (array)
   estado?: string; // estado inicial opcional (ej: EN_PROGRESO)
 };
 
@@ -275,6 +276,12 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
     // ÚNICO campo message_ids como JSON (requerimiento):
     // ej: ["id1","id2",...]
     fd.set('message_ids', JSON.stringify(arr));
+  }
+  if (Array.isArray(form.file_ids) && form.file_ids.length > 0) {
+    const arr = form.file_ids.map(String);
+    // ÚNICO campo file_ids como JSON (requerimiento):
+    // ej: ["file1","file2",...]
+    fd.set('file_ids', JSON.stringify(arr));
   }
   if (descripcion) fd.set('descripcion', descripcion);
   (form.archivos ?? []).forEach((file) => fd.append('archivos', file));

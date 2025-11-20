@@ -964,8 +964,15 @@ export function TicketGenerationModal({
                               String(s)
                             )
                           : undefined,
+                        file_ids: idsFromAi,
                       });
                       const payload = created?.data ?? created;
+
+                      /*
+                       * Bloque anterior para adjuntar archivos por IDs en segunda llamada.
+                       * Ahora se envían file_ids directamente en createTicket.
+                       */
+                      /*
                       try {
                         const codigo = payload?.codigo
                           ? String(payload.codigo)
@@ -976,6 +983,7 @@ export function TicketGenerationModal({
                       } catch (err) {
                         console.warn("Adjunto por IDs falló:", err);
                       }
+                      */
 
                       setFlowStage("created");
                       await new Promise((r) => setTimeout(r, 900));
