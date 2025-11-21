@@ -143,6 +143,12 @@ export default function CoachChatInline({
   // }, [items]);
   const [text, setText] = React.useState("");
   const [isJoining, setIsJoining] = React.useState(false);
+  // Estado de carga de mensajes (evita parpadeos al hacer join/refrescar)
+  const [loadingMessages, setLoadingMessages] = React.useState(false);
+  const loadingMessagesRef = React.useRef(false);
+  React.useEffect(() => {
+    loadingMessagesRef.current = loadingMessages;
+  }, [loadingMessages]);
   const [chatId, setChatId] = React.useState<string | number | null>(
     socketio?.chatId ?? null
   );
@@ -150,6 +156,8 @@ export default function CoachChatInline({
     string | number | null
   >(null);
   const [otherTyping, setOtherTyping] = React.useState(false);
+  // Estado creación manual de chat
+  const [creatingChat, setCreatingChat] = React.useState(false);
   // Estado del ticket generado por IA
   const [ticketModalOpen, setTicketModalOpen] = React.useState(false);
   const [ticketLoading, setTicketLoading] = React.useState(false);
@@ -326,13 +334,19 @@ export default function CoachChatInline({
       if (key === lastPartsKeyRef.current) return;
       lastPartsKeyRef.current = key;
       if (!precreateOnParticipants) return;
-      // Reiniciar estado de chat para que pueda unirse al nuevo destino
+      // Solo limpiar mensajes si aún no se ha unido a un chat o no hay items.
+      // Evita parpadeo cuando ya hay conversación activa y cambia referencia mínima de participantes.
+      const hasActiveChat = chatIdRef.current != null;
+      const hasMessages = (itemsRef.current?.length || 0) > 0;
       setChatId(null);
       chatIdRef.current = null;
-      setItems([]);
-      seenRef.current = new Set();
+      if (!hasActiveChat || !hasMessages) {
+        setItems([]);
+        seenRef.current = new Set();
+      }
       setOtherTyping(false);
       lastJoinedChatIdRef.current = null;
+      setLoadingMessages(true);
     } catch {}
   }, [socketio?.participants, precreateOnParticipants]);
 
@@ -556,6 +570,17 @@ export default function CoachChatInline({
       const data = json.data || {};
       if (typeof data?.content === "string" && data.content.trim()) {
         const parsed = parseAiContent(data.content);
+        const rawMessages = Array.isArray((data as any)?.messages)
+          ? (data as any).messages
+          : Array.isArray((data as any)?.mensajes)
+          ? (data as any).mensajes
+          : Array.isArray((data as any)?.original_messages)
+          ? (data as any).original_messages
+          : [];
+        const mappedMessages = rawMessages.map((m: any) => ({
+          fecha: String(m?.fecha || m?.date || ""),
+          mensaje: String(m?.mensaje || m?.message || "").trim(),
+        }));
         setTicketData({
           content: data.content,
           archivos_cargados: Array.isArray(data?.archivos_cargados)
@@ -565,10 +590,21 @@ export default function CoachChatInline({
           message_ids: Array.isArray(data?.message_ids)
             ? (data.message_ids as any[]).map((s) => String(s))
             : undefined,
-          messages: Array.isArray(data?.messages) ? data.messages : undefined,
+          messages: mappedMessages,
           parsed,
         });
       } else {
+        const rawMessages = Array.isArray((data as any)?.messages)
+          ? (data as any).messages
+          : Array.isArray((data as any)?.mensajes)
+          ? (data as any).mensajes
+          : Array.isArray((data as any)?.original_messages)
+          ? (data as any).original_messages
+          : [];
+        const mappedMessages = rawMessages.map((m: any) => ({
+          fecha: String(m?.fecha || m?.date || ""),
+          mensaje: String(m?.mensaje || m?.message || "").trim(),
+        }));
         setTicketData({
           nombre: data?.nombre ? String(data.nombre) : undefined,
           sugerencia: data?.sugerencia ? String(data.sugerencia) : undefined,
@@ -581,7 +617,7 @@ export default function CoachChatInline({
           message_ids: Array.isArray(data?.message_ids)
             ? (data.message_ids as any[]).map((s) => String(s))
             : undefined,
-          messages: Array.isArray(data?.messages) ? data.messages : undefined,
+          messages: mappedMessages,
         });
       }
     } catch (e: any) {
@@ -1699,11 +1735,13 @@ export default function CoachChatInline({
     if (!connected) return;
     if (chatId == null) return;
     if (typeof document === "undefined") return;
+    // Ajustar frecuencia según rol para reducir presión y parpadeo en alumno
+    const intervalMs = role === "alumno" ? 4000 : 1800;
     const timer = setInterval(() => {
       try {
         if (document.visibilityState !== "visible") return;
         const since = Date.now() - (lastRealtimeAtRef.current || 0);
-        if (since < 1500) return; // hay eventos RT, no hace falta
+        if (since < 1500) return; // hay eventos RT recientes
         const sio = sioRef.current;
         const current = chatIdRef.current ?? chatId;
         if (!sio || current == null) return;
@@ -1767,7 +1805,7 @@ export default function CoachChatInline({
           } catch {}
         });
       } catch {}
-    }, 1800);
+    }, intervalMs);
     return () => clearInterval(timer);
   }, [connected, chatId, role]);
 
@@ -1791,10 +1829,14 @@ export default function CoachChatInline({
     if (joinInFlightRef.current) return;
     joinInFlightRef.current = true;
     setIsJoining(true);
-    setItems([]);
-    seenRef.current = new Set();
-    setChatId(null);
+    // Evitar limpiar mensajes si ya hay alguno para reducir parpadeo.
+    if (itemsRef.current.length === 0) {
+      setItems([]);
+      seenRef.current = new Set();
+    }
+    setChatId(null); // chatId transitorio hasta éxito de JOIN
     setOtherTyping(false);
+    setLoadingMessages(true);
     const t = setTimeout(() => setIsJoining(false), 6000);
     sio.emit("chat.join", { id_chat: id }, (ack: any) => {
       try {
@@ -1971,6 +2013,7 @@ export default function CoachChatInline({
           }
           mapped.forEach((mm) => seenRef.current.add(mm.id));
           setIsJoining(false);
+          setLoadingMessages(false);
           try {
             onChatInfo?.({
               chatId: cid,
@@ -1981,10 +2024,12 @@ export default function CoachChatInline({
         } else {
           // dbg("JOIN fail", ack);
           setIsJoining(false);
+          setLoadingMessages(false);
         }
       } catch {
         joinInFlightRef.current = false;
         setIsJoining(false);
+        setLoadingMessages(false);
       }
     });
   }
@@ -2348,15 +2393,17 @@ export default function CoachChatInline({
       if (chatId != null) return true;
       const sio = sioRef.current;
       if (!sio) return false;
-      const autoCreate = socketio?.autoCreate ?? false;
       const participants = participantsRef.current ?? socketio?.participants;
       if (!Array.isArray(participants) || participants.length === 0)
         return false;
-      dbg("ensureChatReadyForSend: start", {
+      const autoCreate =
+        socketio?.autoCreate !== undefined ? socketio.autoCreate : true;
+      dbg("ensureChatReadyForSend:start", {
         autoCreate,
-        participants,
+        count: participants.length,
       });
-      // Fallback: si rol alumno y no tenemos código de equipo válido en participantes, intenta resolverlo
+
+      // Resolver código de equipo para alumno si falta (igual que versión previa)
       if (role === "alumno") {
         try {
           const hasEquipoCode = (arr: any[]) =>
@@ -2365,8 +2412,7 @@ export default function CoachChatInline({
                 normalizeTipo(p?.participante_tipo) === "equipo" &&
                 /[^0-9]/.test(String(p?.id_equipo || ""))
             );
-          let partsArr = participants as any[];
-          if (!hasEquipoCode(partsArr) && (socketio as any)?.idCliente) {
+          if (!hasEquipoCode(participants) && (socketio as any)?.idCliente) {
             const alumnoCode = String((socketio as any).idCliente);
             const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
               alumnoCode
@@ -2391,30 +2437,23 @@ export default function CoachChatInline({
               ? String(preferred.codigo)
               : null;
             if (codeEquipo && /[^0-9]/.test(codeEquipo)) {
-              const baseCliente = partsArr.find(
-                (p) => normalizeTipo(p?.participante_tipo) === "cliente"
-              );
-              const next: any[] = [];
-              if (baseCliente)
-                next.push({
-                  participante_tipo: "cliente",
-                  id_cliente: String(baseCliente.id_cliente || alumnoCode),
-                });
-              else
-                next.push({
-                  participante_tipo: "cliente",
-                  id_cliente: alumnoCode,
-                });
-              next.push({ participante_tipo: "equipo", id_equipo: codeEquipo });
-              participantsRef.current = next;
               (socketio as any).idEquipo = codeEquipo;
-              dbg("ensureChat: resolved equipo code for alumno", {
+              participantsRef.current = [
+                {
+                  participante_tipo: "cliente",
+                  id_cliente: String((socketio as any).idCliente),
+                },
+                { participante_tipo: "equipo", id_equipo: codeEquipo },
+              ];
+              dbg("ensureChatReadyForSend:resolvedEquipoAlumno", {
                 codeEquipo,
               });
             }
           }
         } catch {}
       }
+
+      // Construir payload para listar
       const listPayload: any = {};
       if (role === "coach" && socketio?.idEquipo != null) {
         listPayload.participante_tipo = "equipo";
@@ -2422,18 +2461,16 @@ export default function CoachChatInline({
       } else if (role === "alumno" && socketio?.idCliente != null) {
         listPayload.participante_tipo = "cliente";
         listPayload.id_cliente = String(socketio.idCliente);
-        // Solo filtrar por equipo si tenemos un CÓDIGO válido (no numérico)
         if (
           socketio?.idEquipo != null &&
           /[^0-9]/.test(String(socketio.idEquipo))
-        ) {
+        )
           listPayload.id_equipo = String(socketio.idEquipo);
-        }
       } else if (role === "admin" && socketio?.idAdmin != null) {
         listPayload.participante_tipo = "admin";
         listPayload.id_admin = String(socketio.idAdmin);
       }
-      dbg("ensureChatReadyForSend: listPayload", listPayload);
+
       const list: any[] = await new Promise((resolve) => {
         try {
           if (!listPayload.participante_tipo) return resolve([]);
@@ -2448,8 +2485,7 @@ export default function CoachChatInline({
             },
             (ack: any) => {
               try {
-                const arr = Array.isArray(ack?.data) ? ack.data : [];
-                resolve(arr);
+                resolve(Array.isArray(ack?.data) ? ack.data : []);
               } catch {
                 resolve([]);
               }
@@ -2459,7 +2495,7 @@ export default function CoachChatInline({
           resolve([]);
         }
       });
-      dbg("ensureChatReadyForSend: list size", list.length);
+
       const buildKey = (p: any) => {
         const t = normalizeTipo(p?.participante_tipo || p?.tipo || p?.type);
         if (t === "equipo" && p?.id_equipo)
@@ -2470,224 +2506,144 @@ export default function CoachChatInline({
           return `admin:${String(p.id_admin).toLowerCase()}`;
         return null;
       };
-      const desiredSet = new Set<string>();
-      for (const p of participants) {
+      const desired = new Set<string>();
+      for (const p of participantsRef.current ?? participants) {
         const k = buildKey(p);
-        if (k) desiredSet.add(k);
+        if (k) desired.add(k);
       }
       const equalSets = (a: Set<string>, b: Set<string>) =>
         a.size === b.size && [...a].every((x) => b.has(x));
       const isSubset = (a: Set<string>, b: Set<string>) =>
         [...a].every((x) => b.has(x));
-      const findMatchInList = (arr: any[]): any | null => {
-        let matchedLocal: any | null = null;
-        let subsetMatchedLocal: any | null = null;
+      const findMatch = (arr: any[]): any | null => {
+        let full: any | null = null;
+        let subset: any | null = null;
         for (const it of arr) {
-          const parts = it?.participants || it?.participantes || [];
           const remote = new Set<string>();
-          for (const p of parts) {
-            const k = buildKey(p);
+          for (const rp of it?.participants || it?.participantes || []) {
+            const k = buildKey(rp);
             if (k) remote.add(k);
           }
           if (remote.size === 0) continue;
-          if (equalSets(desiredSet, remote)) {
-            matchedLocal = it;
+          if (equalSets(desired, remote)) {
+            full = it;
             break;
           }
-          if (!subsetMatchedLocal && isSubset(desiredSet, remote))
-            subsetMatchedLocal = it;
+          if (!subset && isSubset(desired, remote)) subset = it;
         }
-        return matchedLocal || subsetMatchedLocal || null;
+        return full || subset || null;
       };
-
-      const matched: any | null = findMatchInList(list);
-
+      const matched = findMatch(list);
       if (matched && (matched.id_chat || matched.id)) {
-        dbg("ensureChatReadyForSend: matched chat", {
-          id: matched.id_chat ?? matched.id,
-        });
-        return await new Promise<boolean>((resolve) => {
+        const idToJoin = matched.id_chat ?? matched.id;
+        const ok = await new Promise<boolean>((resolve) => {
           try {
-            sio.emit(
-              "chat.join",
-              { id_chat: matched.id_chat ?? matched.id },
-              (ack: any) => {
-                try {
-                  if (ack && ack.success) {
-                    const data = ack.data || {};
-                    const cid = data.id_chat ?? matched.id_chat ?? matched.id;
-                    dbg("ensureChat: JOIN matched ok", {
-                      cid,
-                      my_participante: data?.my_participante ?? null,
-                    });
-                    if (cid != null) {
-                      setChatId(cid);
-                      chatIdRef.current = cid;
-                    }
-                    if (data.my_participante) {
-                      setMyParticipantId(data.my_participante);
-                      myParticipantIdRef.current = data.my_participante;
-                    }
-                    dbg("ensureChat: participants resolved", {
-                      myParticipantId: myParticipantIdRef.current,
-                    });
-                    const parts = data.participants || data.participantes || [];
-                    joinedParticipantsRef.current = Array.isArray(parts)
-                      ? parts
-                      : [];
-                    joinDataRef.current = {
-                      participants: joinedParticipantsRef.current,
-                    };
-                    if (
-                      !myParticipantIdRef.current &&
-                      role === "coach" &&
-                      socketio?.idEquipo != null
-                    ) {
-                      try {
-                        const mine = joinedParticipantsRef.current.find(
-                          (p: any) =>
-                            String(
-                              (p?.participante_tipo || "").toLowerCase()
-                            ) === "equipo" &&
-                            String(p?.id_equipo) ===
-                              String(socketio.idEquipo) &&
-                            p?.id_chat_participante != null
-                        );
-                        if (mine?.id_chat_participante != null) {
-                          setMyParticipantId(mine.id_chat_participante);
-                          myParticipantIdRef.current =
-                            mine.id_chat_participante;
-                        }
-                      } catch {}
-                    }
-                    if (
-                      !myParticipantIdRef.current &&
-                      role === "alumno" &&
-                      socketio?.idCliente != null
-                    ) {
-                      try {
-                        const mineCli = joinedParticipantsRef.current.find(
-                          (p: any) =>
-                            String(
-                              (p?.participante_tipo || "").toLowerCase()
-                            ) === "cliente" &&
-                            String(p?.id_cliente) ===
-                              String(socketio.idCliente) &&
-                            p?.id_chat_participante != null
-                        );
-                        if (mineCli?.id_chat_participante != null) {
-                          setMyParticipantId(mineCli.id_chat_participante);
-                          myParticipantIdRef.current =
-                            mineCli.id_chat_participante;
-                        }
-                      } catch {}
-                    }
-                    if (
-                      !myParticipantIdRef.current &&
-                      role === "admin" &&
-                      socketio?.idAdmin != null
-                    ) {
-                      try {
-                        const mineAdm = joinedParticipantsRef.current.find(
-                          (p: any) =>
-                            String(
-                              (p?.participante_tipo || "").toLowerCase()
-                            ) === "admin" &&
-                            String(p?.id_admin) === String(socketio.idAdmin) &&
-                            p?.id_chat_participante != null
-                        );
-                        if (mineAdm?.id_chat_participante != null) {
-                          setMyParticipantId(mineAdm.id_chat_participante);
-                          myParticipantIdRef.current =
-                            mineAdm.id_chat_participante;
-                        }
-                      } catch {}
-                    }
-                    if (
-                      !myParticipantIdRef.current &&
-                      role === "alumno" &&
-                      socketio?.idCliente != null
-                    ) {
-                      try {
-                        const mineCli = joinedParticipantsRef.current.find(
-                          (p: any) =>
-                            String(
-                              (p?.participante_tipo || "").toLowerCase()
-                            ) === "cliente" &&
-                            String(p?.id_cliente) ===
-                              String(socketio.idCliente) &&
-                            p?.id_chat_participante != null
-                        );
-                        if (mineCli?.id_chat_participante != null) {
-                          setMyParticipantId(mineCli.id_chat_participante);
-                          myParticipantIdRef.current =
-                            mineCli.id_chat_participante;
-                        }
-                      } catch {}
-                    }
-                    const msgsSrc = Array.isArray(data.messages)
-                      ? data.messages
-                      : Array.isArray((data as any).mensajes)
-                      ? (data as any).mensajes
-                      : [];
-                    const myPidLocal2 =
-                      data?.my_participante ?? myParticipantIdRef.current;
-                    const mapped: Message[] = msgsSrc.map((m: any) => {
-                      const ev = evalSenderForMapping(m, cid);
-                      const sender: Sender = ev.sender;
-                      const msg: Message = {
-                        id: String(
-                          m?.id_mensaje ??
-                            m?.id_archivo ??
-                            `${Date.now()}-${Math.random()}`
-                        ),
-                        room: normRoom,
-                        sender,
-                        text: String(
-                          m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
-                        ).trim(),
-                        at: String(
-                          normalizeDateStr(m?.fecha_envio) ||
-                            new Date().toISOString()
-                        ),
-                        delivered: true,
-                        read: !!m?.leido,
-                        srcParticipantId: getEmitter(m),
-                        attachments: mapArchivoToAttachments(m),
-                        uiKey: String(
-                          m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
-                        ),
-                      } as Message;
-                      (msg as any).__senderById = !!ev.byId;
-                      (msg as any).__senderReason = ev.reason;
-                      return msg;
-                    });
-                    {
-                      const reconciled = reconcilePreserveSender(mapped);
-                      const merged = mergePreservingOptimistics(reconciled);
-                      setItems(merged);
-                    }
-                    mapped.forEach((mm) => seenRef.current.add(mm.id));
-                    try {
-                      onChatInfo?.({
-                        chatId: cid,
-                        myParticipantId: data?.my_participante ?? null,
-                        participants: joinedParticipantsRef.current,
-                      });
-                    } catch {}
-                    resolve(true);
-                  } else resolve(false);
-                } catch {
-                  resolve(false);
-                }
+            sio.emit("chat.join", { id_chat: idToJoin }, (ack: any) => {
+              try {
+                if (ack && ack.success) {
+                  const data = ack.data || {};
+                  const cid = data.id_chat ?? idToJoin;
+                  setChatId(cid);
+                  chatIdRef.current = cid;
+                  if (data.my_participante) {
+                    setMyParticipantId(data.my_participante);
+                    myParticipantIdRef.current = data.my_participante;
+                  }
+                  joinedParticipantsRef.current = Array.isArray(
+                    data.participants || data.participantes
+                  )
+                    ? data.participants || data.participantes
+                    : [];
+                  joinDataRef.current = {
+                    participants: joinedParticipantsRef.current,
+                  };
+                  resolve(true);
+                } else resolve(false);
+              } catch {
+                resolve(false);
               }
-            );
+            });
           } catch {
             resolve(false);
           }
         });
+        return ok;
       }
-      return false;
+
+      if (opts?.onlyFind) return false;
+      if (!autoCreate) return false;
+
+      // Intento de creación (evento legacy y fallback)
+      const tryCreate = async (eventName: string): Promise<boolean> => {
+        return await new Promise<boolean>((resolve) => {
+          try {
+            sio.emit(eventName, { participants }, (ack: any) => {
+              try {
+                if (ack && ack.success && ack.data) {
+                  const data = ack.data;
+                  const cid =
+                    data.id_chat ??
+                    data.id ??
+                    data?.chat?.id ??
+                    ack?.id_chat ??
+                    ack?.id;
+                  if (cid != null) {
+                    setChatId(cid);
+                    chatIdRef.current = cid;
+                  }
+                  joinedParticipantsRef.current = Array.isArray(
+                    data.participants || data.participantes
+                  )
+                    ? data.participants || data.participantes
+                    : [];
+                  joinDataRef.current = {
+                    participants: joinedParticipantsRef.current,
+                  };
+                  resolve(true);
+                } else resolve(false);
+              } catch {
+                resolve(false);
+              }
+            });
+          } catch {
+            resolve(false);
+          }
+        });
+      };
+
+      const created =
+        (await tryCreate("chat.create-with-participants")) ||
+        (await tryCreate("chat.create"));
+      if (!created || chatIdRef.current == null) return false;
+
+      // Hacer join para obtener my_participante confiable
+      await new Promise<void>((resolve) => {
+        try {
+          sio.emit("chat.join", { id_chat: chatIdRef.current }, (ack: any) => {
+            try {
+              if (ack && ack.success) {
+                const data = ack.data || {};
+                if (data.my_participante) {
+                  setMyParticipantId(data.my_participante);
+                  myParticipantIdRef.current = data.my_participante;
+                }
+                joinedParticipantsRef.current = Array.isArray(
+                  data.participants || data.participantes
+                )
+                  ? data.participants || data.participantes
+                  : joinedParticipantsRef.current;
+                joinDataRef.current = {
+                  participants: joinedParticipantsRef.current,
+                };
+              }
+            } catch {}
+            resolve();
+          });
+        } catch {
+          resolve();
+        }
+      });
+      return true;
     } catch {
       return false;
     }
@@ -3080,6 +3036,24 @@ export default function CoachChatInline({
             <span className="text-xs text-gray-200">
               {connected ? "en línea" : "desconectado"}
             </span>
+            {/* Botón para crear chat manual si aún no existe */}
+            {!chatIdRef.current && !chatId && (
+              <button
+                onClick={async () => {
+                  if (creatingChat) return;
+                  setCreatingChat(true);
+                  try {
+                    await ensureChatReadyForSend();
+                  } catch {}
+                  setCreatingChat(false);
+                }}
+                disabled={creatingChat}
+                className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
+                title="Crear conversación"
+              >
+                {creatingChat ? "Creando…" : "Crear chat"}
+              </button>
+            )}
             {role !== "alumno" && (
               <button
                 onClick={handleGenerateTicket}
@@ -3480,6 +3454,14 @@ export default function CoachChatInline({
                 </div>
               );
             })
+          )}
+          {loadingMessages && items.length > 0 && (
+            <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-4 bg-transparent">
+              <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow">
+                <span className="inline-block h-3 w-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-gray-600">Actualizando…</span>
+              </div>
+            </div>
           )}
           {/* Indicador de escritura como overlay absoluto para no alterar el layout */}
           <div
