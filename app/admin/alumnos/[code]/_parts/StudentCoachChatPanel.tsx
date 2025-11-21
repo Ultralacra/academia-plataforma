@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -60,6 +60,8 @@ export default function StudentCoachChatPanel({
   >(null);
   // Bump para re-render cuando cambien contadores de no leídos
   const [unreadBump, setUnreadBump] = useState<number>(0);
+
+  const manualSelectionRef = useRef(false);
 
   // Selección de destino (coach)
   const [targetCoachId, setTargetCoachId] = useState<string | null>(null);
@@ -489,7 +491,11 @@ export default function StudentCoachChatPanel({
       >
         <div className="grid grid-cols-12 gap-3 h-full min-h-0">
           {/* Sidebar: filtros + coaches + mis conversaciones */}
-          <div className="col-span-3 overflow-auto border rounded p-3 bg-white space-y-3">
+          <div
+            className={`${
+              studentChats.length > 0 ? "hidden" : "col-span-3"
+            } overflow-auto border rounded p-3 bg-white space-y-3`}
+          >
             {/* Buscador */}
             <div className="flex items-center gap-2">
               <div className="relative flex-1">
@@ -538,6 +544,7 @@ export default function StudentCoachChatPanel({
                         }`}
                         title={subtitle}
                         onClick={() => {
+                          manualSelectionRef.current = true;
                           const nextCode = (t as any).codigo ?? t.id;
                           setTargetCoachId(String(nextCode));
                           setSelectedChatId(null);
@@ -647,6 +654,7 @@ export default function StudentCoachChatPanel({
                               id,
                             });
                           } catch {}
+                          manualSelectionRef.current = true;
                           setTargetCoachId(null);
                           setTargetTitle(studentName || "Conversación");
                           setTargetSubtitle(undefined);
@@ -707,7 +715,11 @@ export default function StudentCoachChatPanel({
           </div>
 
           {/* Panel de chat */}
-          <div className="col-span-9 h-full flex flex-col min-h-0">
+          <div
+            className={`${
+              studentChats.length > 0 ? "col-span-12" : "col-span-9"
+            } h-full flex flex-col min-h-0`}
+          >
             {/** Resolvedor de nombres para logs legibles */}
             {(() => {
               return null; // placeholder para mantener orden visual
@@ -764,6 +776,20 @@ export default function StudentCoachChatPanel({
                   });
                 } catch {}
                 setStudentChats(arr);
+
+                // Auto-load existing chat if available and not manually navigating
+                if (
+                  arr.length > 0 &&
+                  !selectedChatId &&
+                  !manualSelectionRef.current
+                ) {
+                  const mostRecent = arr[0];
+                  const id = mostRecent.id_chat ?? mostRecent.id;
+                  if (id) {
+                    setSelectedChatId(id);
+                    setTargetCoachId(null);
+                  }
+                }
               }}
               onChatInfo={(info) => {
                 setCurrentOpenChatId(info?.chatId ?? null);
