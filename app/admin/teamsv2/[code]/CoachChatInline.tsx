@@ -529,9 +529,6 @@ export default function CoachChatInline({
       // });
 
       const sendId = String(currentId).trim();
-      // const urlWithParam = buildUrl(
-      //   `/ai/compute/chat/${encodeURIComponent(sendId)}`
-      // );
       const urlWithParam = buildUrl(
         `/v1/ai/compute/chat/by-ids/${encodeURIComponent(sendId)}`
       );
