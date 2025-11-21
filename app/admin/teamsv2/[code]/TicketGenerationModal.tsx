@@ -115,8 +115,9 @@ export function TicketGenerationModal({
         // Busca líneas del tipo **Campo:** valor
         // Escapes dobles para que la expresión regular sea válida en string
         // Soporta contenido multilínea hasta el siguiente campo (**Campo2:) o fin de texto
+        // Mejora: soporta **Campo:**, **Campo**: y **Campo**
         const re = new RegExp(
-          String.raw`\*\*${field}\s*:\*\*\s*([\s\S]+?)(?=\r?\n\*\*|$)`,
+          String.raw`\*\*${field}\s*(?::\*\*|\*\*\s*:?)\s*([\s\S]+?)(?=\r?\n\*\*|$)`,
           "i"
         );
         const m = content.match(re);
@@ -127,6 +128,14 @@ export function TicketGenerationModal({
     },
     []
   );
+
+  // Resetear estado al abrir
+  React.useEffect(() => {
+    if (open) {
+      setFlowStage("idle");
+      setActionError(null);
+    }
+  }, [open]);
 
   React.useEffect(() => {
     if (!data) return;
@@ -198,7 +207,7 @@ export function TicketGenerationModal({
       .trim();
   }, []);
 
-  // Cargar opciones de área cuando abre el modal y mapear el texto actual a una opción
+  // Cargar opciones de área cuando abre el modal
   React.useEffect(() => {
     if (!open) return;
     let alive = true;
@@ -208,18 +217,7 @@ export function TicketGenerationModal({
         const ops = await getOpciones("area");
         if (!alive) return;
         setAreaOptions(ops);
-        // Mapear área sugerida: usar `area` si viene de IA; si no, intentar con `tipo`
-        let candidate = String(area || "").trim();
-        if (!candidate && tipo) candidate = String(tipo).trim();
-        if (candidate) {
-          const aim = normalize(candidate);
-          const match = ops.find(
-            (o) => normalize(o.key) === aim || normalize(o.value) === aim
-          );
-          if (match) setAreaKey(match.key);
-        }
       } catch {
-        // fallback: sin opciones
         setAreaOptions([]);
       } finally {
         if (alive) setAreasLoading(false);
@@ -228,7 +226,23 @@ export function TicketGenerationModal({
     return () => {
       alive = false;
     };
-  }, [open, area, tipo, normalize, areaKey]);
+  }, [open]);
+
+  // Mapear área sugerida
+  React.useEffect(() => {
+    if (!open) return;
+    let candidate = String(area || "").trim();
+    if (!candidate && tipo) candidate = String(tipo).trim();
+    if (candidate && areaOptions.length > 0) {
+      const aim = normalize(candidate);
+      const match = areaOptions.find(
+        (o) => normalize(o.key) === aim || normalize(o.value) === aim
+      );
+      if (match && match.key !== areaKey) {
+        setAreaKey(match.key);
+      }
+    }
+  }, [open, area, tipo, areaOptions, normalize, areaKey]);
 
   // ¿El tipo coincide con alguna opción de Área? Si no, se oculta en la sugerencia.
   const tipoMatchesArea = React.useMemo(() => {
@@ -817,7 +831,7 @@ export function TicketGenerationModal({
                             Mensaje de alumno
                           </Label>
                           <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-                            {studentMessages.map((m, idx) => (
+                            {studentMessages.map((m: any, idx: number) => (
                               <div key={idx} className="mb-2 last:mb-0">
                                 {m.fecha && (
                                   <div className="text-[10px] text-zinc-400 mb-1">
@@ -910,7 +924,9 @@ export function TicketGenerationModal({
                       if (!alumnoCode) {
                         alumnoCode =
                           readFieldFromContent(content, "ID cliente") ||
-                          readFieldFromContent(content, "Código de cliente");
+                          readFieldFromContent(content, "Código de cliente") ||
+                          readFieldFromContent(content, "ID") ||
+                          readFieldFromContent(content, "Código");
                       }
                       if (!alumnoCode) {
                         setActionError(
