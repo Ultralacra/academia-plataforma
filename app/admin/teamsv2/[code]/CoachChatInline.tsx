@@ -565,6 +565,7 @@ export default function CoachChatInline({
           message_ids: Array.isArray(data?.message_ids)
             ? (data.message_ids as any[]).map((s) => String(s))
             : undefined,
+          messages: Array.isArray(data?.messages) ? data.messages : undefined,
           parsed,
         });
       } else {
@@ -580,6 +581,7 @@ export default function CoachChatInline({
           message_ids: Array.isArray(data?.message_ids)
             ? (data.message_ids as any[]).map((s) => String(s))
             : undefined,
+          messages: Array.isArray(data?.messages) ? data.messages : undefined,
         });
       }
     } catch (e: any) {

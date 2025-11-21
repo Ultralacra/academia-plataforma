@@ -240,18 +240,42 @@ export function TicketGenerationModal({
     );
   }, [tipo, areaOptions, normalize]);
 
+  // Mensajes originales del alumno enviados por la IA
+  const studentMessages = React.useMemo(() => {
+    try {
+      const arr = Array.isArray((data as any)?.messages)
+        ? (data as any).messages
+        : [];
+      return arr
+        .map((m: any) => ({
+          fecha: String(m?.fecha || m?.date || ""),
+          mensaje: String(m?.mensaje || m?.message || "").trim(),
+        }))
+        .filter((x: any) => x.mensaje);
+    } catch {
+      return [] as { fecha: string; mensaje: string }[];
+    }
+  }, [data]);
+
   const buildMarkdown = React.useCallback(() => {
     const lines: string[] = [];
     if (titulo) lines.push(`**Título (obligatorio):** ${titulo}`);
-    if (descripcion) lines.push(`**Descripción:** ${descripcion}`);
-    if (alumno) lines.push(`**Alumno:** ${alumno}`);
-    {
-      const selectedLabel =
-        areaOptions.find((x) => x.key === areaKey)?.value || "";
-      if (selectedLabel) lines.push(`**Área:** ${selectedLabel}`);
+    const rawMessage = studentMessages[0]?.mensaje || "";
+    if (rawMessage) {
+      lines.push("**Mensaje de alumno:**");
+      lines.push(rawMessage);
+      if (descripcion) {
+        lines.push("");
+        lines.push(`**Descripción:** ${descripcion}`);
+      }
+    } else if (descripcion) {
+      lines.push(`**Descripción:** ${descripcion}`);
     }
+    if (alumno) lines.push(`**Alumno:** ${alumno}`);
+    const selectedLabel =
+      areaOptions.find((x) => x.key === areaKey)?.value || "";
+    if (selectedLabel) lines.push(`**Área:** ${selectedLabel}`);
     if (prioridad) lines.push(`**Prioridad:** ${prioridad}`);
-    // Campos no necesarios en los inputs del modal (Categoría y Tipo) omitidos del contenido generado
     if (coachNombre) lines.push(`**Nombre de coach asignado:** ${coachNombre}`);
     if (recomendacion)
       lines.push(`**Recomendación o siguiente paso:** ${recomendacion}`);
@@ -261,15 +285,13 @@ export function TicketGenerationModal({
     titulo,
     descripcion,
     alumno,
-    area,
     areaKey,
     areaOptions,
     prioridad,
-    categoria,
-    tipo,
     coachNombre,
     recomendacion,
     links,
+    studentMessages,
   ]);
 
   const normalizedAttachments: Attachment[] = React.useMemo(() => {
@@ -788,6 +810,27 @@ export function TicketGenerationModal({
                         </div>
                       </div>
 
+                      {/* Mensaje de alumno */}
+                      {studentMessages.length > 0 && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-medium text-zinc-500 uppercase">
+                            Mensaje de alumno
+                          </Label>
+                          <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                            {studentMessages.map((m, idx) => (
+                              <div key={idx} className="mb-2 last:mb-0">
+                                {m.fecha && (
+                                  <div className="text-[10px] text-zinc-400 mb-1">
+                                    {new Date(m.fecha).toLocaleString()}
+                                  </div>
+                                )}
+                                <div>{m.mensaje}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Descripción */}
                       <div className="space-y-1.5">
                         <Label
@@ -972,7 +1015,7 @@ export function TicketGenerationModal({
                        * Bloque anterior para adjuntar archivos por IDs en segunda llamada.
                        * Ahora se envían file_ids directamente en createTicket.
                        */
-                      /*
+
                       try {
                         const codigo = payload?.codigo
                           ? String(payload.codigo)
@@ -983,7 +1026,6 @@ export function TicketGenerationModal({
                       } catch (err) {
                         console.warn("Adjunto por IDs falló:", err);
                       }
-                      */
 
                       setFlowStage("created");
                       await new Promise((r) => setTimeout(r, 900));

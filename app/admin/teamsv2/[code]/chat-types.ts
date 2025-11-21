@@ -51,6 +51,11 @@ export type TicketData = {
   content?: string;
   ai_run_id?: string;
   message_ids?: string[];
+  messages?: Array<{
+    fecha?: string;
+    mensaje?: string;
+    [key: string]: any;
+  }>;
   parsed?: {
     titulo?: string;
     descripcion?: string;
