@@ -530,7 +530,7 @@ export default function CoachChatInline({
 
       const sendId = String(currentId).trim();
       const urlWithParam = buildUrl(
-        `/v1/ai/compute/chat/by-ids/${encodeURIComponent(sendId)}`
+        `/ai/compute/chat/by-ids/${encodeURIComponent(sendId)}`
       );
       // logging eliminado
       res = await fetch(urlWithParam, {
