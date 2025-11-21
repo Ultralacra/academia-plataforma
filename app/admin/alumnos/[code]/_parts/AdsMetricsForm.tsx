@@ -71,6 +71,7 @@ export default function AdsMetricsForm({
     pauta_activa?: boolean;
     requiere_interv?: boolean;
     fase?: string;
+    fase_data?: Record<string, { obs?: string; interv_sugerida?: string }>;
     coach_copy?: string;
     coach_plat?: string;
     obs?: string;
@@ -135,6 +136,21 @@ export default function AdsMetricsForm({
           try {
             const parsed = JSON.parse(raw);
             const maybeForm = parsed?.form ?? parsed;
+
+            // Migration: if obs/interv exists but no fase_data, move them
+            if (
+              (maybeForm.obs || maybeForm.interv_sugerida) &&
+              !maybeForm.fase_data
+            ) {
+              const p = maybeForm.fase || "sin-fase";
+              maybeForm.fase_data = {
+                [p]: {
+                  obs: maybeForm.obs,
+                  interv_sugerida: maybeForm.interv_sugerida,
+                },
+              };
+            }
+
             setData((prev) => ({ ...prev, ...maybeForm }));
           } catch {}
         }
@@ -217,6 +233,17 @@ export default function AdsMetricsForm({
     persist({ ...data, [k]: v });
   }
 
+  // Cleanup session files on unmount
+  useEffect(() => {
+    return () => {
+      sessionFiles.forEach((f) => {
+        try {
+          if (f.url) URL.revokeObjectURL(f.url);
+        } catch {}
+      });
+    };
+  }, []);
+
   // Notas y Adjuntos (link y archivos de sesión)
   const [newLinkName, setNewLinkName] = useState<string>("");
   const [newLinkUrl, setNewLinkUrl] = useState<string>("");
@@ -270,163 +297,6 @@ export default function AdsMetricsForm({
       if (it?.url) URL.revokeObjectURL(it.url);
       return prev.filter((x) => x.id !== id);
     });
-  }
-
-  function NotesAndAttachments({
-    data,
-    onChange,
-  }: {
-    data: Metrics;
-    onChange: <K extends keyof Metrics>(k: K, v: Metrics[K]) => void;
-  }) {
-    useEffect(() => {
-      return () => {
-        sessionFiles.forEach((f) => {
-          try {
-            if (f.url) URL.revokeObjectURL(f.url);
-          } catch {}
-        });
-      };
-    }, []);
-
-    return (
-      <Card>
-        <CardHeader className="py-3">
-          <CardTitle className="text-sm">Notas y adjuntos</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>Observaciones</Label>
-            <Textarea
-              rows={3}
-              placeholder="Notas, comentarios, enlaces…"
-              value={data.obs || ""}
-              onChange={(e) => onChange("obs", e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Intervención sugerida</Label>
-            <Textarea
-              rows={3}
-              placeholder="Descripción de la intervención"
-              value={data.interv_sugerida || ""}
-              onChange={(e) => onChange("interv_sugerida", e.target.value)}
-            />
-          </div>
-
-          <div className="pt-2 space-y-2">
-            <div className="text-xs text-muted-foreground">
-              Adjuntar enlaces
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-              <Input
-                className="md:col-span-2"
-                placeholder="Nombre (opcional)"
-                value={newLinkName}
-                onChange={(e) => setNewLinkName(e.target.value)}
-              />
-              <Input
-                className="md:col-span-3"
-                placeholder="https://…"
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.target.value)}
-              />
-            </div>
-            <div>
-              <Button type="button" size="sm" onClick={addLinkAttachment}>
-                Agregar enlace
-              </Button>
-            </div>
-            {(data.adjuntos || []).filter((a) => a.kind === "link").length >
-              0 && (
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">
-                  Enlaces guardados
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {(data.adjuntos || [])
-                    .filter((a) => a.kind === "link")
-                    .map((a) => (
-                      <div
-                        key={a.id}
-                        className="flex items-center gap-2 rounded border px-2 py-1"
-                      >
-                        <a
-                          href={a.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-blue-600 hover:underline"
-                          title={a.url}
-                        >
-                          {a.name || a.url}
-                        </a>
-                        <button
-                          type="button"
-                          className="text-[11px] text-muted-foreground hover:text-red-600"
-                          onClick={() => removeSavedAttachment(a.id)}
-                        >
-                          Quitar
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="pt-3 space-y-2">
-            <div className="text-xs text-muted-foreground">
-              Adjuntar archivos (solo esta sesión)
-            </div>
-            <input type="file" multiple onChange={onPickSessionFiles} />
-            {sessionFiles.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">
-                  Archivos de la sesión
-                </div>
-                <div className="flex flex-col gap-1">
-                  {sessionFiles.map((f) => (
-                    <div
-                      key={f.id}
-                      className="flex items-center justify-between text-xs rounded border px-2 py-1"
-                    >
-                      <div className="truncate">
-                        {f.name}{" "}
-                        <span className="text-muted-foreground">
-                          ({(f.size / 1024).toFixed(0)} KB)
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={f.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-blue-600 hover:underline"
-                        >
-                          Ver
-                        </a>
-                        <button
-                          type="button"
-                          className="hover:text-red-600"
-                          onClick={() => removeSessionFile(f.id)}
-                        >
-                          Quitar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="text-[11px] text-muted-foreground">
-                  Nota: los archivos no se guardan en el servidor ni en
-                  localStorage. Usa enlaces para persistir referencias (Drive,
-                  YouTube, etc.).
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    );
   }
 
   // Auto-calcular "Carga de página (%)" = visitas/clics*100
@@ -560,7 +430,167 @@ export default function AdsMetricsForm({
               </CardContent>
             </Card>
 
-            <NotesAndAttachments data={data} onChange={onChange} />
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Notas y adjuntos</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Observaciones</Label>
+                  <Textarea
+                    rows={3}
+                    placeholder="Notas, comentarios, enlaces…"
+                    value={data.fase_data?.[data.fase || "sin-fase"]?.obs || ""}
+                    onChange={(e) => {
+                      const phase = data.fase || "sin-fase";
+                      const currentPhaseData = data.fase_data?.[phase] || {};
+                      const nextPhaseData = {
+                        ...currentPhaseData,
+                        obs: e.target.value,
+                      };
+                      onChange("fase_data", {
+                        ...(data.fase_data || {}),
+                        [phase]: nextPhaseData,
+                      });
+                    }}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Intervención sugerida</Label>
+                  <Textarea
+                    rows={3}
+                    placeholder="Descripción de la intervención"
+                    value={
+                      data.fase_data?.[data.fase || "sin-fase"]
+                        ?.interv_sugerida || ""
+                    }
+                    onChange={(e) => {
+                      const phase = data.fase || "sin-fase";
+                      const currentPhaseData = data.fase_data?.[phase] || {};
+                      const nextPhaseData = {
+                        ...currentPhaseData,
+                        interv_sugerida: e.target.value,
+                      };
+                      onChange("fase_data", {
+                        ...(data.fase_data || {}),
+                        [phase]: nextPhaseData,
+                      });
+                    }}
+                  />
+                </div>
+
+                <div className="pt-2 space-y-2">
+                  <div className="text-xs text-muted-foreground">
+                    Adjuntar enlaces
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                    <Input
+                      className="md:col-span-2"
+                      placeholder="Nombre (opcional)"
+                      value={newLinkName}
+                      onChange={(e) => setNewLinkName(e.target.value)}
+                    />
+                    <Input
+                      className="md:col-span-3"
+                      placeholder="https://…"
+                      value={newLinkUrl}
+                      onChange={(e) => setNewLinkUrl(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Button type="button" size="sm" onClick={addLinkAttachment}>
+                      Agregar enlace
+                    </Button>
+                  </div>
+                  {(data.adjuntos || []).filter((a) => a.kind === "link")
+                    .length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground">
+                        Enlaces guardados
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(data.adjuntos || [])
+                          .filter((a) => a.kind === "link")
+                          .map((a) => (
+                            <div
+                              key={a.id}
+                              className="flex items-center gap-2 rounded border px-2 py-1"
+                            >
+                              <a
+                                href={a.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-blue-600 hover:underline"
+                                title={a.url}
+                              >
+                                {a.name || a.url}
+                              </a>
+                              <button
+                                type="button"
+                                className="text-[11px] text-muted-foreground hover:text-red-600"
+                                onClick={() => removeSavedAttachment(a.id)}
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 space-y-2">
+                  <div className="text-xs text-muted-foreground">
+                    Adjuntar archivos (solo esta sesión)
+                  </div>
+                  <input type="file" multiple onChange={onPickSessionFiles} />
+                  {sessionFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-xs text-muted-foreground">
+                        Archivos de la sesión
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        {sessionFiles.map((f) => (
+                          <div
+                            key={f.id}
+                            className="flex items-center justify-between text-xs rounded border px-2 py-1"
+                          >
+                            <div className="truncate">
+                              {f.name}{" "}
+                              <span className="text-muted-foreground">
+                                ({(f.size / 1024).toFixed(0)} KB)
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={f.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 hover:underline"
+                              >
+                                Ver
+                              </a>
+                              <button
+                                type="button"
+                                className="hover:text-red-600"
+                                onClick={() => removeSessionFile(f.id)}
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        Nota: los archivos no se guardan en el servidor ni en
+                        localStorage. Usa enlaces para persistir referencias
+                        (Drive, YouTube, etc.).
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -605,18 +635,6 @@ export default function AdsMetricsForm({
                     onChange={(e) => onChange("pagos", e.target.value)}
                   />
                 </div>
-                <div className="space-y-1.5 col-span-2">
-                  <Label>Carga de página (%)</Label>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0%"
-                    disabled
-                    value={`${data.carga_pagina || "0"}%`}
-                  />
-                  <div className="text-[11px] text-muted-foreground">
-                    Se calcula: visitas / clics × 100
-                  </div>
-                </div>
               </CardContent>
             </Card>
             <Card>
@@ -624,6 +642,15 @@ export default function AdsMetricsForm({
                 <CardTitle className="text-sm">Efectividades (%)</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-1 gap-3">
+                <div className="space-y-1">
+                  <Label>Carga de página (visitas/clics)</Label>
+                  <Input
+                    inputMode="decimal"
+                    placeholder="0%"
+                    disabled
+                    value={`${data.carga_pagina || "0"}%`}
+                  />
+                </div>
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
                     <Label>Ads (visitas/alcance)</Label>
