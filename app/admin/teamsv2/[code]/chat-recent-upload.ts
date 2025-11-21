@@ -30,7 +30,7 @@ export function hasRecentUploadMatch(
     const list: RecentUploadHint[] = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(list) || list.length === 0) return false;
     const now = Date.now();
-    const windowMs = 2 * 60 * 1000; // 2 minutos
+    const windowMs = 30 * 60 * 1000; // 30 minutos
     for (const a of atts) {
       for (const h of list) {
         if (now - (h?.ts || 0) > windowMs) continue;
@@ -58,7 +58,7 @@ export function hasRecentUploadLoose(
     const list: RecentUploadHint[] = raw ? JSON.parse(raw) : [];
     if (!Array.isArray(list) || list.length === 0) return false;
     const now = Date.now();
-    const windowMs = 30 * 1000; // 30s
+    const windowMs = 10 * 60 * 1000; // 10 minutos
     const cat = (m?: string) => (m || '').split('/')[0];
     for (const a of atts) {
       const aCat = cat(a?.mime);

@@ -48,6 +48,7 @@ import {
   Mic,
   Square,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -74,7 +75,6 @@ function dbg(...args: any[]) {
 // Pistas de subida movidas a ./chat-recent-upload
 
 // Config movida a ./chat-types
-
 export default function CoachChatInline({
   room,
   role = "coach",
@@ -916,6 +916,7 @@ export default function CoachChatInline({
 
   const joinedParticipantsRef = React.useRef<any[] | null>(null);
   const joinDataRef = React.useRef<any | null>(null);
+  const isTwoPartyAlumnoCoachRef = React.useRef<boolean>(false);
 
   // getEmitter/normalizeDateStr movidos a ./chat-core
 
@@ -965,7 +966,10 @@ export default function CoachChatInline({
           m?.participante_tipo ||
             getTipoByParticipantId(m?.id_chat_participante_emisor)
         );
-        const senderIsByTipo = tipoNorm === "cliente";
+        const senderIsByTipoKnown =
+          tipoNorm === "cliente" ||
+          tipoNorm === "equipo" ||
+          tipoNorm === "admin";
 
         // Priorizar identificación por id (emitter) cuando esté disponible.
         let final: Sender;
@@ -978,30 +982,40 @@ export default function CoachChatInline({
           else final = isMine ? role : "alumno";
         } else {
           // Usar heurísticas ordenadas: session -> outbox -> recent -> tipo
-          if (senderIsBySession) reason = "bySession";
-          else if (senderIsByOutbox) reason = "byOutbox";
-          else if (senderIsByRecent) reason = "byRecentUpload";
-          else if (senderIsByTipo) reason = "byParticipantType";
-          else reason = "fallback-other";
-
-          if (role === "alumno") {
-            final =
-              senderIsBySession ||
-              senderIsByOutbox ||
-              senderIsByRecent ||
-              senderIsByTipo
-                ? "alumno"
-                : "coach";
-          } else if (role === "coach") {
-            final =
-              senderIsBySession || senderIsByOutbox || senderIsByRecent
-                ? "coach"
-                : "alumno";
+          if (senderIsBySession) {
+            reason = "bySession";
+            final = role;
+          } else if (senderIsByOutbox) {
+            reason = "byOutbox";
+            final = role;
+          } else if (senderIsByRecent) {
+            reason = "byRecentUpload";
+            final = role;
+          } else if (senderIsByTipoKnown) {
+            reason = "byParticipantType";
+            if (tipoNorm === "cliente") final = "alumno";
+            else if (tipoNorm === "equipo") final = "coach";
+            else final = role; // admin u otros
           } else {
-            final =
-              senderIsBySession || senderIsByOutbox || senderIsByRecent
-                ? role
-                : "alumno";
+            reason = "fallback-other";
+            const hasAtts = Array.isArray(atts) && atts.length > 0;
+            const twoParty = !!isTwoPartyAlumnoCoachRef.current;
+            if (hasAtts && twoParty) {
+              final =
+                role === "alumno"
+                  ? "coach"
+                  : role === "coach"
+                  ? "alumno"
+                  : "alumno";
+              reason = "fallback-twoParty-attachments-other";
+            } else {
+              final =
+                role === "alumno"
+                  ? "coach"
+                  : role === "coach"
+                  ? "alumno"
+                  : "alumno";
+            }
           }
         }
         if (chatDebug() && (ctx === "realtime" || ctx === "user")) {
@@ -1871,6 +1885,18 @@ export default function CoachChatInline({
           const parts = data.participants || data.participantes || [];
           joinedParticipantsRef.current = Array.isArray(parts) ? parts : [];
           joinDataRef.current = { participants: joinedParticipantsRef.current };
+          try {
+            const arr = Array.isArray(joinedParticipantsRef.current)
+              ? joinedParticipantsRef.current
+              : [];
+            const tipos = arr.map((p: any) =>
+              normalizeTipo(p?.participante_tipo)
+            );
+            const clientes = tipos.filter((t) => t === "cliente").length;
+            const equipos = tipos.filter((t) => t === "equipo").length;
+            isTwoPartyAlumnoCoachRef.current =
+              clientes >= 1 && equipos >= 1 && arr.length <= 3;
+          } catch {}
           if (
             !myParticipantIdRef.current &&
             role === "coach" &&
@@ -3445,7 +3471,13 @@ export default function CoachChatInline({
                               m.read ? "text-[#53BDEB]" : "text-gray-500"
                             }`}
                           >
-                            {m.read ? "✓✓" : m.delivered ? "✓✓" : "✓"}
+                            {!m.delivered ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : m.read ? (
+                              "✓✓"
+                            ) : (
+                              "✓✓"
+                            )}
                           </span>
                         )}
                       </div>
@@ -3835,19 +3867,23 @@ export default function CoachChatInline({
               disabled={uploading || (!text.trim() && attachments.length === 0)}
               className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                />
-              </svg>
+              {uploading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                  />
+                </svg>
+              )}
             </button>
           </div>
           {uploadError && (

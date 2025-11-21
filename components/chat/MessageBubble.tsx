@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { CheckCheck, Check } from "lucide-react";
+import { CheckCheck, Check, Loader2 } from "lucide-react";
 
 export type ChatSender = "admin" | "alumno" | "coach";
 
@@ -190,12 +190,12 @@ export default function MessageBubble({
             })}
           </span>
           {mine &&
-            (msg.read ? (
+            (!msg.delivered ? (
+              <Loader2 className="w-3 h-3 animate-spin text-gray-500" />
+            ) : msg.read ? (
               <CheckCheck className="w-4 h-4 text-[#53bdeb]" />
-            ) : msg.delivered ? (
-              <CheckCheck className="w-4 h-4 text-gray-500" />
             ) : (
-              <Check className="w-4 h-4 text-gray-500" />
+              <CheckCheck className="w-4 h-4 text-gray-500" />
             ))}
           {msg.status && (
             <span
