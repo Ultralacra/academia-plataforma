@@ -242,7 +242,7 @@ export function TicketGenerationModal({
         setAreaKey(match.key);
       }
     }
-  }, [open, area, tipo, areaOptions, normalize, areaKey]);
+  }, [open, area, tipo, areaOptions, normalize]);
 
   // ¿El tipo coincide con alguna opción de Área? Si no, se oculta en la sugerencia.
   const tipoMatchesArea = React.useMemo(() => {

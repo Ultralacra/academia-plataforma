@@ -181,7 +181,9 @@ export default function TicketsBoard() {
     null
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState<"general" | "detalle">("general");
+  const [detailTab, setDetailTab] = useState<"general" | "detalle" | "notas">(
+    "general"
+  );
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
   const [ticketDetailError, setTicketDetailError] = useState<string | null>(
@@ -266,6 +268,9 @@ export default function TicketsBoard() {
   const [descEditing, setDescEditing] = useState(false);
   const [descDraft, setDescDraft] = useState("");
   const [savingDesc, setSavingDesc] = useState(false);
+
+  const [notasDraft, setNotasDraft] = useState("");
+  const [savingNotas, setSavingNotas] = useState(false);
 
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("");
@@ -697,7 +702,9 @@ export default function TicketsBoard() {
         throw new Error(text || `HTTP ${res.status}`);
       }
       const json = await res.json().catch(() => ({}));
-      setTicketDetail(json?.data ?? json ?? null);
+      const data = json?.data ?? json ?? null;
+      setTicketDetail(data);
+      setNotasDraft(data?.notas_internas || "");
     } catch (e: any) {
       setTicketDetailError(
         String(e?.message || e || "Error al cargar detalle")
@@ -1463,6 +1470,18 @@ export default function TicketsBoard() {
                     >
                       Detalle
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailTab("notas")}
+                      className={`px-3 py-1.5 text-xs border-l ${
+                        detailTab === "notas"
+                          ? "bg-slate-900 text-white"
+                          : "hover:bg-gray-50"
+                      }`}
+                      title="Notas internas"
+                    >
+                      Notas internas
+                    </button>
                   </div>
                 </div>
 
@@ -2210,6 +2229,54 @@ export default function TicketsBoard() {
                     ) : (
                       <div className="flex items-center justify-center py-12 text-sm text-slate-500">
                         Sin datos de detalle
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className={detailTab === "notas" ? "block" : "hidden"}>
+                  <div className="p-6 space-y-4">
+                    {ticketDetailLoading ? (
+                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+                        Cargando notas...
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <Label className="text-sm font-medium">
+                            Notas internas
+                          </Label>
+                          <Textarea
+                            rows={12}
+                            value={notasDraft}
+                            onChange={(e) => setNotasDraft(e.target.value)}
+                            placeholder="Escribe notas internas sobre este ticket..."
+                            className="resize-none"
+                          />
+                        </div>
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={async () => {
+                              if (!selectedTicket?.codigo) return;
+                              setSavingNotas(true);
+                              try {
+                                await updateTicket(selectedTicket.codigo, {
+                                  notas_internas: notasDraft,
+                                } as any);
+                                toast({ title: "Notas internas guardadas" });
+                                await loadTicketDetail(selectedTicket.codigo);
+                              } catch (e) {
+                                console.error(e);
+                                toast({ title: "Error al guardar notas" });
+                              } finally {
+                                setSavingNotas(false);
+                              }
+                            }}
+                            disabled={savingNotas}
+                          >
+                            {savingNotas ? "Guardando..." : "Guardar notas"}
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
