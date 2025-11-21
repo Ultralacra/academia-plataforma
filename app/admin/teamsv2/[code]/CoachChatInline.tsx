@@ -529,8 +529,11 @@ export default function CoachChatInline({
       // });
 
       const sendId = String(currentId).trim();
+      // const urlWithParam = buildUrl(
+      //   `/ai/compute/chat/${encodeURIComponent(sendId)}`
+      // );
       const urlWithParam = buildUrl(
-        `/ai/compute/chat/${encodeURIComponent(sendId)}`
+        `/v1/ai/compute/chat/by-ids/${encodeURIComponent(sendId)}`
       );
       // logging eliminado
       res = await fetch(urlWithParam, {
