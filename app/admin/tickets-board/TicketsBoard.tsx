@@ -152,6 +152,8 @@ function mimeFromName(name?: string | null): string | null {
 export default function TicketsBoard() {
   const { user } = useAuth();
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
+  const isStudent = (user?.role || "").toLowerCase() === "student";
+  const canEdit = !isStudent; // admins and team members can edit; students only view
   const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
@@ -366,11 +368,13 @@ export default function TicketsBoard() {
   }
 
   function handleDragOver(e: React.DragEvent) {
+    if (!canEdit) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
   }
 
   function handleDrop(e: React.DragEvent, targetEstado: string) {
+    if (!canEdit) return;
     e.preventDefault();
     const id =
       e.dataTransfer.getData("text/ticket-id") ||
@@ -787,14 +791,17 @@ export default function TicketsBoard() {
         }
       }
 
-      await updateTicket(selectedTicket.codigo, {
+      const payload: any = {
         nombre: editForm.nombre,
-        // ensure we only send a string or undefined
-        estado:
-          typeof editForm.estado === "string" ? editForm.estado : undefined,
-        deadline: editForm.deadline ?? undefined,
         descripcion: finalDescripcion || undefined,
-      } as any);
+      };
+      // only allow updating estado/deadline when user can edit (not students)
+      if (canEdit) {
+        payload.estado =
+          typeof editForm.estado === "string" ? editForm.estado : undefined;
+        payload.deadline = editForm.deadline ?? undefined;
+      }
+      await updateTicket(selectedTicket.codigo, payload as any);
       // Notificación local: guardado de cambios (incluye estado si cambia)
       try {
         const current =
@@ -825,8 +832,10 @@ export default function TicketsBoard() {
             ? {
                 ...t,
                 nombre: editForm.nombre ?? t.nombre,
-                estado: editForm.estado ?? t.estado,
-                deadline: editForm.deadline ?? t.deadline,
+                ...(canEdit ? { estado: editForm.estado ?? t.estado } : {}),
+                ...(canEdit
+                  ? { deadline: editForm.deadline ?? t.deadline }
+                  : {}),
                 // No almacenamos descripcion aquí; se mostrará en detalle recargado
               }
             : t
@@ -990,8 +999,8 @@ export default function TicketsBoard() {
                 </div>
 
                 <div
-                  onDragOver={handleDragOver}
-                  onDrop={(e) => handleDrop(e, estado)}
+                  onDragOver={(e) => canEdit && handleDragOver(e)}
+                  onDrop={(e) => canEdit && handleDrop(e, estado)}
                   className="flex-1 space-y-3"
                 >
                   {itemsForCol.length === 0 ? (
@@ -1002,8 +1011,8 @@ export default function TicketsBoard() {
                     itemsForCol.map((t) => (
                       <div
                         key={t.id}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, t.id)}
+                        draggable={canEdit}
+                        onDragStart={(e) => canEdit && handleDragStart(e, t.id)}
                         onClick={() => openTicketDetail(t)}
                         className={
                           "group rounded-lg border bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md cursor-pointer " +
@@ -1428,7 +1437,7 @@ export default function TicketsBoard() {
                     setReassignCoach("");
                     setReassignOpen(true);
                   }}
-                  disabled={!selectedTicket?.codigo}
+                  disabled={!selectedTicket?.codigo || !canEdit}
                   className="relative z-10 mt-1"
                 >
                   Reasignar ticket
@@ -1525,6 +1534,7 @@ export default function TicketsBoard() {
                           setEditForm((f) => ({ ...f, nombre: e.target.value }))
                         }
                         placeholder="Nombre o asunto"
+                        disabled={!canEdit}
                       />
                     </div>
 
@@ -2031,7 +2041,7 @@ export default function TicketsBoard() {
                             <div className="text-sm font-medium">
                               Descripción
                             </div>
-                            {!descEditing && (
+                            {!descEditing && canEdit && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -2252,6 +2262,7 @@ export default function TicketsBoard() {
                             onChange={(e) => setNotasDraft(e.target.value)}
                             placeholder="Escribe notas internas sobre este ticket..."
                             className="resize-none"
+                            disabled={!canEdit}
                           />
                         </div>
                         <div className="flex justify-end">
@@ -2272,7 +2283,7 @@ export default function TicketsBoard() {
                                 setSavingNotas(false);
                               }
                             }}
-                            disabled={savingNotas}
+                            disabled={savingNotas || !canEdit}
                           >
                             {savingNotas ? "Guardando..." : "Guardar notas"}
                           </Button>
@@ -2298,7 +2309,9 @@ export default function TicketsBoard() {
               <SheetClose asChild>
                 <Button variant="outline">Cancelar</Button>
               </SheetClose>
-              <Button onClick={saveTicketChanges}>Guardar cambios</Button>
+              {canEdit && (
+                <Button onClick={saveTicketChanges}>Guardar cambios</Button>
+              )}
             </div>
           </SheetFooter>
         </SheetContent>

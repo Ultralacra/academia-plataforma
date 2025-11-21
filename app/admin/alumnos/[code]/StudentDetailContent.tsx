@@ -524,53 +524,70 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
       {/* Mi perfil (detalle) */}
       <>
-        <MetricsStrip
-          statusLabel={
-            (student?.state ?? student?.raw?.estado ?? "").replace?.(
-              "_",
-              " "
-            ) ??
-            student?.state ??
-            student?.raw?.estado ??
-            ""
-          }
-          permanencia={permanencia}
-          lastTaskAt={lastTaskAt}
-          faseActual={faseActual}
-          ingreso={pIngreso}
-          salida={salida}
-          pausedRange={pauseInfo}
-          onSaveLastTask={async (localValue) => {
-            try {
-              const iso = new Date(localValue).toISOString();
-              await updateClientLastTask(student.code || code, iso);
-              setLastTaskAt(iso);
-              try {
-                const th = await getClienteTareas(
-                  (student as any)?.id ?? student.code ?? code
-                );
-                setTasksHistory(th);
-              } catch {}
-              toast({ title: "Última tarea actualizada" });
-            } catch (e) {
-              console.error(e);
-              toast({ title: "No se pudo actualizar la última tarea" });
-            }
-          }}
-          coachCount={(coaches || []).length}
-          coachNames={
-            (coaches || []).map((c) => c.name).filter(Boolean) as string[]
-          }
-          onJumpToCoaches={() => {
-            if (typeof window === "undefined") return;
-            const el = document.getElementById("coaches-card");
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-          }}
-          onEdit={(mode) => {
-            setEditMode(mode ?? "all");
-            setEditOpen(true);
-          }}
-        />
+        {/** Determinar si el usuario puede editar meta (estado, etapa, última tarea). Los alumnos NO. */}
+        {(() => {
+          const canEditMeta = (user?.role ?? "").toLowerCase() !== "student";
+          return (
+            <MetricsStrip
+              statusLabel={
+                (student?.state ?? student?.raw?.estado ?? "").replace?.(
+                  "_",
+                  " "
+                ) ??
+                student?.state ??
+                student?.raw?.estado ??
+                ""
+              }
+              permanencia={permanencia}
+              lastTaskAt={lastTaskAt}
+              faseActual={faseActual}
+              ingreso={pIngreso}
+              salida={salida}
+              pausedRange={pauseInfo}
+              onSaveLastTask={
+                canEditMeta
+                  ? async (localValue) => {
+                      try {
+                        const iso = new Date(localValue).toISOString();
+                        await updateClientLastTask(student.code || code, iso);
+                        setLastTaskAt(iso);
+                        try {
+                          const th = await getClienteTareas(
+                            (student as any)?.id ?? student.code ?? code
+                          );
+                          setTasksHistory(th);
+                        } catch {}
+                        toast({ title: "Última tarea actualizada" });
+                      } catch (e) {
+                        console.error(e);
+                        toast({
+                          title: "No se pudo actualizar la última tarea",
+                        });
+                      }
+                    }
+                  : undefined
+              }
+              coachCount={(coaches || []).length}
+              coachNames={
+                (coaches || []).map((c) => c.name).filter(Boolean) as string[]
+              }
+              onJumpToCoaches={() => {
+                if (typeof window === "undefined") return;
+                const el = document.getElementById("coaches-card");
+                if (el)
+                  el.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              onEdit={
+                canEditMeta
+                  ? (mode) => {
+                      setEditMode(mode ?? "all");
+                      setEditOpen(true);
+                    }
+                  : undefined
+              }
+            />
+          );
+        })()}
 
         {/* Contrato se moverá a la columna derecha junto a otras tarjetas para evitar espacios en blanco */}
 
