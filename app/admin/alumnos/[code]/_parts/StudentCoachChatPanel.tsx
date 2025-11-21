@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { RotateCw, Search } from "lucide-react";
+import { RotateCw, Search, Loader2 } from "lucide-react";
 import { dataService, type TeamWithCounts } from "@/lib/data-service";
 import CoachChatInline from "@/app/admin/teamsv2/[code]/CoachChatInline";
 import { CHAT_HOST } from "@/lib/api-config";
@@ -60,6 +60,7 @@ export default function StudentCoachChatPanel({
   >(null);
   // Bump para re-render cuando cambien contadores de no leídos
   const [unreadBump, setUnreadBump] = useState<number>(0);
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
 
   const manualSelectionRef = useRef(false);
 
@@ -487,13 +488,25 @@ export default function StudentCoachChatPanel({
         )}
       </div>
       <div
-        className={fullHeight ? "p-3 flex-1 min-h-0" : "p-3 h-[620px] min-h-0"}
+        className={`${
+          fullHeight ? "p-3 flex-1 min-h-0" : "p-3 h-[620px] min-h-0"
+        } relative`}
       >
+        {isLoadingChats && (
+          <div className="absolute inset-0 z-50 bg-white flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2">
+              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              <p className="text-sm text-gray-500">Cargando conversación...</p>
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-12 gap-3 h-full min-h-0">
           {/* Sidebar: filtros + coaches + mis conversaciones */}
           <div
             className={`${
-              studentChats.length > 0 ? "hidden" : "col-span-3"
+              studentChats.length > 0 || isLoadingChats
+                ? "hidden"
+                : "col-span-3"
             } overflow-auto border rounded p-3 bg-white space-y-3`}
           >
             {/* Buscador */}
@@ -717,7 +730,9 @@ export default function StudentCoachChatPanel({
           {/* Panel de chat */}
           <div
             className={`${
-              studentChats.length > 0 ? "col-span-12" : "col-span-9"
+              studentChats.length > 0 || isLoadingChats
+                ? "col-span-12"
+                : "col-span-9"
             } h-full flex flex-col min-h-0`}
           >
             {/** Resolvedor de nombres para logs legibles */}
@@ -776,6 +791,9 @@ export default function StudentCoachChatPanel({
                   });
                 } catch {}
                 setStudentChats(arr);
+
+                setStudentChats(arr);
+                setIsLoadingChats(false);
 
                 // Auto-load existing chat if available and not manually navigating
                 if (

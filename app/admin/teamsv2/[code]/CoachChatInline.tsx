@@ -3181,7 +3181,10 @@ export default function CoachChatInline({
         >
           {isJoining && items.length === 0 ? (
             <div className="h-full flex items-center justify-center">
-              <div className="text-sm text-gray-500">Cargando mensajes…</div>
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                <div className="text-sm text-gray-500">Cargando mensajes…</div>
+              </div>
             </div>
           ) : items.length === 0 ? (
             <div className="h-full flex items-center justify-center">
@@ -3490,7 +3493,7 @@ export default function CoachChatInline({
           {loadingMessages && items.length > 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-4 bg-transparent">
               <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow">
-                <span className="inline-block h-3 w-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                <Loader2 className="h-3 w-3 animate-spin text-gray-600" />
                 <span className="text-xs text-gray-600">Actualizando…</span>
               </div>
             </div>
