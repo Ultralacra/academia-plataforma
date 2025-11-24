@@ -481,6 +481,15 @@ export default function CoachChatInline({
           vacio: mensajes.length === 0 && adjuntos.length === 0,
         });
       } catch {}
+
+      if (selectedMessageIds.size === 0) {
+        setTicketModalOpen(true);
+        setTicketError(
+          "Debes seleccionar al menos un mensaje para generar el ticket."
+        );
+        return;
+      }
+
       const currentId = (chatIdRef.current ?? chatId) as any;
       // logging eliminado
       if (currentId == null) {
