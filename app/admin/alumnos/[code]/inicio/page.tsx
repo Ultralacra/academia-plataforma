@@ -19,86 +19,18 @@ import {
   BarChart3,
 } from "lucide-react";
 
-function CredsCard({
-  title,
-  storageKey,
-  placeholderUrl,
-}: {
-  title: string;
-  storageKey: string;
-  placeholderUrl?: string;
-}) {
-  const [url, setUrl] = useState("");
-  const [user, setUser] = useState("");
-  const [pass, setPass] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const j = JSON.parse(raw);
-        setUrl(j?.url || "");
-        setUser(j?.user || "");
-        setPass(j?.pass || "");
-      }
-    } catch {}
-  }, [storageKey]);
-
-  function save() {
-    try {
-      setSaving(true);
-      const payload = { url: url.trim(), user: user.trim(), pass };
-      localStorage.setItem(storageKey, JSON.stringify(payload));
-    } catch {}
-    setTimeout(() => setSaving(false), 400);
-  }
-
-  const href = (url || "").trim();
-
+function StaticCard({ title, href }: { title: string; href: string }) {
   return (
     <Card className="border-border">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 gap-2">
-          <div className="space-y-1">
-            <Label>URL</Label>
-            <Input
-              placeholder={placeholderUrl || "https://..."}
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Usuario</Label>
-            <Input
-              placeholder="usuario"
-              value={user}
-              onChange={(e) => setUser(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label>Clave</Label>
-            <Input
-              type="password"
-              placeholder="********"
-              value={pass}
-              onChange={(e) => setPass(e.target.value)}
-            />
-          </div>
-        </div>
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={save} disabled={saving}>
-            {saving ? "Guardando…" : "Guardar"}
-          </Button>
-          <Button asChild disabled={!href}>
-            <a href={href || "#"} target="_blank" rel="noreferrer">
-              Abrir <ExternalLink className="w-4 h-4 ml-1" />
-            </a>
-          </Button>
-        </div>
+      <CardContent className="flex items-center justify-end gap-2">
+        <Button asChild className="w-full" variant="outline">
+          <a href={href} target="_blank" rel="noreferrer">
+            Abrir <ExternalLink className="w-4 h-4 ml-1" />
+          </a>
+        </Button>
       </CardContent>
     </Card>
   );
@@ -146,17 +78,9 @@ export default function StudentInicioPage() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          <CredsCard
-            title="Notion de la academia"
-            storageKey={`inicio:notion:${code}`}
-            placeholderUrl="https://notion.so/..."
-          />
+          <StaticCard title="Notion de la academia" href="https://notion.so/" />
 
-          <CredsCard
-            title="Mi School"
-            storageKey={`inicio:school:${code}`}
-            placeholderUrl="https://school.com/..."
-          />
+          <StaticCard title="Mi School" href="https://school.com/" />
 
           <InternalCard
             title="Chat soporte"
