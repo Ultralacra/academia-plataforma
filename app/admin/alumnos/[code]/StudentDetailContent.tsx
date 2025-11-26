@@ -620,7 +620,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               />
             </div>
             {/* Contrato card */}
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <div className="rounded-xl border border-border bg-card p-4">
               <h3 className="mb-2 text-sm font-medium">Contrato</h3>
               <ContratoCard
                 code={student.code || code}
@@ -1853,8 +1853,8 @@ function TabBtn({
       onClick={onClick}
       className={`px-3 py-1 text-sm font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-sky-400 ${
         active
-          ? "bg-sky-50 text-sky-700 ring-1 ring-sky-100"
-          : "bg-white text-muted-foreground border border-gray-100"
+          ? "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 ring-1 ring-sky-200 dark:ring-sky-800"
+          : "bg-card text-muted-foreground border border-border hover:bg-muted/50"
       }`}
     >
       {children}

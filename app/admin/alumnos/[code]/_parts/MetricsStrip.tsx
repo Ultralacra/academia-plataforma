@@ -115,12 +115,14 @@ export default function MetricsStrip({
       {items.map((it) => (
         <div
           key={it.label}
-          className="group relative overflow-hidden rounded-xl border border-gray-200 bg-white p-4"
+          className="group relative overflow-hidden rounded-xl border border-border bg-card p-4"
         >
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                <span className="text-muted-foreground/60">{it.icon}</span>
+                <span className="text-muted-foreground/60 dark:text-primary/70">
+                  {it.icon}
+                </span>
                 {it.label}
               </div>
               {it.editable && onEdit && (
@@ -180,7 +182,7 @@ export default function MetricsStrip({
                   <input
                     type="datetime-local"
                     defaultValue={isoToLocalInput(lastTaskAt)}
-                    className="w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-sm"
+                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
                     onChange={(e) => {
                       // almacenar provisionalmente en el elemento para el botón
                       (e.currentTarget as any)._pending = e.currentTarget.value;
@@ -196,7 +198,7 @@ export default function MetricsStrip({
                       if (!v) return;
                       Promise.resolve(onSaveLastTask(v)).catch(() => {});
                     }}
-                    className="inline-flex items-center justify-center rounded-md border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    className="inline-flex items-center justify-center rounded-md border border-input bg-background px-3 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
                   >
                     Guardar
                   </button>
@@ -211,7 +213,7 @@ export default function MetricsStrip({
             {!it.editable && it.ctaLabel && onJumpToCoaches && (
               <button
                 onClick={onJumpToCoaches}
-                className="ml-2 inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                className="ml-2 inline-flex items-center rounded-md border border-input bg-background px-2 py-1 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
               >
                 {it.ctaLabel}
               </button>

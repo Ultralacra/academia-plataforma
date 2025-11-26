@@ -398,10 +398,10 @@ export default function StudentsContent() {
                   aria-label="Seleccionar coach"
                   className={cn(
                     "group flex w-full items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium outline-none transition-all",
-                    "bg-gradient-to-r from-white to-white/90",
+                    "bg-card hover:bg-accent/50",
                     coach !== "todos"
                       ? "border-blue-500/60 ring-1 ring-blue-500/10"
-                      : "border-gray-200 hover:border-gray-300",
+                      : "border-border hover:border-gray-300 dark:hover:border-gray-600",
                     "focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-500"
                   )}
                 >
@@ -409,19 +409,23 @@ export default function StudentsContent() {
                     <UserCircle2
                       className={cn(
                         "h-4 w-4 flex-shrink-0",
-                        coach !== "todos" ? "text-blue-600" : "text-gray-400"
+                        coach !== "todos"
+                          ? "text-blue-600 dark:text-blue-400"
+                          : "text-muted-foreground"
                       )}
                     />
                     <span
                       className={cn(
                         "truncate",
-                        coach !== "todos" ? "text-gray-900" : "text-gray-500"
+                        coach !== "todos"
+                          ? "text-foreground"
+                          : "text-muted-foreground"
                       )}
                     >
                       {selectedCoachName || "Seleccionar coach"}
                     </span>
                     {coach !== "todos" && (
-                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-blue-50 text-blue-600 px-2 py-0.5 text-[10px] font-semibold">
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-blue-50 dark:bg-blue-500/20 text-blue-600 dark:text-blue-300 px-2 py-0.5 text-[10px] font-semibold">
                         <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
                         Filtrando
                       </span>
@@ -434,11 +438,11 @@ export default function StudentsContent() {
                           e.stopPropagation();
                           setCoach("todos");
                         }}
-                        className="h-4 w-4 text-gray-400 hover:text-red-500 transition-colors"
+                        className="h-4 w-4 text-muted-foreground hover:text-destructive transition-colors"
                         aria-label="Limpiar coach"
                       />
                     )}
-                    <ChevronsUpDown className="h-4 w-4 text-gray-400 group-hover:text-gray-500" />
+                    <ChevronsUpDown className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
                   </span>
                 </button>
               </PopoverTrigger>
@@ -493,9 +497,9 @@ export default function StudentsContent() {
           )}
 
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
-              className="pl-10 h-10 rounded-xl bg-white border border-gray-200"
+              className="pl-10 h-10 rounded-xl bg-background border-border"
               placeholder="Buscar por nombre o estado..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -605,7 +609,7 @@ export default function StudentsContent() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div className="group relative overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-card to-card/50 p-5 transition-all">
+          <div className="group relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-card to-card/50 p-5 transition-all">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
@@ -623,7 +627,7 @@ export default function StudentsContent() {
             <div className="absolute inset-0 -z-10 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
 
-          <div className="group relative overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-card to-card/50 p-5 transition-all sm:col-span-2 lg:col-span-1">
+          <div className="group relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-card to-card/50 p-5 transition-all sm:col-span-2 lg:col-span-1">
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
@@ -655,7 +659,7 @@ export default function StudentsContent() {
       {uniqueStates.length > 0 && (
         <div className="mb-2">
           <div className="flex items-center gap-2 w-full">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Estado
             </span>
             <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
@@ -669,7 +673,7 @@ export default function StudentsContent() {
                       "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
                       active
                         ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                        : "bg-card text-foreground border-border hover:bg-accent"
                     )}
                   >
                     {it}
@@ -679,7 +683,7 @@ export default function StudentsContent() {
               {filterState && (
                 <button
                   onClick={() => setFilterState(null)}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
                 >
                   Limpiar
                 </button>
@@ -693,7 +697,7 @@ export default function StudentsContent() {
       {uniqueStages.length > 0 && (
         <div className="mb-3">
           <div className="flex items-center gap-2 w-full">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               Fase
             </span>
             <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
@@ -707,7 +711,7 @@ export default function StudentsContent() {
                       "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
                       active
                         ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                        : "bg-card text-foreground border-border hover:bg-accent"
                     )}
                   >
                     {it}
@@ -717,7 +721,7 @@ export default function StudentsContent() {
               {filterStage && (
                 <button
                   onClick={() => setFilterStage(null)}
-                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
                 >
                   Limpiar
                 </button>
@@ -727,10 +731,10 @@ export default function StudentsContent() {
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
+            <thead className="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Nombre</th>
                 <th className="px-3 py-2 text-left font-medium">Estado</th>
@@ -752,7 +756,7 @@ export default function StudentsContent() {
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-3 py-4 text-center text-gray-500"
+                    className="px-3 py-4 text-center text-muted-foreground"
                   >
                     Cargando alumnos…
                   </td>
@@ -761,7 +765,7 @@ export default function StudentsContent() {
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-3 py-4 text-center text-gray-500"
+                    className="px-3 py-4 text-center text-muted-foreground"
                   >
                     No se encontraron estudiantes
                   </td>
@@ -770,15 +774,15 @@ export default function StudentsContent() {
                 pageItems.map((student) => (
                   <tr
                     key={student.id}
-                    className="border-t border-gray-100 hover:bg-gray-50"
+                    className="border-t border-border/50 hover:bg-muted/50"
                   >
-                    <td className="px-3 py-2 font-medium text-gray-900">
+                    <td className="px-3 py-2 font-medium text-foreground">
                       {student.code ? (
                         <Link
                           href={`/admin/alumnos/${encodeURIComponent(
                             student.code
                           )}`}
-                          className="hover:text-blue-600"
+                          className="hover:text-blue-600 dark:hover:text-blue-400"
                         >
                           {student.name}
                         </Link>
@@ -790,14 +794,14 @@ export default function StudentsContent() {
                       {(() => {
                         const v = (student.state || "").toUpperCase();
                         const classes = v.includes("INACTIVO")
-                          ? "bg-rose-100 text-rose-800"
+                          ? "bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300"
                           : v.includes("ACTIVO")
-                          ? "bg-sky-100 text-sky-800"
+                          ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
                           : v.includes("PROCESO")
-                          ? "bg-violet-100 text-violet-800"
+                          ? "bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-300"
                           : v
-                          ? "bg-gray-100 text-gray-700"
-                          : "bg-gray-100 text-gray-500";
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-muted text-muted-foreground";
                         return (
                           <span
                             className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
@@ -811,22 +815,22 @@ export default function StudentsContent() {
                       {(() => {
                         const v = (student.stage || "").toUpperCase();
                         const classes = v.includes("COPY")
-                          ? "bg-amber-100 text-amber-800"
+                          ? "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300"
                           : v.includes("F1")
-                          ? "bg-emerald-100 text-emerald-800"
+                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
                           : v.includes("F2")
-                          ? "bg-lime-100 text-lime-800"
+                          ? "bg-lime-100 dark:bg-lime-500/20 text-lime-800 dark:text-lime-300"
                           : v.includes("F3")
-                          ? "bg-cyan-100 text-cyan-800"
+                          ? "bg-cyan-100 dark:bg-cyan-500/20 text-cyan-800 dark:text-cyan-300"
                           : v.includes("F4")
-                          ? "bg-sky-100 text-sky-800"
+                          ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
                           : v.includes("F5")
-                          ? "bg-purple-100 text-purple-800"
+                          ? "bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300"
                           : v.includes("ONBOARD")
-                          ? "bg-indigo-100 text-indigo-800"
+                          ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-800 dark:text-indigo-300"
                           : v
-                          ? "bg-gray-100 text-gray-700"
-                          : "bg-gray-100 text-gray-500";
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-muted text-muted-foreground";
                         return (
                           <span
                             className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
@@ -836,13 +840,13 @@ export default function StudentsContent() {
                         );
                       })()}
                     </td>
-                    <td className="px-3 py-2 text-gray-700">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {fmtDateSmart(student.joinDate)}
                     </td>
-                    <td className="px-3 py-2 text-gray-700">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {fmtDateSmart(student.lastActivity)}
                     </td>
-                    <td className="px-3 py-2 text-gray-700">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {student.inactivityDays != null &&
                       student.inactivityDays !== undefined ? (
                         <span>{student.inactivityDays}d</span>
@@ -858,24 +862,24 @@ export default function StudentsContent() {
         </div>
 
         {!loading && pageItems.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs">
-            <div>
+          <div className="flex items-center justify-between px-4 py-3 border-t border-border/50 bg-muted/30 text-xs">
+            <div className="text-muted-foreground">
               Mostrando {(page - 1) * PAGE_SIZE + 1} a{" "}
               {Math.min(page * PAGE_SIZE, total)} de {total} estudiantes
             </div>
             <div className="flex items-center gap-2">
               <button
-                className="px-2 py-1 rounded-md border bg-white disabled:opacity-40"
+                className="px-2 py-1 rounded-md border border-border bg-card disabled:opacity-40 hover:bg-accent"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
               >
                 Anterior
               </button>
-              <div className="text-xs">
+              <div className="text-xs text-muted-foreground">
                 Página {page} de {totalPages}
               </div>
               <button
-                className="px-2 py-1 rounded-md border bg-white disabled:opacity-40"
+                className="px-2 py-1 rounded-md border border-border bg-card disabled:opacity-40 hover:bg-accent"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
               >

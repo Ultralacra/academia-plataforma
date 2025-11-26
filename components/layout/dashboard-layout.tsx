@@ -101,7 +101,7 @@ function NotificationsBadge() {
           )}
           {totalUnread === 0 && (sseDisabled || !sseConnected) && (
             <span
-              className="absolute -top-1 -right-1 bg-neutral-300 text-neutral-700 rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+              className="absolute -top-1 -right-1 bg-muted text-muted-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
               title="SSE desconectado"
             >
               !
@@ -144,19 +144,19 @@ function NotificationsBadge() {
                     const s = String(n.current || "").toUpperCase();
                     const style =
                       s === "PENDIENTE"
-                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
                         : s === "EN_PROGRESO"
-                        ? "bg-amber-50 text-amber-700 border-amber-200"
+                        ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
                         : s === "PENDIENTE_DE_ENVIO"
-                        ? "bg-sky-50 text-sky-700 border-sky-200"
+                        ? "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800"
                         : s === "PAUSADO"
-                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                        ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
                         : s === "RESUELTO"
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
                         : s === "CREADO"
-                        ? "bg-slate-100 text-slate-700 border-slate-200"
+                        ? "bg-muted text-muted-foreground border-border"
                         : s === "ELIMINADO"
-                        ? "bg-red-50 text-red-700 border-red-200"
+                        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
                         : "hidden";
                     const labelMap: Record<string, string> = {
                       EN_PROGRESO: "En progreso",

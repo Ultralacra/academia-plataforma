@@ -47,7 +47,7 @@ export default function PhaseHistory({
     );
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <h3 className="mb-3 text-sm font-semibold">Historial</h3>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {/* Etapas */}
@@ -61,13 +61,13 @@ export default function PhaseHistory({
             </p>
           ) : (
             <div className="relative ml-2">
-              <div className="absolute left-2 top-6 bottom-0 w-px bg-gray-200" />
+              <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
               <ol className="space-y-6">
                 {phasesSorted.map((h) => (
                   <li key={h.id} className="relative pl-8">
-                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-white" />
-                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
-                      <div className="text-sm font-medium text-gray-900">{`Cambio a ${h.etapa_id}`}</div>
+                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-background" />
+                    <div className="rounded-md border border-border bg-muted/50 p-3">
+                      <div className="text-sm font-medium text-foreground">{`Cambio a ${h.etapa_id}`}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {fmtES(h.created_at)}
                       </div>
@@ -90,13 +90,13 @@ export default function PhaseHistory({
             </p>
           ) : (
             <div className="relative ml-2">
-              <div className="absolute left-2 top-6 bottom-0 w-px bg-gray-200" />
+              <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
               <ol className="space-y-6">
                 {statusSorted.map((h) => (
                   <li key={h.id} className="relative pl-8">
-                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-white" />
-                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
-                      <div className="text-sm font-medium text-gray-900">{`Cambio a ${String(
+                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-background" />
+                    <div className="rounded-md border border-border bg-muted/50 p-3">
+                      <div className="text-sm font-medium text-foreground">{`Cambio a ${String(
                         h.estado_id
                       ).toUpperCase()}`}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
@@ -121,13 +121,13 @@ export default function PhaseHistory({
             </p>
           ) : (
             <div className="relative ml-2">
-              <div className="absolute left-2 top-6 bottom-0 w-px bg-gray-200" />
+              <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
               <ol className="space-y-6">
                 {tasksSorted.map((h) => (
                   <li key={h.id} className="relative pl-8">
-                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-white" />
-                    <div className="rounded-md border border-gray-100 bg-gray-50 p-3">
-                      <div className="text-sm font-medium text-gray-900">
+                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-background" />
+                    <div className="rounded-md border border-border bg-muted/50 p-3">
+                      <div className="text-sm font-medium text-foreground">
                         {h.descripcion || "Tarea registrada"}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">

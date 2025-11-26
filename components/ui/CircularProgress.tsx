@@ -37,7 +37,7 @@ export default function CircularProgress({
           cy={size / 2}
           r={radius}
           stroke="currentColor"
-          className="text-gray-200 dark:text-gray-800"
+          className="text-muted"
           strokeWidth={strokeWidth}
           fill="none"
         />
@@ -47,7 +47,7 @@ export default function CircularProgress({
           cy={size / 2}
           r={radius}
           stroke="currentColor"
-          className="text-blue-600 dark:text-blue-400"
+          className="text-primary"
           strokeWidth={strokeWidth}
           fill="none"
           strokeLinecap="round"
@@ -58,7 +58,7 @@ export default function CircularProgress({
       </svg>
 
       {showLabel && (
-        <span className="absolute text-sm font-semibold text-gray-900 dark:text-gray-100">
+        <span className="absolute text-sm font-semibold text-foreground">
           {Math.round(pct)}%
         </span>
       )}

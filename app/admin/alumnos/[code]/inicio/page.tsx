@@ -57,7 +57,7 @@ function CredsCard({
   const href = (url || "").trim();
 
   return (
-    <Card className="border-neutral-200/70">
+    <Card className="border-border">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
@@ -116,14 +116,14 @@ function InternalCard({
   icon: any;
 }) {
   return (
-    <Card className="border-neutral-200/70">
+    <Card className="border-border">
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
           <Icon className="w-4 h-4" /> {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex items-center justify-between gap-3">
-        <p className="text-sm text-neutral-600">{description}</p>
+        <p className="text-sm text-muted-foreground">{description}</p>
         <Button asChild variant="secondary">
           <Link href={href}>Entrar</Link>
         </Button>

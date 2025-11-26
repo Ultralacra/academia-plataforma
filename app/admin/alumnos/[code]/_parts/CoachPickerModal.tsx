@@ -95,7 +95,7 @@ export default function CoachPickerModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[92vw] sm:max-w-3xl max-h-[85vh] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-none">
+      <DialogContent className="w-[92vw] sm:max-w-3xl max-h-[85vh] overflow-hidden rounded-xl border border-border bg-card shadow-none">
         <DialogHeader>
           <DialogTitle>Seleccionar integrante</DialogTitle>
           <DialogDescription>
@@ -106,7 +106,7 @@ export default function CoachPickerModal({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            className="pl-9 border-gray-200 bg-white"
+            className="pl-9 border-border bg-background"
             placeholder="Buscar por nombre, área, puesto o equipo…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -138,7 +138,7 @@ export default function CoachPickerModal({
                 return (
                   <li
                     key={key}
-                    className={`flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-gray-50 ${
+                    className={`flex items-center justify-between gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted/50 ${
                       isSelected ? "ring-2 ring-primary/30" : ""
                     }`}
                     onClick={() => {
@@ -199,7 +199,7 @@ export default function CoachPickerModal({
         )}
 
         {/* Footer con botón Asignar para confirmar selección múltiple */}
-        <div className="border-t border-gray-100 px-4 py-3">
+        <div className="border-t border-border px-4 py-3">
           <div className="flex items-center justify-end gap-2">
             <div className="text-sm text-muted-foreground">
               {Object.values(selected).filter(Boolean).length} seleccionados

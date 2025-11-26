@@ -98,8 +98,8 @@ export default function EditForm({
   ];
 
   return (
-    <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-      <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
+    <section className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-3">
         <div className="flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-muted-foreground" />
         </div>

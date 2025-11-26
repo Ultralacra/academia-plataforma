@@ -11,6 +11,8 @@ import {
   ChevronDown,
   Settings,
   CalendarClock,
+  Moon,
+  Sun,
 } from "lucide-react";
 import {
   Sidebar,
@@ -35,6 +37,7 @@ import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
 import { useChatNotifications } from "@/components/hooks/useChatNotifications";
 import { toast } from "@/components/ui/use-toast";
+import { useTheme } from "next-themes";
 
 /* ====================== Tipos ====================== */
 type MenuItem = {
@@ -90,6 +93,7 @@ const studentItems: MenuItem[] = [
 export function AppSidebar() {
   const { user } = useAuth();
   const pathname = usePathname();
+  const { theme, setTheme } = useTheme();
 
   const menuItems: MenuItem[] = useMemo(() => {
     // Detectar si estamos en la ficha de un alumno para añadir acceso directo al chat del alumno
@@ -266,17 +270,6 @@ export function AppSidebar() {
             icon: GraduationCap,
           },
           {
-            title: "Métricas ADS",
-            url: `/admin/alumnos/${code}/ads`,
-            icon: BarChart3,
-          },
-          {
-            title: "Sesiones",
-            url: `/admin/alumnos/${code}/sesiones`,
-            icon: CalendarClock,
-          },
-          { title: "Bonos", url: `/admin/alumnos/${code}/bonos`, icon: Users },
-          {
             title: "Chat soporte",
             url: `/admin/alumnos/${code}/chat`,
             icon: MessageSquare,
@@ -376,7 +369,7 @@ export function AppSidebar() {
   }, [pathname]);
 
   return (
-    <Sidebar className="border-r bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/70">
+    <Sidebar className="border-r bg-sidebar backdrop-blur supports-[backdrop-filter]:bg-sidebar/70">
       <SidebarContent className="flex h-full flex-col overflow-x-hidden">
         {/* Header — estilo Notion */}
         <div className="p-3">
@@ -384,24 +377,24 @@ export function AppSidebar() {
             <img
               src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
               alt="Logo"
-              className="h-8 w-8 rounded-md object-cover ring-1 ring-black/5"
+              className="h-8 w-8 rounded-md object-cover ring-1 ring-sidebar-border"
               loading="eager"
             />
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-neutral-900">
+              <p className="truncate text-sm font-medium text-sidebar-foreground">
                 {user?.name ?? user?.email ?? "Usuario"}
               </p>
               <Badge
                 variant="outline"
-                className="mt-0.5 h-5 px-1.5 text-[10px] border-neutral-200 text-neutral-600"
+                className="mt-0.5 h-5 px-1.5 text-[10px] border-sidebar-border text-muted-foreground"
               >
                 {roleLabel}
               </Badge>
               {(user?.role === "student" || user?.role === "equipo") &&
                 (user as any)?.codigo && (
-                  <div className="mt-1 text-[10px] text-neutral-500 truncate">
+                  <div className="mt-1 text-[10px] text-muted-foreground truncate">
                     Código:{" "}
-                    <code className="text-neutral-700">
+                    <code className="text-sidebar-foreground">
                       {(user as any).codigo}
                     </code>
                   </div>
@@ -415,7 +408,7 @@ export function AppSidebar() {
         {/* Navegación — Notion-like */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden">
           <SidebarGroup>
-            <SidebarGroupLabel className="px-3 text-[11px] uppercase tracking-wide text-neutral-500">
+            <SidebarGroupLabel className="px-3 text-[11px] uppercase tracking-wide text-muted-foreground">
               Navegación
             </SidebarGroupLabel>
             <SidebarGroupContent>
@@ -441,8 +434,8 @@ export function AppSidebar() {
                                 className={cn(
                                   "group relative overflow-hidden rounded-md px-2.5 py-1.5 text-sm",
                                   active
-                                    ? "bg-neutral-100 text-neutral-900"
-                                    : "hover:bg-neutral-50 text-neutral-700"
+                                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                    : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
                                 )}
                               >
                                 <Link
@@ -460,8 +453,8 @@ export function AppSidebar() {
                                     className={cn(
                                       "h-4 w-4",
                                       active
-                                        ? "text-neutral-900"
-                                        : "text-neutral-600"
+                                        ? "text-sidebar-accent-foreground"
+                                        : "text-muted-foreground"
                                     )}
                                   />
                                   <span className="truncate flex items-center gap-2">
@@ -499,8 +492,8 @@ export function AppSidebar() {
                           className={cn(
                             "group flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-sm",
                             metricsOpen || isAnyChildActive
-                              ? "bg-neutral-100 text-neutral-900"
-                              : "hover:bg-neutral-50 text-neutral-700"
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                              : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
                           )}
                         >
                           <span className="flex items-center gap-2.5">
@@ -508,14 +501,14 @@ export function AppSidebar() {
                               className={cn(
                                 "h-4 w-4",
                                 (metricsOpen || isAnyChildActive) &&
-                                  "text-neutral-900"
+                                  "text-sidebar-accent-foreground"
                               )}
                             />
                             <span className="truncate">{item.title}</span>
                           </span>
                           <ChevronDown
                             className={cn(
-                              "h-4 w-4 transition-transform text-neutral-500",
+                              "h-4 w-4 transition-transform text-muted-foreground",
                               metricsOpen ? "rotate-180" : "rotate-0"
                             )}
                           />
@@ -531,7 +524,7 @@ export function AppSidebar() {
                           )}
                         >
                           <div className="min-h-0">
-                            <ul className="my-1 ml-5 border-l border-neutral-200 pl-3 space-y-0.5">
+                            <ul className="my-1 ml-5 border-l border-sidebar-border pl-3 space-y-0.5">
                               {item.children?.map((child) => {
                                 const CIcon = child.icon;
                                 const active =
@@ -546,8 +539,8 @@ export function AppSidebar() {
                                       className={cn(
                                         "relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
                                         active
-                                          ? "bg-neutral-100 text-neutral-900"
-                                          : "hover:bg-neutral-50 text-neutral-700"
+                                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                                          : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
                                       )}
                                     >
                                       {/* Dot activo */}
@@ -561,8 +554,8 @@ export function AppSidebar() {
                                         className={cn(
                                           "h-4 w-4",
                                           active
-                                            ? "text-neutral-900"
-                                            : "text-neutral-600"
+                                            ? "text-sidebar-accent-foreground"
+                                            : "text-muted-foreground"
                                         )}
                                       />
                                       <span className="truncate">
@@ -586,10 +579,25 @@ export function AppSidebar() {
 
         {/* Footer minimal — Notion-like */}
         <Separator className="mx-3 mt-2" />
-        <div className="px-3 py-2">
-          <p className="text-[11px] text-neutral-500">
+        <div className="px-3 py-2 flex items-center justify-between">
+          <p className="text-[11px] text-muted-foreground">
             {new Date().getFullYear()} • Workspace
           </p>
+          {/*  <button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className="p-1.5 rounded-md hover:bg-sidebar-accent text-muted-foreground hover:text-sidebar-foreground transition-colors"
+            title={
+              theme === "dark"
+                ? "Cambiar a modo claro"
+                : "Cambiar a modo oscuro"
+            }
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </button> */}
         </div>
       </SidebarContent>
     </Sidebar>

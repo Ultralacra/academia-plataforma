@@ -49,42 +49,50 @@ function translateEstado(estado?: string | null) {
   const map: Record<string, { label: string; className: string }> = {
     requested: {
       label: "Solicitada",
-      className: "rounded-md bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 px-2 py-0.5 text-xs",
     },
     offered: {
       label: "Ofrecida",
-      className: "rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300 px-2 py-0.5 text-xs",
     },
     approved: {
       label: "Aprobada",
       className:
-        "rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs",
+        "rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 px-2 py-0.5 text-xs",
     },
     canceled: {
       label: "Cancelada",
-      className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300 px-2 py-0.5 text-xs",
     },
     done: {
       label: "Realizada",
-      className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300 px-2 py-0.5 text-xs",
     },
     pending: {
       label: "Pendiente",
-      className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 px-2 py-0.5 text-xs",
     },
     failed: {
       label: "Fallida",
-      className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300 px-2 py-0.5 text-xs",
     },
     solicitada: {
       label: "Solicitada",
-      className: "rounded-md bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-300 px-2 py-0.5 text-xs",
     },
   };
   return (
     map[v] || {
       label: estado || "—",
-      className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 px-2 py-0.5 text-xs",
     }
   );
 }
@@ -98,42 +106,49 @@ function badgeForStage(value?: string | null) {
     .trim();
   if (!v)
     return {
-      className: "rounded-md bg-gray-100 text-gray-500 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 px-2 py-0.5 text-xs",
       label: "—",
     } as const;
   if (v.includes("ONBOARD"))
     return {
-      className: "rounded-md bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F1"))
     return {
       className:
-        "rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs",
+        "rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F2"))
     return {
-      className: "rounded-md bg-lime-100 text-lime-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-lime-100 text-lime-800 dark:bg-lime-500/20 dark:text-lime-300 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F3"))
     return {
-      className: "rounded-md bg-cyan-100 text-cyan-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-cyan-100 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-300 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F4"))
     return {
-      className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F5"))
     return {
-      className: "rounded-md bg-purple-100 text-purple-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-300 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   return {
-    className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+    className:
+      "rounded-md bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 px-2 py-0.5 text-xs",
     label: raw,
   } as const;
 }
@@ -281,11 +296,11 @@ export default function SessionsStudentPanel({
       </div>
 
       {/* Resumen arriba de la tabla (vista del alumno) */}
-      <div className="rounded-md border bg-white p-3">
+      <div className="rounded-md border bg-card p-3">
         {loading ? (
-          <div className="text-xs text-neutral-500">Cargando…</div>
+          <div className="text-xs text-muted-foreground">Cargando…</div>
         ) : items.length === 0 ? (
-          <div className="text-xs text-neutral-500">Sin historial</div>
+          <div className="text-xs text-muted-foreground">Sin historial</div>
         ) : (
           <div className="flex flex-wrap gap-2 text-xs">
             {(() => {
@@ -321,20 +336,20 @@ export default function SessionsStudentPanel({
                   : k;
               const pillClass = (k: string) =>
                 k === "requested"
-                  ? "bg-amber-100 text-amber-800"
+                  ? "bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
                   : k === "offered"
-                  ? "bg-sky-100 text-sky-800"
+                  ? "bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-300"
                   : k === "approved"
-                  ? "bg-emerald-100 text-emerald-800"
+                  ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
                   : k === "failed"
-                  ? "bg-rose-100 text-rose-800"
+                  ? "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300"
                   : k === "pending"
-                  ? "bg-neutral-100 text-neutral-700"
+                  ? "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
                   : k === "canceled"
-                  ? "bg-rose-100 text-rose-800"
+                  ? "bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300"
                   : k === "done"
-                  ? "bg-teal-100 text-teal-800"
-                  : "bg-neutral-100 text-neutral-700";
+                  ? "bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-300"
+                  : "bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300";
               const keys = Array.from(
                 new Set([...order, ...Object.keys(counts)])
               ).filter((k) => counts[k] != null);
@@ -354,7 +369,7 @@ export default function SessionsStudentPanel({
         )}
       </div>
 
-      <Card className="border-neutral-200/70">
+      <Card className="border-border">
         <CardContent className="pt-4">
           <div className="max-h-[60vh] overflow-y-auto">
             <Table>
@@ -374,7 +389,7 @@ export default function SessionsStudentPanel({
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={`sk-${i}`}>
                       <TableCell colSpan={7}>
-                        <div className="h-6 animate-pulse rounded bg-neutral-100" />
+                        <div className="h-6 animate-pulse rounded bg-muted" />
                       </TableCell>
                     </TableRow>
                   ))
@@ -386,7 +401,10 @@ export default function SessionsStudentPanel({
                   </TableRow>
                 ) : items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-sm text-neutral-500">
+                    <TableCell
+                      colSpan={7}
+                      className="text-sm text-muted-foreground"
+                    >
                       Sin sesiones.
                     </TableCell>
                   </TableRow>
@@ -524,22 +542,22 @@ export default function SessionsStudentPanel({
             </div>
 
             {/* Historial */}
-            <div className="mt-1 rounded-md border bg-neutral-50">
-              <div className="px-3 py-2 text-xs font-medium text-neutral-700 flex items-center justify-between">
+            <div className="mt-1 rounded-md border bg-muted/50">
+              <div className="px-3 py-2 text-xs font-medium text-muted-foreground flex items-center justify-between">
                 <span>Historial de sesiones del alumno</span>
                 {historyLoading && (
-                  <span className="text-[10px] text-neutral-500">
+                  <span className="text-[10px] text-muted-foreground">
                     Cargando…
                   </span>
                 )}
               </div>
               <div className="px-3 pb-2">
                 {history.length === 0 ? (
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-muted-foreground">
                     Sin historial disponible.
                   </div>
                 ) : (
-                  <div className="max-h-32 overflow-y-auto rounded border bg-white">
+                  <div className="max-h-32 overflow-y-auto rounded border bg-card">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -678,36 +696,36 @@ export default function SessionsStudentPanel({
           {selected ? (
             <div className="grid gap-2 py-1 text-sm">
               <div>
-                <span className="text-neutral-500">Alumno:</span>{" "}
+                <span className="text-muted-foreground">Alumno:</span>{" "}
                 {studentName || studentCode}
               </div>
               <div>
-                <span className="text-neutral-500">Coach:</span>{" "}
+                <span className="text-muted-foreground">Coach:</span>{" "}
                 {coachLabelFor(selected)}
               </div>
               <div>
-                <span className="text-neutral-500">Etapa:</span>{" "}
+                <span className="text-muted-foreground">Etapa:</span>{" "}
                 {selected.etapa || studentStage || "—"}
               </div>
               <div>
-                <span className="text-neutral-500">Fecha:</span>{" "}
+                <span className="text-muted-foreground">Fecha:</span>{" "}
                 {formatDateTime(selected.fecha_programada)}
               </div>
               <div>
-                <span className="text-neutral-500">Duración:</span>{" "}
+                <span className="text-muted-foreground">Duración:</span>{" "}
                 {selected.duracion ?? 60} min
               </div>
               <div>
-                <span className="text-neutral-500">Estado:</span>{" "}
+                <span className="text-muted-foreground">Estado:</span>{" "}
                 {translateEstado(selected.estado).label}
               </div>
               <div>
-                <span className="text-neutral-500">Notas:</span>{" "}
+                <span className="text-muted-foreground">Notas:</span>{" "}
                 {selected.notas || "—"}
               </div>
             </div>
           ) : (
-            <div className="text-sm text-neutral-500">
+            <div className="text-sm text-muted-foreground">
               Selecciona una sesión…
             </div>
           )}
@@ -742,28 +760,28 @@ export default function SessionsStudentPanel({
             <DialogTitle>Confirmar aceptación</DialogTitle>
           </DialogHeader>
           {selected ? (
-            <div className="text-sm text-neutral-700 space-y-1">
+            <div className="text-sm text-foreground space-y-1">
               <div>
                 ¿Deseas aceptar esta sesión con el coach{" "}
                 <strong>{coachLabelFor(selected)}</strong>?
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
                 <div>
-                  <span className="text-neutral-500">Fecha:</span>{" "}
+                  <span className="text-muted-foreground">Fecha:</span>{" "}
                   {formatDateTime(selected.fecha_programada)}
                 </div>
                 <div>
-                  <span className="text-neutral-500">Duración:</span>{" "}
+                  <span className="text-muted-foreground">Duración:</span>{" "}
                   {selected.duracion ?? 60} min
                 </div>
                 <div className="col-span-2">
-                  <span className="text-neutral-500">Etapa:</span>{" "}
+                  <span className="text-muted-foreground">Etapa:</span>{" "}
                   {selected.etapa || studentStage || "—"}
                 </div>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-neutral-700">
+            <div className="text-sm text-foreground">
               ¿Deseas aceptar esta sesión?
             </div>
           )}
@@ -807,28 +825,28 @@ export default function SessionsStudentPanel({
             <DialogTitle>Confirmar cancelación</DialogTitle>
           </DialogHeader>
           {selected ? (
-            <div className="text-sm text-neutral-700 space-y-1">
+            <div className="text-sm text-foreground space-y-1">
               <div>
                 ¿Deseas cancelar esta sesión con el coach{" "}
                 <strong>{coachLabelFor(selected)}</strong>?
               </div>
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
                 <div>
-                  <span className="text-neutral-500">Fecha:</span>{" "}
+                  <span className="text-muted-foreground">Fecha:</span>{" "}
                   {formatDateTime(selected.fecha_programada)}
                 </div>
                 <div>
-                  <span className="text-neutral-500">Duración:</span>{" "}
+                  <span className="text-muted-foreground">Duración:</span>{" "}
                   {selected.duracion ?? 60} min
                 </div>
                 <div className="col-span-2">
-                  <span className="text-neutral-500">Etapa:</span>{" "}
+                  <span className="text-muted-foreground">Etapa:</span>{" "}
                   {selected.etapa || studentStage || "—"}
                 </div>
               </div>
             </div>
           ) : (
-            <div className="text-sm text-neutral-700">
+            <div className="text-sm text-foreground">
               ¿Deseas cancelar esta sesión?
             </div>
           )}

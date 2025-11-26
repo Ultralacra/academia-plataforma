@@ -3222,7 +3222,7 @@ export default function ChatRealtime({
   return (
     <>
       <div
-        className={`${containerBase} ${className ?? ""}`}
+        className={`${containerBase} chat-root ${className ?? ""}`}
         style={useFullscreen ? { height: "100%" } : undefined}
       >
         <div

@@ -463,24 +463,26 @@ export default function StudentCoachChatPanel({
   // Render
   return (
     <div
-      className={`rounded-xl border border-gray-200 bg-white overflow-hidden ${
+      className={`rounded-xl border border-border bg-card overflow-hidden ${
         fullHeight ? "h-full flex flex-col" : ""
       }`}
     >
-      <div className="px-4 py-3 border-b bg-white">
-        <h3 className="text-sm font-semibold text-gray-900">Chat del alumno</h3>
-        <p className="text-xs text-gray-500">
+      <div className="px-4 py-3 border-b border-border bg-card">
+        <h3 className="text-sm font-semibold text-foreground">
+          Chat del alumno
+        </h3>
+        <p className="text-xs text-muted-foreground">
           El alumno chatea solo con sus coaches asignados de Atención al Cliente
         </p>
         {selectedCoach && (
           <div className="mt-1">
             <Badge
               variant="secondary"
-              className="h-5 px-2 text-[10px] font-medium bg-gray-100 text-gray-700 border-gray-200"
+              className="h-5 px-2 text-[10px] font-medium bg-muted text-muted-foreground border-border"
               title="Soporte · Atención al Cliente"
             >
               Soporte X Academy
-              <span className="ml-1 text-[10px] text-gray-500">
+              <span className="ml-1 text-[10px] text-muted-foreground">
                 · Atención al Cliente
               </span>
             </Badge>
@@ -493,10 +495,12 @@ export default function StudentCoachChatPanel({
         } relative`}
       >
         {isLoadingChats && (
-          <div className="absolute inset-0 z-50 bg-white flex items-center justify-center">
+          <div className="absolute inset-0 z-50 bg-background/80 flex items-center justify-center">
             <div className="flex flex-col items-center gap-2">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              <p className="text-sm text-gray-500">Cargando conversación...</p>
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">
+                Cargando conversación...
+              </p>
             </div>
           </div>
         )}
@@ -507,7 +511,7 @@ export default function StudentCoachChatPanel({
               studentChats.length > 0 || isLoadingChats
                 ? "hidden"
                 : "col-span-3"
-            } overflow-auto border rounded p-3 bg-white space-y-3`}
+            } overflow-auto border border-border rounded p-3 bg-card space-y-3`}
           >
             {/* Buscador */}
             <div className="flex items-center gap-2">
@@ -516,9 +520,9 @@ export default function StudentCoachChatPanel({
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
                   placeholder="Buscar coach por nombre, código, área, cargo…"
-                  className="pl-9"
+                  className="pl-9 bg-background border-border"
                 />
-                <Search className="w-4 h-4 text-gray-500 absolute left-3 top-2.5" />
+                <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
               </div>
               <Button
                 variant="outline"
@@ -534,13 +538,15 @@ export default function StudentCoachChatPanel({
               </Button>
             </div>
             {/* Filtros simplificados: área fija Atención al Cliente, dejamos solo búsqueda */}
-            <div className="text-[11px] text-neutral-500">
+            <div className="text-[11px] text-muted-foreground">
               Área: Atención al Cliente
             </div>
 
             {/* Coaches */}
             <div className="min-h-0">
-              <div className="text-sm font-semibold mb-2">Coaches</div>
+              <div className="text-sm font-semibold mb-2 text-foreground">
+                Coaches
+              </div>
               <ul className="space-y-1 text-sm max-h-[28vh] overflow-auto pr-1">
                 {filteredCoaches.map((t) => {
                   const selected =
@@ -552,8 +558,8 @@ export default function StudentCoachChatPanel({
                   return (
                     <li key={String(t.id)}>
                       <button
-                        className={`w-full text-left rounded hover:bg-gray-50 ${
-                          selected ? "bg-sky-50" : ""
+                        className={`w-full text-left rounded hover:bg-muted/50 ${
+                          selected ? "bg-primary/10" : ""
                         }`}
                         title={subtitle}
                         onClick={() => {
@@ -575,11 +581,11 @@ export default function StudentCoachChatPanel({
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0 flex-1">
-                            <div className="truncate font-medium">
+                            <div className="truncate font-medium text-foreground">
                               Soporte X Academy
                             </div>
                             {subtitle && (
-                              <div className="text-[11px] text-neutral-500 truncate">
+                              <div className="text-[11px] text-muted-foreground truncate">
                                 {subtitle}
                               </div>
                             )}
@@ -593,9 +599,11 @@ export default function StudentCoachChatPanel({
             </div>
 
             {/* Mis conversaciones como alumno */}
-            <div className="pt-2 border-t">
+            <div className="pt-2 border-t border-border">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-semibold">Mis conversaciones</div>
+                <div className="text-sm font-semibold text-foreground">
+                  Mis conversaciones
+                </div>
                 <Button
                   variant="outline"
                   size="icon"
@@ -608,7 +616,9 @@ export default function StudentCoachChatPanel({
               </div>
               <ul className="space-y-1 text-sm max-h-[24vh] overflow-auto pr-1">
                 {studentChats.length === 0 && (
-                  <li className="text-xs text-gray-500">Sin conversaciones</li>
+                  <li className="text-xs text-muted-foreground">
+                    Sin conversaciones
+                  </li>
                 )}
                 {studentChats.map((it) => {
                   const id = it?.id_chat ?? it?.id;
@@ -658,8 +668,8 @@ export default function StudentCoachChatPanel({
                   return (
                     <li key={String(id)}>
                       <button
-                        className={`w-full text-left rounded hover:bg-gray-50 ${
-                          count > 0 && !isOpen ? "bg-emerald-50" : ""
+                        className={`w-full text-left rounded hover:bg-muted/50 ${
+                          count > 0 && !isOpen ? "bg-emerald-900/20" : ""
                         }`}
                         onClick={() => {
                           try {
@@ -700,15 +710,15 @@ export default function StudentCoachChatPanel({
                           </Avatar>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-3">
-                              <span className="truncate font-medium">
+                              <span className="truncate font-medium text-foreground">
                                 {title}
                               </span>
-                              <span className="text-[11px] text-neutral-500 flex-shrink-0">
+                              <span className="text-[11px] text-muted-foreground flex-shrink-0">
                                 {formatListTime(lastAt)}
                               </span>
                             </div>
                             {(areaPuesto || last) && (
-                              <div className="text-[11px] text-neutral-600 truncate">
+                              <div className="text-[11px] text-muted-foreground truncate">
                                 {areaPuesto || last}
                               </div>
                             )}

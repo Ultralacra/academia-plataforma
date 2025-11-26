@@ -18,18 +18,14 @@ export default function Spinner({
       <div
         aria-label={label || "Cargando"}
         role="status"
-        className="rounded-full border-gray-300 dark:border-gray-700 border-t-blue-600 dark:border-t-blue-400 animate-spin"
+        className="rounded-full border-muted border-t-primary animate-spin"
         style={{
           width: s,
           height: s,
           borderWidth: border,
         }}
       />
-      {label && (
-        <span className="text-xs text-gray-600 dark:text-gray-300">
-          {label}
-        </span>
-      )}
+      {label && <span className="text-xs text-muted-foreground">{label}</span>}
     </div>
   );
 }

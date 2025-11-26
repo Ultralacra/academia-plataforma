@@ -50,7 +50,7 @@ export default function Header({
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div className="flex items-start gap-4">
-        <div className="flex h-14 w-14 flex-none items-center justify-center rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 ring-1 ring-black/5 dark:from-blue-950/30 dark:to-indigo-950/30 dark:ring-white/10">
+        <div className="flex h-14 w-14 flex-none items-center justify-center rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 ring-1 ring-black/5 dark:from-blue-500/20 dark:to-indigo-500/20 dark:ring-white/10">
           <User className="h-6 w-6 text-blue-600 dark:text-blue-400" />
         </div>
         <div className="min-w-0 flex-1">

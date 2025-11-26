@@ -520,14 +520,14 @@ export default function AdsMetricsForm({
                                 href={a.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-xs text-blue-600 hover:underline"
+                                className="text-xs text-primary hover:underline"
                                 title={a.url}
                               >
                                 {a.name || a.url}
                               </a>
                               <button
                                 type="button"
-                                className="text-[11px] text-muted-foreground hover:text-red-600"
+                                className="text-[11px] text-muted-foreground hover:text-destructive"
                                 onClick={() => removeSavedAttachment(a.id)}
                               >
                                 Quitar
@@ -566,13 +566,13 @@ export default function AdsMetricsForm({
                                 href={f.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-blue-600 hover:underline"
+                                className="text-primary hover:underline"
                               >
                                 Ver
                               </a>
                               <button
                                 type="button"
-                                className="hover:text-red-600"
+                                className="hover:text-destructive"
                                 onClick={() => removeSessionFile(f.id)}
                               >
                                 Quitar
@@ -944,7 +944,7 @@ export default function AdsMetricsForm({
                   .map(([k, v]) => (
                     <span
                       key={k}
-                      className="inline-flex items-center rounded bg-neutral-100 px-2 py-1 text-xs"
+                      className="inline-flex items-center rounded bg-muted px-2 py-1 text-xs"
                     >
                       {k}: {fmtNum(v)}
                     </span>
@@ -968,9 +968,7 @@ export default function AdsMetricsForm({
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                    data.pauta_activa
-                      ? "border-neutral-300"
-                      : "border-neutral-200"
+                    data.pauta_activa ? "border-border" : "border-border"
                   }`}
                 >
                   {data.pauta_activa ? "Pauta activa" : "Pauta inactiva"}
@@ -978,15 +976,15 @@ export default function AdsMetricsForm({
                 <span
                   className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
                     data.requiere_interv
-                      ? "bg-rose-100 text-rose-700"
-                      : "bg-neutral-100 text-neutral-700"
+                      ? "bg-rose-900/20 text-rose-300"
+                      : "bg-muted text-muted-foreground"
                   }`}
                 >
                   {data.requiere_interv
                     ? "Requiere intervención"
                     : "Sin intervención"}
                 </span>
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs border-neutral-300">
+                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs border-border">
                   {data.fase || "Sin fase"}
                 </span>
               </div>

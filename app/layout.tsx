@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { SseNotificationsProvider } from "@/components/hooks/useSseNotifications";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export const metadata: Metadata = {
   title: "Academia X",
@@ -32,13 +33,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
+    <html lang="es" suppressHydrationWarning>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        <SseNotificationsProvider>
-          <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
-        </SseNotificationsProvider>
-        <Toaster />
-        <Analytics />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="light"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <SseNotificationsProvider>
+            <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
+          </SseNotificationsProvider>
+          <Toaster />
+          <Analytics />
+        </ThemeProvider>
       </body>
     </html>
   );

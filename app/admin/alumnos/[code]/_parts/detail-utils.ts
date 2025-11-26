@@ -135,29 +135,29 @@ export function buildLifecycleFor(s: StudentItem, p: Phases, today = new Date())
 /* ===== Status pill (único con color) ===== */
 export const STATUS_CLASSES: Record<StatusSint, string> = {
   EN_CURSO:
-    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900",
-  COMPLETADO: "bg-emerald-600 text-white dark:bg-emerald-500",
-  ABANDONO: "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900",
+    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-500/40",
+  COMPLETADO: "bg-emerald-600 text-white dark:bg-emerald-600 dark:text-white",
+  ABANDONO: "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/40",
   PAUSA:
-    "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900",
+    "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40",
 }
 
 /* ===== Badge classes para opciones de API (estado/etapa/nicho) ===== */
 export const OPTION_STATE_CLASSES: Record<string, string> = {
-  ACTIVO: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-  INACTIVO: "bg-slate-50 text-slate-700 ring-1 ring-slate-200",
-  INACTIVO_POR_PAGO: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
-  MEMBRESIA: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-  PAUSADO: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
+  ACTIVO: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-500/40",
+  INACTIVO: "bg-slate-50 text-slate-700 ring-1 ring-slate-200 dark:bg-slate-500/20 dark:text-slate-300 dark:ring-slate-500/40",
+  INACTIVO_POR_PAGO: "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/40",
+  MEMBRESIA: "bg-blue-50 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:ring-blue-500/40",
+  PAUSADO: "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40",
 };
 
 export const STAGE_CLASSES: Record<string, string> = {
-  ONBOARDING: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200",
-  F1: "bg-blue-50 text-blue-700 ring-1 ring-blue-200",
-  F2: "bg-teal-50 text-teal-700 ring-1 ring-teal-200",
-  F3: "bg-violet-50 text-violet-700 ring-1 ring-violet-200",
-  F4: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
-  F5: "bg-emerald-600 text-white",
+  ONBOARDING: "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200 dark:bg-indigo-500/20 dark:text-indigo-300 dark:ring-indigo-500/40",
+  F1: "bg-blue-50 text-blue-700 ring-1 ring-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:ring-blue-500/40",
+  F2: "bg-teal-50 text-teal-700 ring-1 ring-teal-200 dark:bg-teal-500/20 dark:text-teal-300 dark:ring-teal-500/40",
+  F3: "bg-violet-50 text-violet-700 ring-1 ring-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:ring-violet-500/40",
+  F4: "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/40",
+  F5: "bg-emerald-600 text-white dark:bg-emerald-600 dark:text-white",
 };
 
 export function getOptionBadgeClass(group: "estado" | "etapa" | "nicho" | "status_sint", key?: string) {

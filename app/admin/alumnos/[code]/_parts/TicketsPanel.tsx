@@ -114,11 +114,11 @@ const STATUS_LABEL: Record<StatusKey, string> = {
 
 const STATUS_STYLE: Record<StatusKey, string> = {
   PENDIENTE:
-    "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20",
+    "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/20 dark:text-blue-300 dark:border-blue-500/40",
   PAUSADO:
-    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20",
+    "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/40",
   RESUELTO:
-    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20",
+    "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/40",
 };
 
 function coerceStatus(raw?: string | null): StatusKey {
@@ -690,36 +690,36 @@ export default function TicketsPanel({
 
   return (
     <>
-      <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-4">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div className="border-b border-border bg-muted/50 px-6 py-4">
           <div className="flex flex-col gap-4">
             {/* Date filters */}
             <div className="flex flex-wrap items-center gap-3">
-              <label className="text-sm font-medium text-slate-700">
+              <label className="text-sm font-medium text-muted-foreground">
                 Desde:
               </label>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
               />
-              <label className="text-sm font-medium text-slate-700">
+              <label className="text-sm font-medium text-muted-foreground">
                 Hasta:
               </label>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="rounded-md border border-slate-200 px-3 py-1.5 text-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100"
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
             {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <TicketIcon className="h-5 w-5 text-slate-600" />
-                <h3 className="text-lg font-semibold text-slate-900">
+                <TicketIcon className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold text-foreground">
                   Tickets del alumno
                 </h3>
               </div>
@@ -738,8 +738,8 @@ export default function TicketsPanel({
                 onClick={() => setStatus("ALL")}
                 className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
                   status === "ALL"
-                    ? "bg-slate-900 text-white shadow-sm"
-                    : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-card text-muted-foreground hover:bg-muted border border-border"
                 }`}
               >
                 <span className="font-semibold">{allFull.length}</span>
@@ -754,8 +754,8 @@ export default function TicketsPanel({
                     onClick={() => setStatus(k)}
                     className={`inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
                       status === k
-                        ? "bg-slate-900 text-white shadow-sm"
-                        : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "bg-card text-muted-foreground hover:bg-muted border border-border"
                     }`}
                   >
                     <span className="font-semibold">{count}</span>
@@ -767,9 +767,9 @@ export default function TicketsPanel({
 
             {/* Search */}
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-10 border-slate-200 bg-white"
+                className="pl-10 border-input bg-background"
                 placeholder="Buscar por asunto o tipo..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
@@ -780,12 +780,12 @@ export default function TicketsPanel({
 
         <div className="p-6">
           {loading ? (
-            <div className="flex items-center justify-center py-16 text-slate-500">
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Cargando tickets...
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-16 text-center text-sm text-slate-500">
+            <div className="py-16 text-center text-sm text-muted-foreground">
               No hay tickets en este filtro
             </div>
           ) : (
@@ -798,7 +798,7 @@ export default function TicketsPanel({
                   return (
                     <div
                       key={col}
-                      className="min-h-[200px] rounded-lg border border-slate-200 bg-slate-50/50 p-4"
+                      className="min-h-[200px] rounded-lg border border-border bg-muted/50 p-4"
                     >
                       <div className="mb-4 flex items-center justify-between">
                         <Badge
@@ -807,7 +807,7 @@ export default function TicketsPanel({
                         >
                           {STATUS_LABEL[col]}
                         </Badge>
-                        <span className="text-sm font-medium text-slate-500">
+                        <span className="text-sm font-medium text-muted-foreground">
                           {itemsForCol.length}
                         </span>
                       </div>
@@ -817,13 +817,13 @@ export default function TicketsPanel({
                           <div
                             key={t.id}
                             onClick={() => openTicketDetail(t)}
-                            className="group cursor-pointer rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:shadow-md hover:border-slate-300"
+                            className="group cursor-pointer rounded-lg border border-border bg-card p-4 shadow-sm transition-all hover:shadow-md hover:border-primary/50"
                           >
                             <div className="space-y-3">
-                              <div className="font-medium text-slate-900 leading-snug">
+                              <div className="font-medium text-foreground leading-snug">
                                 {t.nombre ?? "Ticket"}
                               </div>
-                              <div className="flex flex-wrap gap-2 text-xs text-slate-500">
+                              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                                 {t.tipo && (
                                   <div className="flex items-center gap-1">
                                     <TicketIcon className="h-3 w-3" />
@@ -845,7 +845,7 @@ export default function TicketsPanel({
                               </div>
                               <div className="flex items-center justify-between">
                                 <button
-                                  className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
+                                  className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     openFilesFor(
@@ -857,7 +857,7 @@ export default function TicketsPanel({
                                   type="button"
                                 >
                                   <FileIcon className="h-3.5 w-3.5" />
-                                  <span className="underline decoration-slate-300 hover:decoration-slate-900">
+                                  <span className="underline decoration-muted hover:decoration-foreground">
                                     Ver archivos
                                   </span>
                                 </button>
@@ -880,11 +880,11 @@ export default function TicketsPanel({
           <DrawerHeader className="border-b pb-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
-                <DrawerTitle className="text-lg font-semibold text-slate-900">
+                <DrawerTitle className="text-lg font-semibold text-foreground">
                   {selectedTicket?.nombre || "Detalle del ticket"}
                 </DrawerTitle>
                 {selectedTicket?.creacion && (
-                  <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
+                  <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="h-4 w-4" />
                     <span>Creado el {fmtDate(selectedTicket.creacion)}</span>
                   </div>
@@ -911,14 +911,14 @@ export default function TicketsPanel({
           <div className="flex-1 overflow-y-auto">
             {/* Tabs pequeña en el drawer */}
             <div className="px-6 pt-4">
-              <div className="inline-flex items-center rounded-md border bg-white overflow-hidden">
+              <div className="inline-flex items-center rounded-md border bg-card overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setDetailTab("general")}
                   className={`px-3 py-1.5 text-xs ${
                     detailTab === "general"
-                      ? "bg-slate-900 text-white"
-                      : "hover:bg-gray-50"
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted/50"
                   }`}
                   title="Información general"
                 >
@@ -929,8 +929,8 @@ export default function TicketsPanel({
                   onClick={() => setDetailTab("detalle")}
                   className={`px-3 py-1.5 text-xs border-l ${
                     detailTab === "detalle"
-                      ? "bg-slate-900 text-white"
-                      : "hover:bg-gray-50"
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-muted/50"
                   }`}
                   title="Detalle del ticket (API)"
                 >
@@ -943,10 +943,10 @@ export default function TicketsPanel({
               <div className="p-6 space-y-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium text-slate-500">
+                    <Label className="text-sm font-medium text-muted-foreground">
                       Título del ticket
                     </Label>
-                    <p className="text-base text-slate-900">
+                    <p className="text-base text-foreground">
                       {selectedTicket?.nombre || "—"}
                     </p>
                   </div>
@@ -956,23 +956,23 @@ export default function TicketsPanel({
 
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 text-sm font-medium">
-                    <User className="h-4 w-4 text-slate-500" />
+                    <User className="h-4 w-4 text-muted-foreground" />
                     Personas involucradas
                   </div>
                   <div className="space-y-4">
                     <div className="space-y-2">
-                      <Label className="text-sm text-slate-500">
+                      <Label className="text-sm text-muted-foreground">
                         Informante
                       </Label>
-                      <p className="text-base text-slate-900">
+                      <p className="text-base text-foreground">
                         {(selectedTicket as any)?.informante || "—"}
                       </p>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-sm text-slate-500">
+                      <Label className="text-sm text-muted-foreground">
                         Resuelto por
                       </Label>
-                      <p className="text-base text-slate-900">
+                      <p className="text-base text-foreground">
                         {(selectedTicket as any)?.resuelto_por || "—"}
                       </p>
                     </div>
@@ -985,7 +985,7 @@ export default function TicketsPanel({
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm font-medium">
-                      <Paperclip className="h-4 w-4 text-slate-500" />
+                      <Paperclip className="h-4 w-4 text-muted-foreground" />
                       Archivos adjuntos
                     </div>
                     {selectedTicket && (
@@ -1006,7 +1006,7 @@ export default function TicketsPanel({
                   </div>
 
                   {selectedTicket && (
-                    <div className="rounded-lg bg-slate-50 p-4 text-sm text-slate-600">
+                    <div className="rounded-lg bg-muted/50 p-4 text-sm text-muted-foreground">
                       <p>
                         Haz clic en "Ver todos" para ver los archivos adjuntos a
                         este ticket.
@@ -1022,24 +1022,24 @@ export default function TicketsPanel({
             <div className={detailTab === "detalle" ? "block" : "hidden"}>
               <div className="p-6 space-y-6">
                 {ticketDetailLoading ? (
-                  <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+                  <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
                     Cargando detalle…
                   </div>
                 ) : ticketDetailError ? (
-                  <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  <div className="rounded-md border border-red-200 dark:border-red-900/30 bg-red-50 dark:bg-red-900/30 p-3 text-sm text-red-800 dark:text-red-200">
                     {ticketDetailError}
                   </div>
                 ) : ticketDetail ? (
                   <>
                     {/* Header resumido */}
-                    <div className="rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="rounded-lg border border-border bg-card p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div className="text-base font-semibold text-slate-900">
+                          <div className="text-base font-semibold text-foreground">
                             {ticketDetail?.nombre || "Ticket"}
                           </div>
                           {ticketDetail?.codigo && (
-                            <div className="text-xs text-slate-500 break-all">
+                            <div className="text-xs text-muted-foreground break-all">
                               Código: {ticketDetail.codigo}
                             </div>
                           )}
@@ -1060,27 +1060,33 @@ export default function TicketsPanel({
                           </span>
                         )}
                       </div>
-                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-muted-foreground">
                         <div className="space-y-1">
-                          <div className="text-slate-500 text-xs">Alumno</div>
-                          <div className="font-medium break-all">
+                          <div className="text-muted-foreground text-xs">
+                            Alumno
+                          </div>
+                          <div className="font-medium break-all text-foreground">
                             {ticketDetail?.alumno_nombre || student.name || "—"}
                           </div>
                           {ticketDetail?.id_alumno && (
-                            <div className="text-xs text-slate-500 break-all">
+                            <div className="text-xs text-muted-foreground break-all">
                               ID: {ticketDetail.id_alumno}
                             </div>
                           )}
                         </div>
                         <div className="space-y-1">
-                          <div className="text-slate-500 text-xs">Tipo</div>
-                          <div className="font-medium">
+                          <div className="text-muted-foreground text-xs">
+                            Tipo
+                          </div>
+                          <div className="font-medium text-foreground">
                             {ticketDetail?.tipo || selectedTicket?.tipo || "—"}
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <div className="text-slate-500 text-xs">Creado</div>
-                          <div>
+                          <div className="text-muted-foreground text-xs">
+                            Creado
+                          </div>
+                          <div className="text-foreground">
                             {ticketDetail?.created_at
                               ? new Date(
                                   ticketDetail.created_at
@@ -1089,8 +1095,10 @@ export default function TicketsPanel({
                           </div>
                         </div>
                         <div className="space-y-1">
-                          <div className="text-slate-500 text-xs">Deadline</div>
-                          <div>
+                          <div className="text-muted-foreground text-xs">
+                            Deadline
+                          </div>
+                          <div className="text-foreground">
                             {ticketDetail?.deadline
                               ? new Date(ticketDetail.deadline).toLocaleString(
                                   "es-ES"
@@ -1100,17 +1108,21 @@ export default function TicketsPanel({
                         </div>
                         {ticketDetail?.plazo && (
                           <div className="space-y-1">
-                            <div className="text-slate-500 text-xs">Plazo</div>
-                            <div>{String(ticketDetail.plazo)}</div>
+                            <div className="text-muted-foreground text-xs">
+                              Plazo
+                            </div>
+                            <div className="text-foreground">
+                              {String(ticketDetail.plazo)}
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
 
                     {/* Descripción y links */}
-                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                    <div className="rounded-lg border border-border bg-card p-4 space-y-2">
                       <div className="text-sm font-medium">Descripción</div>
-                      <div className="whitespace-pre-wrap text-sm text-slate-800">
+                      <div className="whitespace-pre-wrap text-sm text-foreground">
                         {ticketDetail?.descripcion || "—"}
                       </div>
                       {(() => {
@@ -1140,7 +1152,7 @@ export default function TicketsPanel({
                                   href={normalizeUrl(u)}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="text-sky-600 underline break-all text-sm"
+                                  className="text-primary underline break-all text-sm"
                                 >
                                   {u}
                                 </a>
@@ -1154,7 +1166,7 @@ export default function TicketsPanel({
                     {/* Coaches */}
                     {Array.isArray(ticketDetail?.coaches) &&
                       ticketDetail.coaches.length > 0 && (
-                        <div className="rounded-lg border border-slate-200 bg-white p-4">
+                        <div className="rounded-lg border border-border bg-card p-4">
                           <div className="text-sm font-medium mb-2">
                             Coaches
                           </div>
@@ -1162,7 +1174,7 @@ export default function TicketsPanel({
                             {ticketDetail.coaches.map((c: any, idx: number) => (
                               <span
                                 key={`${c.codigo_equipo ?? c.nombre ?? idx}`}
-                                className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                                className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground"
                                 title={`${c.nombre ?? "Coach"}${
                                   c.area ? ` · ${c.area}` : ""
                                 }${c.puesto ? ` · ${c.puesto}` : ""}`}
@@ -1178,10 +1190,10 @@ export default function TicketsPanel({
                       )}
 
                     {/* Estados */}
-                    <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
+                    <div className="rounded-lg border border-border bg-card p-4 space-y-2">
                       <div className="text-sm font-medium">Estados</div>
                       {ticketDetail?.ultimo_estado?.estatus && (
-                        <div className="text-xs text-slate-600">
+                        <div className="text-xs text-muted-foreground">
                           Último:{" "}
                           {
                             STATUS_LABEL[
@@ -1204,7 +1216,7 @@ export default function TicketsPanel({
                           {ticketDetail.estados.map((e: any) => (
                             <div
                               key={e.id}
-                              className="flex items-center gap-2 text-xs text-slate-700"
+                              className="flex items-center gap-2 text-xs text-muted-foreground"
                             >
                               <span
                                 className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
@@ -1220,14 +1232,14 @@ export default function TicketsPanel({
                           ))}
                         </div>
                       ) : (
-                        <div className="text-xs text-slate-500">
+                        <div className="text-xs text-muted-foreground">
                           Sin historial
                         </div>
                       )}
                     </div>
                   </>
                 ) : (
-                  <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+                  <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
                     Sin datos de detalle
                   </div>
                 )}
@@ -1260,12 +1272,12 @@ export default function TicketsPanel({
             <DialogTitle>Archivos adjuntos</DialogTitle>
           </DialogHeader>
           {filesLoading ? (
-            <div className="flex items-center justify-center py-12 text-slate-500">
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando
               archivos...
             </div>
           ) : files.length === 0 ? (
-            <div className="py-12 text-center text-sm text-slate-500">
+            <div className="py-12 text-center text-sm text-muted-foreground">
               Sin archivos adjuntos
             </div>
           ) : (
@@ -1274,9 +1286,9 @@ export default function TicketsPanel({
                 {files.map((f) => (
                   <div
                     key={f.id}
-                    className="group rounded-lg border border-slate-200 bg-white p-3 transition-all hover:shadow-md"
+                    className="group rounded-lg border border-border bg-card p-3 transition-all hover:shadow-md"
                   >
-                    <div className="mx-auto flex aspect-square w-full items-center justify-center overflow-hidden rounded-md bg-slate-50">
+                    <div className="mx-auto flex aspect-square w-full items-center justify-center overflow-hidden rounded-md bg-muted/50">
                       {(() => {
                         const m = f.mime_type || mimeFromName(f.nombre_archivo);
                         if (m?.startsWith("image/")) {
@@ -1288,7 +1300,7 @@ export default function TicketsPanel({
                               className="h-full w-full object-cover"
                             />
                           ) : (
-                            <FileImage className="h-10 w-10 text-slate-400" />
+                            <FileImage className="h-10 w-10 text-muted-foreground" />
                           );
                         }
                         return iconFor(m, f.nombre_archivo);
@@ -1298,7 +1310,7 @@ export default function TicketsPanel({
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <div
-                            className="truncate text-sm font-medium text-slate-900"
+                            className="truncate text-sm font-medium text-foreground"
                             title={f.nombre_archivo}
                           >
                             {shortenFileName(f.nombre_archivo, 20)}
@@ -1311,7 +1323,7 @@ export default function TicketsPanel({
                           {f.nombre_archivo}
                         </TooltipContent>
                       </Tooltip>
-                      <div className="text-xs text-slate-500">
+                      <div className="text-xs text-muted-foreground">
                         {f.tamano_bytes
                           ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
                           : ""}
@@ -1406,12 +1418,12 @@ export default function TicketsPanel({
             </DialogTitle>
           </DialogHeader>
           {previewLoading ? (
-            <div className="flex items-center justify-center py-16 text-slate-500">
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Cargando
               previsualización...
             </div>
           ) : previewFile?.url ? (
-            <div className="max-h-[70vh] overflow-auto rounded-lg border bg-slate-50 p-4">
+            <div className="max-h-[70vh] overflow-auto rounded-lg border bg-muted/50 p-4">
               {(() => {
                 const m =
                   previewFile?.mime_type ||
@@ -1459,7 +1471,7 @@ export default function TicketsPanel({
                   );
                 }
                 return (
-                  <div className="py-16 text-center text-sm text-slate-500">
+                  <div className="py-16 text-center text-sm text-muted-foreground">
                     No se puede previsualizar este tipo de archivo. Descárgalo
                     para verlo.
                   </div>
@@ -1467,7 +1479,7 @@ export default function TicketsPanel({
               })()}
             </div>
           ) : (
-            <div className="py-16 text-center text-sm text-slate-500">
+            <div className="py-16 text-center text-sm text-muted-foreground">
               No hay previsualización disponible.
             </div>
           )}

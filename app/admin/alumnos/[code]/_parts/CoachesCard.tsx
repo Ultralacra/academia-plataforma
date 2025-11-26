@@ -42,8 +42,8 @@ export default function CoachesCard({
   const list = coaches;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-blue-100 bg-white">
-      <div className="flex items-center justify-between gap-2 border-b border-blue-100 bg-blue-50/70 px-4 py-3">
+    <div className="overflow-hidden rounded-xl border border-blue-100 dark:border-blue-500/20 bg-card">
+      <div className="flex items-center justify-between gap-2 border-b border-blue-100 dark:border-blue-500/20 bg-blue-50/70 dark:bg-blue-500/10 px-4 py-3">
         <div className="flex items-center gap-2">
           <Users className="h-4 w-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold">Equipo asignado</h3>
@@ -65,7 +65,7 @@ export default function CoachesCard({
 
       <div className="space-y-2 p-3">
         {list.length === 0 && (
-          <div className="flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          <div className="flex items-center justify-between rounded-md border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-300">
             <div>Sin coach</div>
             {canManage && (
               <button
@@ -83,11 +83,11 @@ export default function CoachesCard({
         {list.map((c, idx) => (
           <div
             key={`${c.name}-${idx}`}
-            className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-white p-3 transition-colors hover:bg-blue-50/40"
+            className="flex items-center justify-between gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted/50"
           >
             <div className="flex min-w-0 flex-1 items-center gap-3">
               {/* Avatar */}
-              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 text-sm font-medium text-blue-700 ring-1 ring-blue-200">
+              <div className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-500/20 dark:to-indigo-500/20 text-sm font-medium text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-500/40">
                 {(c.name ?? "?")[0]}
               </div>
               <div className="min-w-0 flex-1">
@@ -149,7 +149,7 @@ export default function CoachesCard({
                     setConfirmTarget({ id: coachId, name: c.name });
                     setConfirmOpen(true);
                   }}
-                  className="flex-none rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                  className="flex-none rounded-md border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/20"
                 >
                   Desvincular
                 </button>

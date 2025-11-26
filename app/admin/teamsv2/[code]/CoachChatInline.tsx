@@ -3054,7 +3054,9 @@ export default function CoachChatInline({
 
   return (
     <>
-      <div className={`flex flex-col w-full min-h-0 ${className || ""}`}>
+      <div
+        className={`flex flex-col w-full min-h-0 chat-root ${className || ""}`}
+      >
         <div className="flex items-center justify-between px-4 py-3 bg-[#075E54] text-white">
           <div className="flex items-center gap-3 min-w-0">
             <div className="h-10 w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
