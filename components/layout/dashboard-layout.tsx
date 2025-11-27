@@ -29,6 +29,7 @@ import Spinner from "@/components/ui/spinner";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
+  contentClassName?: string; // optional override for content padding/margins
 }
 
 function NotificationsBadge() {
@@ -200,7 +201,10 @@ function NotificationsBadge() {
   );
 }
 
-export function DashboardLayout({ children }: DashboardLayoutProps) {
+export function DashboardLayout({
+  children,
+  contentClassName,
+}: DashboardLayoutProps) {
   const { user, logout, isLoading } = useAuth();
 
   const MenuToggleButton = () => {
@@ -276,7 +280,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               </AlertDialog>
             </div>
           </header>
-          <div className="flex-1 p-6 overflow-x-hidden overflow-y-auto min-h-0 flex flex-col">
+          <div
+            className={`flex-1 ${
+              contentClassName ?? "p-6"
+            } overflow-x-hidden overflow-y-auto min-h-0 flex flex-col`}
+          >
             {children}
           </div>
         </main>

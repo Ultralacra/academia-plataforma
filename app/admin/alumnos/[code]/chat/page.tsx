@@ -11,8 +11,8 @@ export default function StudentChatFullPage() {
 
   return (
     <ProtectedRoute allowedRoles={["admin", "coach", "student", "equipo"]}>
-      <DashboardLayout>
-        <div className="mt-2 h-[calc(100vh-140px)]">
+      <DashboardLayout contentClassName="p-0">
+        <div className="h-[100dvh]">
           <ChatPanel code={code} fullHeight />
         </div>
       </DashboardLayout>

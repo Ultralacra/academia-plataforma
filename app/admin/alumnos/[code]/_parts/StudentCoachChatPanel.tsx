@@ -504,13 +504,13 @@ export default function StudentCoachChatPanel({
             </div>
           </div>
         )}
-        <div className="grid grid-cols-12 gap-3 h-full min-h-0">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 h-full min-h-0">
           {/* Sidebar: filtros + coaches + mis conversaciones */}
           <div
             className={`${
               studentChats.length > 0 || isLoadingChats
                 ? "hidden"
-                : "col-span-3"
+                : "col-span-1 md:col-span-3"
             } overflow-auto border border-border rounded p-3 bg-card space-y-3`}
           >
             {/* Buscador */}
@@ -742,7 +742,7 @@ export default function StudentCoachChatPanel({
             className={`${
               studentChats.length > 0 || isLoadingChats
                 ? "col-span-12"
-                : "col-span-9"
+                : "col-span-1 md:col-span-9"
             } h-full flex flex-col min-h-0`}
           >
             {/** Resolvedor de nombres para logs legibles */}
@@ -756,7 +756,7 @@ export default function StudentCoachChatPanel({
               title={targetTitle}
               subtitle={targetSubtitle}
               variant="card"
-              className="flex-1 min-h-0 rounded-lg shadow-sm overflow-hidden"
+              className="flex-1 min-h-0 h-full rounded-lg shadow-sm overflow-hidden"
               precreateOnParticipants
               resolveName={(tipo, id) => {
                 const sid = String(id ?? "");

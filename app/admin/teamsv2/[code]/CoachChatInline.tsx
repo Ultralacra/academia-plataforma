@@ -3055,7 +3055,9 @@ export default function CoachChatInline({
   return (
     <>
       <div
-        className={`flex flex-col w-full min-h-0 chat-root ${className || ""}`}
+        className={`relative h-full flex flex-col w-full min-h-0 chat-root ${
+          className || ""
+        }`}
       >
         <div className="flex items-center justify-between px-4 py-3 bg-[#075E54] text-white">
           <div className="flex items-center gap-3 min-w-0">
@@ -3182,7 +3184,7 @@ export default function CoachChatInline({
         <div
           ref={scrollRef}
           onScroll={onScrollContainer}
-          className="relative flex-1 h-0 min-h-0 overflow-y-auto p-4 bg-[#ECE5DD]"
+          className="relative flex-1 overflow-y-auto p-4 bg-[#ECE5DD]"
           style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
             scrollbarGutter: "stable both-edges",
@@ -3547,7 +3549,7 @@ export default function CoachChatInline({
                 } catch {}
                 setNewMessagesCount(0);
               }}
-              className="absolute right-4 bottom-4 z-10 inline-flex items-center gap-2 rounded-full bg-[#25d366] text-white shadow-md px-3 py-1.5 text-sm hover:bg-[#1ebe57] transition"
+              className="fixed md:absolute right-4 md:right-4 bottom-20 md:bottom-4 z-30 inline-flex items-center gap-2 rounded-full bg-[#25d366] text-white shadow-md px-3 py-1.5 text-sm hover:bg-[#1ebe57] transition"
               title={`${newMessagesCount} nuevo${
                 newMessagesCount === 1 ? "" : "s"
               }`}
@@ -3562,7 +3564,7 @@ export default function CoachChatInline({
         </div>
 
         <div
-          className="px-3 py-3 bg-[#F0F0F0] border-t border-gray-200"
+          className="flex-shrink-0 px-3 py-3 bg-[#F0F0F0] border-t border-gray-200 pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
           onDragOver={(e) => {
             try {
               if (e.dataTransfer?.types?.includes("Files")) {
@@ -3874,12 +3876,12 @@ export default function CoachChatInline({
                 }
               }}
               placeholder="Escribe un mensaje"
-              className="flex-1 bg-white border border-gray-300 rounded-full px-4 py-2.5 text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors"
+              className="flex-1 bg-white border border-gray-300 rounded-full px-4 py-2.5 text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors shadow-sm"
             />
             <button
               onClick={send}
               disabled={uploading || (!text.trim() && attachments.length === 0)}
-              className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors"
+              className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors shadow"
             >
               {uploading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
