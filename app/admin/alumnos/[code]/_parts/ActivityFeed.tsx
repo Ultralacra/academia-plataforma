@@ -24,7 +24,7 @@ export default function ActivityFeed({
   steps: Array<{ label: string; date?: string | null }>;
 }) {
   const items: Item[] = [
-    { kind: "tarea", date: lastTaskAt, text: "Última entrega de tarea" },
+    { kind: "tarea", date: lastTaskAt, text: "Última entrega de tarea." },
     ...steps
       .filter((s) => s.date)
       .slice(-3)
