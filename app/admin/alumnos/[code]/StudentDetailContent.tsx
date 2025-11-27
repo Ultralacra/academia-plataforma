@@ -118,12 +118,37 @@ export default function StudentDetailContent({ code }: { code: string }) {
             } as any)
         );
 
-        const s =
+        let s =
           list.find(
             (x) => (x.code ?? "").toLowerCase() === code.toLowerCase()
           ) ||
           list[0] ||
           null;
+        // Fallback: si no aparece en el listado (p.ej. rol "user" no indexado), consultar endpoint directo
+        if (!s) {
+          try {
+            const j = await apiFetch<any>(
+              `/client/get/cliente/${encodeURIComponent(code)}`
+            );
+            const r = j?.data || j;
+            if (r && (r.codigo || r.code || r.id)) {
+              s = {
+                id: r.id,
+                code: r.codigo ?? r.code ?? code,
+                name: r.nombre ?? r.name ?? "-",
+                stage: r.etapa ?? r.stage ?? null,
+                state: r.estado ?? r.state ?? null,
+                ingreso: r.ingreso ?? r.joinDate ?? null,
+                lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
+                teamMembers: Array.isArray(r.teamMembers)
+                  ? r.teamMembers
+                  : r.equipo ?? r.alumnos ?? [],
+                contrato: r.contrato ?? null,
+                raw: r,
+              } as any;
+            }
+          } catch {}
+        }
         if (!alive) return;
         setStudent(s as any);
 
@@ -188,9 +213,57 @@ export default function StudentDetailContent({ code }: { code: string }) {
           setStatusSint("EN_CURSO" as StatusSint);
         }
       } catch {
-        setStudent(null);
+        // Error en listado (posible 401/403 para alumno). Fallback directo a detalle único.
+        try {
+          const j = await apiFetch<any>(
+            `/client/get/cliente/${encodeURIComponent(code)}`
+          );
+          const r = j?.data || j;
+          if (r && (r.codigo || r.code || r.id)) {
+            const s = {
+              id: r.id,
+              code: r.codigo ?? r.code ?? code,
+              name: r.nombre ?? r.name ?? "-",
+              stage: r.etapa ?? r.stage ?? null,
+              state: r.estado ?? r.state ?? null,
+              ingreso: r.ingreso ?? r.joinDate ?? null,
+              lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
+              teamMembers: Array.isArray(r.teamMembers)
+                ? r.teamMembers
+                : r.equipo ?? r.alumnos ?? [],
+              contrato: r.contrato ?? null,
+              raw: r,
+            } as any;
+            if (alive) setStudent(s);
+          } else if (alive) {
+            setStudent(null);
+          }
+        } catch {
+          if (alive) setStudent(null);
+        }
       } finally {
         if (alive) setLoading(false);
+        // Fallback extremo: si no pudimos cargar desde APIs y el usuario autenticado es el alumno dueño del código
+        if (
+          alive &&
+          !student &&
+          user?.role === "student" &&
+          user?.codigo &&
+          user.codigo === code
+        ) {
+          setStudent({
+            id: user.id,
+            code: user.codigo,
+            name: user.name,
+            stage: null,
+            state: null,
+            ingreso: null,
+            lastActivity: null,
+            teamMembers: [],
+            contrato: null,
+            raw: { source: "auth-fallback" },
+          });
+        }
       }
     })();
     return () => {
@@ -488,7 +561,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       <div className="flex min-h-[50vh] items-center justify-center">
         <div className="text-center">
           <p className="text-sm text-muted-foreground">
-            No se encontró el alumno con código{" "}
+            No se encontró el alumno/cliente con código{" "}
             <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
               {code}
             </code>
