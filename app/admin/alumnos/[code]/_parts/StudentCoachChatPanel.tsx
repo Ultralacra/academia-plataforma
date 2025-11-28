@@ -504,14 +504,20 @@ export default function StudentCoachChatPanel({
             </div>
           </div>
         )}
-        <div className="grid grid-cols-12 gap-3 h-full min-h-0">
+        <div className="flex flex-col md:grid md:grid-cols-12 gap-3 h-full min-h-0">
           {/* Sidebar: filtros + coaches + mis conversaciones */}
           <div
-            className={`${
-              studentChats.length > 0 || isLoadingChats
-                ? "hidden"
-                : "col-span-3"
-            } overflow-auto border border-border rounded p-3 bg-card space-y-3`}
+            className={`
+              w-full md:col-span-3
+              overflow-auto border border-border rounded p-3 bg-card space-y-3
+              shrink-0
+              max-h-[180px] md:max-h-full md:h-full
+              ${
+                studentChats.length > 0 || isLoadingChats
+                  ? "block md:hidden"
+                  : "block"
+              }
+            `}
           >
             {/* Buscador */}
             <div className="flex items-center gap-2">
@@ -739,11 +745,14 @@ export default function StudentCoachChatPanel({
 
           {/* Panel de chat */}
           <div
-            className={`${
-              studentChats.length > 0 || isLoadingChats
-                ? "col-span-12"
-                : "col-span-9"
-            } h-full flex flex-col min-h-0`}
+            className={`
+              h-full flex flex-col min-h-0 flex-1
+              ${
+                studentChats.length > 0 || isLoadingChats
+                  ? "w-full md:col-span-12"
+                  : "w-full md:col-span-9"
+              }
+            `}
           >
             {/** Resolvedor de nombres para logs legibles */}
             {(() => {

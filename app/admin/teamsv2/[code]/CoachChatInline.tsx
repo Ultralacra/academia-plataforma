@@ -49,6 +49,7 @@ import {
   Square,
   Sparkles,
   Loader2,
+  Plus,
 } from "lucide-react";
 import {
   Dialog,
@@ -3059,24 +3060,38 @@ export default function CoachChatInline({
           className || ""
         }`}
       >
-        <div className="flex items-center justify-between px-4 py-3 bg-[#075E54] text-white">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-sm flex-shrink-0">
+        <div className="flex items-center justify-between px-3 py-2 md:px-4 md:py-3 bg-[#075E54] text-white">
+          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 mr-2">
+            <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-xs md:text-sm flex-shrink-0">
               {(title || "C").charAt(0).toUpperCase()}
             </div>
-            <div className="min-w-0">
-              <div className="text-sm font-medium truncate">{title}</div>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium truncate leading-tight">
+                {title}
+              </div>
               {subtitle && (
-                <div className="text-xs text-gray-200 truncate">{subtitle}</div>
+                <div className="text-[10px] md:text-xs text-gray-200 truncate leading-tight">
+                  {subtitle}
+                </div>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs text-gray-200">
-              {connected ? "en línea" : "desconectado"}
-            </span>
+          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+            <div
+              className="flex items-center gap-1.5"
+              title={connected ? "Conectado" : "Desconectado"}
+            >
+              <div
+                className={`w-2 h-2 rounded-full ${
+                  connected ? "bg-green-400" : "bg-white/30"
+                }`}
+              />
+              <span className="text-xs text-gray-200 hidden sm:inline">
+                {connected ? "en línea" : "offline"}
+              </span>
+            </div>
             {/* Botón para crear chat manual si aún no existe */}
-            {!chatIdRef.current && !chatId && (
+            {/*  {!chatIdRef.current && !chatId && (
               <button
                 onClick={async () => {
                   if (creatingChat) return;
@@ -3087,12 +3102,14 @@ export default function CoachChatInline({
                   setCreatingChat(false);
                 }}
                 disabled={creatingChat}
-                className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60 whitespace-nowrap"
                 title="Crear conversación"
               >
-                {creatingChat ? "Creando…" : "Crear chat"}
+                {creatingChat ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3"/>}
+                <span className="hidden sm:inline">{creatingChat ? "Creando…" : "Crear chat"}</span>
+                <span className="sm:hidden">Crear</span>
               </button>
-            )}
+            )} */}
             {role !== "alumno" && (
               <button
                 onClick={handleGenerateTicket}
@@ -3263,7 +3280,7 @@ export default function CoachChatInline({
                     } w-fit ${
                       hasAudioOnly
                         ? "p-0 bg-transparent shadow-none"
-                        : "max-w-[75%] px-3 py-2 shadow-sm " +
+                        : "max-w-[85%] md:max-w-[75%] px-2.5 py-1.5 md:px-3 md:py-2 shadow-sm " +
                           (isMine ? "bg-[#DCF8C6]" : "bg-white")
                     } ${radius} ${isSelected ? "ring-2 ring-violet-500" : ""}`}
                   >
@@ -3282,7 +3299,7 @@ export default function CoachChatInline({
                       </>
                     )}
                     {m.text?.trim() ? (
-                      <div className="text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
+                      <div className="text-sm md:text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
                         {renderTextWithLinks(m.text)}
                       </div>
                     ) : null}
@@ -3564,7 +3581,7 @@ export default function CoachChatInline({
         </div>
 
         <div
-          className="flex-shrink-0 px-3 py-3 bg-[#F0F0F0] border-t border-gray-200 pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
+          className="flex-shrink-0 px-2 py-2 md:px-3 md:py-3 bg-[#F0F0F0] border-t border-gray-200 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
           onDragOver={(e) => {
             try {
               if (e.dataTransfer?.types?.includes("Files")) {
@@ -3581,7 +3598,7 @@ export default function CoachChatInline({
             } catch {}
           }}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 md:gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -3596,9 +3613,9 @@ export default function CoachChatInline({
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               title={uploading ? "Subiendo archivos…" : "Adjuntar archivos"}
-              className="p-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50"
+              className="p-1.5 md:p-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 flex-shrink-0"
             >
-              <Paperclip className="w-5 h-5" />
+              <Paperclip className="w-5 h-5 md:w-5 md:h-5" />
             </button>
             <button
               type="button"
@@ -3785,16 +3802,16 @@ export default function CoachChatInline({
                 }
               }}
               title={recording ? "Detener grabación" : "Grabar audio"}
-              className={`p-2 rounded-md transition-colors ${
+              className={`p-1.5 md:p-2 rounded-md transition-colors flex-shrink-0 ${
                 recording
                   ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
                   : "text-gray-600 hover:text-gray-800"
               }`}
             >
               {recording ? (
-                <Square className="w-4 h-4" />
+                <Square className="w-4 h-4 md:w-4 md:h-4" />
               ) : (
-                <Mic className="w-5 h-5" />
+                <Mic className="w-5 h-5 md:w-5 md:h-5" />
               )}
             </button>
             {recording && (
@@ -3875,13 +3892,13 @@ export default function CoachChatInline({
                   notifyTyping(true);
                 }
               }}
-              placeholder="Escribe un mensaje"
-              className="flex-1 bg-white border border-gray-300 rounded-full px-4 py-2.5 text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors shadow-sm"
+              placeholder="Mensaje"
+              className="flex-1 bg-white border border-gray-300 rounded-full px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors shadow-sm min-w-0"
             />
             <button
               onClick={send}
               disabled={uploading || (!text.trim() && attachments.length === 0)}
-              className="p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors shadow"
+              className="p-2 md:p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors shadow flex-shrink-0"
             >
               {uploading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />

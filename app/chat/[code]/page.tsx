@@ -69,22 +69,24 @@ export default function ChatByCodePage({
     <ProtectedRoute allowedRoles={["admin", "student", "coach"]}>
       <DashboardLayout>
         <div className="flex flex-col h-full min-h-0">
-          <div className="flex items-center justify-between pb-2 px-1">
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold truncate">{title}</h1>
-              <p className="text-xs text-muted-foreground truncate">
-                {subtitle}
-              </p>
+          {senderRole !== "alumno" && (
+            <div className="flex items-center justify-between pb-2 px-1">
+              <div className="min-w-0">
+                <h1 className="text-lg font-semibold truncate">{title}</h1>
+                <p className="text-xs text-muted-foreground truncate">
+                  {subtitle}
+                </p>
+              </div>
+              {user?.role === "admin" && (
+                <Link
+                  href={`/admin/alumnos/${encodeURIComponent(code)}`}
+                  className="text-xs text-primary hover:underline whitespace-nowrap ml-2"
+                >
+                  Volver
+                </Link>
+              )}
             </div>
-            {user?.role === "admin" && (
-              <Link
-                href={`/admin/alumnos/${encodeURIComponent(code)}`}
-                className="text-xs text-primary hover:underline whitespace-nowrap ml-2"
-              >
-                Volver
-              </Link>
-            )}
-          </div>
+          )}
 
           <div className="flex-1 min-h-0 overflow-hidden">
             {senderRole === "alumno" ? (
