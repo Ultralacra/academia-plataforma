@@ -78,9 +78,15 @@ export default function StudentInicioPage() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          <StaticCard title="Notion de la academia" href="https://notion.so/" />
+          <StaticCard
+            title="Notion de la academia"
+            href="https://www.notion.so/x-academy/HOTSELLING-LITE-af0d3555dc5b4b0c935e22129ebc878b?p=931dd222189342a9ae6a6ee1befd1ee1&pm=s"
+          />
 
-          <StaticCard title="Mi School" href="https://school.com/" />
+          <StaticCard
+            title="Skool"
+            href="https://www.skool.com/hotselling-lite-4832"
+          />
 
           <InternalCard
             title="Chat soporte"
