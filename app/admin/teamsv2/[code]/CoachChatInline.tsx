@@ -50,6 +50,8 @@ import {
   Sparkles,
   Loader2,
   Plus,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import {
   Dialog,
@@ -242,6 +244,7 @@ export default function CoachChatInline({
     React.useState<Attachment | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [fullImageSrc, setFullImageSrc] = React.useState<string | null>(null);
+  const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
 
   // Detectar URLs en texto y envolverlas en <a>
   const renderTextWithLinks = React.useCallback((value?: string) => {
@@ -3060,38 +3063,44 @@ export default function CoachChatInline({
           className || ""
         }`}
       >
-        <div className="flex items-center justify-between px-3 py-2 md:px-4 md:py-3 bg-[#075E54] text-white">
-          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 mr-2">
-            <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-xs md:text-sm flex-shrink-0">
-              {(title || "C").charAt(0).toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium truncate leading-tight">
-                {title}
-              </div>
-              {subtitle && (
-                <div className="text-[10px] md:text-xs text-gray-200 truncate leading-tight">
-                  {subtitle}
+        <div
+          className={`flex items-center justify-between px-3 transition-all duration-300 bg-[#075E54] text-white ${
+            headerCollapsed ? "py-1.5" : "py-2 md:px-4 md:py-3"
+          }`}
+        >
+          {!headerCollapsed ? (
+            <>
+              <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 mr-2">
+                <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-xs md:text-sm flex-shrink-0">
+                  {(title || "C").charAt(0).toUpperCase()}
                 </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-            <div
-              className="flex items-center gap-1.5"
-              title={connected ? "Conectado" : "Desconectado"}
-            >
-              <div
-                className={`w-2 h-2 rounded-full ${
-                  connected ? "bg-green-400" : "bg-white/30"
-                }`}
-              />
-              <span className="text-xs text-gray-200 hidden sm:inline">
-                {connected ? "en línea" : "offline"}
-              </span>
-            </div>
-            {/* Botón para crear chat manual si aún no existe */}
-            {/*  {!chatIdRef.current && !chatId && (
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium truncate leading-tight">
+                    {title}
+                  </div>
+                  {subtitle && (
+                    <div className="text-[10px] md:text-xs text-gray-200 truncate leading-tight">
+                      {subtitle}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+                <div
+                  className="flex items-center gap-1.5"
+                  title={connected ? "Conectado" : "Desconectado"}
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      connected ? "bg-green-400" : "bg-white/30"
+                    }`}
+                  />
+                  <span className="text-xs text-gray-200 hidden sm:inline">
+                    {connected ? "en línea" : "offline"}
+                  </span>
+                </div>
+                {/* Botón para crear chat manual si aún no existe */}
+                {/*  {!chatIdRef.current && !chatId && (
               <button
                 onClick={async () => {
                   if (creatingChat) return;
@@ -3110,92 +3119,119 @@ export default function CoachChatInline({
                 <span className="sm:hidden">Crear</span>
               </button>
             )} */}
-            {role !== "alumno" && (
-              <button
-                onClick={handleGenerateTicket}
-                disabled={!(chatIdRef.current ?? chatId) || ticketLoading}
-                className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
-                title={
-                  chatIdRef.current ?? chatId
-                    ? "Generar ticket de esta conversación"
-                    : "Sin chat activo"
-                }
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Generar ticket
-              </button>
-            )}
-            {role !== "alumno" && (
-              <button
-                onClick={() => {
-                  if (selectionMode) {
-                    setSelectionMode(false);
-                    setSelectedMessageIds(new Set());
-                    setSelectedAttachmentIds(new Set());
-                  } else {
-                    setSelectionMode(true);
-                  }
-                }}
-                className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition"
-                title={
-                  selectionMode
-                    ? "Cancelar selección"
-                    : "Activar selección de mensajes y archivos"
-                }
-              >
-                {selectionMode ? "Cancelar" : "Seleccionar"}
-              </button>
-            )}
-            {selectionMode && (
-              <span className="text-[11px] px-2 py-1 rounded bg-white/10 text-white">
-                {selectedMessageIds.size} msg / {selectedAttachmentIds.size} adj
-              </span>
-            )}
-            {/* Menú de acciones (3 puntitos) */}
-            <AlertDialog
-              open={confirmDeleteOpen}
-              onOpenChange={setConfirmDeleteOpen}
-            >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+                {role !== "alumno" && (
                   <button
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
-                    title="Más acciones"
+                    onClick={handleGenerateTicket}
+                    disabled={!(chatIdRef.current ?? chatId) || ticketLoading}
+                    className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
+                    title={
+                      chatIdRef.current ?? chatId
+                        ? "Generar ticket de esta conversación"
+                        : "Sin chat activo"
+                    }
                   >
-                    <MoreVertical className="h-4 w-4 text-white" />
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Generar ticket
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <AlertDialogTrigger asChild>
-                    <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
-                      <Trash2 className="h-4 w-4 mr-2" /> Eliminar conversación
-                    </DropdownMenuItem>
-                  </AlertDialogTrigger>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    ¿Eliminar esta conversación?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Se eliminarán los mensajes del chat{" "}
-                    {String(chatIdRef.current ?? chatId ?? "")}. Esta acción no
-                    se puede deshacer.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDeleteChat}
-                    className="bg-red-600 hover:bg-red-700"
+                )}
+                {role !== "alumno" && (
+                  <button
+                    onClick={() => {
+                      if (selectionMode) {
+                        setSelectionMode(false);
+                        setSelectedMessageIds(new Set());
+                        setSelectedAttachmentIds(new Set());
+                      } else {
+                        setSelectionMode(true);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition"
+                    title={
+                      selectionMode
+                        ? "Cancelar selección"
+                        : "Activar selección de mensajes y archivos"
+                    }
                   >
-                    Eliminar
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+                    {selectionMode ? "Cancelar" : "Seleccionar"}
+                  </button>
+                )}
+                {selectionMode && (
+                  <span className="text-[11px] px-2 py-1 rounded bg-white/10 text-white">
+                    {selectedMessageIds.size} msg / {selectedAttachmentIds.size}{" "}
+                    adj
+                  </span>
+                )}
+                {/* Menú de acciones (3 puntitos) */}
+                <AlertDialog
+                  open={confirmDeleteOpen}
+                  onOpenChange={setConfirmDeleteOpen}
+                >
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                        title="Más acciones"
+                      >
+                        <MoreVertical className="h-4 w-4 text-white" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <AlertDialogTrigger asChild>
+                        <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
+                          <Trash2 className="h-4 w-4 mr-2" /> Eliminar
+                          conversación
+                        </DropdownMenuItem>
+                      </AlertDialogTrigger>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        ¿Eliminar esta conversación?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Se eliminarán los mensajes del chat{" "}
+                        {String(chatIdRef.current ?? chatId ?? "")}. Esta acción
+                        no se puede deshacer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteChat}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Eliminar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <button
+                  onClick={() => setHeaderCollapsed(true)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                  title="Contraer encabezado"
+                >
+                  <ChevronUp className="h-4 w-4 text-white" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-[10px] flex-shrink-0">
+                  {(title || "C").charAt(0).toUpperCase()}
+                </div>
+                <div className="text-xs font-medium truncate">{title}</div>
+              </div>
+              <button
+                onClick={() => setHeaderCollapsed(false)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                title="Expandir encabezado"
+              >
+                <ChevronDown className="h-4 w-4 text-white" />
+              </button>
+            </div>
+          )}
         </div>
 
         <div
@@ -3581,7 +3617,7 @@ export default function CoachChatInline({
         </div>
 
         <div
-          className="flex-shrink-0 px-2 py-2 md:px-3 md:py-3 bg-[#F0F0F0] border-t border-gray-200 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
+          className="sticky bottom-0 z-20 flex-shrink-0 px-2 py-2 md:px-3 md:py-3 bg-[#F0F0F0] border-t border-gray-200 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
           onDragOver={(e) => {
             try {
               if (e.dataTransfer?.types?.includes("Files")) {
