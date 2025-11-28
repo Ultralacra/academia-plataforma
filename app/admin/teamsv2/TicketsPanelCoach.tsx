@@ -1946,7 +1946,7 @@ export default function TicketsPanelCoach({
       </Dialog>
 
       <Drawer open={editOpen} onOpenChange={setEditOpen} direction="right">
-        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl flex flex-col">
+        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl flex flex-col">
           <DrawerHeader className="border-b">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
@@ -2195,7 +2195,7 @@ export default function TicketsPanelCoach({
                         <div className="rounded-lg border border-slate-200 bg-white p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="text-base font-semibold text-slate-900">
+                              <div className="text-base font-semibold text-slate-900 break-words">
                                 {ticketDetail?.nombre ||
                                   editTicket?.nombre ||
                                   "Ticket"}
@@ -2298,7 +2298,7 @@ export default function TicketsPanelCoach({
                             ) : null}
                           </div>
                           {!descEditing ? (
-                            <div className="whitespace-pre-wrap text-sm text-slate-800">
+                            <div className="whitespace-pre-wrap break-words text-sm text-slate-800">
                               {ticketDetail?.descripcion || "—"}
                             </div>
                           ) : (

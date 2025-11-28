@@ -2296,7 +2296,7 @@ export default function TicketsBoard() {
             )}
           </div>
 
-          {/*  <SheetFooter className="border-t pt-4">
+          <SheetFooter className="border-t pt-4">
             <div className="flex items-center justify-end gap-2">
               {selectedTicket?.codigo && isAdmin && (
                 <Button
@@ -2313,7 +2313,7 @@ export default function TicketsBoard() {
                 <Button onClick={saveTicketChanges}>Guardar cambios</Button>
               )}
             </div>
-          </SheetFooter> */}
+          </SheetFooter>
         </SheetContent>
       </Sheet>
 
