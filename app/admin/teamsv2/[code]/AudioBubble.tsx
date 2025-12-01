@@ -40,7 +40,7 @@ export default function AudioBubble({
         const token = getAuthToken();
         const headers: Record<string, string> = {};
         if (token) headers["Authorization"] = `Bearer ${token}`;
-        
+
         const res = await fetch(src, { headers });
         if (!res.ok) throw new Error("Error cargando audio");
         const blob = await res.blob();
@@ -83,7 +83,7 @@ export default function AudioBubble({
   React.useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    
+
     const onLoaded = () => {
       setDur(isFinite(a.duration) ? a.duration : 0);
       setError(false);
@@ -103,7 +103,7 @@ export default function AudioBubble({
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", onEnd);
     a.addEventListener("error", onError);
-    
+
     return () => {
       a.removeEventListener("loadedmetadata", onLoaded);
       a.removeEventListener("timeupdate", onTime);
@@ -115,7 +115,7 @@ export default function AudioBubble({
   const toggle = () => {
     const a = audioRef.current;
     if (!a || !blobUrl) return;
-    
+
     if (playing) {
       a.pause();
       setPlaying(false);
@@ -160,16 +160,25 @@ export default function AudioBubble({
       } px-2 py-1 w-[336px] h-[50px]`}
     >
       {blobUrl && (
-        <audio ref={audioRef} src={blobUrl} preload="metadata" className="hidden" />
+        <audio
+          ref={audioRef}
+          src={blobUrl}
+          preload="metadata"
+          className="hidden"
+        />
       )}
-      
+
       <button
         type="button"
         onClick={toggle}
         disabled={loading || error || !blobUrl}
         className={`h-7 w-7 rounded-full grid place-items-center flex-shrink-0 transition-colors ${
           isMine ? "bg-[#128C7E] text-white" : "bg-gray-200 text-gray-700"
-        } ${loading || error ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"}`}
+        } ${
+          loading || error
+            ? "opacity-50 cursor-not-allowed"
+            : "hover:opacity-90"
+        }`}
         aria-label={playing ? "Pausar audio" : "Reproducir audio"}
       >
         {loading ? (
@@ -187,7 +196,7 @@ export default function AudioBubble({
           </svg>
         )}
       </button>
-      
+
       <div className="flex-1 min-w-0">
         <div className="flex items-end gap-2">
           <div className="flex-1 flex items-end gap-[2px] h-6 overflow-hidden">
