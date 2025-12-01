@@ -72,6 +72,16 @@ export default function StudentCoachChatPanel({
   const [targetSubtitle, setTargetSubtitle] = useState<string | undefined>(
     undefined
   );
+
+  const isChatOpen = !!selectedChatId || !!targetCoachId;
+
+  const handleBack = () => {
+    setSelectedChatId(null);
+    setTargetCoachId(null);
+    setCurrentOpenChatId(null);
+    manualSelectionRef.current = true;
+  };
+
   const selectedCoach = useMemo(() => {
     if (!targetCoachId) return null;
     return (
@@ -512,10 +522,11 @@ export default function StudentCoachChatPanel({
               overflow-auto border border-border rounded p-3 bg-card space-y-3
               shrink-0
               max-h-[180px] md:max-h-full md:h-full
+              ${isChatOpen ? "hidden" : "block"}
               ${
                 studentChats.length > 0 || isLoadingChats
-                  ? "block md:hidden"
-                  : "block"
+                  ? "md:hidden"
+                  : "md:block"
               }
             `}
           >
@@ -746,7 +757,8 @@ export default function StudentCoachChatPanel({
           {/* Panel de chat */}
           <div
             className={`
-              h-full flex flex-col min-h-0 flex-1
+              h-full flex-col min-h-0 flex-1
+              ${isChatOpen ? "flex" : "hidden md:flex"}
               ${
                 studentChats.length > 0 || isLoadingChats
                   ? "w-full md:col-span-12"
@@ -767,6 +779,7 @@ export default function StudentCoachChatPanel({
               variant="card"
               className="flex-1 min-h-0 rounded-lg shadow-sm overflow-hidden"
               precreateOnParticipants
+              onBack={isChatOpen ? handleBack : undefined}
               resolveName={(tipo, id) => {
                 const sid = String(id ?? "");
                 if (tipo === "cliente") {

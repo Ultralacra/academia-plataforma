@@ -52,6 +52,7 @@ import {
   Plus,
   ChevronUp,
   ChevronDown,
+  ArrowLeft,
 } from "lucide-react";
 import {
   Dialog,
@@ -93,6 +94,7 @@ export default function CoachChatInline({
   listParams,
   onChatsList,
   resolveName,
+  onBack,
 }: {
   room: string;
   role?: Sender;
@@ -112,6 +114,7 @@ export default function CoachChatInline({
   listParams?: any;
   onChatsList?: (list: any[]) => void;
   resolveName?: (tipo: "equipo" | "cliente" | "admin", id: string) => string;
+  onBack?: () => void;
 }) {
   const normRoom = React.useMemo(
     () => (room || "").trim().toLowerCase(),
@@ -486,10 +489,10 @@ export default function CoachChatInline({
         });
       } catch {}
 
-      if (selectedMessageIds.size === 0) {
+      if (selectedMessageIds.size === 0 && selectedAttachmentIds.size === 0) {
         setTicketModalOpen(true);
         setTicketError(
-          "Debes seleccionar al menos un mensaje para generar el ticket."
+          "Debes seleccionar al menos un mensaje o archivo para generar el ticket."
         );
         return;
       }
@@ -3071,6 +3074,15 @@ export default function CoachChatInline({
           {!headerCollapsed ? (
             <>
               <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 mr-2">
+                {onBack && (
+                  <button
+                    onClick={onBack}
+                    className="p-1 mr-1 rounded-full hover:bg-white/10 text-white md:hidden"
+                    title="Volver"
+                  >
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                )}
                 <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-xs md:text-sm flex-shrink-0">
                   {(title || "C").charAt(0).toUpperCase()}
                 </div>
@@ -3218,6 +3230,15 @@ export default function CoachChatInline({
           ) : (
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-2">
+                {onBack && (
+                  <button
+                    onClick={onBack}
+                    className="p-1 rounded-full hover:bg-white/10 text-white md:hidden"
+                    title="Volver"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                )}
                 <div className="h-6 w-6 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-[10px] flex-shrink-0">
                   {(title || "C").charAt(0).toUpperCase()}
                 </div>
