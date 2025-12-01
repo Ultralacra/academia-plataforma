@@ -1,5 +1,7 @@
 "use client";
 import React from "react";
+import { getAuthToken } from "@/lib/auth";
+import { Loader2, AlertCircle } from "lucide-react";
 
 export default function AudioBubble({
   src,
@@ -14,9 +16,53 @@ export default function AudioBubble({
   const [playing, setPlaying] = React.useState(false);
   const [dur, setDur] = React.useState(0);
   const [t, setT] = React.useState(0);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(false);
+  const [blobUrl, setBlobUrl] = React.useState<string | null>(null);
   const idRef = React.useRef(
     `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   );
+
+  // Cargar audio protegido si es necesario
+  React.useEffect(() => {
+    let active = true;
+    const loadAudio = async () => {
+      if (!src) return;
+      // Si es data URI o blob local, usar directo
+      if (src.startsWith("data:") || src.startsWith("blob:")) {
+        setBlobUrl(src);
+        return;
+      }
+      // Intentar fetch con token
+      try {
+        setLoading(true);
+        setError(false);
+        const token = getAuthToken();
+        const headers: Record<string, string> = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        
+        const res = await fetch(src, { headers });
+        if (!res.ok) throw new Error("Error cargando audio");
+        const blob = await res.blob();
+        if (active) {
+          const url = URL.createObjectURL(blob);
+          setBlobUrl(url);
+        }
+      } catch (e) {
+        // Fallback: intentar usar src directo si fetch falla (ej. CORS o pública)
+        if (active) setBlobUrl(src);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadAudio();
+    return () => {
+      active = false;
+      if (blobUrl && blobUrl.startsWith("blob:") && blobUrl !== src) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
+  }, [src]);
 
   React.useEffect(() => {
     const onExternalPlay = (ev: any) => {
@@ -37,25 +83,39 @@ export default function AudioBubble({
   React.useEffect(() => {
     const a = audioRef.current;
     if (!a) return;
-    const onLoaded = () => setDur(isFinite(a.duration) ? a.duration : 0);
+    
+    const onLoaded = () => {
+      setDur(isFinite(a.duration) ? a.duration : 0);
+      setError(false);
+    };
     const onTime = () => setT(a.currentTime || 0);
     const onEnd = () => {
       setPlaying(false);
       setT(0);
     };
+    const onError = () => {
+      console.error("Error reproduciendo audio", a.error);
+      setPlaying(false);
+      setError(true);
+    };
+
     a.addEventListener("loadedmetadata", onLoaded);
     a.addEventListener("timeupdate", onTime);
     a.addEventListener("ended", onEnd);
+    a.addEventListener("error", onError);
+    
     return () => {
       a.removeEventListener("loadedmetadata", onLoaded);
       a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("ended", onEnd);
+      a.removeEventListener("error", onError);
     };
-  }, []);
+  }, [blobUrl]); // Re-bind cuando cambia blobUrl
 
   const toggle = () => {
     const a = audioRef.current;
-    if (!a) return;
+    if (!a || !blobUrl) return;
+    
     if (playing) {
       a.pause();
       setPlaying(false);
@@ -67,10 +127,12 @@ export default function AudioBubble({
           })
         );
       } catch {}
-      a.play().then(
-        () => setPlaying(true),
-        () => setPlaying(false)
-      );
+      a.play().catch((e) => {
+        console.error("Play error", e);
+        setPlaying(false);
+        setError(true);
+      });
+      setPlaying(true);
     }
   };
 
@@ -97,16 +159,24 @@ export default function AudioBubble({
         isMine ? "bg-[#cfe9ba]" : "bg-white/60"
       } px-2 py-1 w-[336px] h-[50px]`}
     >
-      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+      {blobUrl && (
+        <audio ref={audioRef} src={blobUrl} preload="metadata" className="hidden" />
+      )}
+      
       <button
         type="button"
         onClick={toggle}
-        className={`h-7 w-7 rounded-full grid place-items-center ${
+        disabled={loading || error || !blobUrl}
+        className={`h-7 w-7 rounded-full grid place-items-center flex-shrink-0 transition-colors ${
           isMine ? "bg-[#128C7E] text-white" : "bg-gray-200 text-gray-700"
-        }`}
+        } ${loading || error ? "opacity-50 cursor-not-allowed" : "hover:opacity-90"}`}
         aria-label={playing ? "Pausar audio" : "Reproducir audio"}
       >
-        {playing ? (
+        {loading ? (
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        ) : error ? (
+          <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
+        ) : playing ? (
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
             <rect x="6" y="4" width="4" height="16" rx="1"></rect>
             <rect x="14" y="4" width="4" height="16" rx="1"></rect>
@@ -117,7 +187,8 @@ export default function AudioBubble({
           </svg>
         )}
       </button>
-      <div className="flex-1">
+      
+      <div className="flex-1 min-w-0">
         <div className="flex items-end gap-2">
           <div className="flex-1 flex items-end gap-[2px] h-6 overflow-hidden">
             {bars.map((h, i) => (
