@@ -4,7 +4,21 @@ import type React from "react";
 
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { getTickets, type TicketBoardItem, reassignTicket } from "./api";
+import {
+  getTickets,
+  type TicketBoardItem,
+  reassignTicket,
+  getTicketComments,
+  createTicketComment,
+  updateTicketComment,
+  deleteTicketComment,
+  type TicketComment,
+  getInternalNotes,
+  createInternalNote,
+  updateInternalNote,
+  deleteInternalNote,
+  type InternalNote,
+} from "./api";
 import { Button } from "@/components/ui/button";
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
@@ -237,6 +251,7 @@ export default function TicketsBoard() {
       nombre?: string | null;
       estado?: StatusKey | string | null;
       deadline?: string | null;
+      descripcion?: string | null;
     }
   >({});
 
@@ -264,6 +279,25 @@ export default function TicketsBoard() {
   const [reassignLoading, setReassignLoading] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingTicket, setDeletingTicket] = useState(false);
+
+  // Comentarios (Observaciones)
+  const [comments, setComments] = useState<TicketComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [addingComment, setAddingComment] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+
+  // Notas Internas (Internal Notes)
+  const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
+  const [internalNotesLoading, setInternalNotesLoading] = useState(false);
+  const [newInternalNote, setNewInternalNote] = useState("");
+  const [addingInternalNote, setAddingInternalNote] = useState(false);
+  const [editingInternalNoteId, setEditingInternalNoteId] = useState<
+    string | null
+  >(null);
+  const [editingInternalNoteText, setEditingInternalNoteText] = useState("");
+
   // Control para expandir lista completa de archivos en el panel de edición
   const [showAllFiles, setShowAllFiles] = useState(false);
   // Edición de descripción (pestaña Detalle)
@@ -318,7 +352,16 @@ export default function TicketsBoard() {
           coach: coachFiltro || undefined,
         });
         if (!mounted) return;
-        setTickets(res.items ?? []);
+        // Filtrar explícitamente tickets eliminados por si la API los devuelve
+        const validTickets = (res.items ?? []).filter((t) => {
+          const st = (t.estado || "").toUpperCase();
+          return (
+            !st.includes("ELIMINAD") &&
+            !st.includes("BORRADO") &&
+            !st.includes("DELETED")
+          );
+        });
+        setTickets(validTickets);
       } catch (e) {
         console.error(e);
         toast({ title: "Error cargando tickets" });
@@ -633,6 +676,120 @@ export default function TicketsBoard() {
     }
   }
 
+  async function loadComments(codigo: string) {
+    try {
+      setCommentsLoading(true);
+      const list = await getTicketComments(codigo);
+      setComments(list);
+    } catch (e) {
+      console.error(e);
+      setComments([]);
+    } finally {
+      setCommentsLoading(false);
+    }
+  }
+
+  async function handleAddComment() {
+    if (!selectedTicket?.codigo || !newComment.trim()) return;
+    try {
+      setAddingComment(true);
+      await createTicketComment(selectedTicket.codigo, newComment);
+      setNewComment("");
+      await loadComments(selectedTicket.codigo);
+      toast({ title: "Observación agregada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al agregar observación" });
+    } finally {
+      setAddingComment(false);
+    }
+  }
+
+  async function handleUpdateComment() {
+    if (!editingCommentId || !editingCommentText.trim()) return;
+    try {
+      await updateTicketComment(editingCommentId, editingCommentText);
+      setEditingCommentId(null);
+      setEditingCommentText("");
+      if (selectedTicket?.codigo) await loadComments(selectedTicket.codigo);
+      toast({ title: "Observación actualizada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al actualizar observación" });
+    }
+  }
+
+  async function handleDeleteComment(id: number) {
+    if (!confirm("¿Eliminar esta observación?")) return;
+    try {
+      await deleteTicketComment(id);
+      if (selectedTicket?.codigo) await loadComments(selectedTicket.codigo);
+      toast({ title: "Observación eliminada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al eliminar observación" });
+    }
+  }
+
+  // --- Handlers para Notas Internas ---
+
+  async function loadInternalNotes(codigo: string) {
+    try {
+      setInternalNotesLoading(true);
+      const list = await getInternalNotes(codigo);
+      setInternalNotes(list);
+    } catch (e) {
+      console.error(e);
+      setInternalNotes([]);
+    } finally {
+      setInternalNotesLoading(false);
+    }
+  }
+
+  async function handleAddInternalNote() {
+    if (!selectedTicket?.codigo || !newInternalNote.trim()) return;
+    try {
+      setAddingInternalNote(true);
+      await createInternalNote(selectedTicket.codigo, newInternalNote);
+      setNewInternalNote("");
+      await loadInternalNotes(selectedTicket.codigo);
+      toast({ title: "Nota interna agregada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al agregar nota interna" });
+    } finally {
+      setAddingInternalNote(false);
+    }
+  }
+
+  async function handleUpdateInternalNote() {
+    if (!editingInternalNoteId || !editingInternalNoteText.trim()) return;
+    try {
+      await updateInternalNote(editingInternalNoteId, editingInternalNoteText);
+      setEditingInternalNoteId(null);
+      setEditingInternalNoteText("");
+      if (selectedTicket?.codigo)
+        await loadInternalNotes(selectedTicket.codigo);
+      toast({ title: "Nota interna actualizada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al actualizar nota interna" });
+    }
+  }
+
+  async function handleDeleteInternalNote(id: string) {
+    if (!confirm("¿Eliminar esta nota interna?")) return;
+    try {
+      await deleteInternalNote(id);
+      if (selectedTicket?.codigo)
+        await loadInternalNotes(selectedTicket.codigo);
+      toast({ title: "Nota interna eliminada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al eliminar nota interna" });
+    }
+  }
+
   function openTicketDetail(ticket: TicketBoardItem) {
     // Resolver nombres legibles para informante y resuelto_por cuando la API
     // entrega solo IDs. Preferimos los campos *_nombre y, si faltan, buscamos
@@ -685,6 +842,8 @@ export default function TicketsBoard() {
       loadFilesForTicket(ticket.codigo);
       setDetailTab("general");
       loadTicketDetail(ticket.codigo);
+      loadComments(ticket.codigo);
+      loadInternalNotes(ticket.codigo);
     }
     setShowAllFiles(false);
   }
@@ -709,6 +868,10 @@ export default function TicketsBoard() {
       const data = json?.data ?? json ?? null;
       setTicketDetail(data);
       setNotasDraft(data?.notas_internas || "");
+      setEditForm((prev) => ({
+        ...prev,
+        descripcion: data?.descripcion || "",
+      }));
     } catch (e: any) {
       setTicketDetailError(
         String(e?.message || e || "Error al cargar detalle")
@@ -752,14 +915,14 @@ export default function TicketsBoard() {
     if (!selectedTicket?.codigo) return;
     try {
       // Construir nueva descripción con links (audioUrls) si existen, anteponiendo contenido previo
-      let currentDesc = String(ticketDetail?.descripcion || "").trim();
+      let currentDesc = String(editForm.descripcion || "").trim();
       // Eliminar líneas previas de URLs para evitar duplicados
       const lines = currentDesc
         .split(/\r?\n/)
         .filter((ln) => !/^\s*URLs\s*:/i.test(ln));
       currentDesc = lines.join("\n").trim();
       const existingUrls =
-        extractUrlsFromDescription(ticketDetail?.descripcion) || [];
+        extractUrlsFromDescription(editForm.descripcion) || [];
       const newUrls = audioUrls
         .map((u) => u.trim())
         .filter((u) => !!u && isLikelyUrl(u));
@@ -1411,7 +1574,7 @@ export default function TicketsBoard() {
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent
           side="right"
-          className="w-full sm:max-w-xl md:max-w-2xl flex flex-col overflow-hidden"
+          className="w-full sm:max-w-2xl md:max-w-4xl flex flex-col overflow-hidden"
         >
           <SheetHeader className="border-b pb-4 pr-12">
             <div className="flex items-start justify-between gap-4">
@@ -1584,6 +1747,125 @@ export default function TicketsBoard() {
                     {/* Se eliminó la sección 'Equipo asignado' según solicitud */}
 
                     {/* 'Trabajo y resolución' eliminado del modal según solicitud del usuario */}
+
+                    {/* Observaciones (Comentarios) */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">
+                        Observaciones
+                      </Label>
+
+                      {/* Lista de comentarios */}
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
+                        {commentsLoading ? (
+                          <div className="text-center py-4 text-xs text-slate-500">
+                            Cargando observaciones...
+                          </div>
+                        ) : comments.length === 0 ? (
+                          <div className="text-center py-4 text-xs text-slate-500">
+                            No hay observaciones registradas.
+                          </div>
+                        ) : (
+                          comments.map((c) => (
+                            <div
+                              key={c.id}
+                              className="bg-white p-3 rounded border border-slate-100 shadow-sm text-sm group"
+                            >
+                              {editingCommentId === c.id ? (
+                                <div className="space-y-2">
+                                  <Textarea
+                                    value={editingCommentText}
+                                    onChange={(e) =>
+                                      setEditingCommentText(e.target.value)
+                                    }
+                                    className="min-h-[60px]"
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingCommentId(null)}
+                                    >
+                                      Cancelar
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={handleUpdateComment}
+                                    >
+                                      Guardar
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex justify-between items-start mb-1">
+                                    <span className="font-semibold text-xs text-slate-700">
+                                      {c.created_by_name || "Usuario"}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      {c.created_at
+                                        ? new Date(c.created_at).toLocaleString(
+                                            "es-ES"
+                                          )
+                                        : ""}
+                                    </span>
+                                  </div>
+                                  <div className="text-slate-800 whitespace-pre-wrap break-words">
+                                    {c.contenido}
+                                  </div>
+                                  {canEdit && (
+                                    <div className="mt-2 flex justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        onClick={() => {
+                                          setEditingCommentId(c.id);
+                                          setEditingCommentText(c.contenido);
+                                        }}
+                                        className="text-[10px] text-blue-600 hover:underline"
+                                      >
+                                        Editar
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          handleDeleteComment(c.id)
+                                        }
+                                        className="text-[10px] text-red-600 hover:underline"
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Agregar comentario */}
+                      {canEdit && (
+                        <div className="flex gap-2 items-start">
+                          <Textarea
+                            placeholder="Escribir nueva observación..."
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            className="min-h-[40px] flex-1"
+                            rows={2}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={handleAddComment}
+                            disabled={addingComment || !newComment.trim()}
+                            className="mt-0.5"
+                          >
+                            {addingComment ? (
+                              <Spinner className="h-4 w-4" />
+                            ) : (
+                              "Enviar"
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+
                     <Separator />
 
                     {/* Archivos (adjuntos + upload + recorder) */}
@@ -2246,50 +2528,139 @@ export default function TicketsBoard() {
 
                 <div className={detailTab === "notas" ? "block" : "hidden"}>
                   <div className="p-6 space-y-4">
-                    {ticketDetailLoading ? (
-                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
-                        Cargando notas...
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">
+                          Notas internas (Privado)
+                        </Label>
+                        <span className="text-xs text-slate-500">
+                          Solo visible para el equipo
+                        </span>
                       </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label className="text-sm font-medium">
-                            Notas internas
-                          </Label>
+
+                      {/* Lista de notas */}
+                      <div className="space-y-4 max-h-[400px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-4">
+                        {internalNotesLoading ? (
+                          <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+                            Cargando notas...
+                          </div>
+                        ) : internalNotes.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-slate-500">
+                            <p>No hay notas internas.</p>
+                          </div>
+                        ) : (
+                          internalNotes.map((note) => (
+                            <div
+                              key={note.id}
+                              className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+                                    {(note.user_nombre || "U")[0].toUpperCase()}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-semibold text-slate-900">
+                                      {note.user_nombre || "Usuario"}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500">
+                                      {note.created_at
+                                        ? new Date(
+                                            note.created_at
+                                          ).toLocaleDateString()
+                                        : ""}
+                                    </span>
+                                  </div>
+                                </div>
+                                {canEdit && (
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+                                      onClick={() => {
+                                        setEditingInternalNoteId(note.id);
+                                        setEditingInternalNoteText(
+                                          note.contenido
+                                        );
+                                      }}
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 text-slate-400 hover:text-red-600"
+                                      onClick={() =>
+                                        handleDeleteInternalNote(note.id)
+                                      }
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {editingInternalNoteId === note.id ? (
+                                <div className="mt-2 space-y-2">
+                                  <Textarea
+                                    value={editingInternalNoteText}
+                                    onChange={(e) =>
+                                      setEditingInternalNoteText(e.target.value)
+                                    }
+                                    className="min-h-[60px] text-sm"
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditingInternalNoteId(null);
+                                        setEditingInternalNoteText("");
+                                      }}
+                                    >
+                                      Cancelar
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={handleUpdateInternalNote}
+                                      disabled={!editingInternalNoteText.trim()}
+                                    >
+                                      Guardar
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-sm text-slate-700 whitespace-pre-wrap break-words pl-8">
+                                  {note.contenido}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Formulario nueva nota */}
+                      {canEdit && (
+                        <div className="flex gap-2 items-start">
                           <Textarea
-                            rows={12}
-                            value={notasDraft}
-                            onChange={(e) => setNotasDraft(e.target.value)}
-                            placeholder="Escribe notas internas sobre este ticket..."
-                            className="resize-none"
-                            disabled={!canEdit}
+                            value={newInternalNote}
+                            onChange={(e) => setNewInternalNote(e.target.value)}
+                            placeholder="Escribe una nota interna..."
+                            className="min-h-[80px] resize-none"
                           />
-                        </div>
-                        <div className="flex justify-end">
                           <Button
-                            onClick={async () => {
-                              if (!selectedTicket?.codigo) return;
-                              setSavingNotas(true);
-                              try {
-                                await updateTicket(selectedTicket.codigo, {
-                                  notas_internas: notasDraft,
-                                } as any);
-                                toast({ title: "Notas internas guardadas" });
-                                await loadTicketDetail(selectedTicket.codigo);
-                              } catch (e) {
-                                console.error(e);
-                                toast({ title: "Error al guardar notas" });
-                              } finally {
-                                setSavingNotas(false);
-                              }
-                            }}
-                            disabled={savingNotas || !canEdit}
+                            onClick={handleAddInternalNote}
+                            disabled={
+                              addingInternalNote || !newInternalNote.trim()
+                            }
+                            className="shrink-0"
                           >
-                            {savingNotas ? "Guardando..." : "Guardar notas"}
+                            {addingInternalNote ? "..." : "Agregar"}
                           </Button>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </>

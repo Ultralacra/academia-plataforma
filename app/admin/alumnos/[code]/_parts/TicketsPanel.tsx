@@ -13,6 +13,10 @@ import {
   deleteTicketFile,
   updateTicket,
 } from "../../api";
+import {
+  getTicketComments,
+  type TicketComment,
+} from "@/app/admin/tickets-board/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -191,6 +195,8 @@ export default function TicketsPanel({
   const [ticketDetailError, setTicketDetailError] = useState<string | null>(
     null
   );
+  const [comments, setComments] = useState<TicketComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
 
   // New state variables for ticket creation
   const [openCreate, setOpenCreate] = useState(false);
@@ -233,6 +239,7 @@ export default function TicketsPanel({
         const fetchedAll = await getStudentTickets(student.code || "");
         if (!alive) return;
         const normalized = fetchedAll
+          .filter((t) => (t.estado || "").toUpperCase() !== "ELIMINADO")
           .slice()
           .sort((a, b) => (a.creacion > b.creacion ? -1 : 1));
         setAllFull(normalized);
@@ -628,7 +635,25 @@ export default function TicketsPanel({
     setDetailTab("general");
     const codigo =
       (ticket as any)?.codigo || (ticket as any)?.id_externo || null;
-    if (codigo) loadTicketDetail(String(codigo));
+    if (codigo) {
+      loadTicketDetail(String(codigo));
+      loadComments(String(codigo));
+    } else {
+      setComments([]);
+    }
+  }
+
+  async function loadComments(codigo: string) {
+    try {
+      setCommentsLoading(true);
+      const list = await getTicketComments(codigo);
+      setComments(list);
+    } catch (e) {
+      console.error(e);
+      setComments([]);
+    } finally {
+      setCommentsLoading(false);
+    }
   }
 
   async function loadTicketDetail(codigo: string) {
@@ -876,7 +901,7 @@ export default function TicketsPanel({
       </div>
 
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} direction="right">
-        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-xl md:max-w-2xl flex flex-col">
+        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-4xl md:max-w-7xl flex flex-col">
           <DrawerHeader className="border-b pb-4">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
@@ -976,6 +1001,48 @@ export default function TicketsPanel({
                         {(selectedTicket as any)?.resuelto_por || "—"}
                       </p>
                     </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Observaciones (Comentarios) - Read Only */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <FileText className="h-4 w-4 text-muted-foreground" />
+                    Observaciones
+                  </div>
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto rounded-md border border-border bg-muted/30 p-3">
+                    {commentsLoading ? (
+                      <div className="text-center py-4 text-xs text-muted-foreground">
+                        Cargando observaciones...
+                      </div>
+                    ) : comments.length === 0 ? (
+                      <div className="text-center py-4 text-xs text-muted-foreground">
+                        No hay observaciones registradas.
+                      </div>
+                    ) : (
+                      comments.map((c) => (
+                        <div
+                          key={c.id}
+                          className="bg-card p-3 rounded border border-border shadow-sm text-sm"
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="font-semibold text-xs text-foreground">
+                              {c.created_by_name || "Usuario"}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {c.created_at
+                                ? new Date(c.created_at).toLocaleString("es-ES")
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="text-foreground whitespace-pre-wrap break-words">
+                            {c.contenido}
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
 
