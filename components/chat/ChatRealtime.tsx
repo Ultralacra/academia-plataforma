@@ -18,6 +18,8 @@ import {
   MessageSquare,
   CheckCheck,
   Check,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 import {
   Popover,
@@ -170,7 +172,7 @@ export default function ChatRealtime({
   >([]);
 
   const filteredItems = React.useMemo(() => {
-    return items.filter((m) => {
+    const res = items.filter((m) => {
       let ok = true;
       if (statusFilter && m.status) {
         ok = ok && m.status === statusFilter;
@@ -179,6 +181,14 @@ export default function ChatRealtime({
         ok = ok && m.phase === phaseFilter;
       }
       return ok;
+    });
+    // Sort by date ascending
+    return res.sort((a, b) => {
+      const da = new Date(a.at).getTime();
+      const db = new Date(b.at).getTime();
+      const va = isNaN(da) ? 0 : da;
+      const vb = isNaN(db) ? 0 : db;
+      return va - vb;
     });
   }, [items, statusFilter, phaseFilter]);
 
@@ -763,6 +773,12 @@ export default function ChatRealtime({
               msg?.id_mensaje ?? `${Date.now()}-${Math.random()}`
             );
             if (seenRef.current.has(id)) return;
+
+            // Check for own message echo via client_session
+            const isMyEcho =
+              !!msg?.client_session &&
+              String(msg.client_session) === String(clientSessionRef.current);
+
             seenRef.current.add(id);
             const senderIsMeById =
               (myParticipantId != null &&
@@ -824,19 +840,47 @@ export default function ChatRealtime({
             if (mappedAtts) (newMsg as any).attachments = mappedAtts;
             setItems((prev) => {
               // Intentar reconciliar con mensaje optimista (mío) para evitar duplicados
-              if (sender === currentRole) {
+              if (sender === currentRole || isMyEcho) {
                 const next = [...prev];
+                // Search backwards for a matching optimistic message
                 for (let i = next.length - 1; i >= 0; i--) {
                   const mm = next[i];
+                  // Match if:
+                  // 1. It's my role AND text matches AND not delivered yet
+                  // 2. OR it's my echo (client_session matched) AND not delivered yet (stronger match)
+                  const isOptimistic = mm.delivered === false;
+                  const textMatch = mm.text === newMsg.text;
+
+                  // Require text match to avoid swapping messages if multiple are pending.
+                  // isMyEcho helps if 'sender' was incorrectly calculated.
                   if (
-                    mm.sender === currentRole &&
-                    mm.text === newMsg.text &&
-                    mm.delivered === false
+                    isOptimistic &&
+                    textMatch &&
+                    (isMyEcho || mm.sender === currentRole)
                   ) {
-                    next[i] = { ...newMsg, read: mm.read || false };
+                    // Preserve the local timestamp to prevent the message from jumping up/down
+                    // due to server clock skew, which makes it look like it "disappeared".
+                    // Also preserve 'read' status and sender (to avoid flipping sides if sender calc failed).
+                    next[i] = {
+                      ...newMsg,
+                      sender: mm.sender, // Keep local sender
+                      at: mm.at, // Keep local time
+                      read: mm.read || false,
+                    };
                     return next;
                   }
                 }
+                // If it's my echo but we didn't find the optimistic message (maybe already acked/replaced?),
+                // we should be careful. If we already have this ID (checked by seenRef), we returned early.
+                // If we are here, it's a NEW ID.
+                // If it's my echo, and I didn't find an optimistic counterpart, it might be a duplicate or a race condition.
+                // However, usually 'seenRef' catches the ID if Ack handled it.
+                // If Ack hasn't handled it, we replace optimistic.
+                // If Ack handled it, we have real ID in items and seenRef.
+                // So if we are here, it means we have a NEW ID that is NOT in seenRef.
+                // If it is my echo, it implies it IS the confirmation of my message.
+                // If I couldn't find the optimistic one (e.g. text changed? or logic error?), appending it might cause double.
+                // But usually text match works.
               }
               return [...prev, newMsg];
             });
@@ -3100,6 +3144,7 @@ export default function ChatRealtime({
   }, [filteredItems]);
 
   const [selectMode, setSelectMode] = React.useState(false);
+  const [headerCollapsed, setHeaderCollapsed] = React.useState(false);
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
   function toggleSelect(id: string) {
     setSelectedIds((prev) => {
@@ -3226,15 +3271,19 @@ export default function ChatRealtime({
         style={useFullscreen ? { height: "100%" } : undefined}
       >
         <div
-          className="sticky top-0 z-10 flex-shrink-0 flex items-center justify-between px-3 sm:px-4 py-3 bg-[#075e54] text-white shadow"
+          className={`sticky top-0 z-10 flex-shrink-0 flex items-center justify-between px-3 sm:px-4 bg-[#075e54] text-white shadow transition-all duration-300 ${
+            headerCollapsed ? "py-1" : "py-3"
+          }`}
           style={{
             paddingTop: useFullscreen
               ? "max(env(safe-area-inset-top), 12px)"
+              : headerCollapsed
+              ? "4px"
               : "12px",
           }}
         >
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            {onBack && useFullscreen && (
+            {onBack && useFullscreen && role !== "alumno" && (
               <button
                 onClick={onBack}
                 className="mr-1 inline-flex h-9 w-9 items-center justify-center rounded-full hover:bg-white/10 active:scale-95"
@@ -3243,21 +3292,25 @@ export default function ChatRealtime({
                 <ArrowLeft className="h-5 w-5" />
               </button>
             )}
-            <div className="relative">
-              <div className="w-10 h-10 rounded-full bg-[#128c7e] flex items-center justify-center text-white font-semibold text-sm border-2 border-white/20">
-                {title.charAt(0).toUpperCase()}
+            {!headerCollapsed && (
+              <div className="relative">
+                <div className="w-10 h-10 rounded-full bg-[#128c7e] flex items-center justify-center text-white font-semibold text-sm border-2 border-white/20">
+                  {title.charAt(0).toUpperCase()}
+                </div>
+                {connected && (
+                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#25d366] border-2 border-[#075e54]" />
+                )}
               </div>
-              {connected && (
-                <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#25d366] border-2 border-[#075e54]" />
-              )}
-            </div>
+            )}
             <div className="flex-1 min-w-0">
               <h3 className="text-base font-semibold text-white truncate">
                 {title}
               </h3>
-              <p className="text-xs text-white/80 truncate">
-                {subtitle || (connected ? "en línea" : "desconectado")}
-              </p>
+              {!headerCollapsed && (
+                <p className="text-xs text-white/80 truncate">
+                  {subtitle || (connected ? "en línea" : "desconectado")}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -3381,13 +3434,24 @@ export default function ChatRealtime({
             <button className="p-2 rounded-full hover:bg-white/10 transition-colors">
               <MoreVertical className="w-5 h-5" />
             </button>
+            <button
+              onClick={() => setHeaderCollapsed(!headerCollapsed)}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors"
+              title={headerCollapsed ? "Expandir" : "Contraer"}
+            >
+              {headerCollapsed ? (
+                <ChevronDown className="w-5 h-5" />
+              ) : (
+                <ChevronUp className="w-5 h-5" />
+              )}
+            </button>
           </div>
         </div>
 
         <div
           ref={scrollRef}
           onScroll={onScrollContainer}
-          className="flex-1 overflow-y-auto p-4 space-y-2 min-h-0"
+          className="flex-1 overflow-y-auto p-1 md:px-2 space-y-1 min-h-0"
           style={bgPatternStyle}
         >
           {isJoining && (

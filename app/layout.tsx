@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
 import { SseNotificationsProvider } from "@/components/hooks/useSseNotifications";
+import { GlobalChatNotifications } from "@/components/chat/GlobalChatNotifications";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -42,6 +43,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <SseNotificationsProvider>
+            <GlobalChatNotifications />
             <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
           </SseNotificationsProvider>
           <Toaster />

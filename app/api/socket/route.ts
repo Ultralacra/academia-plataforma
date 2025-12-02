@@ -76,7 +76,7 @@ export function GET(req: Request) {
         // Límite sencillo: max 25MB por mensaje
         const totalSize = (attachments || []).reduce((acc, a) => acc + (a.size || 0), 0);
         if (totalSize > 25 * 1024 * 1024) return;
-        const msg: Message = {
+        const msg: Message & { client_session?: string } = {
           id: String(payload.id || Math.random().toString(36).slice(2)),
           room: roomIn,
           sender,
@@ -84,6 +84,9 @@ export function GET(req: Request) {
           at: new Date().toISOString(),
           attachments,
         };
+        if (payload.client_session) {
+            msg.client_session = String(payload.client_session);
+        }
         const arr = history.get(roomIn) || [];
         arr.push(msg);
         if (arr.length > 200) arr.splice(0, arr.length - 200);

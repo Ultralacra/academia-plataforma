@@ -1,27 +1,31 @@
 "use client";
 import React from "react";
 import AudioBubble from "@/app/admin/teamsv2/[code]/AudioBubble";
-import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
-import { TicketGenerationModal } from "./TicketGenerationModal";
+import { AttachmentPreviewModal } from "@/app/admin/teamsv2/[code]/AttachmentPreviewModal";
+import { TicketGenerationModal } from "@/app/admin/teamsv2/[code]/TicketGenerationModal";
 import {
   Sender,
   Attachment,
   Message,
   SocketIOConfig,
   TicketData,
-} from "./chat-types";
+} from "@/app/admin/teamsv2/[code]/chat-types";
 import {
   simpleMarkdownToHtml,
   parseAiContent,
   formatBytes as formatBytesUtil,
-} from "./chat-utils";
-import { getAttachmentUrl } from "./chat-attachments";
+} from "@/app/admin/teamsv2/[code]/chat-utils";
+import { getAttachmentUrl } from "@/app/admin/teamsv2/[code]/chat-attachments";
 import {
   recordRecentUpload,
   hasRecentUploadMatch,
   hasRecentUploadLoose,
-} from "./chat-recent-upload";
-import { getEmitter, normalizeDateStr, normalizeTipo } from "./chat-core";
+} from "@/app/admin/teamsv2/[code]/chat-recent-upload";
+import {
+  getEmitter,
+  normalizeDateStr,
+  normalizeTipo,
+} from "@/app/admin/teamsv2/[code]/chat-core";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST, apiFetch, buildUrl } from "@/lib/api-config";
 import {
@@ -369,13 +373,8 @@ export default function CoachChatInline({
         const parts = participantsRef.current ?? socketio?.participants;
         if (!Array.isArray(parts) || parts.length === 0) return;
         // Alumno: solo localizar y hacer join si existe (no crear aquí)
-        const found = await ensureChatReadyForSend({ onlyFind: true });
-        if (!found) {
-          setLoadingMessages(false);
-        }
-      } catch {
-        setLoadingMessages(false);
-      }
+        await ensureChatReadyForSend({ onlyFind: true });
+      } catch {}
     })();
   }, [connected, precreateOnParticipants, socketio?.participants]);
 
@@ -1686,7 +1685,6 @@ export default function CoachChatInline({
                 const mm = next[i];
                 const tNew = Date.parse(newMsg.at || "");
                 const tOld = Date.parse(mm.at || "");
-                // Aumentamos tolerancia a 60s para evitar duplicados por skew de reloj
                 const near =
                   !isNaN(tNew) && !isNaN(tOld) && Math.abs(tNew - tOld) < 60000;
                 const sameText =
@@ -1946,10 +1944,7 @@ export default function CoachChatInline({
     setChatId(null); // chatId transitorio hasta éxito de JOIN
     setOtherTyping(false);
     setLoadingMessages(true);
-    const t = setTimeout(() => {
-      setIsJoining(false);
-      setLoadingMessages(false);
-    }, 6000);
+    const t = setTimeout(() => setIsJoining(false), 6000);
     sio.emit("chat.join", { id_chat: id }, (ack: any) => {
       try {
         clearTimeout(t);
@@ -3144,161 +3139,208 @@ export default function CoachChatInline({
   return (
     <>
       <div
-        className={`relative h-full flex flex-col w-full min-h-0 chat-root bg-[#EFEAE2] ${
+        className={`relative h-full flex flex-col w-full min-h-0 chat-root ${
           className || ""
         }`}
       >
-        {/* Header estilo WhatsApp Web */}
         <div
-          className={`flex items-center justify-between px-4 transition-all duration-300 bg-[#F0F2F5] border-b border-[#d1d7db] z-10 flex-shrink-0 ${
-            headerCollapsed ? "h-[40px] py-1" : "h-[60px] py-2.5"
+          className={`flex items-center justify-between px-3 transition-all duration-300 bg-[#075E54] text-white ${
+            headerCollapsed ? "py-1.5" : "py-2 md:px-4 md:py-3"
           }`}
         >
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            {onBack && role !== "alumno" && (
-              <button
-                onClick={onBack}
-                className="p-1 mr-1 rounded-full hover:bg-black/10 text-[#54656f] md:hidden"
-                title="Volver"
-              >
-                <ArrowLeft className="w-6 h-6" />
-              </button>
-            )}
-            {!headerCollapsed && (
-              <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-semibold text-sm flex-shrink-0 overflow-hidden">
-                {/* Avatar placeholder o inicial */}
-                {(title || "C").charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div className="min-w-0 flex-1 flex flex-col justify-center">
-              <div className="text-[#111b21] text-base font-normal leading-tight truncate">
-                {title}
-              </div>
-              {!headerCollapsed &&
-                (subtitle ? (
-                  <div className="text-[13px] text-[#667781] truncate leading-tight">
-                    {subtitle}
-                  </div>
-                ) : (
-                  <div className="text-[13px] text-[#667781] truncate leading-tight h-4">
-                    {/* Espacio reservado para estado o subtítulo */}
-                  </div>
-                ))}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 flex-shrink-0 text-[#54656f]">
-            {/* Indicador de conexión discreto */}
-            <div
-              className={`w-2.5 h-2.5 rounded-full ${
-                connected ? "bg-green-500" : "bg-red-400"
-              }`}
-              title={connected ? "Conectado" : "Desconectado"}
-            />
-
-            {role !== "alumno" && (
-              <button
-                onClick={handleGenerateTicket}
-                disabled={!(chatIdRef.current ?? chatId) || ticketLoading}
-                className="p-2 rounded-full hover:bg-black/5 transition disabled:opacity-50"
-                title="Generar ticket"
-              >
-                <Sparkles className="h-5 w-5" />
-              </button>
-            )}
-
-            {role !== "alumno" && (
-              <button
-                onClick={() => {
-                  if (selectionMode) {
-                    setSelectionMode(false);
-                    setSelectedMessageIds(new Set());
-                    setSelectedAttachmentIds(new Set());
-                  } else {
-                    setSelectionMode(true);
-                  }
-                }}
-                className={`p-2 rounded-full hover:bg-black/5 transition ${
-                  selectionMode ? "bg-[#d9fdd3]" : ""
-                }`}
-                title={
-                  selectionMode ? "Cancelar selección" : "Seleccionar mensajes"
-                }
-              >
-                <div className="text-xs font-bold border-2 border-current rounded px-1">
-                  ✓
-                </div>
-              </button>
-            )}
-
-            <button
-              onClick={() => setHeaderCollapsed(!headerCollapsed)}
-              className="p-2 rounded-full hover:bg-black/5 transition focus:outline-none"
-              title={
-                headerCollapsed ? "Expandir encabezado" : "Contraer encabezado"
-              }
-            >
-              {headerCollapsed ? (
-                <ChevronDown className="h-5 w-5" />
-              ) : (
-                <ChevronUp className="h-5 w-5" />
-              )}
-            </button>
-
-            <AlertDialog
-              open={confirmDeleteOpen}
-              onOpenChange={setConfirmDeleteOpen}
-            >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
+          {!headerCollapsed ? (
+            <>
+              <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 mr-2">
+                {onBack && (
                   <button
-                    className="p-2 rounded-full hover:bg-black/5 focus:outline-none"
-                    title="Más opciones"
+                    onClick={onBack}
+                    className="p-1 mr-1 rounded-full hover:bg-white/10 text-white md:hidden"
+                    title="Volver"
                   >
-                    <MoreVertical className="h-5 w-5" />
+                    <ArrowLeft className="w-5 h-5" />
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <AlertDialogTrigger asChild>
-                    <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
-                      <Trash2 className="h-4 w-4 mr-2" /> Eliminar chat
-                    </DropdownMenuItem>
-                  </AlertDialogTrigger>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    ¿Eliminar esta conversación?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Se eliminarán los mensajes del chat. Esta acción no se puede
-                    deshacer.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDeleteChat}
-                    className="bg-red-600 hover:bg-red-700"
+                )}
+                <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-xs md:text-sm flex-shrink-0">
+                  {(title || "C").charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium truncate leading-tight">
+                    {title}
+                  </div>
+                  {subtitle && (
+                    <div className="text-[10px] md:text-xs text-gray-200 truncate leading-tight">
+                      {subtitle}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+                <div
+                  className="flex items-center gap-1.5"
+                  title={connected ? "Conectado" : "Desconectado"}
+                >
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      connected ? "bg-green-400" : "bg-white/30"
+                    }`}
+                  />
+                  <span className="text-xs text-gray-200 hidden sm:inline">
+                    {connected ? "en línea" : "offline"}
+                  </span>
+                </div>
+                {/* Botón para crear chat manual si aún no existe */}
+                {/*  {!chatIdRef.current && !chatId && (
+              <button
+                onClick={async () => {
+                  if (creatingChat) return;
+                  setCreatingChat(true);
+                  try {
+                    await ensureChatReadyForSend();
+                  } catch {}
+                  setCreatingChat(false);
+                }}
+                disabled={creatingChat}
+                className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60 whitespace-nowrap"
+                title="Crear conversación"
+              >
+                {creatingChat ? <Loader2 className="w-3 h-3 animate-spin"/> : <Plus className="w-3 h-3"/>}
+                <span className="hidden sm:inline">{creatingChat ? "Creando…" : "Crear chat"}</span>
+                <span className="sm:hidden">Crear</span>
+              </button>
+            )} */}
+                {role !== "alumno" && (
+                  <button
+                    onClick={handleGenerateTicket}
+                    disabled={!(chatIdRef.current ?? chatId) || ticketLoading}
+                    className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
+                    title={
+                      chatIdRef.current ?? chatId
+                        ? "Generar ticket de esta conversación"
+                        : "Sin chat activo"
+                    }
                   >
-                    Eliminar
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Generar ticket
+                  </button>
+                )}
+                {role !== "alumno" && (
+                  <button
+                    onClick={() => {
+                      if (selectionMode) {
+                        setSelectionMode(false);
+                        setSelectedMessageIds(new Set());
+                        setSelectedAttachmentIds(new Set());
+                      } else {
+                        setSelectionMode(true);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition"
+                    title={
+                      selectionMode
+                        ? "Cancelar selección"
+                        : "Activar selección de mensajes y archivos"
+                    }
+                  >
+                    {selectionMode ? "Cancelar" : "Seleccionar"}
+                  </button>
+                )}
+                {selectionMode && (
+                  <span className="text-[11px] px-2 py-1 rounded bg-white/10 text-white">
+                    {selectedMessageIds.size} msg / {selectedAttachmentIds.size}{" "}
+                    adj
+                  </span>
+                )}
+                {/* Menú de acciones (3 puntitos) */}
+                <AlertDialog
+                  open={confirmDeleteOpen}
+                  onOpenChange={setConfirmDeleteOpen}
+                >
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                        title="Más acciones"
+                      >
+                        <MoreVertical className="h-4 w-4 text-white" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <AlertDialogTrigger asChild>
+                        <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
+                          <Trash2 className="h-4 w-4 mr-2" /> Eliminar
+                          conversación
+                        </DropdownMenuItem>
+                      </AlertDialogTrigger>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        ¿Eliminar esta conversación?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Se eliminarán los mensajes del chat{" "}
+                        {String(chatIdRef.current ?? chatId ?? "")}. Esta acción
+                        no se puede deshacer.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteChat}
+                        className="bg-red-600 hover:bg-red-700"
+                      >
+                        Eliminar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <button
+                  onClick={() => setHeaderCollapsed(true)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                  title="Contraer encabezado"
+                >
+                  <ChevronUp className="h-4 w-4 text-white" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-2">
+                {onBack && (
+                  <button
+                    onClick={onBack}
+                    className="p-1 rounded-full hover:bg-white/10 text-white md:hidden"
+                    title="Volver"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                )}
+                <div className="h-6 w-6 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-[10px] flex-shrink-0">
+                  {(title || "C").charAt(0).toUpperCase()}
+                </div>
+                <div className="text-xs font-medium truncate">{title}</div>
+              </div>
+              <button
+                onClick={() => setHeaderCollapsed(false)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                title="Expandir encabezado"
+              >
+                <ChevronDown className="h-4 w-4 text-white" />
+              </button>
+            </div>
+          )}
         </div>
 
         <div
           ref={scrollRef}
           onScroll={onScrollContainer}
-          className="relative flex-1 overflow-y-auto p-1 md:px-2"
+          className="relative flex-1 overflow-y-auto p-1 md:px-2 bg-[#ECE5DD]"
           style={{
-            backgroundImage: `url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")`,
-            backgroundRepeat: "repeat",
-            backgroundSize: "400px",
-            backgroundColor: "#EFEAE2", // Fallback color
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+            scrollbarGutter: "stable both-edges",
+            overscrollBehavior: "contain",
+            overflowY: "scroll",
           }}
         >
           {isJoining && items.length === 0 ? (
@@ -3320,15 +3362,23 @@ export default function CoachChatInline({
               const prev = idx > 0 ? items[idx - 1] : null;
               const next = idx + 1 < items.length ? items[idx + 1] : null;
               const samePrev = prev && prev.sender === m.sender;
+              const sameNext = next && next.sender === m.sender;
               const newGroup = !samePrev;
-
+              const endGroup = !sameNext;
               const isSelected = selectionMode && selectedMessageIds.has(m.id);
 
               let radius = "rounded-lg";
               if (isMine) {
-                if (newGroup) radius = "rounded-lg rounded-tr-none";
+                if (newGroup && !endGroup) radius = "rounded-lg rounded-br-sm";
+                if (!newGroup && !endGroup)
+                  radius =
+                    "rounded-tr-sm rounded-br-sm rounded-tl-lg rounded-bl-lg";
+                if (!newGroup && endGroup) radius = "rounded-lg rounded-tr-sm";
               } else {
-                if (newGroup) radius = "rounded-lg rounded-tl-none";
+                if (newGroup && !endGroup) radius = "rounded-lg rounded-bl-sm";
+                if (!newGroup && !endGroup)
+                  radius =
+                    "rounded-tl-sm rounded-bl-sm rounded-tr-lg rounded-br-lg";
               }
 
               const wrapperMt = newGroup ? "mt-1" : "mt-0.5";
@@ -3350,7 +3400,7 @@ export default function CoachChatInline({
                   key={m.uiKey || m.id}
                   className={`flex ${
                     isMine ? "justify-end" : "justify-start"
-                  } ${wrapperMt} group/msg`}
+                  } ${wrapperMt}`}
                 >
                   <div
                     onClick={() => {
@@ -3361,56 +3411,13 @@ export default function CoachChatInline({
                       selectionMode && !isAttachmentOnly
                         ? "cursor-pointer"
                         : "cursor-default"
-                    } w-fit max-w-[90%] md:max-w-[85%] ${
+                    } w-fit ${
                       hasAudioOnly
                         ? "p-0 bg-transparent shadow-none"
-                        : "px-2 py-1.5 shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] " +
-                          (isMine ? "bg-[#d9fdd3]" : "bg-white")
-                    } ${radius} ${
-                      isSelected ? "ring-2 ring-[#00a884] bg-[#d9fdd3]/80" : ""
-                    }`}
+                        : "max-w-[90%] md:max-w-[85%] px-2.5 py-1.5 md:px-3 md:py-2 shadow-sm " +
+                          (isMine ? "bg-[#DCF8C6]" : "bg-white")
+                    } ${radius} ${isSelected ? "ring-2 ring-violet-500" : ""}`}
                   >
-                    {!hasAudioOnly &&
-                      newGroup &&
-                      (isMine ? (
-                        <span className="absolute -right-2 top-0 text-[#d9fdd3]">
-                          <svg
-                            viewBox="0 0 8 13"
-                            height="13"
-                            width="8"
-                            preserveAspectRatio="xMidYMid slice"
-                            fit=""
-                            version="1.1"
-                            x="0px"
-                            y="0px"
-                            enableBackground="new 0 0 8 13"
-                          >
-                            <path
-                              fill="currentColor"
-                              d="M5.188,1H0v11.193l6.467-8.625 C7.526,2.156,6.958,1,5.188,1z"
-                            ></path>
-                          </svg>
-                        </span>
-                      ) : (
-                        <span className="absolute -left-2 top-0 text-white">
-                          <svg
-                            viewBox="0 0 8 13"
-                            height="13"
-                            width="8"
-                            preserveAspectRatio="xMidYMid slice"
-                            fit=""
-                            version="1.1"
-                            x="0px"
-                            y="0px"
-                            enableBackground="new 0 0 8 13"
-                          >
-                            <path
-                              fill="currentColor"
-                              d="M1.533,3.568L8,12.193V1H2.812 C1.042,1,0.474,2.156,1.533,3.568z"
-                            ></path>
-                          </svg>
-                        </span>
-                      ))}
                     {selectionMode && !isAttachmentOnly && (
                       <>
                         <div className="absolute inset-0 z-10 bg-transparent" />
@@ -3426,7 +3433,7 @@ export default function CoachChatInline({
                       </>
                     )}
                     {m.text?.trim() ? (
-                      <div className="text-[14.2px] leading-[19px] text-[#111b21] whitespace-pre-wrap break-words">
+                      <div className="text-sm md:text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
                         {renderTextWithLinks(m.text)}
                       </div>
                     ) : null}
@@ -3620,19 +3627,19 @@ export default function CoachChatInline({
                       ))}
                     {!hasAudioOnly && (
                       <div
-                        className={`float-right ml-2 mt-1 flex items-center gap-1 select-none h-[15px]`}
+                        className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
+                          isMine ? "text-gray-600" : "text-gray-500"
+                        }`}
                       >
-                        <span className="text-[11px] text-[#667781]">
-                          {formatTime(m.at)}
-                        </span>
+                        <span>{formatTime(m.at)}</span>
                         {isMine && (
                           <span
                             className={`ml-0.5 ${
-                              m.read ? "text-[#53bdeb]" : "text-[#8696a0]"
+                              m.read ? "text-[#53BDEB]" : "text-gray-500"
                             }`}
                           >
                             {!m.delivered ? (
-                              <Loader2 className="h-3 w-3 animate-spin text-[#8696a0]" />
+                              <Loader2 className="h-3 w-3 animate-spin" />
                             ) : m.read ? (
                               <CheckCheck className="h-3.5 w-3.5" />
                             ) : (
@@ -3708,7 +3715,7 @@ export default function CoachChatInline({
         </div>
 
         <div
-          className="sticky bottom-0 z-20 flex-shrink-0 px-4 py-2 bg-[#F0F2F5] border-t border-[#d1d7db]"
+          className="sticky bottom-0 z-20 flex-shrink-0 px-2 py-2 md:px-3 md:py-3 bg-[#F0F0F0] border-t border-gray-200 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
           onDragOver={(e) => {
             try {
               if (e.dataTransfer?.types?.includes("Files")) {
@@ -3725,344 +3732,332 @@ export default function CoachChatInline({
             } catch {}
           }}
         >
-          {attachments.length > 0 && (
-            <div className="flex gap-2 overflow-x-auto mb-2 pb-2 px-2">
-              {attachments.map((a, i) => (
-                <div
-                  key={i}
-                  className="relative flex-shrink-0 w-16 h-16 bg-white rounded-md border border-gray-200 overflow-hidden group shadow-sm"
-                >
-                  {a.preview ? (
-                    a.file.type.startsWith("image/") ? (
-                      <img
-                        src={a.preview}
-                        alt={a.file.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="h-full w-full bg-gray-100 grid place-items-center text-[10px] text-gray-500 font-medium">
-                        {a.file.type.startsWith("video/")
-                          ? "VID"
-                          : a.file.type.startsWith("audio/")
-                          ? "AUD"
-                          : "FILE"}
-                      </div>
-                    )
-                  ) : (
-                    <div className="h-full w-full bg-gray-100 grid place-items-center text-[10px] text-gray-500 font-medium">
-                      FILE
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeAttachment(i)}
-                    className="absolute top-0.5 right-0.5 bg-gray-800/60 text-white rounded-full p-0.5 hover:bg-gray-800 transition-colors"
-                    title="Quitar adjunto"
-                  >
-                    <svg
-                      className="w-3 h-3"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M6 18L18 6M6 6l12 12"
-                      ></path>
-                    </svg>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="flex items-end gap-2 max-w-screen-2xl mx-auto">
+          <div className="flex items-center gap-1 md:gap-2">
             <input
               ref={fileInputRef}
               type="file"
               multiple
               onChange={handleFilesSelected}
               className="hidden"
+              // Permitimos todos los tipos; el backend decidirá cómo manejarlos
               accept="*/*"
             />
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              title="Adjuntar"
-              className="p-2 text-[#54656f] hover:bg-[rgba(0,0,0,0.05)] rounded-full transition-colors flex-shrink-0 mb-1"
+              title={uploading ? "Subiendo archivos…" : "Adjuntar archivos"}
+              className="p-1.5 md:p-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 flex-shrink-0"
             >
-              <Paperclip className="w-6 h-6" />
+              <Paperclip className="w-5 h-5 md:w-5 md:h-5" />
             </button>
-
-            <div className="flex-1 bg-white rounded-lg flex items-center min-h-[42px] px-4 py-2 shadow-sm border border-white focus-within:border-white mx-1">
-              <input
-                value={text}
-                onChange={(e) => {
-                  setText(e.target.value);
-                  if (e.target.value.trim()) notifyTyping(true);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  } else {
-                    notifyTyping(true);
-                  }
-                }}
-                placeholder="Escribe un mensaje"
-                className="w-full bg-transparent border-none focus:ring-0 text-[#111b21] placeholder:text-[#8696a0] text-[15px] max-h-[100px] overflow-y-auto resize-none outline-none"
-                style={{ outline: "none", boxShadow: "none" }}
-              />
-            </div>
-
-            {text.trim() || attachments.length > 0 ? (
-              <button
-                onClick={send}
-                disabled={uploading}
-                className="p-2 text-[#54656f] hover:bg-[rgba(0,0,0,0.05)] rounded-full transition-colors flex-shrink-0 mb-1"
-              >
-                {uploading ? (
-                  <Loader2 className="w-6 h-6 animate-spin text-[#00a884]" />
-                ) : (
-                  <svg
-                    viewBox="0 0 24 24"
-                    height="24"
-                    width="24"
-                    preserveAspectRatio="xMidYMid meet"
-                    version="1.1"
-                    x="0px"
-                    y="0px"
-                    enableBackground="new 0 0 24 24"
-                  >
-                    <path
-                      fill="#54656f"
-                      d="M1.101,21.757L23.8,12.028L1.101,2.3l0.011,7.912l13.623,1.816L1.112,13.845 L1.101,21.757z"
-                    ></path>
-                  </svg>
-                )}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  if (recording) {
+            <button
+              type="button"
+              onClick={() => {
+                // Toggle grabación de audio
+                if (recording) {
+                  try {
+                    mediaRecorderRef.current?.stop();
+                  } catch {}
+                  setRecording(false);
+                  try {
+                    if (recordTimerRef.current) {
+                      clearInterval(recordTimerRef.current);
+                      recordTimerRef.current = null;
+                    }
+                    setRecordStartAt(null);
+                  } catch {}
+                } else {
+                  (async () => {
                     try {
-                      mediaRecorderRef.current?.stop();
-                    } catch {}
-                    setRecording(false);
-                    try {
-                      if (recordTimerRef.current) {
-                        clearInterval(recordTimerRef.current);
-                        recordTimerRef.current = null;
+                      if (
+                        typeof navigator === "undefined" ||
+                        !navigator.mediaDevices?.getUserMedia
+                      ) {
+                        setUploadError(
+                          "Grabación no soportada en este navegador."
+                        );
+                        return;
                       }
-                      setRecordStartAt(null);
-                    } catch {}
-                  } else {
-                    (async () => {
+                      // Estrategia robusta de getUserMedia
+                      // 1) { audio: true } (deja que el navegador elija)
+                      // 2) Si falla, { audio: { echoCancellation, noiseSuppression } }
+                      // 3) Si aún falla, detecta un deviceId disponible y úsalo
+                      let stream: MediaStream | null = null;
+                      let firstErr: any = null;
                       try {
-                        if (
-                          typeof navigator === "undefined" ||
-                          !navigator.mediaDevices?.getUserMedia
-                        ) {
-                          setUploadError(
-                            "Grabación no soportada en este navegador."
-                          );
-                          return;
-                        }
-                        let stream: MediaStream | null = null;
-                        let firstErr: any = null;
+                        stream = await navigator.mediaDevices.getUserMedia({
+                          audio: true,
+                        });
+                      } catch (e1: any) {
+                        firstErr = e1;
                         try {
                           stream = await navigator.mediaDevices.getUserMedia({
-                            audio: true,
+                            audio: {
+                              echoCancellation: true,
+                              noiseSuppression: true,
+                            } as any,
                           });
-                        } catch (e1: any) {
-                          firstErr = e1;
+                        } catch (e2: any) {
                           try {
-                            stream = await navigator.mediaDevices.getUserMedia({
-                              audio: {
-                                echoCancellation: true,
-                                noiseSuppression: true,
-                              } as any,
-                            });
-                          } catch (e2: any) {
-                            try {
-                              const devices =
-                                await navigator.mediaDevices.enumerateDevices();
-                              const mics = devices.filter(
-                                (d) => d.kind === "audioinput"
-                              );
-                              if (mics.length > 0 && mics[0].deviceId) {
-                                stream =
-                                  await navigator.mediaDevices.getUserMedia({
-                                    audio: {
-                                      deviceId: { exact: mics[0].deviceId },
-                                    } as any,
-                                  });
-                              } else {
-                                throw e2;
-                              }
-                            } catch (e3: any) {
-                              throw firstErr || e2 || e3;
-                            }
-                          }
-                        }
-                        recordedChunksRef.current = [];
-                        const mimes = [
-                          "audio/webm;codecs=opus",
-                          "audio/webm",
-                          "audio/ogg;codecs=opus",
-                          "audio/ogg",
-                          "audio/mp4",
-                          "audio/aac",
-                        ];
-                        let mimeType: string | undefined = undefined;
-                        for (const c of mimes) {
-                          if (
-                            (window as any).MediaRecorder?.isTypeSupported?.(c)
-                          ) {
-                            mimeType = c;
-                            break;
-                          }
-                        }
-                        const mr = new MediaRecorder(
-                          stream,
-                          mimeType ? { mimeType } : undefined
-                        );
-                        mediaRecorderRef.current = mr;
-                        mr.ondataavailable = (ev) => {
-                          if (ev.data && ev.data.size > 0)
-                            recordedChunksRef.current.push(ev.data);
-                        };
-                        mr.onstop = () => {
-                          try {
-                            const chosenType =
-                              mr.mimeType || mimeType || "audio/webm";
-                            const blob = new Blob(recordedChunksRef.current, {
-                              type: chosenType,
-                            });
-                            const ts = new Date();
-                            const pad = (n: number) =>
-                              String(n).padStart(2, "0");
-                            const ext = (() => {
-                              const t = (blob.type || "").toLowerCase();
-                              if (t.includes("ogg")) return "ogg";
-                              if (t.includes("mp4") || t.includes("aac"))
-                                return "m4a";
-                              return "webm";
-                            })();
-                            const fname = `grabacion-${ts.getFullYear()}${pad(
-                              ts.getMonth() + 1
-                            )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
-                              ts.getMinutes()
-                            )}${pad(ts.getSeconds())}.${ext}`;
-                            const file = new File([blob], fname, {
-                              type: blob.type || chosenType,
-                            });
-                            if ((file.size || 0) > MAX_FILE_SIZE) {
-                              setUploadError(
-                                "El audio grabado excede el límite de 25MB y no se adjuntará."
-                              );
-                            } else {
-                              addPendingAttachments([file] as any);
-                            }
-                          } catch {
-                            setUploadError(
-                              "No se pudo procesar el audio grabado."
+                            const devices =
+                              await navigator.mediaDevices.enumerateDevices();
+                            const mics = devices.filter(
+                              (d) => d.kind === "audioinput"
                             );
-                          }
-                          try {
-                            stream.getTracks().forEach((t) => t.stop());
-                          } catch {}
-                          try {
-                            if (recordTimerRef.current) {
-                              clearInterval(recordTimerRef.current);
-                              recordTimerRef.current = null;
+                            if (mics.length > 0 && mics[0].deviceId) {
+                              stream =
+                                await navigator.mediaDevices.getUserMedia({
+                                  audio: {
+                                    deviceId: { exact: mics[0].deviceId },
+                                  } as any,
+                                });
+                            } else {
+                              throw e2;
                             }
-                            setRecordStartAt(null);
-                          } catch {}
-                        };
-                        mr.start();
-                        setRecording(true);
-                        try {
-                          setRecordStartAt(Date.now());
-                          recordTimerRef.current = setInterval(
-                            () => setRecordTick(Date.now()),
-                            250
-                          );
-                        } catch {}
-                      } catch (err: any) {
-                        const name = err?.name || "";
-                        if (
-                          name === "NotFoundError" ||
-                          name === "DevicesNotFoundError"
-                        ) {
-                          setUploadError(
-                            "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador."
-                          );
-                        } else if (
-                          name === "NotAllowedError" ||
-                          name === "PermissionDeniedError"
-                        ) {
-                          setUploadError(
-                            "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio."
-                          );
-                        } else if (name === "NotReadableError") {
-                          setUploadError(
-                            "El micrófono está siendo usado por otra aplicación o no es accesible."
-                          );
-                        } else {
-                          setUploadError(
-                            (err?.message ||
-                              "No se pudo iniciar la grabación") +
-                              " (" +
-                              (name || "error") +
-                              ")"
-                          );
+                          } catch (e3: any) {
+                            throw firstErr || e2 || e3;
+                          }
                         }
                       }
-                    })();
-                  }
-                }}
-                title={recording ? "Detener grabación" : "Grabar audio"}
-                className={`p-2 rounded-full transition-colors flex-shrink-0 mb-1 ${
-                  recording
-                    ? "bg-red-500 text-white animate-pulse shadow-md"
-                    : "text-[#54656f] hover:bg-[rgba(0,0,0,0.05)]"
-                }`}
-              >
-                {recording ? (
-                  <Square className="w-6 h-6" />
-                ) : (
-                  <Mic className="w-6 h-6" />
-                )}
-              </button>
+                      recordedChunksRef.current = [];
+                      const mimes = [
+                        "audio/webm;codecs=opus",
+                        "audio/webm",
+                        "audio/ogg;codecs=opus",
+                        "audio/ogg",
+                        "audio/mp4",
+                        "audio/aac",
+                      ];
+                      let mimeType: string | undefined = undefined;
+                      for (const c of mimes) {
+                        if (
+                          (window as any).MediaRecorder?.isTypeSupported?.(c)
+                        ) {
+                          mimeType = c;
+                          break;
+                        }
+                      }
+                      const mr = new MediaRecorder(
+                        stream,
+                        mimeType ? { mimeType } : undefined
+                      );
+                      mediaRecorderRef.current = mr;
+                      mr.ondataavailable = (ev) => {
+                        if (ev.data && ev.data.size > 0)
+                          recordedChunksRef.current.push(ev.data);
+                      };
+                      mr.onstop = () => {
+                        try {
+                          const chosenType =
+                            mr.mimeType || mimeType || "audio/webm";
+                          const blob = new Blob(recordedChunksRef.current, {
+                            type: chosenType,
+                          });
+                          const ts = new Date();
+                          const pad = (n: number) => String(n).padStart(2, "0");
+                          const ext = (() => {
+                            const t = (blob.type || "").toLowerCase();
+                            if (t.includes("ogg")) return "ogg";
+                            if (t.includes("mp4") || t.includes("aac"))
+                              return "m4a";
+                            return "webm";
+                          })();
+                          const fname = `grabacion-${ts.getFullYear()}${pad(
+                            ts.getMonth() + 1
+                          )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
+                            ts.getMinutes()
+                          )}${pad(ts.getSeconds())}.${ext}`;
+                          const file = new File([blob], fname, {
+                            type: blob.type || chosenType,
+                          });
+                          if ((file.size || 0) > MAX_FILE_SIZE) {
+                            setUploadError(
+                              "El audio grabado excede el límite de 25MB y no se adjuntará."
+                            );
+                          } else {
+                            addPendingAttachments([file] as any);
+                          }
+                        } catch {
+                          setUploadError(
+                            "No se pudo procesar el audio grabado."
+                          );
+                        }
+                        try {
+                          stream.getTracks().forEach((t) => t.stop());
+                        } catch {}
+                        try {
+                          if (recordTimerRef.current) {
+                            clearInterval(recordTimerRef.current);
+                            recordTimerRef.current = null;
+                          }
+                          setRecordStartAt(null);
+                        } catch {}
+                      };
+                      mr.start();
+                      setRecording(true);
+                      try {
+                        setRecordStartAt(Date.now());
+                        recordTimerRef.current = setInterval(
+                          () => setRecordTick(Date.now()),
+                          250
+                        );
+                      } catch {}
+                    } catch (err: any) {
+                      const name = err?.name || "";
+                      if (
+                        name === "NotFoundError" ||
+                        name === "DevicesNotFoundError"
+                      ) {
+                        setUploadError(
+                          "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador."
+                        );
+                      } else if (
+                        name === "NotAllowedError" ||
+                        name === "PermissionDeniedError"
+                      ) {
+                        setUploadError(
+                          "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio."
+                        );
+                      } else if (name === "NotReadableError") {
+                        setUploadError(
+                          "El micrófono está siendo usado por otra aplicación o no es accesible."
+                        );
+                      } else {
+                        setUploadError(
+                          (err?.message || "No se pudo iniciar la grabación") +
+                            " (" +
+                            (name || "error") +
+                            ")"
+                        );
+                      }
+                    }
+                  })();
+                }
+              }}
+              title={recording ? "Detener grabación" : "Grabar audio"}
+              className={`p-1.5 md:p-2 rounded-md transition-colors flex-shrink-0 ${
+                recording
+                  ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
+                  : "text-gray-600 hover:text-gray-800"
+              }`}
+            >
+              {recording ? (
+                <Square className="w-4 h-4 md:w-4 md:h-4" />
+              ) : (
+                <Mic className="w-5 h-5 md:w-5 md:h-5" />
+              )}
+            </button>
+            {recording && (
+              <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-xs">
+                <span className="inline-block w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+                <span>
+                  {(() => {
+                    const ms = Math.max(
+                      0,
+                      recordStartAt ? recordTick - recordStartAt : 0
+                    );
+                    const s = Math.floor(ms / 1000);
+                    const mm = Math.floor(s / 60);
+                    const ss = String(s % 60).padStart(2, "0");
+                    return `${mm}:${ss}`;
+                  })()}
+                </span>
+                <span className="opacity-70">Grabando…</span>
+              </div>
             )}
+            {attachments.length > 0 && (
+              <div className="flex-1 overflow-x-auto">
+                <div className="flex items-center gap-2">
+                  {attachments.map((a, i) => (
+                    <div
+                      key={i}
+                      className="group relative flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs text-gray-700"
+                    >
+                      {a.preview ? (
+                        // Pequeña miniatura si es imagen/video
+                        a.file.type.startsWith("image/") ? (
+                          <img
+                            src={a.preview}
+                            alt={a.file.name}
+                            className="h-6 w-6 rounded object-cover"
+                          />
+                        ) : (
+                          <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
+                            {a.file.type.startsWith("video/")
+                              ? "VID"
+                              : a.file.type.startsWith("audio/")
+                              ? "AUD"
+                              : "FILE"}
+                          </div>
+                        )
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
+                          FILE
+                        </div>
+                      )}
+                      <div className="max-w-[160px] truncate">
+                        {a.file.name}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(i)}
+                        className="ml-1 rounded px-1 text-gray-500 hover:text-gray-800"
+                        title="Quitar adjunto"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <input
+              value={text}
+              onChange={(e) => {
+                setText(e.target.value);
+                if (e.target.value.trim()) notifyTyping(true);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                } else {
+                  notifyTyping(true);
+                }
+              }}
+              placeholder="Mensaje"
+              className="flex-1 bg-white border border-gray-300 rounded-full px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors shadow-sm min-w-0"
+            />
+            <button
+              onClick={send}
+              disabled={uploading || (!text.trim() && attachments.length === 0)}
+              className="p-2 md:p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors shadow flex-shrink-0"
+            >
+              {uploading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                  />
+                </svg>
+              )}
+            </button>
           </div>
-          {recording && (
-            <div className="absolute top-[-40px] left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 rounded-full bg-white shadow-lg border border-gray-100 z-30">
-              <span className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-gray-700 font-mono font-medium">
-                {(() => {
-                  const ms = Math.max(
-                    0,
-                    recordStartAt ? recordTick - recordStartAt : 0
-                  );
-                  const s = Math.floor(ms / 1000);
-                  const mm = Math.floor(s / 60);
-                  const ss = String(s % 60).padStart(2, "0");
-                  return `${mm}:${ss}`;
-                })()}
-              </span>
-            </div>
-          )}
           {uploadError && (
-            <div className="mt-2 text-xs text-rose-600 px-2">{uploadError}</div>
+            <div className="mt-2 text-xs text-rose-600">{uploadError}</div>
           )}
           {(uploading || uploadState.active) && (
-            <div className="mt-1 text-[11px] text-gray-700 flex items-center gap-2 px-2">
+            <div className="mt-1 text-[11px] text-gray-700 flex items-center gap-2">
               <span className="inline-block h-3 w-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
               <span>
                 Subiendo archivos {uploadState.done}/{uploadState.total}

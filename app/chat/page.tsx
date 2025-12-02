@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useChatNotifications } from "@/components/hooks/useChatNotifications";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import ChatRealtime from "@/components/chat/ChatRealtime";
@@ -66,6 +67,23 @@ function getAvatarColor(name: string): string {
 
 export default function ChatHubPage() {
   const search = useSearchParams();
+  const { unreadByRoom } = useChatNotifications({
+    role: "admin",
+    enableToast: false,
+  });
+
+  // Helper para leer estado de lectura local
+  function getLastRead(room: string): number {
+    if (typeof window === "undefined") return 0;
+    try {
+      const key = `chatLastRead:${room}:admin`;
+      const raw = localStorage.getItem(key);
+      return raw ? parseInt(raw, 10) : 0;
+    } catch {
+      return 0;
+    }
+  }
+
   const transport = (search?.get("transport") === "local" ? "local" : "ws") as
     | "local"
     | "ws";
@@ -647,6 +665,21 @@ export default function ChatHubPage() {
                   const hasCode = !!(s.code && s.code.trim());
                   const isSelected = selected?.id === s.id;
 
+                  // Lógica de no leídos
+                  const room = (s.code || String(s.id)).toLowerCase();
+                  const lastRead = getLastRead(room);
+                  const lastActivity = s.lastActivity
+                    ? new Date(s.lastActivity).getTime()
+                    : 0;
+                  // Si la actividad es más reciente que mi última lectura, es unread persistente
+                  // (Solo si no está seleccionado actualmente)
+                  const isUnreadPersistent =
+                    lastActivity > lastRead && !isSelected;
+                  // Si hay mensajes nuevos en vivo
+                  const isUnreadLive = (unreadByRoom[room] || 0) > 0;
+
+                  const isUnread = isUnreadPersistent || isUnreadLive;
+
                   return (
                     <button
                       key={s.id}
@@ -656,25 +689,40 @@ export default function ChatHubPage() {
                         hasCode
                           ? "hover:bg-muted/50 cursor-pointer active:bg-muted"
                           : "opacity-50 cursor-not-allowed"
-                      } ${isSelected ? "bg-muted" : "bg-transparent"}`}
+                      } ${
+                        isSelected
+                          ? "bg-muted"
+                          : isUnread
+                          ? "bg-blue-50/40 dark:bg-blue-900/10"
+                          : "bg-transparent"
+                      }`}
                       title={
                         hasCode ? "Abrir chat" : "Este alumno no tiene código"
                       }
                     >
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-12 w-12 flex-shrink-0">
-                          <AvatarFallback
-                            className={`${getAvatarColor(
-                              s.name
-                            )} text-white font-medium`}
-                          >
-                            {getInitials(s.name)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <div className="relative">
+                          <Avatar className="h-12 w-12 flex-shrink-0">
+                            <AvatarFallback
+                              className={`${getAvatarColor(
+                                s.name
+                              )} text-white font-medium`}
+                            >
+                              {getInitials(s.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {isUnread && (
+                            <span className="absolute top-0 right-0 h-3 w-3 rounded-full bg-blue-600 border-2 border-background" />
+                          )}
+                        </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                            <h3 className="font-semibold text-sm truncate text-foreground">
+                            <h3
+                              className={`text-sm truncate text-foreground ${
+                                isUnread ? "font-bold" : "font-semibold"
+                              }`}
+                            >
                               {s.name}
                             </h3>
                             {hasCode && (
@@ -686,7 +734,9 @@ export default function ChatHubPage() {
                           <p
                             className={`text-xs truncate ${
                               hasCode
-                                ? "text-muted-foreground"
+                                ? isUnread
+                                  ? "text-foreground font-medium"
+                                  : "text-muted-foreground"
                                 : "text-amber-600 font-medium"
                             }`}
                           >

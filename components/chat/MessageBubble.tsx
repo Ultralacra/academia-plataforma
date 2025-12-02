@@ -60,7 +60,7 @@ export default function MessageBubble({
               }
             : undefined
         }
-        className={`relative max-w-[85%] sm:max-w-[75%] rounded-lg px-3 py-2 shadow-sm ${
+        className={`relative max-w-[90%] sm:max-w-[85%] rounded-lg px-3 py-2 shadow-sm ${
           mine
             ? "bg-[#d9fdd3] text-gray-900 rounded-br-none"
             : "bg-white text-gray-900 rounded-bl-none"
