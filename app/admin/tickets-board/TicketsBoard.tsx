@@ -311,6 +311,7 @@ export default function TicketsBoard() {
   const [search, setSearch] = useState("");
   const [estadoFiltro, setEstadoFiltro] = useState("");
   const [tipoFiltro, setTipoFiltro] = useState("");
+  const [onlyMyTickets, setOnlyMyTickets] = useState(false);
 
   const today = new Date();
   const y = today.getFullYear();
@@ -1133,6 +1134,18 @@ export default function TicketsBoard() {
               </option>
             ))}
           </select>
+
+          <Button
+            variant={onlyMyTickets ? "default" : "outline"}
+            size="sm"
+            onClick={() => setOnlyMyTickets(!onlyMyTickets)}
+            className="h-9 w-full gap-2 sm:w-auto"
+            title="Mostrar solo mis tickets creados"
+          >
+            <User className="h-4 w-4" />
+            Mis Tickets
+          </Button>
+
           <Button
             onClick={async () => {
               setLoading(true);
@@ -1170,9 +1183,15 @@ export default function TicketsBoard() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           {estados.map((estado) => {
-            const itemsForCol = tickets.filter(
-              (t) => coerceStatus(t.estado) === (estado as StatusKey)
-            );
+            const itemsForCol = tickets.filter((t) => {
+              const statusMatch =
+                coerceStatus(t.estado) === (estado as StatusKey);
+              if (!statusMatch) return false;
+              if (onlyMyTickets && user?.codigo) {
+                return t.informante === user.codigo;
+              }
+              return true;
+            });
             return (
               <div
                 key={estado}
@@ -1299,6 +1318,16 @@ export default function TicketsBoard() {
                                   </button>
                                 )}
                               </div>
+
+                              {/* Informante */}
+                              {(t.informante_nombre || t.informante) && (
+                                <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                                  <User className="h-3.5 w-3.5 text-slate-400" />
+                                  <span className="font-medium text-slate-700">
+                                    {t.informante_nombre || t.informante}
+                                  </span>
+                                </div>
+                              )}
 
                               {Array.isArray((t as any).coaches) &&
                                 (t as any).coaches.length > 0 && (
