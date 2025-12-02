@@ -1799,7 +1799,7 @@ export default function TicketsBoard() {
                                 <>
                                   <div className="flex justify-between items-start mb-1">
                                     <span className="font-semibold text-xs text-slate-700">
-                                      {c.created_by_name || "Usuario"}
+                                      {c.user_nombre || "Usuario"}
                                     </span>
                                     <span className="text-[10px] text-slate-400">
                                       {c.created_at
@@ -1810,7 +1810,27 @@ export default function TicketsBoard() {
                                     </span>
                                   </div>
                                   <div className="text-slate-800 whitespace-pre-wrap break-words">
-                                    {c.contenido}
+                                    {(() => {
+                                      const content = c.contenido || "";
+                                      const urlRegex = /(https?:\/\/[^\s]+)/g;
+                                      const parts = content.split(urlRegex);
+                                      return parts.map((part, i) => {
+                                        if (part.match(urlRegex)) {
+                                          return (
+                                            <a
+                                              key={i}
+                                              href={part}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-blue-600 hover:underline"
+                                            >
+                                              {part}
+                                            </a>
+                                          );
+                                        }
+                                        return part;
+                                      });
+                                    })()}
                                   </div>
                                   {canEdit && (
                                     <div className="mt-2 flex justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">

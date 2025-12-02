@@ -149,18 +149,18 @@ export async function getTickets(opts: {
   // --- Comentarios / Observaciones ---
 
   export type TicketComment = {
-    id: number;
+    id: string;
     ticket_id: string;
+    user_codigo?: string;
+    user_nombre?: string;
     contenido: string;
     created_at: string;
     updated_at?: string;
-    created_by?: string;
-    created_by_name?: string;
   };
 
   export async function getTicketComments(ticketCode: string) {
     if (!ticketCode) return [];
-    const path = `/tickets/get/public-comments/${encodeURIComponent(ticketCode)}`;
+    const path = `/ticket/get/public-comments/${encodeURIComponent(ticketCode)}`;
     const res = await apiFetch<any>(path);
     // Asumimos que devuelve { data: [...] } o directamente [...]
     const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
@@ -170,7 +170,7 @@ export async function getTickets(opts: {
   export async function createTicketComment(ticketCode: string, contenido: string) {
     if (!ticketCode) throw new Error("Código de ticket requerido");
     if (!contenido) throw new Error("Contenido requerido");
-    const path = `/tickets/create/public-comment/${encodeURIComponent(ticketCode)}`;
+    const path = `/ticket/create/public-comment/${encodeURIComponent(ticketCode)}`;
     return apiFetch<any>(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -190,7 +190,7 @@ export async function getTickets(opts: {
 
   export async function deleteTicketComment(commentId: number | string) {
     if (!commentId) throw new Error("ID de comentario requerido");
-    const path = `/tickets/delete/public-comment/${encodeURIComponent(commentId)}`;
+    const path = `/ticket/delete/public-comment/${encodeURIComponent(commentId)}`;
     return apiFetch<any>(path, {
       method: "DELETE",
     });

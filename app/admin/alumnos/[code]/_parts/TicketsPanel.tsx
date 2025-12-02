@@ -1029,7 +1029,7 @@ export default function TicketsPanel({
                         >
                           <div className="flex justify-between items-start mb-1">
                             <span className="font-semibold text-xs text-foreground">
-                              {c.created_by_name || "Usuario"}
+                              {c.user_nombre || "Usuario"}
                             </span>
                             <span className="text-[10px] text-muted-foreground">
                               {c.created_at
@@ -1038,7 +1038,27 @@ export default function TicketsPanel({
                             </span>
                           </div>
                           <div className="text-foreground whitespace-pre-wrap break-words">
-                            {c.contenido}
+                            {(() => {
+                              const content = c.contenido || "";
+                              const urlRegex = /(https?:\/\/[^\s]+)/g;
+                              const parts = content.split(urlRegex);
+                              return parts.map((part, i) => {
+                                if (part.match(urlRegex)) {
+                                  return (
+                                    <a
+                                      key={i}
+                                      href={part}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-primary underline hover:text-primary/80"
+                                    >
+                                      {part}
+                                    </a>
+                                  );
+                                }
+                                return part;
+                              });
+                            })()}
                           </div>
                         </div>
                       ))
