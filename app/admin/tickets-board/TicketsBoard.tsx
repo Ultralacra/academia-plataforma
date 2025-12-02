@@ -285,7 +285,7 @@ export default function TicketsBoard() {
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [addingComment, setAddingComment] = useState(false);
-  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState("");
 
   // Notas Internas (Internal Notes)
@@ -318,7 +318,15 @@ export default function TicketsBoard() {
   const d = String(today.getDate()).padStart(2, "0");
   const todayStr = `${y}-${m}-${d}`;
 
-  const [fechaDesde, setFechaDesde] = useState<string>(todayStr);
+  // Default to 4 days ago
+  const fourDaysAgo = new Date();
+  fourDaysAgo.setDate(today.getDate() - 4);
+  const y4 = fourDaysAgo.getFullYear();
+  const m4 = String(fourDaysAgo.getMonth() + 1).padStart(2, "0");
+  const d4 = String(fourDaysAgo.getDate()).padStart(2, "0");
+  const fourDaysAgoStr = `${y4}-${m4}-${d4}`;
+
+  const [fechaDesde, setFechaDesde] = useState<string>(fourDaysAgoStr);
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
 
   useEffect(() => {
@@ -719,7 +727,7 @@ export default function TicketsBoard() {
     }
   }
 
-  async function handleDeleteComment(id: number) {
+  async function handleDeleteComment(id: string) {
     if (!confirm("¿Eliminar esta observación?")) return;
     try {
       await deleteTicketComment(id);
@@ -1024,23 +1032,47 @@ export default function TicketsBoard() {
     return <FileIcon className="h-4 w-4" />;
   }
 
+  function groupByDate(items: TicketBoardItem[]) {
+    const sorted = [...items].sort((a, b) => {
+      const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return db - da;
+    });
+    const map = new Map<string, TicketBoardItem[]>();
+    sorted.forEach((t) => {
+      let key = "Sin fecha";
+      if (t.created_at) {
+        const d = new Date(t.created_at);
+        const s = d.toLocaleDateString("es-ES", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        });
+        key = s.charAt(0).toUpperCase() + s.slice(1);
+      }
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    });
+    return Array.from(map.entries()).map(([date, items]) => ({ date, items }));
+  }
+
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          <h1 className="text-lg font-semibold tracking-tight text-slate-900">
             Tablero de Tickets
           </h1>
-          <p className="text-sm text-slate-600">
+          <p className="text-xs text-slate-600">
             Arrastra y suelta tickets entre columnas para cambiar su estado
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="relative">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
+          <div className="relative w-full sm:w-auto">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              className="h-9 w-64 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all"
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-64"
               placeholder="Buscar asunto, alumno..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -1048,11 +1080,11 @@ export default function TicketsBoard() {
           </div>
 
           {/* Filtro por fecha: Desde */}
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="date"
-              className="h-9 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all min-w-[160px]"
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-auto sm:min-w-[160px]"
               value={fechaDesde}
               max={fechaHasta || undefined}
               onChange={(e) => {
@@ -1068,11 +1100,11 @@ export default function TicketsBoard() {
           </div>
 
           {/* Filtro por fecha: Hasta */}
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="date"
-              className="h-9 rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all min-w-[160px]"
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-auto sm:min-w-[160px]"
               value={fechaHasta}
               min={fechaDesde || undefined}
               onChange={(e) => {
@@ -1088,7 +1120,7 @@ export default function TicketsBoard() {
           </div>
 
           <select
-            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all min-w-[180px]"
+            className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-auto sm:min-w-[180px]"
             value={coachFiltro}
             onChange={(e) => setCoachFiltro(e.target.value)}
             title="Filtrar por coach/equipo"
@@ -1123,7 +1155,7 @@ export default function TicketsBoard() {
             }}
             variant="outline"
             size="sm"
-            className="h-9 gap-2"
+            className="h-9 w-full gap-2 sm:w-auto"
           >
             <RefreshCw className="h-4 w-4" />
             Recargar
@@ -1171,146 +1203,163 @@ export default function TicketsBoard() {
                       Sin tickets
                     </div>
                   ) : (
-                    itemsForCol.map((t) => (
-                      <div
-                        key={t.id}
-                        draggable={canEdit}
-                        onDragStart={(e) => canEdit && handleDragStart(e, t.id)}
-                        onClick={() => openTicketDetail(t)}
-                        className={
-                          "group rounded-lg border bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md cursor-pointer " +
-                          (coerceStatus(t.estado) === "PAUSADO"
-                            ? "border-amber-300 ring-1 ring-amber-200"
-                            : "border-slate-200")
-                        }
-                      >
-                        <div className="space-y-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <h3 className="flex-1 text-sm font-medium leading-snug text-slate-900">
-                              {t.nombre ?? "Ticket"}
-                            </h3>
-                            <span
-                              className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-                                STATUS_STYLE[coerceStatus(t.estado)]
-                              }`}
-                            >
-                              {STATUS_LABEL[coerceStatus(t.estado)]}
-                            </span>
-                          </div>
-
-                          {coerceStatus(t.estado) === "PAUSADO" && (
-                            <div className="flex items-center gap-1.5 text-amber-700">
-                              <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                              <span className="text-[11px] font-medium">
-                                Requiere atención
-                              </span>
-                            </div>
-                          )}
-
-                          <div className="space-y-1.5 text-xs text-slate-600">
-                            <div className="flex items-center gap-1.5">
-                              <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
-                              <span>
-                                {t.created_at
-                                  ? new Date(t.created_at).toLocaleDateString(
-                                      "es-ES",
-                                      {
-                                        day: "numeric",
-                                        month: "short",
-                                        year: "numeric",
-                                      }
-                                    )
-                                  : "—"}
-                              </span>
-                            </div>
-                            {t.tipo && (
-                              <div className="flex items-center gap-1.5">
-                                <div className="h-1 w-1 rounded-full bg-slate-400" />
-                                <span>{t.tipo}</span>
-                              </div>
-                            )}
-                            {t.deadline && (
-                              <div className="flex items-center gap-1.5">
-                                <div className="h-1 w-1 rounded-full bg-slate-400" />
-                                <span>
-                                  Vence:{" "}
-                                  {new Date(t.deadline).toLocaleDateString(
-                                    "es-ES",
-                                    { day: "numeric", month: "short" }
-                                  )}
+                    groupByDate(itemsForCol).map((group) => (
+                      <div key={group.date} className="space-y-3">
+                        <div className="flex items-center gap-2 py-2">
+                          <div className="h-px flex-1 bg-slate-200"></div>
+                          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                            {group.date}
+                          </span>
+                          <div className="h-px flex-1 bg-slate-200"></div>
+                        </div>
+                        {group.items.map((t) => (
+                          <div
+                            key={t.id}
+                            draggable={canEdit}
+                            onDragStart={(e) =>
+                              canEdit && handleDragStart(e, t.id)
+                            }
+                            onClick={() => openTicketDetail(t)}
+                            className={
+                              "group rounded-lg border bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md cursor-pointer " +
+                              (coerceStatus(t.estado) === "PAUSADO"
+                                ? "border-amber-300 ring-1 ring-amber-200"
+                                : "border-slate-200")
+                            }
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <h3 className="flex-1 text-sm font-medium leading-snug text-slate-900">
+                                  {t.nombre ?? "Ticket"}
+                                </h3>
+                                <span
+                                  className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
+                                    STATUS_STYLE[coerceStatus(t.estado)]
+                                  }`}
+                                >
+                                  {STATUS_LABEL[coerceStatus(t.estado)]}
                                 </span>
                               </div>
-                            )}
-                            {t.codigo && (
-                              <button
-                                className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openFilesFor(t);
-                                }}
-                                type="button"
-                              >
-                                <FileIcon className="h-3.5 w-3.5" />
-                                <span className="underline decoration-slate-300 hover:decoration-slate-900">
-                                  Ver archivos
-                                </span>
-                              </button>
-                            )}
-                          </div>
 
-                          {Array.isArray((t as any).coaches) &&
-                            (t as any).coaches.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5">
-                                {(t as any).coaches
-                                  .slice(0, 3)
-                                  .map((c: any, idx: number) => (
-                                    <span
-                                      key={`${
-                                        c.codigo_equipo ?? c.nombre ?? idx
-                                      }`}
-                                      className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-200"
-                                      title={`${c.nombre ?? "Coach"}${
-                                        c.area ? ` · ${c.area}` : ""
-                                      }${c.puesto ? ` · ${c.puesto}` : ""}`}
-                                    >
-                                      {(c.nombre ?? "Coach").slice(0, 20)}
-                                      {c.area
-                                        ? ` · ${String(c.area).slice(0, 10)}`
-                                        : ""}
-                                    </span>
-                                  ))}
-                                {((t as any).coaches?.length ?? 0) > 3 && (
-                                  <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                                    +{(t as any).coaches.length - 3}
+                              {coerceStatus(t.estado) === "PAUSADO" && (
+                                <div className="flex items-center gap-1.5 text-amber-700">
+                                  <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                                  <span className="text-[11px] font-medium">
+                                    Requiere atención
                                   </span>
+                                </div>
+                              )}
+
+                              <div className="space-y-1.5 text-xs text-slate-600">
+                                <div className="flex items-center gap-1.5">
+                                  <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
+                                  <span>
+                                    {t.created_at
+                                      ? new Date(
+                                          t.created_at
+                                        ).toLocaleDateString("es-ES", {
+                                          day: "numeric",
+                                          month: "short",
+                                          year: "numeric",
+                                        })
+                                      : "—"}
+                                  </span>
+                                </div>
+                                {t.tipo && (
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="h-1 w-1 rounded-full bg-slate-400" />
+                                    <span>{t.tipo}</span>
+                                  </div>
+                                )}
+                                {t.deadline && (
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="h-1 w-1 rounded-full bg-slate-400" />
+                                    <span>
+                                      Vence:{" "}
+                                      {new Date(t.deadline).toLocaleDateString(
+                                        "es-ES",
+                                        { day: "numeric", month: "short" }
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
+                                {t.codigo && (
+                                  <button
+                                    className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openFilesFor(t);
+                                    }}
+                                    type="button"
+                                  >
+                                    <FileIcon className="h-3.5 w-3.5" />
+                                    <span className="underline decoration-slate-300 hover:decoration-slate-900">
+                                      Ver archivos
+                                    </span>
+                                  </button>
                                 )}
                               </div>
-                            )}
 
-                          {(t as any).ultimo_estado?.estatus && (
-                            <div className="border-t border-slate-100 pt-2 text-xs text-slate-500">
-                              Último:{" "}
-                              {
-                                STATUS_LABEL[
-                                  coerceStatus((t as any).ultimo_estado.estatus)
-                                ]
-                              }
-                              {(t as any).ultimo_estado?.fecha && (
-                                <>
-                                  {" · "}
-                                  {new Date(
-                                    (t as any).ultimo_estado.fecha
-                                  ).toLocaleDateString("es-ES", {
-                                    day: "numeric",
-                                    month: "short",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
-                                </>
+                              {Array.isArray((t as any).coaches) &&
+                                (t as any).coaches.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {(t as any).coaches
+                                      .slice(0, 3)
+                                      .map((c: any, idx: number) => (
+                                        <span
+                                          key={`${
+                                            c.codigo_equipo ?? c.nombre ?? idx
+                                          }`}
+                                          className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-200"
+                                          title={`${c.nombre ?? "Coach"}${
+                                            c.area ? ` · ${c.area}` : ""
+                                          }${c.puesto ? ` · ${c.puesto}` : ""}`}
+                                        >
+                                          {(c.nombre ?? "Coach").slice(0, 20)}
+                                          {c.area
+                                            ? ` · ${String(c.area).slice(
+                                                0,
+                                                10
+                                              )}`
+                                            : ""}
+                                        </span>
+                                      ))}
+                                    {((t as any).coaches?.length ?? 0) > 3 && (
+                                      <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                                        +{(t as any).coaches.length - 3}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+
+                              {(t as any).ultimo_estado?.estatus && (
+                                <div className="border-t border-slate-100 pt-2 text-xs text-slate-500">
+                                  Último:{" "}
+                                  {
+                                    STATUS_LABEL[
+                                      coerceStatus(
+                                        (t as any).ultimo_estado.estatus
+                                      )
+                                    ]
+                                  }
+                                  {(t as any).ultimo_estado?.fecha && (
+                                    <>
+                                      {" · "}
+                                      {new Date(
+                                        (t as any).ultimo_estado.fecha
+                                      ).toLocaleDateString("es-ES", {
+                                        day: "numeric",
+                                        month: "short",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })}
+                                    </>
+                                  )}
+                                </div>
                               )}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        ))}
                       </div>
                     ))
                   )}
