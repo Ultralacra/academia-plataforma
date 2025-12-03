@@ -18,6 +18,8 @@ import {
   updateInternalNote,
   deleteInternalNote,
   type InternalNote,
+  deleteTicketLink,
+  createTicketLink,
 } from "./api";
 import { Button } from "@/components/ui/button";
 import { getAuthToken } from "@/lib/auth";
@@ -43,6 +45,8 @@ import {
   User,
   X,
   AlertTriangle,
+  Link as LinkIcon,
+  Plus,
 } from "lucide-react";
 import {
   Dialog,
@@ -268,6 +272,7 @@ export default function TicketsBoard() {
   // Links genéricos (antes: audio URLs)
   const [audioUrls, setAudioUrls] = useState<string[]>([]);
   const [newAudioUrl, setNewAudioUrl] = useState<string>("");
+  const [newTaskTitle, setNewTaskTitle] = useState<string>("");
   const [fileToDelete, setFileToDelete] = useState<null | {
     id: string;
     nombre_archivo: string;
@@ -1749,7 +1754,8 @@ export default function TicketsBoard() {
                 </div>
 
                 <div className={detailTab === "general" ? "block" : "hidden"}>
-                  <div className="p-6 space-y-6">
+                  <div className="p-6 space-y-8">
+                    {/* Alerta de Pausado */}
                     {coerceStatus(editForm.estado as any) === "PAUSADO" && (
                       <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
                         <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
@@ -1757,103 +1763,480 @@ export default function TicketsBoard() {
                           Este ticket está pausado y requiere acción. Por favor
                           envía la información correspondiente.
                         </div>
-                        <div className="ml-auto">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              try {
-                                editFileInputRef.current?.click();
-                              } catch {}
-                            }}
-                          >
-                            Adjuntar ahora
-                          </Button>
-                        </div>
                       </div>
                     )}
-                    {/* Título */}
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="edit-nombre"
-                        className="text-sm font-medium"
-                      >
-                        Título del ticket
-                      </Label>
+
+                    {/* Título editable */}
+                    <div className="space-y-1">
                       <Input
-                        id="edit-nombre"
-                        className="h-10"
+                        className="text-lg font-semibold border-transparent hover:border-slate-200 px-0 h-auto py-1 focus:ring-0 focus:border-slate-300 bg-transparent shadow-none"
                         value={editForm.nombre ?? ""}
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, nombre: e.target.value }))
                         }
-                        placeholder="Nombre o asunto"
+                        placeholder="Título del ticket"
                         disabled={!canEdit}
                       />
                     </div>
 
-                    {/* Personas involucradas */}
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <User className="h-4 w-4 text-slate-500" />
-                        Personas involucradas
+                    {/* Lista de Propiedades (Estilo Notion) */}
+                    <div className="grid grid-cols-[140px_1fr] gap-y-3 text-sm items-start">
+                      {/* Alumno */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <User className="h-4 w-4" /> <span>Alumno</span>
                       </div>
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="edit-informante" className="text-sm">
-                            Informante
-                          </Label>
-                          <Input
-                            id="edit-informante"
-                            className="h-10 bg-slate-50 cursor-not-allowed"
-                            value={editForm.informante ?? ""}
-                            onChange={(e) =>
-                              setEditForm((f) => ({
-                                ...f,
-                                informante: e.target.value,
-                              }))
+                      <div className="min-h-[24px] flex items-center font-medium">
+                        {ticketDetail?.alumno_nombre || "—"}
+                      </div>
+
+                      {/* Tarea (Links) - Integrado aquí */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6 pt-1">
+                        <LinkIcon className="h-4 w-4" /> <span>Tarea</span>
+                      </div>
+                      <div className="space-y-2">
+                        {(() => {
+                          type TaskLink = {
+                            id?: string | number | null;
+                            url: string;
+                            title?: string | null;
+                          };
+                          const raw = Array.isArray(
+                            (ticketDetail as any)?.links
+                          )
+                            ? (ticketDetail as any).links
+                            : [];
+                          const taskLinks: TaskLink[] = (raw as any[])
+                            .map((it) => {
+                              if (typeof it === "string")
+                                return { id: null, url: it, title: null };
+                              const url =
+                                it?.url || it?.link || it?.enlace || "";
+                              const title =
+                                it?.titulo || it?.title || it?.nombre || null;
+                              return {
+                                id: it?.id ?? null,
+                                url,
+                                title,
+                              } as TaskLink;
+                            })
+                            .filter((t) => !!t.url);
+
+                          const onDeleteTask = async (
+                            id?: string | number | null
+                          ) => {
+                            if (!id) return;
+                            try {
+                              await deleteTicketLink(id);
+                              toast({ title: "Tarea eliminada" });
+                              if (selectedTicket?.codigo)
+                                await loadTicketDetail(selectedTicket.codigo);
+                            } catch (e) {
+                              console.error(e);
+                              toast({ title: "Error al eliminar tarea" });
                             }
-                            placeholder="Nombre del informante"
-                            disabled
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label
-                            htmlFor="edit-resuelto-por"
-                            className="text-sm"
-                          >
-                            Resuelto por
-                          </Label>
-                          <Input
-                            id="edit-resuelto-por"
-                            className="h-10 bg-slate-50 cursor-not-allowed"
-                            value={editForm.resuelto_por ?? ""}
-                            placeholder="Nombre de quien resolvió"
-                            disabled
-                          />
-                        </div>
+                          };
+
+                          return (
+                            <>
+                              {taskLinks.length > 0 && (
+                                <div className="flex flex-col gap-1">
+                                  {taskLinks.map((t, i) => (
+                                    <div
+                                      key={`task-${t.id ?? i}`}
+                                      className="group flex items-center gap-2"
+                                    >
+                                      <a
+                                        href={normalizeUrl(t.url)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-sky-600 underline truncate max-w-[300px]"
+                                        title={t.url}
+                                      >
+                                        {t.title || t.url}
+                                      </a>
+                                      {canEdit && t.id != null && (
+                                        <button
+                                          onClick={() => onDeleteTask(t.id!)}
+                                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {canEdit && selectedTicket?.codigo && (
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Input
+                                    placeholder="Agregar link..."
+                                    className="h-7 text-xs w-full max-w-[200px]"
+                                    value={newAudioUrl}
+                                    onChange={(e) =>
+                                      setNewAudioUrl(e.target.value)
+                                    }
+                                    onKeyDown={async (e) => {
+                                      if (e.key === "Enter") {
+                                        const url = (newAudioUrl || "").trim();
+                                        if (!url) return;
+                                        try {
+                                          await createTicketLink(
+                                            selectedTicket.codigo!,
+                                            { url }
+                                          );
+                                          setNewAudioUrl("");
+                                          await loadTicketDetail(
+                                            selectedTicket.codigo!
+                                          );
+                                          toast({ title: "Tarea creada" });
+                                        } catch (err) {
+                                          console.error(err);
+                                          toast({
+                                            title: "Error al crear tarea",
+                                          });
+                                        }
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                                    title="Guardar tarea"
+                                    onClick={async () => {
+                                      const url = (newAudioUrl || "").trim();
+                                      if (!url) return;
+                                      try {
+                                        await createTicketLink(
+                                          selectedTicket.codigo!,
+                                          { url }
+                                        );
+                                        setNewAudioUrl("");
+                                        await loadTicketDetail(
+                                          selectedTicket.codigo!
+                                        );
+                                        toast({ title: "Tarea creada" });
+                                      } catch (err) {
+                                        console.error(err);
+                                        toast({
+                                          title: "Error al crear tarea",
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Informante */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <Users className="h-4 w-4" /> <span>Informante</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        {editForm.informante || "—"}
+                      </div>
+
+                      {/* Resuelto por */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <CheckCircle2 className="h-4 w-4" />{" "}
+                        <span>Resuelto por</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        {editForm.resuelto_por || "—"}
+                      </div>
+
+                      {/* Creación */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <Clock className="h-4 w-4" /> <span>Creación</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center text-slate-700">
+                        {ticketDetail?.created_at
+                          ? new Date(ticketDetail.created_at).toLocaleString(
+                              "es-ES",
+                              {
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )
+                          : "—"}
+                      </div>
+
+                      {/* Resolución */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <CalendarIcon className="h-4 w-4" />{" "}
+                        <span>Resolución</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center text-slate-700">
+                        {ticketDetail?.ultimo_estado?.estatus === "RESUELTO" &&
+                        ticketDetail?.ultimo_estado?.fecha
+                          ? new Date(
+                              ticketDetail.ultimo_estado.fecha
+                            ).toLocaleString("es-ES", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "—"}
+                      </div>
+
+                      {/* Deadline */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <AlertTriangle className="h-4 w-4" />{" "}
+                        <span>Deadline</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        <input
+                          type="date"
+                          className="h-7 rounded border border-slate-200 px-2 text-xs"
+                          value={
+                            editForm.deadline
+                              ? new Date(editForm.deadline)
+                                  .toISOString()
+                                  .split("T")[0]
+                              : ""
+                          }
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              deadline: e.target.value
+                                ? new Date(e.target.value).toISOString()
+                                : null,
+                            }))
+                          }
+                          disabled={!canEdit}
+                        />
+                      </div>
+
+                      {/* Estado */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <RefreshCw className="h-4 w-4" /> <span>Estado</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        <select
+                          className="h-7 rounded border border-slate-200 px-2 text-xs bg-white"
+                          value={editForm.estado as string}
+                          onChange={(e) =>
+                            setEditForm((prev) => ({
+                              ...prev,
+                              estado: e.target.value as any,
+                            }))
+                          }
+                          disabled={!canEdit}
+                        >
+                          {estados.map((st) => (
+                            <option key={st} value={st}>
+                              {STATUS_LABEL[st as StatusKey]}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
-                    {/* Se eliminó la sección 'Equipo asignado' según solicitud */}
+                    <Separator />
 
-                    {/* 'Trabajo y resolución' eliminado del modal según solicitud del usuario */}
+                    {/* Archivos (Compacto) */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                          <Paperclip className="h-4 w-4 text-slate-500" />{" "}
+                          Archivos
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            ref={editFileInputRef}
+                            type="file"
+                            className="hidden"
+                            multiple
+                            onChange={(e) => {
+                              const picked = Array.from(e.target.files ?? []);
+                              if (!picked.length) return;
+                              setEditFiles((prev) =>
+                                [...prev, ...picked].slice(0, 10)
+                              );
+                              e.currentTarget.value = "";
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            onClick={() => editFileInputRef.current?.click()}
+                          >
+                            + Agregar
+                          </Button>
+                        </div>
+                      </div>
 
-                    {/* Observaciones (Comentarios) */}
+                      {/* Lista de archivos existentes + nuevos */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {files.map((f) => (
+                          <div
+                            key={f.id}
+                            className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs group"
+                          >
+                            <div className="shrink-0 text-slate-400">
+                              {iconFor(f.mime_type, f.nombre_archivo)}
+                            </div>
+                            <div
+                              className="flex-1 truncate"
+                              title={f.nombre_archivo}
+                            >
+                              {f.nombre_archivo}
+                            </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() =>
+                                  downloadFile(f.id, f.nombre_archivo)
+                                }
+                                className="text-slate-400 hover:text-slate-700"
+                              >
+                                <Download className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => openPreview(f)}
+                                className="text-slate-400 hover:text-slate-700"
+                              >
+                                <Eye className="h-3 w-3" />
+                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() =>
+                                    setFileToDelete({
+                                      id: f.id,
+                                      nombre_archivo: f.nombre_archivo,
+                                    })
+                                  }
+                                  className="text-slate-400 hover:text-red-600"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {editFiles.map((f, i) => (
+                          <div
+                            key={`new-${i}`}
+                            className="flex items-center gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
+                          >
+                            <div className="shrink-0 text-blue-400">
+                              {iconFor(f.type, f.name)}
+                            </div>
+                            <div className="flex-1 truncate font-medium text-blue-700">
+                              {f.name}
+                            </div>
+                            <button
+                              onClick={() =>
+                                setEditFiles((prev) =>
+                                  prev.filter((_, idx) => idx !== i)
+                                )
+                              }
+                              className="text-blue-400 hover:text-blue-700"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      {editFiles.length > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            if (!selectedTicket?.codigo) return;
+                            setUploadingFiles(true);
+                            try {
+                              await uploadTicketFiles(
+                                selectedTicket.codigo,
+                                editFiles
+                              );
+                              toast({ title: "Archivos subidos" });
+                              setEditFiles([]);
+                              await loadFilesForTicket(selectedTicket.codigo);
+                            } catch (e) {
+                              console.error(e);
+                              toast({ title: "Error" });
+                            } finally {
+                              setUploadingFiles(false);
+                            }
+                          }}
+                          disabled={uploadingFiles}
+                        >
+                          {uploadingFiles ? "Subiendo..." : "Subir archivos"}
+                        </Button>
+                      )}
+
+                      {/* Grabador de audio (Compacto) */}
+                      <div className="flex items-center gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant={isRecording ? "destructive" : "outline"}
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            if (isRecording) stopRecording();
+                            else startRecording();
+                          }}
+                        >
+                          {isRecording ? "Detener" : "Grabar audio"}
+                        </Button>
+                        {isRecording && (
+                          <span className="text-xs text-red-500 animate-pulse">
+                            Grabando...
+                          </span>
+                        )}
+                        {recordedUrl && (
+                          <div className="flex items-center gap-2">
+                            <audio
+                              src={recordedUrl}
+                              controls
+                              className="h-6 w-24"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() => {
+                                URL.revokeObjectURL(recordedUrl!);
+                                setRecordedUrl(null);
+                                setRecordedBlob(null);
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-6 text-xs"
+                              onClick={addRecordedToFiles}
+                            >
+                              Guardar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Observaciones */}
                     <div className="space-y-3">
                       <Label className="text-sm font-medium">
                         Observaciones
                       </Label>
-
-                      {/* Lista de comentarios */}
                       <div className="space-y-3 max-h-[300px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
                         {commentsLoading ? (
                           <div className="text-center py-4 text-xs text-slate-500">
-                            Cargando observaciones...
+                            Cargando...
                           </div>
                         ) : comments.length === 0 ? (
                           <div className="text-center py-4 text-xs text-slate-500">
-                            No hay observaciones registradas.
+                            No hay observaciones.
                           </div>
                         ) : (
                           comments.map((c) => (
@@ -1950,8 +2333,6 @@ export default function TicketsBoard() {
                           ))
                         )}
                       </div>
-
-                      {/* Agregar comentario */}
                       {canEdit && (
                         <div className="flex gap-2 items-start">
                           <Textarea
@@ -1975,359 +2356,6 @@ export default function TicketsBoard() {
                           </Button>
                         </div>
                       )}
-                    </div>
-
-                    <Separator />
-
-                    {/* Archivos (adjuntos + upload + recorder) */}
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-sm font-medium">
-                          <Paperclip className="h-4 w-4 text-slate-500" />
-                          Archivos adjuntos
-                        </div>
-                      </div>
-
-                      {filesLoading ? (
-                        <div className="flex items-center justify-center py-8 text-slate-500">
-                          Cargando archivos...
-                        </div>
-                      ) : files.length > 0 ? (
-                        <div className="space-y-2">
-                          <div className="text-xs text-slate-500">
-                            {files.length} archivo(s) existente(s)
-                          </div>
-                          <div className="grid grid-cols-2 gap-2">
-                            {(showAllFiles ? files : files.slice(0, 8)).map(
-                              (f) => (
-                                <div
-                                  key={f.id}
-                                  className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
-                                >
-                                  <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-white">
-                                    {iconFor(f.mime_type, f.nombre_archivo)}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div
-                                      className="truncate text-sm font-medium"
-                                      title={f.nombre_archivo}
-                                    >
-                                      {shortenFileName(f.nombre_archivo, 15)}
-                                    </div>
-                                    <div className="text-xs text-slate-500">
-                                      {f.tamano_bytes
-                                        ? `${Math.ceil(
-                                            f.tamano_bytes / 1024
-                                          )} KB`
-                                        : "—"}
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2 items-center">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-8 w-8 p-0"
-                                      onClick={() =>
-                                        downloadFile(f.id, f.nombre_archivo)
-                                      }
-                                      aria-label={`Descargar ${f.nombre_archivo}`}
-                                    >
-                                      <Download className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-8 w-8 p-0"
-                                      onClick={() => openPreview(f)}
-                                      aria-label={`Ver ${f.nombre_archivo}`}
-                                    >
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-8 w-8 p-0"
-                                      onClick={() =>
-                                        setFileToDelete({
-                                          id: f.id,
-                                          nombre_archivo: f.nombre_archivo,
-                                        })
-                                      }
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </div>
-                              )
-                            )}
-                          </div>
-                          {files.length > 8 && !showAllFiles && (
-                            <button
-                              type="button"
-                              onClick={() => setShowAllFiles(true)}
-                              className="text-xs text-slate-600 text-center pt-2 w-full hover:underline"
-                            >
-                              +{files.length - 8} más
-                            </button>
-                          )}
-                          {showAllFiles && files.length > 8 && (
-                            <button
-                              type="button"
-                              onClick={() => setShowAllFiles(false)}
-                              className="text-xs text-slate-600 text-center pt-2 w-full hover:underline"
-                            >
-                              Mostrar menos
-                            </button>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center py-8 text-center">
-                          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-2">
-                            <FileIcon className="h-6 w-6 text-slate-400" />
-                          </div>
-                          <p className="text-sm text-slate-500">
-                            No hay archivos adjuntos
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Links detectados en la descripción (clicables) */}
-                      {(() => {
-                        const urlList: string[] = [
-                          ...extractUrlsFromDescription(
-                            ticketDetail?.descripcion
-                          ),
-                          ...((Array.isArray(ticketDetail?.links)
-                            ? ticketDetail.links
-                            : []) as string[]),
-                        ];
-                        const seen = new Set<string>();
-                        const links = urlList.filter((u) => {
-                          const k = String(u || "").toLowerCase();
-                          if (!k) return false;
-                          if (seen.has(k)) return false;
-                          seen.add(k);
-                          return true;
-                        });
-                        return links.length > 0 ? (
-                          <div className="mt-3">
-                            <div className="text-sm font-medium">Links</div>
-                            <div className="mt-1 flex flex-col gap-1">
-                              {links.map((u, i) => (
-                                <a
-                                  key={`gen-links-${i}`}
-                                  href={normalizeUrl(u)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-sky-600 underline break-all text-sm"
-                                >
-                                  {u}
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        ) : null;
-                      })()}
-
-                      <Separator />
-
-                      <div className="space-y-3">
-                        <Label className="text-sm font-medium">
-                          Adjuntar nuevos archivos
-                        </Label>
-                        <input
-                          ref={editFileInputRef}
-                          type="file"
-                          className="hidden"
-                          multiple
-                          onChange={(e) => {
-                            const picked = Array.from(e.target.files ?? []);
-                            if (!picked.length) return;
-                            setEditFiles((prev) =>
-                              [...prev, ...picked].slice(0, 10)
-                            );
-                            e.currentTarget.value = "";
-                          }}
-                        />
-                        <Button
-                          variant="outline"
-                          className="w-full gap-2 bg-transparent"
-                          onClick={() => editFileInputRef.current?.click()}
-                        >
-                          <Paperclip className="h-4 w-4" /> Seleccionar archivos
-                        </Button>
-
-                        {/* Grabador de audio y URLs */}
-                        <div className="space-y-3 pt-3">
-                          <Label className="text-sm font-medium">
-                            Grabar audio
-                          </Label>
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant={isRecording ? "destructive" : "outline"}
-                              onClick={() => {
-                                if (isRecording) stopRecording();
-                                else startRecording();
-                              }}
-                            >
-                              {isRecording ? "Detener" : "Grabar"}
-                            </Button>
-                            {isRecording && (
-                              <div className="voice-visualizer" aria-hidden>
-                                <span className="bar" />
-                                <span className="bar" />
-                                <span className="bar" />
-                                <span className="bar" />
-                                <span className="bar" />
-                              </div>
-                            )}
-                            {recordedUrl && (
-                              <audio
-                                src={recordedUrl}
-                                controls
-                                className="h-8"
-                              />
-                            )}
-                            {recordedBlob && (
-                              <Button size="sm" onClick={addRecordedToFiles}>
-                                Añadir grabación a archivos
-                              </Button>
-                            )}
-                          </div>
-                          <div className="pt-2">
-                            <Label className="text-sm font-medium">
-                              Agregar link (se guardará en la descripción)
-                            </Label>
-                            <div className="flex items-center gap-2 pt-2">
-                              <Input
-                                placeholder="https://..."
-                                value={newAudioUrl}
-                                onChange={(e) => setNewAudioUrl(e.target.value)}
-                              />
-                              <Button size="sm" onClick={addAudioUrl}>
-                                Agregar link
-                              </Button>
-                            </div>
-                            {audioUrls.length > 0 && (
-                              <div className="space-y-2 pt-2">
-                                {audioUrls.map((u, idx) => (
-                                  <div
-                                    key={u + idx}
-                                    className="flex items-center gap-2"
-                                  >
-                                    <a
-                                      href={normalizeUrl(u)}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs text-sky-600 underline break-all"
-                                    >
-                                      {u}
-                                    </a>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => removeAudioUrl(idx)}
-                                    >
-                                      Eliminar
-                                    </Button>
-                                  </div>
-                                ))}
-                                <div className="pt-1">
-                                  <Button
-                                    size="sm"
-                                    onClick={saveLinksToDescription}
-                                  >
-                                    Guardar links
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {editFiles.length > 0 && (
-                          <>
-                            <div className="space-y-2">
-                              <div className="text-xs text-slate-500">
-                                {editFiles.length} archivo(s) seleccionado(s)
-                              </div>
-                              <div className="space-y-2">
-                                {editFiles.map((f, i) => (
-                                  <div
-                                    key={`${f.name}-${i}`}
-                                    className="flex items-center gap-3 rounded-lg border bg-white p-3"
-                                  >
-                                    <div className="flex h-10 w-10 flex-none shrink-0 items-center justify-center rounded bg-slate-100">
-                                      {iconFor(f.type, f.name)}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <div
-                                        className="truncate text-sm font-medium"
-                                        title={f.name}
-                                      >
-                                        {f.name}
-                                      </div>
-                                      <div className="text-xs text-slate-500">
-                                        {Math.ceil(f.size / 1024)} KB
-                                      </div>
-                                    </div>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-8 w-8 p-0"
-                                      onClick={() =>
-                                        setEditFiles((prev) =>
-                                          prev.filter((_, idx) => idx !== i)
-                                        )
-                                      }
-                                    >
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="mt-2 flex gap-2">
-                              <Button
-                                size="sm"
-                                className="flex-1"
-                                onClick={async () => {
-                                  if (!selectedTicket?.codigo) return;
-                                  setUploadingFiles(true);
-                                  try {
-                                    await uploadTicketFiles(
-                                      selectedTicket.codigo,
-                                      editFiles
-                                    );
-                                    toast({ title: "Archivos subidos" });
-                                    setEditFiles([]);
-                                    await loadFilesForTicket(
-                                      selectedTicket.codigo
-                                    );
-                                  } catch (e) {
-                                    console.error(e);
-                                    toast({ title: "Error subiendo archivos" });
-                                  } finally {
-                                    setUploadingFiles(false);
-                                  }
-                                }}
-                              >
-                                {uploadingFiles
-                                  ? "Subiendo..."
-                                  : "Subir archivos"}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setEditFiles([])}
-                              >
-                                Limpiar
-                              </Button>
-                            </div>
-                          </>
-                        )}
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -2428,7 +2456,7 @@ export default function TicketsBoard() {
                           </div>
                         </div>
 
-                        {/* Descripción y links */}
+                        {/* Descripción y tareas */}
                         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
                           <div className="flex items-center justify-between">
                             <div className="text-sm font-medium">
@@ -2512,9 +2540,17 @@ export default function TicketsBoard() {
                               ...extractUrlsFromDescription(
                                 ticketDetail?.descripcion
                               ),
-                              ...((Array.isArray(ticketDetail?.links)
-                                ? ticketDetail.links
-                                : []) as string[]),
+                              ...(
+                                (Array.isArray((ticketDetail as any)?.links)
+                                  ? (ticketDetail as any).links
+                                  : []) as any[]
+                              )
+                                .map((it: any) =>
+                                  typeof it === "string"
+                                    ? it
+                                    : it?.url || it?.link || it?.enlace || ""
+                                )
+                                .filter((s: string) => !!s),
                             ];
                             // Dedupe final
                             const seen = new Set<string>();
@@ -2527,7 +2563,9 @@ export default function TicketsBoard() {
                             });
                             return links.length > 0 ? (
                               <div className="pt-1">
-                                <div className="text-sm font-medium">Links</div>
+                                <div className="text-sm font-medium">
+                                  Tareas
+                                </div>
                                 <div className="mt-1 flex flex-col gap-1">
                                   {links.map((u, i) => (
                                     <a
@@ -2791,9 +2829,7 @@ export default function TicketsBoard() {
               <SheetClose asChild>
                 <Button variant="outline">Cancelar</Button>
               </SheetClose>
-              {canEdit && (
-                <Button onClick={saveTicketChanges}>Guardar cambios</Button>
-              )}
+              {/* Botón de guardar oculto según solicitud */}
             </div>
           </SheetFooter>
         </SheetContent>

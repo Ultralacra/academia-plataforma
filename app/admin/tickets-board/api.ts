@@ -245,3 +245,35 @@ export async function getTickets(opts: {
       method: "DELETE",
     });
   }
+
+  // --- Tareas (Links asociados al ticket) ---
+
+  /**
+   * Elimina un link/tarea por ID.
+   * Endpoint: DELETE /v1/ticket/delete/link/:id
+   */
+  export async function deleteTicketLink(linkId: number | string) {
+    if (!linkId) throw new Error("ID de link requerido");
+    const path = `/ticket/delete/link/${encodeURIComponent(linkId)}`;
+    return apiFetch<any>(path, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   * Crea un link/tarea asociado a un ticket por código.
+   * Endpoint sugerido: POST /v1/ticket/create/link/:ticketCode
+   * Body: { url: string, title?: string }
+   */
+  export async function createTicketLink(
+    ticketCode: string,
+    payload: { url: string; title?: string }
+  ) {
+    if (!ticketCode) throw new Error("Código de ticket requerido");
+    const path = `/ticket/create/link/${encodeURIComponent(ticketCode)}`;
+    return apiFetch<any>(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: payload.url, title: payload.title }),
+    });
+  }
