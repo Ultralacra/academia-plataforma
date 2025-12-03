@@ -2,6 +2,7 @@
 
 import React from "react";
 import { CheckCheck, Check, Loader2 } from "lucide-react";
+import VideoPlayer from "./VideoPlayer";
 
 export type ChatSender = "admin" | "alumno" | "coach";
 
@@ -135,14 +136,16 @@ export default function MessageBubble({
                 return (
                   <div key={a.id} className={commonWrapCls}>
                     {overlay}
-                    {selectMode ? (
-                      <video
-                        src={url}
-                        className="max-h-40 w-full"
-                        onClick={() => onToggleSelectAttachment(a.id)}
-                      />
-                    ) : (
-                      <video src={url} controls className="max-h-40 w-full" />
+                    <VideoPlayer
+                      src={url}
+                      className="max-h-40 w-full"
+                      selectMode={selectMode}
+                      onSelect={() => onToggleSelectAttachment(a.id)}
+                    />
+                    {mine && !msg.delivered && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-20 pointer-events-none">
+                        <Loader2 className="w-8 h-8 text-white animate-spin" />
+                      </div>
                     )}
                   </div>
                 );

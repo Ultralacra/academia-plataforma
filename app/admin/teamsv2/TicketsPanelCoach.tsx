@@ -48,6 +48,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import VideoPlayer from "@/components/chat/VideoPlayer";
 import {
   getCoachTickets,
   type CoachTicket,
@@ -1879,9 +1880,8 @@ export default function TicketsPanelCoach({
                 }
                 if (m.startsWith("video/")) {
                   return (
-                    <video
+                    <VideoPlayer
                       src={previewFile.url}
-                      controls
                       className="mx-auto max-h-[65vh]"
                     />
                   );

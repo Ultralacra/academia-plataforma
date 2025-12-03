@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Attachment } from "./chat-types";
+import VideoPlayer from "@/components/chat/VideoPlayer";
 
 export function AttachmentPreviewModal({
   open,
@@ -59,12 +60,7 @@ export function AttachmentPreviewModal({
             />
           )}
           {isVideo && (
-            <video
-              src={url}
-              controls
-              className="max-w-full max-h-full"
-              autoPlay
-            />
+            <VideoPlayer src={url} className="max-w-full max-h-full" />
           )}
           {isAudio && <audio src={url} controls autoPlay className="w-full" />}
           {isPdf && (

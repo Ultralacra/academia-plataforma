@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
 import { toast } from "@/components/ui/use-toast";
+import VideoPlayer from "@/components/chat/VideoPlayer";
 
 import {
   Search,
@@ -1565,9 +1566,8 @@ export default function TicketsBoard() {
                 }
                 if (m.startsWith("video/")) {
                   return (
-                    <video
+                    <VideoPlayer
                       src={previewFile.url}
-                      controls
                       className="mx-auto max-h-[65vh] rounded-md"
                     />
                   );

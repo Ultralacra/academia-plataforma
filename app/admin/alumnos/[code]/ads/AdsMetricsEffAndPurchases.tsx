@@ -7,9 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
   pctOf,
-  toPercentNoSymbol,
   toPercentNoSymbolNoScale,
   sanitizePercentInput,
+  toNum,
+  toPercentNoSymbol,
 } from "./ads-utils";
 
 export default function AdsMetricsEffAndPurchases({
@@ -83,29 +84,21 @@ export default function AdsMetricsEffAndPurchases({
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3">
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <Label>Ads (visitas/alcance)</Label>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span>Auto</span>
-                <Switch
-                  checked={!!data.auto_eff}
-                  onCheckedChange={(v) => onChange("auto_eff", v)}
+            <Label>Ads (clics/alcance)</Label>
+            {(() => {
+              // Dejar el input vacío, sin mostrar porcentaje ni ratio
+              return (
+                <Input
+                  inputMode="decimal"
+                  placeholder="0.0"
+                  disabled
+                  value=""
                 />
-              </div>
+              );
+            })()}
+            <div className="text-[11px] text-muted-foreground">
+              Se calcula: clics / alcance × 100
             </div>
-            <Input
-              inputMode="decimal"
-              placeholder="0%"
-              disabled={data.auto_eff}
-              value={`${
-                data.auto_eff
-                  ? toPercentNoSymbol(view.eff_ads)
-                  : toPercentNoSymbol(data.eff_ads)
-              }%`}
-              onChange={(e) =>
-                onChange("eff_ads", sanitizePercentInput(e.target.value))
-              }
-            />
           </div>
           <div className="space-y-1.5">
             <Label>Pago iniciado (pagos/visitas)</Label>

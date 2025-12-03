@@ -53,6 +53,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import VideoPlayer from "@/components/chat/VideoPlayer";
 import {
   Tooltip,
   TooltipContent,
@@ -1536,9 +1537,8 @@ export default function TicketsPanel({
                 }
                 if (m.startsWith("video/")) {
                   return (
-                    <video
+                    <VideoPlayer
                       src={previewFile.url}
-                      controls
                       className="mx-auto max-h-[65vh] rounded"
                     />
                   );

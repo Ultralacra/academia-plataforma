@@ -209,7 +209,9 @@ export default function AdsStudentsTable({
   const fmtPercent = (n?: string | number | null) => {
     const v = toNum(n);
     if (v == null) return "—";
-    const pct = v <= 1 ? v * 100 : v;
+    // Heurística: si es <= 5, asumimos que es un ratio (ej. 1.5 = 150%).
+    // Si es > 5, asumimos que ya es porcentaje (ej. 20 = 20%).
+    const pct = v <= 5 ? v * 100 : v;
     return `${pct.toFixed(1)}%`;
   };
   const fmtRoas = (n?: string | number | null) => {
@@ -738,7 +740,7 @@ export default function AdsStudentsTable({
 
 function PercentBar({ value }: { value: number | null }) {
   if (value == null || !Number.isFinite(value)) return <span>—</span>;
-  const pct = value <= 1 ? value * 100 : value;
+  const pct = value <= 5 ? value * 100 : value;
   const w = Math.max(0, Math.min(100, pct));
   const color = w >= 66 ? "#10b981" : w >= 33 ? "#f59e0b" : "#ef4444";
   return (

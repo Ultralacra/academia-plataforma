@@ -1,6 +1,7 @@
 "use client";
 import React from "react";
 import AudioBubble from "@/app/admin/teamsv2/[code]/AudioBubble";
+import VideoPlayer from "@/components/chat/VideoPlayer";
 import { AttachmentPreviewModal } from "@/app/admin/teamsv2/[code]/AttachmentPreviewModal";
 import { TicketGenerationModal } from "@/app/admin/teamsv2/[code]/TicketGenerationModal";
 import {
@@ -130,8 +131,8 @@ export default function CoachChatInline({
     (s: Sender) => (s || "").toLowerCase() === role.toLowerCase(),
     [role]
   );
-  // Límite de tamaño por archivo: 25MB
-  const MAX_FILE_SIZE = 25 * 1024 * 1024;
+  // Límite de tamaño por archivo: 50MB
+  const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
   const [connected, setConnected] = React.useState(false);
   const [items, setItems] = React.useState<Message[]>([]);
@@ -676,7 +677,7 @@ export default function CoachChatInline({
           .join(", ");
         const more = tooBig.length > 3 ? ` y ${tooBig.length - 3} más` : "";
         setUploadError(
-          `Se omitieron ${tooBig.length} archivo(s) por exceder 25MB: ${names}${more}.`
+          `Se omitieron ${tooBig.length} archivo(s) por exceder 50MB: ${names}${more}.`
         );
         arr = arr.filter((f) => (f?.size || 0) <= MAX_FILE_SIZE);
       }
@@ -697,43 +698,52 @@ export default function CoachChatInline({
         current: undefined,
       });
 
-      // Subir uno por uno para simplificar y evitar errores si el backend espera un único "file"
-      for (const file of arr) {
+      // 1) Prepare all optimistic messages
+      const tasks = arr.map((file) => {
+        const optimisticId = `${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
+        const optimisticAttachment = {
+          id: `${optimisticId}-att`,
+          name: file.name,
+          mime: file.type || "application/octet-stream",
+          size: file.size,
+          data_base64: "",
+          url: URL.createObjectURL(file),
+        } as Attachment;
+        const optimisticMsg: Message = {
+          id: optimisticId,
+          room: normRoom,
+          sender: role,
+          text: "",
+          at: new Date().toISOString(),
+          delivered: false,
+          read: false,
+          srcParticipantId: myParticipantIdRef.current ?? undefined,
+          attachments: [optimisticAttachment],
+          uiKey: optimisticId,
+        };
+        return { file, optimisticMsg, optimisticId };
+      });
+
+      // Add all to UI immediately
+      setItems((prev) => [...prev, ...tasks.map((t) => t.optimisticMsg)]);
+
+      // Register recent uploads
+      tasks.forEach((t) => {
+        try {
+          recordRecentUpload(role, id, t.file);
+        } catch {}
+      });
+
+      // 2) Upload one by one
+      for (const { file, optimisticId } of tasks) {
         const fd = new FormData();
         fd.append("file", file, file.name);
         try {
           setUploadState((s) => ({ ...s, current: file.name }));
-          // 1) Insertar mensaje optimista en la UI
-          const optimisticId = `${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2, 8)}`;
-          const optimisticAttachment = {
-            id: `${optimisticId}-att`,
-            name: file.name,
-            mime: file.type || "application/octet-stream",
-            size: file.size,
-            data_base64: "",
-            url: URL.createObjectURL(file),
-          } as Attachment;
-          const optimisticMsg: Message = {
-            id: optimisticId,
-            room: normRoom,
-            sender: role,
-            text: "",
-            at: new Date().toISOString(),
-            delivered: false,
-            read: false,
-            srcParticipantId: myParticipantIdRef.current ?? undefined,
-            attachments: [optimisticAttachment],
-            uiKey: optimisticId,
-          };
-          setItems((prev) => [...prev, optimisticMsg]);
-          // Registrar pista local para poder reconocer este adjunto tras recargar
-          try {
-            recordRecentUpload(role, id, file);
-          } catch {}
 
-          // 2) Subir al servidor (intenta primero en CHAT_HOST, luego en API_HOST)
+          // Subir al servidor (intenta primero en CHAT_HOST, luego en API_HOST)
           const token = getAuthToken();
           const headers: Record<string, string> = token
             ? { Authorization: `Bearer ${token}` }
@@ -811,7 +821,7 @@ export default function CoachChatInline({
         .join(", ");
       const more = rejected.length > 3 ? ` y ${rejected.length - 3} más` : "";
       setUploadError(
-        `No se pueden adjuntar archivos mayores a 25MB. Se omitieron: ${names}${more}.`
+        `No se pueden adjuntar archivos mayores a 50MB. Se omitieron: ${names}${more}.`
       );
     }
     if (!valid.length) return;
@@ -3547,10 +3557,13 @@ export default function CoachChatInline({
                                     attSelected ? "ring-2 ring-violet-500" : ""
                                   }`}
                                 >
-                                  <video
+                                  <VideoPlayer
                                     src={url}
-                                    controls
                                     className="h-full w-full max-h-40"
+                                    selectMode={selectionMode}
+                                    onSelect={() =>
+                                      toggleAttachmentSelection(a.id)
+                                    }
                                   />
                                   {selectionMode && (
                                     <span
@@ -3873,7 +3886,7 @@ export default function CoachChatInline({
                           });
                           if ((file.size || 0) > MAX_FILE_SIZE) {
                             setUploadError(
-                              "El audio grabado excede el límite de 25MB y no se adjuntará."
+                              "El audio grabado excede el límite de 50MB y no se adjuntará."
                             );
                           } else {
                             addPendingAttachments([file] as any);

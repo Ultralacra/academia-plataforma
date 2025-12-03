@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 // Utilidades numéricas para formato en vista previa del formulario ADS
 function toNum(v?: string | number | null) {
   if (v == null) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
   const s = String(v).trim();
   if (!s) return null;
   const n = Number(s.replace(/\./g, "").replace(/,/g, "."));
@@ -176,21 +177,21 @@ export default function AdsMetricsForm({
     return undefined;
   }, [data.inversion, data.facturacion]);
   const effAdsCalc = useMemo(() => {
-    const v = toNum(data.visitas);
+    const c = toNum(data.clics);
     const a = toNum(data.alcance);
-    if (v != null && a && a > 0) return String(v / a);
+    if (c != null && a && a > 0) return c / a;
     return undefined;
-  }, [data.visitas, data.alcance]);
+  }, [data.clics, data.alcance]);
   const effPagoCalc = useMemo(() => {
     const p = toNum(data.pagos);
     const v = toNum(data.visitas);
-    if (p != null && v && v > 0) return String(p / v);
+    if (p != null && v && v > 0) return p / v;
     return undefined;
   }, [data.pagos, data.visitas]);
   const effCompraCalc = useMemo(() => {
     const comp = toNum(data.compra_carnada);
     const v = toNum(data.visitas);
-    if (comp != null && v && v > 0) return String(comp / v);
+    if (comp != null && v && v > 0) return comp / v;
     return undefined;
   }, [data.compra_carnada, data.visitas]);
 
@@ -394,7 +395,7 @@ export default function AdsMetricsForm({
               <CardContent className="grid grid-cols-1 gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <Label>Ads (visitas/alcance)</Label>
+                    <Label>Ads (clics/alcance)</Label>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span>Auto</span>
                       <Switch
@@ -405,22 +406,14 @@ export default function AdsMetricsForm({
                   </div>
                   <Input
                     inputMode="decimal"
-                    placeholder="0%"
-                    disabled={data.auto_eff}
-                    value={`${
-                      data.auto_eff
-                        ? toPercentNoSymbol(view.eff_ads)
-                        : toPercentNoSymbol(data.eff_ads)
-                    }%`}
-                    onChange={(e) =>
-                      onChange("eff_ads", sanitizePercentInput(e.target.value))
+                    placeholder="0.0"
+                    disabled
+                    value={
+                      view.eff_ads != null
+                        ? `${(Number(view.eff_ads) * 100).toFixed(1)}%`
+                        : ""
                     }
                   />
-                  {!data.auto_eff && (
-                    <div className="text-[11px] text-muted-foreground">
-                      Ingresa porcentaje (0-100)
-                    </div>
-                  )}
                 </div>
                 <div className="space-y-1.5">
                   <Label>Pago iniciado (pagos/visitas)</Label>
@@ -708,7 +701,10 @@ export default function AdsMetricsForm({
                 </CardHeader>
                 <CardContent className="space-y-1.5 text-sm">
                   <div>
-                    Ads: <b>{fmtPct(view.eff_ads)}</b>
+                    Ads: <b>{fmtPct(view.eff_ads)}</b>{" "}
+                    <span className="text-[10px] text-muted-foreground">
+                      ({view.eff_ads})
+                    </span>
                   </div>
                   <div>
                     Pago iniciado: <b>{fmtPct(view.eff_pago)}</b>

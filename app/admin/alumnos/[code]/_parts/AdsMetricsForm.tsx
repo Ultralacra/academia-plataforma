@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 // Utilidades numéricas para formato en vista previa del formulario ADS
 function toNum(v?: string | number | null) {
   if (v == null) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
   const s = String(v).trim();
   if (!s) return null;
   const n = Number(s.replace(/\./g, "").replace(/,/g, "."));
@@ -202,21 +203,21 @@ export default function AdsMetricsForm({
     return undefined;
   }, [data.inversion, data.facturacion]);
   const effAdsCalc = useMemo(() => {
-    const v = toNum(data.visitas);
+    const c = toNum(data.clics);
     const a = toNum(data.alcance);
-    if (v != null && a && a > 0) return String(v / a);
+    if (c != null && a && a > 0) return c / a;
     return undefined;
-  }, [data.visitas, data.alcance]);
+  }, [data.clics, data.alcance]);
   const effPagoCalc = useMemo(() => {
     const p = toNum(data.pagos);
     const v = toNum(data.visitas);
-    if (p != null && v && v > 0) return String(p / v);
+    if (p != null && v && v > 0) return p / v;
     return undefined;
   }, [data.pagos, data.visitas]);
   const effCompraCalc = useMemo(() => {
     const comp = toNum(data.compra_carnada);
     const v = toNum(data.visitas);
-    if (comp != null && v && v > 0) return String(comp / v);
+    if (comp != null && v && v > 0) return comp / v;
     return undefined;
   }, [data.compra_carnada, data.visitas]);
 
@@ -314,20 +315,83 @@ export default function AdsMetricsForm({
     }
   }, [data.visitas, data.clics]);
 
-  // Helpers de presentación para porcentajes sin símbolo
-  function toPercentNoSymbol(x?: string | number | null): string {
+  // Debug: log inputs y resultados con etiquetas idénticas a la UI
+  useEffect(() => {
+    try {
+      const alcanceN = toNum(data.alcance) ?? null;
+      const clicsN = toNum(data.clics) ?? null;
+      const visitasN = toNum(data.visitas) ?? null;
+      const pagosN = toNum(data.pagos) ?? null;
+      console.log(
+        "[ADS] Embudo → Alcance:",
+        alcanceN,
+        "Clics:",
+        clicsN,
+        "Visitas:",
+        visitasN,
+        "Pagos iniciados:",
+        pagosN
+      );
+
+      const effAdsRatio = effAdsCalc != null ? Number(effAdsCalc) : null;
+      const effPagoRatio = effPagoCalc != null ? Number(effPagoCalc) : null;
+      const effCompraRatio =
+        effCompraCalc != null ? Number(effCompraCalc) : null;
+      const effAdsPct = effAdsRatio != null ? effAdsRatio * 100 : null;
+      const effPagoPct = effPagoRatio != null ? effPagoRatio * 100 : null;
+      const effCompraPct = effCompraRatio != null ? effCompraRatio * 100 : null;
+      console.log(
+        "[ADS] Efectividades (ratio) → Ads (clics/alcance):",
+        effAdsRatio,
+        "Pago iniciado (pagos/visitas):",
+        effPagoRatio,
+        "Compra (carnada/visitas):",
+        effCompraRatio
+      );
+      console.log(
+        "[ADS] Efectividades (%) → Ads (clics/alcance):",
+        effAdsPct != null ? `${effAdsPct.toFixed(1)}%` : null,
+        "Pago iniciado (pagos/visitas):",
+        effPagoPct != null ? `${effPagoPct.toFixed(1)}%` : null,
+        "Compra (carnada/visitas):",
+        effCompraPct != null ? `${effCompraPct.toFixed(1)}%` : null
+      );
+
+      const dispEffAds = fmtRatioToPercent(view.eff_ads);
+      const dispEffPago = fmtRatioToPercent(view.eff_pago);
+      const dispEffCompra = fmtRatioToPercent(view.eff_compra);
+      console.log(
+        "[ADS] UI → Ads (clics/alcance):",
+        `${dispEffAds}%`,
+        "Pago iniciado (pagos/visitas):",
+        `${dispEffPago}%`,
+        "Compra (carnada/visitas):",
+        `${dispEffCompra}%`
+      );
+    } catch (e) {
+      console.warn("[ADS] Log error", e);
+    }
+  }, [
+    data.alcance,
+    data.clics,
+    data.visitas,
+    data.pagos,
+    effAdsCalc,
+    effPagoCalc,
+    effCompraCalc,
+    data.auto_eff,
+  ]);
+
+  // Helpers de presentación para porcentajes
+  function fmtRatioToPercent(x?: string | number | null): string {
     const v = toNum(x);
     if (v == null) return "";
-    const ratio = v > 1 ? v / 100 : v;
-    const pct = ratio * 100;
-    const s = pct.toFixed(1);
-    return /\.0$/.test(s) ? s.replace(/\.0$/, "") : s;
+    return (v * 100).toFixed(1).replace(/\.0$/, "");
   }
-  function toPercentNoSymbolNoScale(x?: string | number | null): string {
+  function fmtManualPercent(x?: string | number | null): string {
     const v = toNum(x);
     if (v == null) return "";
-    const s = Number(v).toFixed(2);
-    return s.replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+    return v.toFixed(1).replace(/\.0$/, "");
   }
   function sanitizePercentInput(s: string): string {
     try {
@@ -652,27 +716,15 @@ export default function AdsMetricsForm({
                   />
                 </div>
                 <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label>Ads (visitas/alcance)</Label>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>Auto</span>
-                      <Switch
-                        checked={!!data.auto_eff}
-                        onCheckedChange={(v) => onChange("auto_eff", v)}
-                      />
-                    </div>
-                  </div>
+                  <Label>Ads (clics/alcance)</Label>
                   <Input
                     inputMode="decimal"
-                    placeholder="0%"
-                    disabled={data.auto_eff}
-                    value={`${
-                      data.auto_eff
-                        ? toPercentNoSymbol(view.eff_ads)
-                        : toPercentNoSymbol(data.eff_ads)
-                    }%`}
-                    onChange={(e) =>
-                      onChange("eff_ads", sanitizePercentInput(e.target.value))
+                    placeholder="0.0"
+                    disabled
+                    value={
+                      view.eff_ads != null
+                        ? `${(Number(view.eff_ads) * 100).toFixed(1)}%`
+                        : ""
                     }
                   />
                 </div>
@@ -684,8 +736,8 @@ export default function AdsMetricsForm({
                     disabled={data.auto_eff}
                     value={`${
                       data.auto_eff
-                        ? toPercentNoSymbol(view.eff_pago)
-                        : toPercentNoSymbol(data.eff_pago)
+                        ? fmtRatioToPercent(view.eff_pago)
+                        : fmtManualPercent(data.eff_pago)
                     }%`}
                     onChange={(e) =>
                       onChange("eff_pago", sanitizePercentInput(e.target.value))
@@ -700,8 +752,8 @@ export default function AdsMetricsForm({
                     disabled={data.auto_eff}
                     value={`${
                       data.auto_eff
-                        ? toPercentNoSymbol(view.eff_compra)
-                        : toPercentNoSymbol(data.eff_compra)
+                        ? fmtRatioToPercent(view.eff_compra)
+                        : fmtManualPercent(data.eff_compra)
                     }%`}
                     onChange={(e) =>
                       onChange(
@@ -911,7 +963,10 @@ export default function AdsMetricsForm({
                 Efectividades
               </div>
               <div>
-                Ads: <b>{fmtPct(view.eff_ads)}</b>
+                Ads: <b>{fmtPct(view.eff_ads)}</b>{" "}
+                <span className="text-[10px] text-muted-foreground">
+                  ({view.eff_ads})
+                </span>
               </div>
               <div>
                 Pago iniciado: <b>{fmtPct(view.eff_pago)}</b>

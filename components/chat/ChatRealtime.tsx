@@ -4,6 +4,7 @@ import React from "react";
 import { getAuthToken } from "@/lib/auth";
 import Spinner from "@/components/ui/spinner";
 import MessageBubble from "@/components/chat/MessageBubble";
+import VideoPlayer from "@/components/chat/VideoPlayer";
 // chat: disable snackbars in-chat — use console.debug for non-intrusive messages
 import {
   Smile,
@@ -148,8 +149,8 @@ export default function ChatRealtime({
     () => (room || "").trim().toLowerCase(),
     [room]
   );
-  // Límite de tamaño por archivo: 25MB
-  const MAX_FILE_SIZE = 25 * 1024 * 1024;
+  // Límite de tamaño por archivo: 50MB
+  const MAX_FILE_SIZE = 50 * 1024 * 1024;
   const [currentRole, setCurrentRole] = React.useState<Sender>(role);
   const [items, setItems] = React.useState<Message[]>([]);
   const [text, setText] = React.useState("");
@@ -2182,7 +2183,7 @@ export default function ChatRealtime({
         .join(", ");
       const more = rejected.length > 3 ? ` y ${rejected.length - 3} más` : "";
       setAttachError(
-        `No se pueden adjuntar archivos mayores a 25MB. Se omitieron: ${names}${more}.`
+        `No se pueden adjuntar archivos mayores a 50MB. Se omitieron: ${names}${more}.`
       );
     }
     if (!valid.length) {
@@ -2256,20 +2257,31 @@ export default function ChatRealtime({
     if (!val && pendingFiles.length === 0) return;
 
     try {
-      const attachments = await readFilesAsBase64(pendingFiles);
+      // 1. Optimistic update with Blob URLs (immediate feedback)
+      const tempAttachments: Attachment[] = pendingFiles.map((f) => ({
+        id: `${Date.now()}-${Math.random()}`,
+        name: f.name,
+        mime: f.type,
+        size: f.size,
+        data_base64: "", // Empty initially, will be filled later
+        url: URL.createObjectURL(f), // Use Blob URL for local preview
+      }));
 
       const clientId = `${Date.now()}-${Math.random()
         .toString(36)
         .slice(2, 8)}`;
+
       const localMsg: Message = {
         id: clientId,
         room: normRoom,
         sender: currentRole,
         text: val,
         at: new Date().toISOString(),
-        attachments,
+        attachments: tempAttachments,
+        delivered: false,
       };
 
+      // Clear UI immediately
       setText("");
       if (inputRef.current) {
         inputRef.current.value = "";
@@ -2278,26 +2290,51 @@ export default function ChatRealtime({
       if (fileRef.current) fileRef.current.value = "";
       setPendingFiles([]);
 
-      if (transport === "local") {
-        setItems((prev) => {
-          const next = [...prev, localMsg];
+      // Add to list immediately
+      setItems((prev) => {
+        const next = [...prev, localMsg];
+        if (transport === "local") {
           try {
             localStorage.setItem(storageKey, JSON.stringify(next));
           } catch {}
-          return next;
-        });
-        seenRef.current.add(clientId);
+        }
+        return next;
+      });
+      seenRef.current.add(clientId);
+
+      // 2. Process files (heavy operation)
+      const attachments = await readFilesAsBase64(pendingFiles);
+
+      // Update localMsg attachments with real base64 for sending
+      // We reuse the same structure but with base64 data
+      const payloadAttachments = attachments;
+
+      if (transport === "local") {
+        // Already added to items, just notify BC
         try {
-          bcRef.current?.postMessage({ type: "message", msg: localMsg });
+          bcRef.current?.postMessage({
+            type: "message",
+            msg: {
+              ...localMsg,
+              attachments: payloadAttachments,
+              delivered: true,
+            },
+          });
         } catch {}
         markRead();
+        // Update item to delivered
+        setItems((prev) =>
+          prev.map((m) =>
+            m.id === clientId
+              ? { ...m, delivered: true, attachments: payloadAttachments }
+              : m
+          )
+        );
         return;
       }
 
       if (transport === "sse") {
         // enviar vía POST al endpoint SSE
-        setItems((prev) => [...prev, localMsg]);
-        seenRef.current.add(clientId);
         try {
           await fetch(`/api/realtime`, {
             method: "POST",
@@ -2306,8 +2343,13 @@ export default function ChatRealtime({
               room: normRoom,
               sender: currentRole,
               text: val,
+              attachments: payloadAttachments,
             }),
           });
+          // Update to delivered
+          setItems((prev) =>
+            prev.map((m) => (m.id === clientId ? { ...m, delivered: true } : m))
+          );
         } catch {}
         markRead();
         return;
@@ -2479,6 +2521,7 @@ export default function ChatRealtime({
               id_chat_participante_emisor: effectiveMyParticipantId,
               contenido: val,
               client_session: clientSessionRef.current,
+              attachments: payloadAttachments,
             };
             try {
               console.debug("[chat.message.send] =>", {
@@ -2487,21 +2530,14 @@ export default function ChatRealtime({
                 role: currentRole,
                 destino: currentRole === "alumno" ? "coach" : "alumno",
                 texto: String(val).slice(0, 120),
+                attachments: payloadAttachments?.length,
               });
             } catch {}
             // Marca el último id de participante usado para enviar
             lastSentParticipantIdRef.current = effectiveMyParticipantId;
-            // Optimista: mostrar el mensaje local y registrar para reconciliar
-            setItems((prev) => [
-              ...prev,
-              {
-                ...localMsg,
-                delivered: false,
-                read: false,
-                srcParticipantId: effectiveMyParticipantId,
-              },
-            ]);
-            seenRef.current.add(clientId);
+
+            // Already added optimistically at start of send()
+            // Just register for reconciliation
             outboxRef.current.push({
               clientId,
               text: val,
@@ -3611,10 +3647,9 @@ export default function ChatRealtime({
                       className="rounded-md max-h-32 object-cover w-full"
                     />
                   ) : p.type.startsWith("video/") ? (
-                    <video
+                    <VideoPlayer
                       src={p.url}
                       className="rounded-md max-h-32 w-full"
-                      controls
                     />
                   ) : p.type.startsWith("audio/") ? (
                     <audio src={p.url} className="w-full" controls />
@@ -3775,22 +3810,10 @@ export default function ChatRealtime({
 
                           {isVideo && (
                             <div className="aspect-square bg-gray-900">
-                              <video
+                              <VideoPlayer
                                 src={url}
-                                className="w-full h-full object-cover"
-                                preload="metadata"
+                                className="w-full h-full"
                               />
-                              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                                <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
-                                  <svg
-                                    className="w-6 h-6 text-gray-800 ml-1"
-                                    fill="currentColor"
-                                    viewBox="0 0 20 20"
-                                  >
-                                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                                  </svg>
-                                </div>
-                              </div>
                             </div>
                           )}
 

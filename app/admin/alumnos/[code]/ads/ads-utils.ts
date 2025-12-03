@@ -24,14 +24,15 @@ export function fmtMoney(n?: string | number | null) {
 export function fmtPct(n?: string | number | null) {
   const v = toNum(n);
   if (v == null) return "—";
-  const pct = v <= 1 ? v * 100 : v;
+  const pct = v <= 5 ? v * 100 : v;
   return `${pct.toFixed(1)}%`;
 }
 
 export function toPercentNoSymbol(x?: string | number | null): string {
   const v = toNum(x);
   if (v == null) return "";
-  const pct = v <= 1 ? v * 100 : v;
+  // Heurística: si es <= 5, asumimos que es un ratio (ej. 1.5 = 150%).
+  const pct = v <= 5 ? v * 100 : v;
   const s = pct.toFixed(1);
   return /\.0$/.test(s) ? s.replace(/\.0$/, "") : s;
 }

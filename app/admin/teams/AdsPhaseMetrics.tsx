@@ -44,8 +44,11 @@ function fmtMoney(n: number | null | undefined): string {
 }
 function fmtPercent(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(Number(n))) return "—";
-  const v = Number(n) <= 1 ? Number(n) * 100 : Number(n);
-  return `${v.toFixed(1)}%`;
+  const v = Number(n);
+  // Heurística: si es <= 5, asumimos que es un ratio (ej. 1.5 = 150%).
+  // Si es > 5, asumimos que ya es porcentaje (ej. 20 = 20%).
+  const pct = v <= 5 ? v * 100 : v;
+  return `${pct.toFixed(1)}%`;
 }
 
 export default function AdsPhaseMetrics({
@@ -142,7 +145,7 @@ export default function AdsPhaseMetrics({
   });
 
   // Efectividades globales por etapa (sobre totales)
-  const effAdsAbs = totalAlcance > 0 ? totalVisitas / totalAlcance : null;
+  const effAdsAbs = totalAlcance > 0 ? totalClics / totalAlcance : null;
   const effPagoAbs = totalVisitas > 0 ? totalPagos / totalVisitas : null;
   const effCompraAbs = totalPagos > 0 ? totalCompras / totalPagos : null;
 
@@ -548,7 +551,7 @@ export default function AdsPhaseMetrics({
                       />
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>{`Visitas / Alcance → ${fmtPercent(
+                  <TooltipContent>{`Clics / Alcance → ${fmtPercent(
                     effAdsAbs
                   )}`}</TooltipContent>
                 </Tooltip>
