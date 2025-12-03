@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/use-auth";
 import {
   Home,
   ExternalLink,
@@ -67,6 +68,8 @@ function InternalCard({
 export default function StudentInicioPage() {
   const params = useParams<{ code: string }>();
   const code = decodeURIComponent(params?.code ?? "");
+  const { user } = useAuth();
+  const isStudent = user?.role === "student";
 
   return (
     <ProtectedRoute allowedRoles={["admin", "coach", "student", "equipo"]}>
@@ -78,6 +81,16 @@ export default function StudentInicioPage() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {/* Para alumnos: Mi perfil de primero */}
+          {isStudent && (
+            <InternalCard
+              title="Mi perfil"
+              description="Datos y progreso del alumno"
+              href={`/admin/alumnos/${code}/perfil`}
+              icon={GraduationCap}
+            />
+          )}
+
           <StaticCard
             title="Notion de la academia"
             href="https://www.notion.so/x-academy/HOTSELLING-LITE-af0d3555dc5b4b0c935e22129ebc878b?p=931dd222189342a9ae6a6ee1befd1ee1&pm=s"
@@ -95,33 +108,44 @@ export default function StudentInicioPage() {
             icon={MessageSquare}
           />
 
-          <InternalCard
-            title="Sesiones"
-            description="Gestiona y solicita sesiones"
-            href={`/admin/alumnos/${code}/sesiones`}
-            icon={CalendarClock}
-          />
+          {/* Ocultar Sesiones y Bonos para alumnos */}
+          {!isStudent && (
+            <>
+              <InternalCard
+                title="Sesiones"
+                description="Gestiona y solicita sesiones"
+                href={`/admin/alumnos/${code}/sesiones`}
+                icon={CalendarClock}
+              />
 
-          <InternalCard
-            title="Bonos"
-            description="Bonos asignados y extra"
-            href={`/admin/alumnos/${code}/bonos`}
-            icon={Gift}
-          />
+              <InternalCard
+                title="Bonos"
+                description="Bonos asignados y extra"
+                href={`/admin/alumnos/${code}/bonos`}
+                icon={Gift}
+              />
+            </>
+          )}
 
-          <InternalCard
-            title="Mi perfil"
-            description="Datos y progreso del alumno"
-            href={`/admin/alumnos/${code}/perfil`}
-            icon={GraduationCap}
-          />
+          {/* Para no alumnos: Mi perfil en su posición original */}
+          {!isStudent && (
+            <InternalCard
+              title="Mi perfil"
+              description="Datos y progreso del alumno"
+              href={`/admin/alumnos/${code}/perfil`}
+              icon={GraduationCap}
+            />
+          )}
 
-          <InternalCard
-            title="Métricas ADS"
-            description="Rendimiento de campañas"
-            href={`/admin/alumnos/${code}/ads`}
-            icon={BarChart3}
-          />
+          {/* Ocultar Métricas ADS para alumnos */}
+          {!isStudent && (
+            <InternalCard
+              title="Métricas ADS"
+              description="Rendimiento de campañas"
+              href={`/admin/alumnos/${code}/ads`}
+              icon={BarChart3}
+            />
+          )}
         </div>
       </DashboardLayout>
     </ProtectedRoute>
