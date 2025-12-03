@@ -2030,10 +2030,16 @@ export default function TicketsBoard() {
                           <DropdownMenuTrigger asChild disabled={!canEdit}>
                             <button
                               className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
-                                STATUS_STYLE[coerceStatus(editForm.estado as any)]
+                                STATUS_STYLE[
+                                  coerceStatus(editForm.estado as any)
+                                ]
                               }`}
                             >
-                              {STATUS_LABEL[coerceStatus(editForm.estado as any)]}
+                              {
+                                STATUS_LABEL[
+                                  coerceStatus(editForm.estado as any)
+                                ]
+                              }
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
