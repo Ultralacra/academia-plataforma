@@ -13,6 +13,7 @@ import {
   CalendarClock,
   Moon,
   Sun,
+  CreditCard,
 } from "lucide-react";
 import {
   Sidebar,
@@ -43,8 +44,9 @@ import { useTheme } from "next-themes";
 type MenuItem = {
   title: string;
   url?: string;
-  icon: any;
+  icon?: any;
   children?: MenuItem[];
+  isSeparator?: boolean;
 };
 
 /* ====================== Menús (admin con top-level Coachs/Alumnos/Tickets + grupo “Métricas”) ====================== */
@@ -94,6 +96,11 @@ export function AppSidebar() {
   const { user } = useAuth();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const menuItems: MenuItem[] = useMemo(() => {
     // Detectar si estamos en la ficha de un alumno para añadir acceso directo al chat del alumno
@@ -105,6 +112,7 @@ export function AppSidebar() {
           alumnoCodeInPath
             ? [
                 ...adminItems,
+                { title: "Vista Alumno", isSeparator: true },
                 {
                   title: "Inicio",
                   url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
@@ -129,6 +137,11 @@ export function AppSidebar() {
                   title: "Bonos",
                   url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
                   icon: Users,
+                },
+                {
+                  title: "Pagos",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
+                  icon: CreditCard,
                 },
                 {
                   title: "Chat soporte",
@@ -226,6 +239,7 @@ export function AppSidebar() {
           alumnoCodeInPath
             ? [
                 ...base,
+                { title: "Vista Alumno", isSeparator: true },
                 {
                   title: "Inicio",
                   url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
@@ -390,6 +404,24 @@ export function AppSidebar() {
               >
                 {roleLabel}
               </Badge>
+              {mounted && (
+                <div className="mt-2 flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground capitalize">
+                    {new Date().toLocaleDateString("es-ES", {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+                    </span>
+                    En línea
+                  </span>
+                </div>
+              )}
               {(user?.role === "student" || user?.role === "equipo") &&
                 (user as any)?.codigo && (
                   <div className="mt-1 text-[10px] text-muted-foreground truncate">
@@ -414,7 +446,21 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 <TooltipProvider delayDuration={300}>
-                  {menuItems.map((item) => {
+                  {menuItems.map((item, index) => {
+                    if (item.isSeparator) {
+                      return (
+                        <div key={`sep-${index}`} className="mt-4 mb-2 px-2">
+                          <div className="flex items-center gap-2">
+                            <Separator className="flex-1 bg-sidebar-border" />
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold whitespace-nowrap">
+                              {item.title}
+                            </span>
+                            <Separator className="flex-1 bg-sidebar-border" />
+                          </div>
+                        </div>
+                      );
+                    }
+
                     const Icon = item.icon;
 
                     // Enlace simple

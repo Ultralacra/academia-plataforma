@@ -18,6 +18,7 @@ import {
   Gift,
   GraduationCap,
   BarChart3,
+  CreditCard,
 } from "lucide-react";
 
 function StaticCard({ title, href }: { title: string; href: string }) {
@@ -144,6 +145,16 @@ export default function StudentInicioPage() {
               description="Rendimiento de campañas"
               href={`/admin/alumnos/${code}/ads`}
               icon={BarChart3}
+            />
+          )}
+
+          {/* Ocultar Seguimiento de pagos para alumnos */}
+          {!isStudent && (
+            <InternalCard
+              title="Seguimiento de pagos"
+              description="Historial y estado de pagos"
+              href={`/admin/alumnos/${code}/pagos`}
+              icon={CreditCard}
             />
           )}
         </div>
