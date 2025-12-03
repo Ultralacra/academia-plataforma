@@ -110,8 +110,8 @@ export default function AdsMetricsForm({
     const p = toNum(part as any);
     const t = toNum(total as any);
     if (p == null || !t || t <= 0) return "—";
-    // Para bumps/OTO: mostrar porcentaje sin escalar (1 => 1%, no 100%)
-    return fmtPercentNoScale(p / t);
+    // Para bumps/OTO: mostrar porcentaje escalado (1 => 100%)
+    return fmtPercentNoScale((p / t) * 100);
   }
 
   // Cargar métrica existente por estudiante (localStorage)

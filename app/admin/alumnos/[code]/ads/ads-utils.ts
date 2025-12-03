@@ -72,5 +72,5 @@ export function pctOf(
   const p = toNum(part as any);
   const t = toNum(total as any);
   if (p == null || !t || t <= 0) return "—";
-  return fmtPercentNoScale(p / t);
+  return fmtPercentNoScale((p / t) * 100);
 }

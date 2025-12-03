@@ -20,6 +20,8 @@ import {
   FileText,
   History,
   Clock,
+  Split,
+  Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,11 +52,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/use-toast";
 import { getPayments, createManualPayment, type Payment } from "./api";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInDays, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { BONOS_CONTRACTUALES, BONOS_EXTRA } from "@/lib/bonos";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 type PaymentConfig = {
   frequency: "mensual" | "trimestral" | "semanal" | "unico";
@@ -62,11 +70,14 @@ type PaymentConfig = {
   amount: number;
   currency: string;
   dayOfMonth?: number; // Para mensual
+  hasReservation?: boolean;
+  reservationAmount?: number;
+  reservationDate?: string;
   installments: {
     id: string;
     date: string;
     amount: number;
-    type: "regular" | "extra" | "bono";
+    type: "regular" | "extra" | "bono" | "reserva";
     concept?: string;
   }[];
 };
@@ -123,6 +134,9 @@ export default function StudentPaymentsPage() {
     startDate: new Date().toISOString().split("T")[0],
     amount: 0,
     currency: "USD",
+    hasReservation: false,
+    reservationAmount: 0,
+    reservationDate: new Date().toISOString().split("T")[0],
     installments: [],
   });
 
@@ -136,6 +150,14 @@ export default function StudentPaymentsPage() {
   const [editingInstallments, setEditingInstallments] = useState<
     PaymentConfig["installments"]
   >([]);
+  const [shiftDates, setShiftDates] = useState(false);
+
+  // Split state
+  const [splitPopoverOpen, setSplitPopoverOpen] = useState<string | null>(null);
+  const [splitData, setSplitData] = useState({
+    amount1: "",
+    date2: "",
+  });
 
   useEffect(() => {
     loadData();
@@ -176,9 +198,21 @@ export default function StudentPaymentsPage() {
 
   function saveConfig() {
     // Generate installments based on 4 months duration
-    const installments = [];
+    const installments: PaymentConfig["installments"] = [];
     const start = new Date(tempConfig.startDate);
-    const totalAmount = tempConfig.amount;
+    let totalAmount = tempConfig.amount;
+
+    // Handle Reservation
+    if (tempConfig.hasReservation && tempConfig.reservationAmount) {
+      installments.push({
+        id: Math.random().toString(36).substr(2, 9),
+        date: tempConfig.reservationDate || tempConfig.startDate,
+        amount: tempConfig.reservationAmount,
+        type: "reserva",
+        concept: "Reserva / Matrícula",
+      });
+      totalAmount -= tempConfig.reservationAmount;
+    }
 
     if (tempConfig.frequency === "unico") {
       installments.push({
@@ -243,7 +277,7 @@ export default function StudentPaymentsPage() {
     // User said "monto base se debe dividir... ademas... agregar los bonos"
     // So the total config amount should probably reflect everything.
     const totalWithBonuses =
-      totalAmount + initialBonuses.reduce((sum, b) => sum + b.amount, 0);
+      tempConfig.amount + initialBonuses.reduce((sum, b) => sum + b.amount, 0);
 
     const newConfig = {
       ...tempConfig,
@@ -295,6 +329,88 @@ export default function StudentPaymentsPage() {
     setRegisterOpen(true);
   }
 
+  function handleSplitInstallment(originalId: string) {
+    const originalIndex = editingInstallments.findIndex(
+      (i) => i.id === originalId
+    );
+    if (originalIndex === -1) return;
+
+    const original = editingInstallments[originalIndex];
+    const amount1 = Number(splitData.amount1);
+    const amount2 = original.amount - amount1;
+
+    if (amount1 <= 0 || amount1 >= original.amount) {
+      toast({
+        title: "Monto inválido",
+        description: "El monto debe ser menor al total de la cuota",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate date
+    const date1 = new Date(original.date);
+    const date2 = new Date(splitData.date2);
+
+    // Find next installment date to ensure we don't overlap
+    const nextInstallment = editingInstallments
+      .filter((i) => new Date(i.date) > date1 && i.id !== originalId)
+      .sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      )[0];
+
+    if (nextInstallment && date2 >= new Date(nextInstallment.date)) {
+      toast({
+        title: "Fecha inválida",
+        description: "La segunda parte debe ser antes de la siguiente cuota",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const newInst1 = {
+      ...original,
+      amount: amount1,
+      concept: (original.concept || "Cuota") + " (Parte 1)",
+    };
+    const newInst2 = {
+      ...original,
+      id: Math.random().toString(36).substr(2, 9),
+      amount: amount2,
+      date: splitData.date2,
+      concept: (original.concept || "Cuota") + " (Parte 2)",
+    };
+
+    const newInstallments = [...editingInstallments];
+    newInstallments[originalIndex] = newInst1;
+    newInstallments.splice(originalIndex + 1, 0, newInst2);
+
+    setEditingInstallments(newInstallments);
+    setSplitPopoverOpen(null);
+    setSplitData({ amount1: "", date2: "" });
+    toast({ title: "Cuota dividida exitosamente" });
+  }
+
+  function handleDateChange(index: number, newDate: string) {
+    const oldDate = new Date(editingInstallments[index].date);
+    const nDate = new Date(newDate);
+    const diffTime = nDate.getTime() - oldDate.getTime();
+
+    const newInst = [...editingInstallments];
+    newInst[index].date = newDate;
+
+    if (shiftDates) {
+      // Shift all subsequent dates by the same difference
+      for (let i = index + 1; i < newInst.length; i++) {
+        const current = new Date(newInst[i].date);
+        const shifted = new Date(current.getTime() + diffTime);
+        newInst[i].date = shifted.toISOString().split("T")[0];
+      }
+    }
+
+    setEditingInstallments(newInst);
+  }
+
   function saveEditedPlan() {
     if (!config) return;
 
@@ -328,23 +444,19 @@ export default function StudentPaymentsPage() {
           });
         }
       } else {
-        newLogs.push({
-          id: Math.random().toString(36),
-          date: now,
-          action: "Cuota eliminada",
-          details: `Cuota de ${oldInst.amount} (${oldInst.date}) eliminada`,
-        });
+        // Check if it was split (exists but with different ID? No, split keeps one ID and adds another)
+        // If ID is gone, it was deleted.
       }
     });
 
-    // Check for new installments
+    // Check for new installments (splits or adds)
     editingInstallments.forEach((newInst) => {
       const oldInst = config.installments.find((i) => i.id === newInst.id);
       if (!oldInst) {
         newLogs.push({
           id: Math.random().toString(36),
           date: now,
-          action: "Cuota agregada",
+          action: "Cuota agregada/dividida",
           details: `Nueva cuota de ${newInst.amount} para el ${newInst.date}`,
         });
       }
@@ -524,6 +636,11 @@ export default function StudentPaymentsPage() {
     if (!config) return 0;
     return Math.max(0, config.amount - totalPaid);
   }, [config, totalPaid]);
+
+  const bonuses = useMemo(() => {
+    if (!config) return [];
+    return config.installments.filter((i) => i.type === "bono");
+  }, [config]);
 
   return (
     <ProtectedRoute allowedRoles={["admin", "coach", "equipo"]}>
@@ -722,8 +839,44 @@ export default function StudentPaymentsPage() {
             </Card>
           </div>
 
-          {/* Columna Derecha: Historial */}
-          <div className="lg:col-span-2">
+          {/* Columna Derecha: Historial y Bonos */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Bonos Card */}
+            {bonuses.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Gift className="w-4 h-4" /> Bonos Incluidos
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {bonuses.map((bono, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between p-3 rounded-lg border bg-card"
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-medium text-sm">
+                            {bono.concept}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Valorado en{" "}
+                            {new Intl.NumberFormat("es-CO", {
+                              style: "currency",
+                              currency: config?.currency || "USD",
+                              maximumFractionDigits: 0,
+                            }).format(bono.amount)}
+                          </span>
+                        </div>
+                        <Badge variant="secondary">Incluido</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Historial de pagos</CardTitle>
@@ -847,7 +1000,7 @@ export default function StudentPaymentsPage() {
 
         {/* Modal Configuración */}
         <Dialog open={configOpen} onOpenChange={setConfigOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Configuración de pagos</DialogTitle>
             </DialogHeader>
@@ -919,6 +1072,55 @@ export default function StudentPaymentsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Sección Reserva */}
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="space-y-0.5">
+                    <Label>¿Llegó por reserva?</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Si se activa, el monto de reserva se descontará del total
+                      a dividir en cuotas.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={tempConfig.hasReservation}
+                    onCheckedChange={(c) =>
+                      setTempConfig({ ...tempConfig, hasReservation: c })
+                    }
+                  />
+                </div>
+                {tempConfig.hasReservation && (
+                  <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="space-y-2">
+                      <Label>Monto Reserva</Label>
+                      <Input
+                        type="number"
+                        value={tempConfig.reservationAmount}
+                        onChange={(e) =>
+                          setTempConfig({
+                            ...tempConfig,
+                            reservationAmount: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Fecha de pago Reserva</Label>
+                      <Input
+                        type="date"
+                        value={tempConfig.reservationDate}
+                        onChange={(e) =>
+                          setTempConfig({
+                            ...tempConfig,
+                            reservationDate: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Sección de Bonos Iniciales */}
@@ -1049,117 +1251,9 @@ export default function StudentPaymentsPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal Registrar Pago */}
-        <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Registrar pago manual</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Monto</Label>
-                  <Input
-                    type="number"
-                    value={newPayment.monto}
-                    onChange={(e) =>
-                      setNewPayment({ ...newPayment, monto: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Moneda</Label>
-                  <Select
-                    value={newPayment.moneda}
-                    onValueChange={(v) =>
-                      setNewPayment({ ...newPayment, moneda: v })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="COP">COP</SelectItem>
-                      <SelectItem value="MXN">MXN</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Fecha de pago</Label>
-                  <Input
-                    type="date"
-                    value={newPayment.fecha_pago}
-                    onChange={(e) =>
-                      setNewPayment({
-                        ...newPayment,
-                        fecha_pago: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Método</Label>
-                  <Select
-                    value={newPayment.metodo_pago}
-                    onValueChange={(v) =>
-                      setNewPayment({ ...newPayment, metodo_pago: v })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="transferencia">
-                        Transferencia
-                      </SelectItem>
-                      <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                      <SelectItem value="efectivo">Efectivo</SelectItem>
-                      <SelectItem value="stripe">Stripe</SelectItem>
-                      <SelectItem value="otro">Otro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Referencia / Comprobante</Label>
-                <Input
-                  placeholder="# Ref, ID transacción..."
-                  value={newPayment.referencia}
-                  onChange={(e) =>
-                    setNewPayment({ ...newPayment, referencia: e.target.value })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Observaciones</Label>
-                <Input
-                  placeholder="Notas opcionales"
-                  value={newPayment.observaciones}
-                  onChange={(e) =>
-                    setNewPayment({
-                      ...newPayment,
-                      observaciones: e.target.value,
-                    })
-                  }
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setRegisterOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleRegisterPayment}>Registrar pago</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
         {/* Modal Editar Plan (Cuotas) */}
         <Dialog open={editPlanOpen} onOpenChange={setEditPlanOpen}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Editar Plan de Pagos</DialogTitle>
             </DialogHeader>
@@ -1179,13 +1273,25 @@ export default function StudentPaymentsPage() {
                     )}
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setAddInstallmentOpen(true)}
-                >
-                  <Plus className="w-4 h-4 mr-2" /> Agregar cuota
-                </Button>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="shift-dates"
+                      checked={shiftDates}
+                      onCheckedChange={setShiftDates}
+                    />
+                    <Label htmlFor="shift-dates" className="text-xs">
+                      Recalcular fechas siguientes
+                    </Label>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAddInstallmentOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> Agregar cuota
+                  </Button>
+                </div>
               </div>
 
               <div className="border rounded-md max-h-[400px] overflow-y-auto">
@@ -1195,7 +1301,9 @@ export default function StudentPaymentsPage() {
                       <TableHead>Tipo</TableHead>
                       <TableHead>Fecha</TableHead>
                       <TableHead>Monto</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead className="w-[100px] text-right">
+                        Acciones
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -1223,6 +1331,7 @@ export default function StudentPaymentsPage() {
                                 <SelectItem value="regular">Regular</SelectItem>
                                 <SelectItem value="extra">Extra</SelectItem>
                                 <SelectItem value="bono">Bono</SelectItem>
+                                <SelectItem value="reserva">Reserva</SelectItem>
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -1231,11 +1340,9 @@ export default function StudentPaymentsPage() {
                               type="date"
                               value={inst.date}
                               disabled={isPaid}
-                              onChange={(e) => {
-                                const newInst = [...editingInstallments];
-                                newInst[index].date = e.target.value;
-                                setEditingInstallments(newInst);
-                              }}
+                              onChange={(e) =>
+                                handleDateChange(index, e.target.value)
+                              }
                             />
                           </TableCell>
                           <TableCell>
@@ -1250,25 +1357,98 @@ export default function StudentPaymentsPage() {
                               }}
                             />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-right">
                             {isPaid ? (
                               <Badge variant="secondary" className="text-xs">
                                 Pagada
                               </Badge>
                             ) : (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500 hover:text-red-700"
-                                onClick={() => {
-                                  const newInst = editingInstallments.filter(
-                                    (i) => i.id !== inst.id
-                                  );
-                                  setEditingInstallments(newInst);
-                                }}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <Popover
+                                  open={splitPopoverOpen === inst.id}
+                                  onOpenChange={(open) =>
+                                    setSplitPopoverOpen(open ? inst.id : null)
+                                  }
+                                >
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      title="Dividir cuota"
+                                    >
+                                      <Split className="w-4 h-4" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-80">
+                                    <div className="grid gap-4">
+                                      <div className="space-y-2">
+                                        <h4 className="font-medium leading-none">
+                                          Dividir cuota
+                                        </h4>
+                                        <p className="text-sm text-muted-foreground">
+                                          Divide esta cuota en dos partes.
+                                        </p>
+                                      </div>
+                                      <div className="grid gap-2">
+                                        <div className="grid grid-cols-3 items-center gap-4">
+                                          <Label htmlFor="amount1">
+                                            Monto 1
+                                          </Label>
+                                          <Input
+                                            id="amount1"
+                                            type="number"
+                                            className="col-span-2 h-8"
+                                            value={splitData.amount1}
+                                            onChange={(e) =>
+                                              setSplitData({
+                                                ...splitData,
+                                                amount1: e.target.value,
+                                              })
+                                            }
+                                          />
+                                        </div>
+                                        <div className="grid grid-cols-3 items-center gap-4">
+                                          <Label htmlFor="date2">Fecha 2</Label>
+                                          <Input
+                                            id="date2"
+                                            type="date"
+                                            className="col-span-2 h-8"
+                                            value={splitData.date2}
+                                            onChange={(e) =>
+                                              setSplitData({
+                                                ...splitData,
+                                                date2: e.target.value,
+                                              })
+                                            }
+                                          />
+                                        </div>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleSplitInstallment(inst.id)
+                                          }
+                                        >
+                                          Confirmar división
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-500 hover:text-red-700"
+                                  onClick={() => {
+                                    const newInst = editingInstallments.filter(
+                                      (i) => i.id !== inst.id
+                                    );
+                                    setEditingInstallments(newInst);
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
                             )}
                           </TableCell>
                         </TableRow>
