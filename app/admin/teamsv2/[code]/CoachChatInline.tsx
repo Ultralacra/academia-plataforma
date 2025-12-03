@@ -2232,6 +2232,13 @@ export default function CoachChatInline({
             success: !(ack && ack.success === false),
             count: Array.isArray(ack?.data) ? ack.data.length : 0,
           });
+
+          if (Array.isArray(ack?.data)) {
+            console.log("--- LISTA DE CHATS RECIBIDA DEL SERVIDOR ---");
+            ack.data.forEach((c: any, i: number) => console.log(`[${i}]`, c));
+            console.log("--------------------------------------------");
+          }
+
           // Logging eliminado para optimizar rendimiento
           /*
           try {
@@ -2242,28 +2249,19 @@ export default function CoachChatInline({
           if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
           const baseList: any[] = Array.isArray(list) ? list : [];
+
+          // FIX: Renderizar inmediatamente lo que llega para quitar el loading,
+          // aunque falten participantes (se enriquecerán después si es necesario).
+          onChatsList?.(baseList);
+
           const needEnrich = baseList.some(
             (it) => !Array.isArray(it?.participants || it?.participantes)
           );
           if (!needEnrich) {
-            onChatsList?.(baseList);
-            // Logging eliminado
-            /*
-            try {
-              const toLine2 = (it: any) => {
-                 // ...
-              };
-              // ...
-            } catch {}
-            */
             return;
           }
-          const now = Date.now();
-          if (now - (lastEnrichAtRef.current || 0) < 20000) {
-            onChatsList?.(baseList);
-            return;
-          }
-          lastEnrichAtRef.current = now;
+          // Enriquecer inmediatamente sin throttle para resolver nombres rápido
+          lastEnrichAtRef.current = Date.now();
           const sorted = [...baseList]
             .sort((a, b) => getItemTimestamp(b) - getItemTimestamp(a))
             .slice(0, 10);

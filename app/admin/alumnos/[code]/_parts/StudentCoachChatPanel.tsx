@@ -809,6 +809,7 @@ export default function StudentCoachChatPanel({
               listParams={listParams}
               onChatsList={(list) => {
                 const arr = Array.isArray(list) ? list : [];
+                console.log("Conversaciones cargadas:", arr);
                 try {
                   console.log("[StudentCoachChatPanel] onChatsList", {
                     count: arr.length,

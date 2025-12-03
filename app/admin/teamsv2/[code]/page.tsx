@@ -94,7 +94,10 @@ export default function CoachDetailPage({
   );
   const [targetStudentName, setTargetStudentName] = useState<string>("");
   const [chatList, setChatList] = useState<any[]>([]);
-  const [requestListSignal, setRequestListSignal] = useState<number>(0);
+  const [requestListSignal, setRequestListSignal] = useState<
+    number | undefined
+  >(undefined);
+  const [studentsFetchDone, setStudentsFetchDone] = useState(false);
   const [chatConnected, setChatConnected] = useState<boolean>(false);
   const [chatInfo, setChatInfo] = useState<{
     chatId: string | number | null;
@@ -199,7 +202,7 @@ export default function CoachDetailPage({
     setTargetTeamCode(t.codigo);
     setChatInfo({ chatId: null, myParticipantId: null });
     setChatsLoading(true);
-    setRequestListSignal((n) => n + 1);
+    setRequestListSignal((n) => (n ?? 0) + 1);
     setDecisionStamp(null);
     try {
       console.log("[teamsv2] contacto seleccionado =>", {
@@ -274,6 +277,11 @@ export default function CoachDetailPage({
 
   function chatOtherStudentCode(it: any): string | null {
     try {
+      // 1. Try root level properties first (faster, works without participants)
+      const root =
+        it?.id_cliente ?? it?.id_alumno ?? it?.client_id ?? it?.student_id;
+      if (root) return String(root);
+
       const parts = itemParticipants(it);
       for (const p of parts) {
         if (normalizeTipo(p?.participante_tipo) !== "cliente") continue;
@@ -452,6 +460,27 @@ export default function CoachDetailPage({
     return null;
   }
 
+  // Cache de nombre por id_chat para render inmediato y persistencia en recargas
+  function getCachedContactName(chatId: any): string | null {
+    try {
+      const id = chatId == null ? null : String(chatId);
+      if (!id) return null;
+      const k = `chatContactName:${id}`;
+      const v = localStorage.getItem(k);
+      return v && v.trim() ? v : null;
+    } catch {
+      return null;
+    }
+  }
+  function setCachedContactName(chatId: any, name: string | null | undefined) {
+    try {
+      const id = chatId == null ? null : String(chatId);
+      if (!id) return;
+      const k = `chatContactName:${id}`;
+      if (name && name.trim()) localStorage.setItem(k, name.trim());
+    } catch {}
+  }
+
   const chatsByStudent = useMemo(() => {
     const list = Array.isArray(chatList) ? chatList : [];
     const map = new Map<string, any[]>();
@@ -528,6 +557,10 @@ export default function CoachDetailPage({
         },
         0
       );
+      // Persistir nombre de contacto por chatId
+      const topId = c.topChatId;
+      if (topId != null && c.targetName)
+        setCachedContactName(topId, c.targetName);
       allItems.push({
         type: "team",
         key: `team:${c.targetCode}`,
@@ -586,6 +619,9 @@ export default function CoachDetailPage({
         avatarColor: "bg-emerald-500",
         isNew: false,
       });
+      const topId = c.topChatId;
+      if (topId != null && resolvedName)
+        setCachedContactName(topId, resolvedName);
     });
 
     // 3. If searching, find contacts/students WITHOUT active chats
@@ -659,6 +695,87 @@ export default function CoachDetailPage({
           (item.name || "").toLowerCase().includes(q) ||
           (item.code || "").toLowerCase().includes(q)
       );
+    }
+
+    // Fallback: if we have chats but participants info is missing (enrichment pending),
+    // render a flat list directly from chatList so the user doesn't get an empty state.
+    if (
+      result.length === 0 &&
+      (Array.isArray(chatList) ? chatList.length : 0) > 0
+    ) {
+      const flat = (Array.isArray(chatList) ? chatList : []).map((it: any) => {
+        const id = it?.id_chat ?? it?.id ?? null;
+        const lm = getChatLastMessage(it);
+        const lastAt = getChatTimestamp(it);
+        // Resolver nombre del contacto según el tipo de chat
+        // 1) Equipo ↔ Equipo (contacto otro equipo)
+        const otherTeamCode = chatOtherTeamCode(it, code);
+        // 2) Cliente ↔ Equipo (contacto alumno)
+        const otherStudentCode = chatOtherStudentCode(it);
+        let contactName = "Soporte X Academy";
+        let avatarColor = "bg-teal-500";
+
+        // Intentar cache primero
+        const cached = getCachedContactName(id);
+
+        if (otherStudentCode) {
+          const sKey = String(otherStudentCode).toLowerCase();
+          const stu = studentsMap.get(sKey);
+          if (stu?.name) contactName = stu.name;
+          else {
+            // Fallback rápido: buscar en allStudentsList si la lista asignada aún no cargó
+            const fromAll = allStudentsList.find(
+              (s) => (s.code || "").toLowerCase() === sKey
+            );
+            contactName = fromAll?.name || String(otherStudentCode);
+          }
+          avatarColor = "bg-emerald-500";
+        } else if (otherTeamCode) {
+          const otherKey = String(otherTeamCode).toLowerCase();
+          const team = teamsMap.get(otherKey);
+          contactName = team?.nombre || String(otherTeamCode);
+          avatarColor = "bg-teal-500";
+        }
+
+        // Si falló la resolución (es default o código) y tenemos cache válido, usar cache
+        const isDefault = contactName === "Soporte X Academy";
+        const isCode =
+          contactName === String(otherStudentCode) ||
+          contactName === String(otherTeamCode);
+
+        if ((isDefault || isCode) && cached && cached !== "Soporte X Academy") {
+          contactName = cached;
+          // Si recuperamos nombre de cache y no sabíamos el tipo, asumimos alumno si no es equipo conocido
+          if (!otherTeamCode && isDefault) avatarColor = "bg-emerald-500";
+        }
+
+        // Persistir en cache SOLO si es un nombre válido (no default, no código)
+        if (
+          id != null &&
+          contactName &&
+          contactName !== "Soporte X Academy" &&
+          contactName !== String(otherStudentCode) &&
+          contactName !== String(otherTeamCode)
+        ) {
+          setCachedContactName(id, contactName);
+        }
+
+        return {
+          type: otherStudentCode ? "student" : "team",
+          key: `chat:${id ?? Math.random()}`,
+          code: String(id ?? ""),
+          name: contactName,
+          lastAt,
+          lastText: lm.text,
+          hasUnread: false,
+          unreadCount: 0,
+          topChatId: id,
+          chats: [it],
+          avatarColor,
+          isNew: false,
+        };
+      });
+      result = flat;
     }
 
     // Sort: Active chats first (by time), then new contacts
@@ -748,7 +865,10 @@ export default function CoachDetailPage({
             stage: s.stage,
           }))
         );
-      } catch {}
+      } catch {
+      } finally {
+        if (!ctrl.signal.aborted) setStudentsFetchDone(true);
+      }
     })();
 
     return () => ctrl.abort();
@@ -757,13 +877,16 @@ export default function CoachDetailPage({
   const listRequestedRef = useMemo(() => ({ done: false }), []);
   useEffect(() => {
     if (!chatConnected) return;
+    // Esperar a que se carguen los alumnos para poder resolver nombres inmediatamente
+    if (!studentsFetchDone) return;
+
     if (listRequestedRef.done) return;
     if (chatList.length === 0) {
       setChatsLoading(true);
-      setRequestListSignal((n) => n + 1);
+      setRequestListSignal((n) => (n ?? 0) + 1);
     }
     listRequestedRef.done = true;
-  }, [chatConnected]);
+  }, [chatConnected, studentsFetchDone]);
 
   useEffect(() => {
     if (!coach) return;
@@ -848,7 +971,7 @@ export default function CoachDetailPage({
     };
     const onListRefresh = () => {
       setChatsLoading(true);
-      setRequestListSignal((n) => n + 1);
+      setRequestListSignal((n) => (n ?? 0) + 1);
     };
     window.addEventListener("storage", onStorage);
     window.addEventListener("chat:last-read-updated", onLastReadUpdated as any);
@@ -859,7 +982,7 @@ export default function CoachDetailPage({
     window.addEventListener("chat:list-refresh", onListRefresh as any);
     const iv = setInterval(() => {
       setChatsLoading(true);
-      setRequestListSignal((n) => n + 1);
+      setRequestListSignal((n) => (n ?? 0) + 1);
     }, 25000);
     return () => {
       window.removeEventListener("storage", onStorage);
@@ -1343,7 +1466,7 @@ export default function CoachDetailPage({
                         setCurrentOpenChatId(info?.chatId ?? null);
                         if (!chatInfo.chatId && info.chatId) {
                           setChatsLoading(true);
-                          setRequestListSignal((n) => n + 1);
+                          setRequestListSignal((n) => (n ?? 0) + 1);
                         }
                         try {
                           const parts = Array.isArray(info.participants)
@@ -1412,6 +1535,37 @@ export default function CoachDetailPage({
                       }}
                       onChatsList={(list) => {
                         try {
+                          console.log("=== ON CHATS LIST (PAGE) ===");
+                          console.log("Total:", list?.length);
+                          if (Array.isArray(list)) {
+                            // Imprimir ID y nombre resuelto del contacto (equipo o alumno)
+                            list.forEach((it: any, i: number) => {
+                              const id = it?.id_chat ?? it?.id ?? null;
+                              const otherTeam = chatOtherTeamCode(it, code);
+                              const otherStudent = chatOtherStudentCode(it);
+                              let contactName: string | null = null;
+                              if (otherStudent) {
+                                const key = String(otherStudent).toLowerCase();
+                                const s =
+                                  studentsMap.get(key) ||
+                                  allStudentsList.find(
+                                    (st) =>
+                                      (st.code || "").toLowerCase() === key
+                                  );
+                                contactName = s?.name || String(otherStudent);
+                              } else if (otherTeam) {
+                                const key = String(otherTeam).toLowerCase();
+                                const t = teamsMap.get(key);
+                                contactName = t?.nombre || String(otherTeam);
+                              }
+                              console.log(`Chat ${i}:`, {
+                                id,
+                                contactName: contactName ?? "(sin nombre)",
+                                otherTeam: otherTeam ?? null,
+                                otherStudent: otherStudent ?? null,
+                              });
+                            });
+                          }
                           console.log("[CoachDetailPage] listParams =>", {
                             participante_tipo: "equipo",
                             id_equipo: String(code),
@@ -1497,8 +1651,34 @@ export default function CoachDetailPage({
                             Array.isArray(list) ? list.length : 0,
                             ")"
                           );
-                          (Array.isArray(list) ? list : []).forEach((it: any) =>
-                            console.log(" -", toLine(it))
+                          (Array.isArray(list) ? list : []).forEach(
+                            (it: any) => {
+                              console.log(" -", toLine(it));
+                              const id = it?.id_chat ?? it?.id ?? null;
+                              const otherTeam = chatOtherTeamCode(it, code);
+                              const otherStudent = chatOtherStudentCode(it);
+                              let contactName: string | null = null;
+                              if (otherStudent) {
+                                const key = String(otherStudent).toLowerCase();
+                                const s =
+                                  studentsMap.get(key) ||
+                                  allStudentsList.find(
+                                    (st) =>
+                                      (st.code || "").toLowerCase() === key
+                                  );
+                                contactName = s?.name || String(otherStudent);
+                              } else if (otherTeam) {
+                                const key = String(otherTeam).toLowerCase();
+                                const t = teamsMap.get(key);
+                                contactName = t?.nombre || String(otherTeam);
+                              }
+                              console.log(
+                                "   contacto:",
+                                contactName ?? "(sin nombre)",
+                                "id=",
+                                id
+                              );
+                            }
                           );
                         } catch {}
                         setChatList(list);
