@@ -49,6 +49,12 @@ import {
   Plus,
 } from "lucide-react";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -2020,23 +2026,38 @@ export default function TicketsBoard() {
                         <RefreshCw className="h-4 w-4" /> <span>Estado</span>
                       </div>
                       <div className="min-h-[24px] flex items-center">
-                        <select
-                          className="h-7 rounded border border-slate-200 px-2 text-xs bg-white"
-                          value={editForm.estado as string}
-                          onChange={(e) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              estado: e.target.value as any,
-                            }))
-                          }
-                          disabled={!canEdit}
-                        >
-                          {estados.map((st) => (
-                            <option key={st} value={st}>
-                              {STATUS_LABEL[st as StatusKey]}
-                            </option>
-                          ))}
-                        </select>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild disabled={!canEdit}>
+                            <button
+                              className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
+                                STATUS_STYLE[coerceStatus(editForm.estado as any)]
+                              }`}
+                            >
+                              {STATUS_LABEL[coerceStatus(editForm.estado as any)]}
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            {estados.map((st) => (
+                              <DropdownMenuItem
+                                key={st}
+                                onClick={() =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    estado: st as any,
+                                  }))
+                                }
+                                className="text-xs"
+                              >
+                                <span
+                                  className={`mr-2 inline-block h-2 w-2 rounded-full ${
+                                    STATUS_STYLE[st as StatusKey].split(" ")[0]
+                                  }`}
+                                />
+                                {STATUS_LABEL[st as StatusKey]}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
 
