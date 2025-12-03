@@ -53,6 +53,7 @@ import { getAllStudents } from "@/app/admin/alumnos/api";
 import SessionsPanel from "../components/SessionsPanel";
 import { Textarea } from "@/components/ui/textarea";
 import { CHAT_HOST } from "@/lib/api-config";
+import Spinner from "@/components/ui/spinner";
 
 // Tipo compacto para lista de alumnos en chat (evita genérico multilínea en TSX)
 type StudentMini = {
@@ -169,14 +170,28 @@ export default function CoachDetailPage({
     return () => ctrl.abort();
   }, [code]);
 
+  // Optimización: Mapas para búsqueda rápida O(1)
+  const teamsMap = useMemo(() => {
+    const m = new Map<string, CoachMini>();
+    for (const t of teamsList) {
+      if (t.codigo) m.set(t.codigo.toLowerCase(), t);
+    }
+    return m;
+  }, [teamsList]);
+
+  const studentsMap = useMemo(() => {
+    const m = new Map<string, StudentMini>();
+    for (const s of studentsList) {
+      if (s.code) m.set(s.code.toLowerCase(), s);
+    }
+    return m;
+  }, [studentsList]);
+
   const targetTeamName = useMemo(() => {
     if (!targetTeamCode) return "";
-    const found = teamsList.find(
-      (t) =>
-        (t.codigo || "").toLowerCase() === String(targetTeamCode).toLowerCase()
-    );
+    const found = teamsMap.get(String(targetTeamCode).toLowerCase());
     return found?.nombre || String(targetTeamCode);
-  }, [teamsList, targetTeamCode]);
+  }, [teamsMap, targetTeamCode]);
 
   function openContact(t: CoachMini) {
     setTargetStudentCode(null);
@@ -403,9 +418,7 @@ export default function CoachDetailPage({
     const arr = Array.from(map.entries()).map(([key, chats]) => {
       chats.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
       const targetCode = chatsByKeyToOriginalCode(chats, key);
-      const target = teamsList.find(
-        (t) => (t.codigo || "").toLowerCase() === key
-      );
+      const target = teamsMap.get(key);
       const targetName = target?.nombre ?? targetCode ?? key;
       const top = chats[0];
       const topChatId = top?.id_chat ?? top?.id ?? null;
@@ -456,9 +469,7 @@ export default function CoachDetailPage({
         ? chatOtherStudentCode(chats[0])
         : key;
 
-      const stu = studentsList.find(
-        (s) => (s.code || "").toLowerCase() === key
-      );
+      const stu = studentsMap.get(key);
       let targetName = stu?.name;
       if (!targetName) {
         targetName =
@@ -1038,8 +1049,11 @@ export default function CoachDetailPage({
                     {/* Lista de chats */}
                     <div className="flex-1 overflow-y-auto min-h-0">
                       {chatsLoading && unifiedChatList.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-slate-500 text-center mt-4">
-                          Cargando conversaciones...
+                        <div className="flex flex-col items-center justify-center py-8 text-slate-500 gap-3">
+                          <Spinner size={32} className="text-teal-600" />
+                          <span className="text-sm font-medium">
+                            Cargando conversaciones...
+                          </span>
                         </div>
                       ) : unifiedChatList.length === 0 ? (
                         <div className="px-4 py-8 text-sm text-slate-400 text-center flex flex-col items-center gap-2">
@@ -1311,23 +1325,16 @@ export default function CoachDetailPage({
                         chatId: chatInfo.chatId ?? undefined,
                       }}
                       resolveName={(tipo, id) => {
-                        const key = String(id || "");
+                        const key = String(id || "").toLowerCase();
                         if (tipo === "equipo") {
-                          const t = teamsList.find(
-                            (x) =>
-                              (x.codigo || "").toLowerCase() ===
-                              key.toLowerCase()
-                          );
-                          return t?.nombre || key;
+                          const t = teamsMap.get(key);
+                          return t?.nombre || String(id || "");
                         }
                         if (tipo === "cliente") {
-                          const s = studentsList.find(
-                            (x) =>
-                              (x.code || "").toLowerCase() === key.toLowerCase()
-                          );
-                          return s?.name || key;
+                          const s = studentsMap.get(key);
+                          return s?.name || String(id || "");
                         }
-                        return key;
+                        return String(id || "");
                       }}
                       onConnectionChange={setChatConnected}
                       onChatInfo={(info) => {

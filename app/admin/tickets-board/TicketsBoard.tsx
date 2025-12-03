@@ -1189,7 +1189,20 @@ export default function TicketsBoard() {
                 coerceStatus(t.estado) === (estado as StatusKey);
               if (!statusMatch) return false;
               if (onlyMyTickets && user?.codigo) {
-                return t.informante === user.codigo;
+                const myCode = String(user.codigo);
+                // Creados por mí
+                const createdByMe = String(t.informante || "") === myCode;
+                // Asignados a mí (si el ticket incluye arreglo de coaches)
+                let assignedToMe = false;
+                try {
+                  const coachesArr = (t as any)?.coaches;
+                  if (Array.isArray(coachesArr)) {
+                    assignedToMe = coachesArr.some(
+                      (co: any) => String(co?.codigo_equipo || "") === myCode
+                    );
+                  }
+                } catch {}
+                return createdByMe || assignedToMe;
               }
               return true;
             });

@@ -2232,55 +2232,13 @@ export default function CoachChatInline({
             success: !(ack && ack.success === false),
             count: Array.isArray(ack?.data) ? ack.data.length : 0,
           });
+          // Logging eliminado para optimizar rendimiento
+          /*
           try {
             const baseArr = Array.isArray(ack?.data) ? ack.data : [];
-            const toLine = (it: any) => {
-              const id = it?.id_chat ?? it?.id ?? null;
-              const parts = it?.participants || it?.participantes || [];
-              const equipos = (Array.isArray(parts) ? parts : [])
-                .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo"
-                )
-                .map((p: any) => nameOf("equipo", p?.id_equipo))
-                .filter(Boolean);
-              const clientes = (Array.isArray(parts) ? parts : [])
-                .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
-                )
-                .map((p: any) => nameOf("cliente", p?.id_cliente))
-                .filter(Boolean);
-              return `id=${id} | equipos=[${equipos.join(
-                ", "
-              )}] | clientes=[${clientes.join(", ")}]`;
-            };
-            const meLabel =
-              role === "alumno"
-                ? "cliente"
-                : role === "coach"
-                ? "equipo"
-                : role;
-            const meId =
-              role === "alumno"
-                ? (socketio as any)?.idCliente
-                : role === "coach"
-                ? socketio?.idEquipo
-                : (socketio as any)?.idAdmin;
-            const meName =
-              meLabel === "cliente"
-                ? nameOf("cliente", meId)
-                : meLabel === "equipo"
-                ? nameOf("equipo", meId)
-                : String(meId ?? "");
-            console.log(
-              "[Chat] comversaciones del usuario —",
-              meLabel + ":",
-              meName,
-              "(total:",
-              baseArr.length,
-              ")"
-            );
-            baseArr.forEach((it: any) => console.log(" -", toLine(it)));
+            // ... logs eliminados ...
           } catch {}
+          */
           if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
           const baseList: any[] = Array.isArray(list) ? list : [];
@@ -2289,63 +2247,15 @@ export default function CoachChatInline({
           );
           if (!needEnrich) {
             onChatsList?.(baseList);
+            // Logging eliminado
+            /*
             try {
               const toLine2 = (it: any) => {
-                const id = it?.id_chat ?? it?.id ?? null;
-                const parts = it?.participants || it?.participantes || [];
-                const equipos = (Array.isArray(parts) ? parts : [])
-                  .filter(
-                    (p: any) => normalizeTipo(p?.participante_tipo) === "equipo"
-                  )
-                  .map((p: any) => nameOf("equipo", p?.id_equipo))
-                  .filter(Boolean);
-                const clientes = (Array.isArray(parts) ? parts : [])
-                  .filter(
-                    (p: any) =>
-                      normalizeTipo(p?.participante_tipo) === "cliente"
-                  )
-                  .map((p: any) => nameOf("cliente", p?.id_cliente))
-                  .filter(Boolean);
-                return `id=${id} | equipos=[${equipos.join(
-                  ", "
-                )}] | clientes=[${clientes.join(", ")}]`;
+                 // ...
               };
-              console.log(
-                "[Chat] comversaciones del usuario — equipo:",
-                String(socketio?.idEquipo ?? ""),
-                "(enriquecido, total:",
-                baseList.length,
-                ")"
-              );
-              baseList.forEach((it: any) => console.log(" -", toLine2(it)));
-              const sample = baseList.length > 0 ? baseList[0] : null;
-              const sampleObj = sample
-                ? {
-                    id: sample?.id_chat ?? sample?.id ?? null,
-                    last_message_at:
-                      sample?.last_message_at ||
-                      sample?.fecha_ultimo_mensaje ||
-                      sample?.updated_at ||
-                      sample?.fecha_actualizacion ||
-                      sample?.created_at ||
-                      sample?.fecha_creacion ||
-                      null,
-                    participants: Array.isArray(
-                      sample?.participants || sample?.participantes
-                    )
-                      ? (sample?.participants || sample?.participantes).length
-                      : 0,
-                  }
-                : null;
-              console.log(
-                "[Chat] resumen listado",
-                JSON.stringify(
-                  { count: baseList.length, sample: sampleObj },
-                  null,
-                  2
-                )
-              );
+              // ...
             } catch {}
+            */
             return;
           }
           const now = Date.now();
@@ -2383,62 +2293,15 @@ export default function CoachChatInline({
             const id = String(it?.id_chat ?? it?.id ?? "");
             return (id && byId.get(id)) || it;
           });
+          // Logging eliminado
+          /*
           try {
             const toLine3 = (it: any) => {
-              const id = it?.id_chat ?? it?.id ?? null;
-              const parts = it?.participants || it?.participantes || [];
-              const equipos = (Array.isArray(parts) ? parts : [])
-                .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo"
-                )
-                .map((p: any) => nameOf("equipo", p?.id_equipo))
-                .filter(Boolean);
-              const clientes = (Array.isArray(parts) ? parts : [])
-                .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
-                )
-                .map((p: any) => nameOf("cliente", p?.id_cliente))
-                .filter(Boolean);
-              return `id=${id} | equipos=[${equipos.join(
-                ", "
-              )}] | clientes=[${clientes.join(", ")}]`;
+               // ...
             };
-            console.log(
-              "[Chat] comversaciones del usuario — equipo:",
-              String(socketio?.idEquipo ?? ""),
-              "(enriquecido, total:",
-              merged.length,
-              ")"
-            );
-            merged.forEach((it: any) => console.log(" -", toLine3(it)));
-            const sample = merged.length > 0 ? merged[0] : null;
-            const sampleObj = sample
-              ? {
-                  id: sample?.id_chat ?? sample?.id ?? null,
-                  last_message_at:
-                    sample?.last_message_at ||
-                    sample?.fecha_ultimo_mensaje ||
-                    sample?.updated_at ||
-                    sample?.fecha_actualizacion ||
-                    sample?.created_at ||
-                    sample?.fecha_creacion ||
-                    null,
-                  participants: Array.isArray(
-                    sample?.participants || sample?.participantes
-                  )
-                    ? (sample?.participants || sample?.participantes).length
-                    : 0,
-                }
-              : null;
-            console.log(
-              "[Chat] resumen listado",
-              JSON.stringify(
-                { count: merged.length, sample: sampleObj },
-                null,
-                2
-              )
-            );
+            // ...
           } catch {}
+          */
           onChatsList?.(merged);
         } catch {}
       });
@@ -2470,40 +2333,58 @@ export default function CoachChatInline({
         includeParticipants: true,
         withParticipants: true,
       } as any;
-      sio.emit("chat.list", payload, (ack: any) => {
+      sio.emit("chat.list", payload, async (ack: any) => {
         try {
           if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
           dbg("chat.list immediate", { payload, count: list.length });
+
+          // Optimización: Enriquecer chats prioritarios en paralelo
           try {
-            const toLine = (it: any) => {
-              const id = it?.id_chat ?? it?.id ?? null;
-              const parts = it?.participants || it?.participantes || [];
-              const equipos = (Array.isArray(parts) ? parts : [])
-                .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo"
-                )
-                .map((p: any) => String(p?.id_equipo ?? ""))
-                .filter(Boolean);
-              const clientes = (Array.isArray(parts) ? parts : [])
-                .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
-                )
-                .map((p: any) => String(p?.id_cliente ?? ""))
-                .filter(Boolean);
-              return `id=${id} | equipos=[${equipos.join(
-                ", "
-              )}] | clientes=[${clientes.join(", ")}]`;
-            };
-            console.log(
-              "[Chat] comversaciones del usuario — equipo:",
-              String(socketio?.idEquipo ?? ""),
-              "(total:",
-              list.length,
-              ")"
-            );
-            (list || []).forEach((it: any) => console.log(" -", toLine(it)));
-          } catch {}
+            const sorted = [...list].sort((a: any, b: any) => {
+              const ta = new Date(
+                a.last_message_at || a.updated_at || a.created_at || 0
+              ).getTime();
+              const tb = new Date(
+                b.last_message_at || b.updated_at || b.created_at || 0
+              ).getTime();
+              return tb - ta;
+            });
+
+            // Tomamos los más recientes que necesiten datos
+            const toEnrich = sorted.slice(0, 15).filter((c: any) => {
+              const parts = c.participants || c.participantes;
+              return !Array.isArray(parts) || parts.length === 0;
+            });
+
+            if (toEnrich.length > 0) {
+              await Promise.all(
+                toEnrich.map((chat: any) => {
+                  return new Promise<void>((resolve) => {
+                    const id = chat.id_chat || chat.id;
+                    if (!id) return resolve();
+                    sio.emit("chat.get", { id_chat: id }, (res: any) => {
+                      if (res?.success && res?.data) {
+                        const full = res.data;
+                        // Actualizamos el objeto en memoria (referencia)
+                        if (full.participants || full.participantes) {
+                          chat.participants =
+                            full.participants || full.participantes;
+                        }
+                        if (full.last_message) {
+                          chat.last_message = full.last_message;
+                        }
+                      }
+                      resolve();
+                    });
+                  });
+                })
+              );
+            }
+          } catch (err) {
+            console.error("Error enriching chats", err);
+          }
+
           onChatsList?.(list);
         } catch {}
       });
