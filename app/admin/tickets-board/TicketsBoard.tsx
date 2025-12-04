@@ -174,6 +174,14 @@ function mimeFromName(name?: string | null): string | null {
   return map[ext] ?? null;
 }
 
+function formatPlazo(hours: number) {
+  const sign = hours < 0 ? "-" : "";
+  const abs = Math.abs(hours);
+  const h = Math.floor(abs);
+  const m = Math.round((abs - h) * 60);
+  return `${sign}${h}h ${m}m`;
+}
+
 export default function TicketsBoard() {
   const { user } = useAuth();
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
@@ -1327,6 +1335,33 @@ export default function TicketsBoard() {
                                     </span>
                                   </div>
                                 )}
+                                {t.plazo_info &&
+                                  !t.plazo_info.fue_respondido &&
+                                  coerceStatus(t.estado) !== "RESUELTO" && (
+                                    <div className="flex flex-col gap-0.5">
+                                      <div
+                                        className={`flex items-center gap-1.5 font-medium ${
+                                          t.plazo_info.horas_restantes <= 0
+                                            ? "text-red-600"
+                                            : t.plazo_info.horas_restantes < 4
+                                            ? "text-amber-600"
+                                            : "text-emerald-600"
+                                        }`}
+                                      >
+                                        <Clock className="h-3.5 w-3.5" />
+                                        <span>
+                                          {formatPlazo(
+                                            t.plazo_info.horas_restantes
+                                          )}
+                                        </span>
+                                      </div>
+                                      {t.plazo_info.horas_restantes <= 0 && (
+                                        <span className="text-[10px] font-semibold text-red-600 animate-pulse">
+                                          Requiere atención
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                 {t.codigo && (
                                   <button
                                     className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
@@ -2020,6 +2055,48 @@ export default function TicketsBoard() {
                           disabled={!canEdit}
                         />
                       </div>
+
+                      {/* Tiempo restante (SLA) */}
+                      {(ticketDetail?.plazo_info ||
+                        selectedTicket?.plazo_info) &&
+                        !(
+                          ticketDetail?.plazo_info || selectedTicket?.plazo_info
+                        )?.fue_respondido &&
+                        coerceStatus(editForm.estado as any) !== "RESUELTO" && (
+                          <>
+                            <div className="flex items-center gap-2 text-slate-500 h-6">
+                              <Clock className="h-4 w-4" />{" "}
+                              <span>Tiempo restante</span>
+                            </div>
+                            <div className="min-h-[24px] flex flex-col justify-center">
+                              <div
+                                className={`flex items-center gap-2 font-medium ${
+                                  (ticketDetail?.plazo_info ||
+                                    selectedTicket?.plazo_info)!
+                                    .horas_restantes <= 0
+                                    ? "text-red-600"
+                                    : (ticketDetail?.plazo_info ||
+                                        selectedTicket?.plazo_info)!
+                                        .horas_restantes < 4
+                                    ? "text-amber-600"
+                                    : "text-emerald-600"
+                                }`}
+                              >
+                                {formatPlazo(
+                                  (ticketDetail?.plazo_info ||
+                                    selectedTicket?.plazo_info)!.horas_restantes
+                                )}
+                                {(ticketDetail?.plazo_info ||
+                                  selectedTicket?.plazo_info)!
+                                  .horas_restantes <= 0 && (
+                                  <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                                    Requiere atención
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
 
                       {/* Estado */}
                       <div className="flex items-center gap-2 text-slate-500 h-6">

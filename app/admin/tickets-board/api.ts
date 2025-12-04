@@ -28,6 +28,12 @@ export type TicketBoardItem = {
   resuelto_por_nombre?: string | null;
   informante?: string | null;
   informante_nombre?: string | null;
+  plazo_info?: {
+    horas_restantes: number;
+    fue_respondido: boolean;
+    fecha_primera_respuesta: string | null;
+    estado_plazo: string;
+  } | null;
 };
 
 export type TicketBoardResponse = {
@@ -118,6 +124,7 @@ export async function getTickets(opts: {
       resuelto_por_nombre: r.resuelto_por_nombre ?? null,
       informante: r.informante ?? null,
       informante_nombre: r.informante_nombre ?? null,
+      plazo_info: r.plazo_info ?? null,
   }));
 
   return {

@@ -14,10 +14,14 @@ export function GlobalChatNotifications() {
   const pathname = usePathname();
 
   useEffect(() => {
+    console.log("[GlobalChatNotifications] Checking user...", user);
     if (!user) return;
 
     const token = getAuthToken();
+    console.log("[GlobalChatNotifications] Token found?", !!token, token);
     if (!token) return;
+
+    console.log("[GlobalChatNotifications] Connecting with token:", token);
 
     // Connect to Socket.IO
     // Use the same configuration as ChatRealtime to ensure compatibility
