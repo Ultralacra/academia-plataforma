@@ -426,7 +426,9 @@ export default function CoachDetailPage({
     const arr = Array.from(map.entries()).map(([key, chats]) => {
       chats.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
       const targetCode = chatsByKeyToOriginalCode(chats, key);
-      const target = teamsMap.get(key);
+      const target = teamsList.find(
+        (t) => (t.codigo || "").toLowerCase() === key
+      );
       const targetName = target?.nombre ?? targetCode ?? key;
       const top = chats[0];
       const topChatId = top?.id_chat ?? top?.id ?? null;
@@ -498,7 +500,9 @@ export default function CoachDetailPage({
         ? chatOtherStudentCode(chats[0])
         : key;
 
-      const stu = studentsMap.get(key);
+      const stu = studentsList.find(
+        (s) => (s.code || "").toLowerCase() === key
+      );
       let targetName = stu?.name;
       if (!targetName) {
         targetName =
@@ -1775,7 +1779,7 @@ export default function CoachDetailPage({
 
             <div className="grid gap-3 py-2">
               <div>
-                <Label className="text-xs">Nombre</Label>
+                <Label className="text-xs">Nombre.</Label>
                 <Input
                   value={draftNombre}
                   onChange={(e) => setDraftNombre(e.target.value)}
