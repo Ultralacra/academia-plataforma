@@ -464,3 +464,148 @@ export async function completeSession(id: string | number): Promise<any> {
   console.debug('[teamsv2 api] POST', url);
   return fetchJson<any>(url, { method: 'POST' });
 }
+
+// ======================
+// Reasignación de tickets
+// ======================
+
+export async function reassignTicket(
+  ticketId: string,
+  codigoEquipo: string
+) {
+  if (!ticketId) throw new Error("ticketId requerido");
+  if (!codigoEquipo) throw new Error("codigoEquipo requerido");
+  const path = `/ticket/reassign/ticket/${encodeURIComponent(ticketId)}`;
+  return fetchJson<any>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ codigo_equipo: codigoEquipo }),
+  });
+}
+
+// ======================
+// Comentarios / Observaciones
+// ======================
+
+export type TicketComment = {
+  id: string;
+  ticket_id: string;
+  user_codigo?: string;
+  user_nombre?: string;
+  contenido: string;
+  created_at: string;
+  updated_at?: string;
+};
+
+export async function getTicketComments(ticketCode: string) {
+  if (!ticketCode) return [];
+  const path = `/ticket/get/public-comments/${encodeURIComponent(ticketCode)}`;
+  const res = await fetchJson<any>(path);
+  const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+  return list as TicketComment[];
+}
+
+export async function createTicketComment(ticketCode: string, contenido: string) {
+  if (!ticketCode) throw new Error("Código de ticket requerido");
+  if (!contenido) throw new Error("Contenido requerido");
+  const path = `/ticket/create/public-comment/${encodeURIComponent(ticketCode)}`;
+  return fetchJson<any>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contenido }),
+  });
+}
+
+export async function updateTicketComment(commentId: number | string, contenido: string) {
+  if (!commentId) throw new Error("ID de comentario requerido");
+  const path = `/ticket/update/comment/${encodeURIComponent(commentId)}`;
+  return fetchJson<any>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contenido }),
+  });
+}
+
+export async function deleteTicketComment(commentId: number | string) {
+  if (!commentId) throw new Error("ID de comentario requerido");
+  const path = `/ticket/delete/public-comment/${encodeURIComponent(commentId)}`;
+  return fetchJson<any>(path, {
+    method: "DELETE",
+  });
+}
+
+// ======================
+// Notas Internas (Internal Notes)
+// ======================
+
+export type InternalNote = {
+  id: string;
+  ticket_id: string;
+  user_codigo?: string;
+  user_nombre?: string;
+  contenido: string;
+  created_at: string;
+  updated_at?: string;
+};
+
+export async function getInternalNotes(ticketCode: string) {
+  if (!ticketCode) return [];
+  const path = `/ticket/get/comments/${encodeURIComponent(ticketCode)}`;
+  const res = await fetchJson<any>(path);
+  const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+  return list as InternalNote[];
+}
+
+export async function createInternalNote(ticketCode: string, contenido: string) {
+  if (!ticketCode) throw new Error("Código de ticket requerido");
+  if (!contenido) throw new Error("Contenido requerido");
+  const path = `/ticket/create/comment/${encodeURIComponent(ticketCode)}`;
+  return fetchJson<any>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contenido }),
+  });
+}
+
+export async function updateInternalNote(noteId: number | string, contenido: string) {
+  if (!noteId) throw new Error("ID de nota requerido");
+  const path = `/ticket/update/comment/${encodeURIComponent(noteId)}`;
+  return fetchJson<any>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contenido }),
+  });
+}
+
+export async function deleteInternalNote(noteId: number | string) {
+  if (!noteId) throw new Error("ID de nota requerido");
+  const path = `/ticket/delete/comment/${encodeURIComponent(noteId)}`;
+  return fetchJson<any>(path, {
+    method: "DELETE",
+  });
+}
+
+// ======================
+// Tareas (Links asociados al ticket)
+// ======================
+
+export async function deleteTicketLink(linkId: number | string) {
+  if (!linkId) throw new Error("ID de link requerido");
+  const path = `/ticket/delete/link/${encodeURIComponent(linkId)}`;
+  return fetchJson<any>(path, {
+    method: "DELETE",
+  });
+}
+
+export async function createTicketLink(
+  ticketCode: string,
+  payload: { url: string; title?: string }
+) {
+  if (!ticketCode) throw new Error("Código de ticket requerido");
+  const path = `/ticket/create/link/${encodeURIComponent(ticketCode)}`;
+  return fetchJson<any>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: payload.url, title: payload.title }),
+  });
+}

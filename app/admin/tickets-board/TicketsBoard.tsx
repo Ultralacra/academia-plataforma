@@ -642,7 +642,8 @@ export default function TicketsBoard() {
         mediaRecorderRef.current = null;
       };
       mediaRecorderRef.current = mr;
-      mr.start();
+      // Start with 1s timeslices to ensure data availability
+      mr.start(1000);
       setIsRecording(true);
       toast({ title: "Grabación iniciada" });
     } catch (e) {
@@ -652,18 +653,21 @@ export default function TicketsBoard() {
   }
 
   function stopRecording() {
-    try {
-      if (
-        mediaRecorderRef.current &&
-        mediaRecorderRef.current.state !== "inactive"
-      ) {
-        mediaRecorderRef.current.stop();
+    // Small delay to ensure the last chunk is captured
+    setTimeout(() => {
+      try {
+        if (
+          mediaRecorderRef.current &&
+          mediaRecorderRef.current.state !== "inactive"
+        ) {
+          mediaRecorderRef.current.stop();
+        }
+      } catch (e) {
+        console.error(e);
       }
-    } catch (e) {
-      console.error(e);
-    }
-    setIsRecording(false);
-    toast({ title: "Grabación finalizada" });
+      setIsRecording(false);
+      toast({ title: "Grabación finalizada" });
+    }, 500);
   }
 
   function addRecordedToFiles() {

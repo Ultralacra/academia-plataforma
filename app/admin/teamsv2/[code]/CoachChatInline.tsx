@@ -724,6 +724,8 @@ export default function CoachChatInline({
           attachments: [optimisticAttachment],
           uiKey: optimisticId,
         };
+        // Attach client_session for robust deduplication
+        (optimisticMsg as any).client_session = clientSessionRef.current;
         return { file, optimisticMsg, optimisticId };
       });
 
@@ -2137,6 +2139,12 @@ export default function CoachChatInline({
                     : [],
                 }))
               );
+
+              console.log("--- [DEBUG] CONVERSACIÓN ALUMNO ---");
+              console.log("Chat ID:", cid);
+              console.log("Participantes:", joinedParticipantsRef.current);
+              console.log("Mensajes:", mapped);
+              console.log("-----------------------------------");
             } catch {}
           } catch {}
 
@@ -2417,15 +2425,16 @@ export default function CoachChatInline({
       });
 
       // Resolver código de equipo para alumno si falta (igual que versión previa)
+      // FIX: Solo intentar resolver si NO hay ningún equipo en participants.
+      // Si ya viene un equipo (aunque sea numérico), respetarlo para no sobrescribir la selección del panel.
       if (role === "alumno") {
         try {
-          const hasEquipoCode = (arr: any[]) =>
+          const hasAnyEquipo = (arr: any[]) =>
             (arr || []).some(
-              (p) =>
-                normalizeTipo(p?.participante_tipo) === "equipo" &&
-                /[^0-9]/.test(String(p?.id_equipo || ""))
+              (p) => normalizeTipo(p?.participante_tipo) === "equipo"
             );
-          if (!hasEquipoCode(participants) && (socketio as any)?.idCliente) {
+
+          if (!hasAnyEquipo(participants) && (socketio as any)?.idCliente) {
             const alumnoCode = String((socketio as any).idCliente);
             const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
               alumnoCode
@@ -2449,7 +2458,7 @@ export default function CoachChatInline({
             const codeEquipo = preferred?.codigo
               ? String(preferred.codigo)
               : null;
-            if (codeEquipo && /[^0-9]/.test(codeEquipo)) {
+            if (codeEquipo) {
               (socketio as any).idEquipo = codeEquipo;
               participantsRef.current = [
                 {
@@ -2548,6 +2557,7 @@ export default function CoachChatInline({
       };
       const matched = findMatch(list);
       if (matched && (matched.id_chat || matched.id)) {
+        console.log("[DEBUG] Chat encontrado existente:", matched);
         const idToJoin = matched.id_chat ?? matched.id;
         const ok = await new Promise<boolean>((resolve) => {
           try {
@@ -2627,6 +2637,14 @@ export default function CoachChatInline({
       const created =
         (await tryCreate("chat.create-with-participants")) ||
         (await tryCreate("chat.create"));
+
+      console.log(
+        "[DEBUG] Resultado creación chat:",
+        created,
+        "ChatID:",
+        chatIdRef.current
+      );
+
       if (!created || chatIdRef.current == null) return false;
 
       // Hacer join para obtener my_participante confiable
@@ -2793,6 +2811,7 @@ export default function CoachChatInline({
           srcParticipantId: effectivePid ?? undefined,
           uiKey: clientId,
         };
+        (optimistic as any).client_session = clientSessionRef.current;
         setItems((prev) => [...prev, optimistic]);
         seenRef.current.add(clientId);
         outboxRef.current.push({
@@ -3268,7 +3287,6 @@ export default function CoachChatInline({
                             height="13"
                             width="8"
                             preserveAspectRatio="xMidYMid slice"
-                            fit=""
                             version="1.1"
                             x="0px"
                             y="0px"
@@ -3287,7 +3305,6 @@ export default function CoachChatInline({
                             height="13"
                             width="8"
                             preserveAspectRatio="xMidYMid slice"
-                            fit=""
                             version="1.1"
                             x="0px"
                             y="0px"
@@ -3741,17 +3758,20 @@ export default function CoachChatInline({
                 type="button"
                 onClick={() => {
                   if (recording) {
-                    try {
-                      mediaRecorderRef.current?.stop();
-                    } catch {}
-                    setRecording(false);
-                    try {
-                      if (recordTimerRef.current) {
-                        clearInterval(recordTimerRef.current);
-                        recordTimerRef.current = null;
-                      }
-                      setRecordStartAt(null);
-                    } catch {}
+                    // Small delay to ensure the last chunk is captured
+                    setTimeout(() => {
+                      try {
+                        mediaRecorderRef.current?.stop();
+                      } catch {}
+                      setRecording(false);
+                      try {
+                        if (recordTimerRef.current) {
+                          clearInterval(recordTimerRef.current);
+                          recordTimerRef.current = null;
+                        }
+                        setRecordStartAt(null);
+                      } catch {}
+                    }, 500);
                   } else {
                     (async () => {
                       try {
@@ -3876,7 +3896,8 @@ export default function CoachChatInline({
                             setRecordStartAt(null);
                           } catch {}
                         };
-                        mr.start();
+                        // Start with 1s timeslices to ensure data availability
+                        mr.start(1000);
                         setRecording(true);
                         try {
                           setRecordStartAt(Date.now());

@@ -723,6 +723,8 @@ export default function CoachChatInline({
           attachments: [optimisticAttachment],
           uiKey: optimisticId,
         };
+        // Asignar client_session para deduplicación robusta
+        (optimisticMsg as any).client_session = clientSessionRef.current;
         return { file, optimisticMsg, optimisticId };
       });
 
@@ -740,6 +742,9 @@ export default function CoachChatInline({
       for (const { file, optimisticId } of tasks) {
         const fd = new FormData();
         fd.append("file", file, file.name);
+        // Intentar enviar client_session si el backend lo soporta
+        fd.append("client_session", clientSessionRef.current);
+
         try {
           setUploadState((s) => ({ ...s, current: file.name }));
 
@@ -1151,23 +1156,31 @@ export default function CoachChatInline({
             .map((a) => `${a.name}:${a.size}:${a.mime}`)
             .sort()
             .join("|");
-        const attKeySoft = (arr?: Attachment[]) => {
-          const list = arr || [];
-          const cat = (m?: string) => (m || "").split("/")[0];
-          const count = list.length;
-          const sizeSum = list.reduce((s, a) => s + (a?.size || 0), 0);
-          const cats = Array.from(new Set(list.map((a) => cat(a?.mime))))
+
+        // Comparación relajada para adjuntos (especialmente audio)
+        const attKeyRelaxed = (arr?: Attachment[]) => {
+          return (arr || [])
+            .map((a) => {
+              // Si es audio, ignoramos el nombre exacto ya que el servidor puede renombrarlo
+              if ((a.mime || "").startsWith("audio/")) {
+                return `AUDIO:${Math.round((a.size || 0) / 1000)}k`; // Tolerancia de tamaño
+              }
+              return `${a.name}:${a.size}`;
+            })
             .sort()
-            .join(",");
-          return `${count}|${sizeSum}|${cats}`;
+            .join("|");
         };
+
         const sameAtts = attKey(m.attachments) === attKey(msg.attachments);
-        const softAtts =
-          attKeySoft(m.attachments) === attKeySoft(msg.attachments);
+        const sameAttsRelaxed =
+          attKeyRelaxed(m.attachments) === attKeyRelaxed(msg.attachments);
 
         // Si hay match por sesión, ignoramos sender/text (asumimos que es la confirmación)
         // Si no, usamos la heurística estándar
-        if (sessionMatch || (near && sameSender && sameText && sameAtts)) {
+        if (
+          sessionMatch ||
+          (near && sameSender && sameText && (sameAtts || sameAttsRelaxed))
+        ) {
           // fusionar como delivered
           const byId = (msg as any).__senderById === true;
           const preserveSender = !byId && m.sender && m.sender !== msg.sender;
@@ -1176,18 +1189,9 @@ export default function CoachChatInline({
             sender: preserveSender ? m.sender : msg.sender,
             read: m.read || msg.read,
             at: m.at, // Preservar timestamp local
-          } as Message;
-          return next;
-        }
-        // Fallback para multimedia renombrado por el servidor (nombre distinto):
-        if (near && sameSender && sameText && softAtts) {
-          const byId = (msg as any).__senderById === true;
-          const preserveSender = !byId && m.sender && m.sender !== msg.sender;
-          next[i] = {
-            ...msg,
-            sender: preserveSender ? m.sender : msg.sender,
-            read: m.read || msg.read,
-            at: m.at, // Preservar timestamp local
+            // Preservar client_session si el nuevo no lo trae
+            client_session:
+              (msg as any).client_session || (m as any).client_session,
           } as Message;
           return next;
         }
@@ -2909,6 +2913,9 @@ export default function CoachChatInline({
           srcParticipantId: effectivePid ?? undefined,
           uiKey: clientId,
         };
+        // Asignar client_session al optimista
+        (optimistic as any).client_session = clientSessionRef.current;
+
         setItems((prev) => [...prev, optimistic]);
         seenRef.current.add(clientId);
         outboxRef.current.push({
@@ -3769,17 +3776,20 @@ export default function CoachChatInline({
               onClick={() => {
                 // Toggle grabación de audio
                 if (recording) {
-                  try {
-                    mediaRecorderRef.current?.stop();
-                  } catch {}
-                  setRecording(false);
-                  try {
-                    if (recordTimerRef.current) {
-                      clearInterval(recordTimerRef.current);
-                      recordTimerRef.current = null;
-                    }
-                    setRecordStartAt(null);
-                  } catch {}
+                  // Pequeño delay para asegurar que el último chunk se capture
+                  setTimeout(() => {
+                    try {
+                      mediaRecorderRef.current?.stop();
+                    } catch {}
+                    setRecording(false);
+                    try {
+                      if (recordTimerRef.current) {
+                        clearInterval(recordTimerRef.current);
+                        recordTimerRef.current = null;
+                      }
+                      setRecordStartAt(null);
+                    } catch {}
+                  }, 500); // 500ms de buffer final
                 } else {
                   (async () => {
                     try {
@@ -3867,6 +3877,11 @@ export default function CoachChatInline({
                           const blob = new Blob(recordedChunksRef.current, {
                             type: chosenType,
                           });
+                          // Validar que haya datos
+                          if (blob.size === 0) {
+                            console.warn("Audio grabado vacío");
+                            return;
+                          }
                           const ts = new Date();
                           const pad = (n: number) => String(n).padStart(2, "0");
                           const ext = (() => {
@@ -3907,7 +3922,8 @@ export default function CoachChatInline({
                           setRecordStartAt(null);
                         } catch {}
                       };
-                      mr.start();
+                      // Usar timeslice de 1000ms para asegurar chunks periódicos
+                      mr.start(1000);
                       setRecording(true);
                       try {
                         setRecordStartAt(Date.now());

@@ -819,17 +819,21 @@ export default function TicketsPanelCoach({
         setCreateFiles((prev) => [...prev, file].slice(0, 10));
       };
       mediaRecorderRef.current = mr;
-      mr.start();
+      // Start with 1s timeslices to ensure data availability
+      mr.start(1000);
       setIsRecording(true);
     } catch {}
   }
 
   function stopRecording() {
-    try {
-      const mr = mediaRecorderRef.current;
-      if (mr && mr.state !== "inactive") mr.stop();
-    } catch {}
-    setIsRecording(false);
+    // Small delay to ensure the last chunk is captured
+    setTimeout(() => {
+      try {
+        const mr = mediaRecorderRef.current;
+        if (mr && mr.state !== "inactive") mr.stop();
+      } catch {}
+      setIsRecording(false);
+    }, 500);
   }
 
   useEffect(() => {
