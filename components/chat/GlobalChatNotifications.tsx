@@ -4,31 +4,46 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
-import { toast } from "@/hooks/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
 import { usePathname } from "next/navigation";
 
 export function GlobalChatNotifications() {
   const { user } = useAuth();
   const socketRef = useRef<Socket | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const myParticipantIds = useRef<Record<string, string>>({});
+  const { toast } = useToast();
   const pathname = usePathname();
 
   useEffect(() => {
-    console.log("[GlobalChatNotifications] Checking user...", user);
+    // Preload notification sound
+    audioRef.current = new Audio(
+      "https://res.cloudinary.com/dzkq67qmu/video/upload/v1733326786/notification_sound_y8j3s9.mp3"
+    );
+  }, []);
+
+  useEffect(() => {
     if (!user) return;
 
+    // If user is coach/equipo, we use the dedicated CoachChatNotifier component
+    if (user.role === "coach" || user.role === "equipo") return;
+
     const token = getAuthToken();
-    console.log("[GlobalChatNotifications] Token found?", !!token, token);
     if (!token) return;
 
-    console.log("[GlobalChatNotifications] Connecting with token:", token);
+    console.log(
+      "[GlobalChatNotifications] Connecting for user:",
+      user.email,
+      user.role,
+      "Code:",
+      (user as any).codigo
+    );
 
     // Connect to Socket.IO
-    // Use the same configuration as ChatRealtime to ensure compatibility
     const socket = io(CHAT_HOST, {
       auth: { token },
       transports: ["websocket", "polling"],
-      // Reconnection settings
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
@@ -38,7 +53,7 @@ export function GlobalChatNotifications() {
     socket.on("connect", () => {
       console.debug("[GlobalChatNotifications] Connected");
 
-      // Subscribe to user's chats by listing them (server-side subscription pattern)
+      // Construct payload based on role
       const payload: any = {};
       if (user.role === "student") {
         const code = (user as any).codigo;
@@ -51,105 +66,136 @@ export function GlobalChatNotifications() {
         if (code) {
           payload.participante_tipo = "equipo";
           payload.id_equipo = String(code);
+        } else {
+          // Fallback: try to join as user if no team code is present
+          // This ensures coaches without a specific team code still get their chats
+          payload.participante_tipo = "usuario";
+          payload.id_usuario = String(user.id);
         }
       } else if (user.role === "admin") {
-        // Admin might not need specific subscription or subscribes to all?
-        // Usually admins have a dashboard that lists everything.
-        // For now, we try to list without params or with admin type if supported.
-        // payload.participante_tipo = "admin"
+        // Admins might want to see everything or specific chats.
+        // For now, we skip auto-subscription for admins to avoid noise,
+        // unless they have a specific "equipo" code assigned.
+        if ((user as any).codigo) {
+          payload.participante_tipo = "equipo";
+          payload.id_equipo = String((user as any).codigo);
+        }
       }
 
       if (Object.keys(payload).length > 0) {
         socket.emit("chat.list", payload, (ack: any) => {
-          // We don't need the list, just the subscription side-effect
-          console.debug(
-            "[GlobalChatNotifications] Subscribed via chat.list",
-            ack
-          );
+          if (ack && ack.success && Array.isArray(ack.data)) {
+            console.debug(
+              "[GlobalChatNotifications] Joining chats:",
+              ack.data.length
+            );
+            ack.data.forEach((chat: any) => {
+              const cid = chat.id_chat || chat.id;
+              if (cid) {
+                socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
+                  if (
+                    joinAck &&
+                    joinAck.success &&
+                    joinAck.data?.my_participante
+                  ) {
+                    myParticipantIds.current[cid] =
+                      joinAck.data.my_participante;
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+
+    // Listen for new chats to join automatically
+    socket.on("chat.created", (data: any) => {
+      const cid = data?.id_chat || data?.id;
+      if (cid) {
+        // Check if this chat belongs to me (simple heuristic or just try to join)
+        // We just try to join. If not allowed, backend will reject.
+        socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
+          if (joinAck && joinAck.success && joinAck.data?.my_participante) {
+            myParticipantIds.current[cid] = joinAck.data.my_participante;
+          }
         });
       }
     });
 
     socket.on("chat.message", (msg: any) => {
-      // Determine if the message is from the current user
+      console.debug("[GlobalChatNotifications] Message received:", msg);
+      const cid = msg.id_chat;
+      const myPid = myParticipantIds.current[cid];
+      const senderPid = msg.id_chat_participante_emisor;
+
+      // Security/Privacy check: If I am not in this chat, ignore it.
+      // if (!myPid) {
+      //   return;
+      // }
+
       let isMe = false;
-      const myRole = user.role; // "admin", "student", "coach", "equipo"
-
-      // Normalize msg role from backend
-      let msgRole = "";
-      const rawType = (msg.participante_tipo || "").toLowerCase();
-
-      if (rawType === "cliente" || rawType === "alumno") msgRole = "student";
-      else if (rawType === "equipo" || rawType === "coach") msgRole = "coach";
-      else if (rawType === "admin") msgRole = "admin";
-
-      // Heuristic: if the sender role matches my role, assume it's me.
-      // Map myRole to msgRole format for comparison
-      let myMappedRole = "";
-      if (myRole === "student") myMappedRole = "student";
-      else if (myRole === "coach" || myRole === "equipo")
-        myMappedRole = "coach";
-      else if (myRole === "admin") myMappedRole = "admin";
-
-      if (msgRole === myMappedRole) {
-        // Double check: if I am a student, and the sender is ALSO a student (me), ignore.
-        // But if I am a coach, and another coach sends a message?
-        // Usually we only want to ignore messages sent by THIS session/user.
-        // But we don't have session ID here easily.
-        // For now, assuming role match is enough to filter "my own messages"
-        // (since students don't chat with students, and coaches don't chat with coaches in this context usually).
+      if (myPid && senderPid && String(myPid) === String(senderPid)) {
         isMe = true;
+      } else {
+        // Fallback logic if IDs are not resolved
+        const rawType = (msg.participante_tipo || "").toLowerCase();
+        let msgRole = "";
+        if (rawType === "cliente" || rawType === "alumno") msgRole = "student";
+        else if (rawType === "equipo" || rawType === "coach") msgRole = "coach";
+        else if (rawType === "admin") msgRole = "admin";
+
+        // If I am a student, and the message is from a student, it's me (or another student, but usually me in 1:1)
+        if (user.role === "student" && msgRole === "student") isMe = true;
+
+        // If I am admin, and message is from admin, it's me
+        if (user.role === "admin" && msgRole === "admin") isMe = true;
+
+        // Extra robust check using name/email if available
+        if (msg.nombre_emisor && user.name && msg.nombre_emisor === user.name) {
+          isMe = true;
+        }
+        if (msg.email_emisor && user.email && msg.email_emisor === user.email) {
+          isMe = true;
+        }
       }
 
-      // Special case: If I am admin, I might see messages from other admins?
-      // If I am admin, I want to see messages from Students and Coaches.
-      // If msgRole is 'admin', it's likely me or another admin.
-
-      // Refined logic:
-      // If I am Student, I want messages from Coach or Admin.
-      // If I am Coach, I want messages from Student or Admin.
-      // If I am Admin, I want messages from Student or Coach.
-
-      if (myRole === "student" && msgRole === "student") isMe = true;
-      if ((myRole === "coach" || myRole === "equipo") && msgRole === "coach")
-        isMe = true;
-      if (myRole === "admin" && msgRole === "admin") isMe = true;
-
       if (!isMe) {
+        // Play sound
+        // Play always if hidden, or if visible but we want feedback
+        // We'll play it always for now as requested
+        // audioRef.current
+        //   ?.play()
+        //   .catch((e) => console.error("Audio play failed", e));
+
         // Show toast
         toast({
-          title: `Nuevo mensaje de ${msg.nombre_emisor || "Usuario"}`,
+          title: `Nuevo mensaje de ${msg.nombre_emisor || "Coach"}`,
           description:
             msg.contenido ||
             (msg.archivo ? "📎 Archivo adjunto" : "Nuevo mensaje"),
           duration: 5000,
         });
 
-        // Update unread count in localStorage for AppSidebar
+        // Update unread count in localStorage
         if (msg.id_chat) {
-          // Map role for localStorage key (matches AppSidebar logic)
           const roleKey =
             user.role === "student"
               ? "alumno"
               : user.role === "coach" || user.role === "equipo"
               ? "coach"
               : "admin";
-
           const key = `chatUnreadById:${roleKey}:${msg.id_chat}`;
           try {
             const current = parseInt(localStorage.getItem(key) || "0", 10);
             const next = (isNaN(current) ? 0 : current) + 1;
             localStorage.setItem(key, String(next));
-
-            // Dispatch event for AppSidebar to pick up
             window.dispatchEvent(
               new CustomEvent("chat:unread-count-updated", {
                 detail: { chatId: msg.id_chat, role: roleKey, count: next },
               })
             );
-          } catch (e) {
-            console.error("Error updating unread count", e);
-          }
+          } catch (e) {}
         }
       }
     });
@@ -157,7 +203,7 @@ export function GlobalChatNotifications() {
     return () => {
       socket.disconnect();
     };
-  }, [user]); // Re-connect if user changes (login/logout)
+  }, [user, toast]);
 
   return null;
 }

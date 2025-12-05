@@ -99,6 +99,10 @@ export type CoachTicket = {
   resuelto_por_nombre?: string | null;
   ultimo_estado?: { estatus?: string; fecha?: string } | string | null;
   estado: "PENDIENTE" | "EN_PROGRESO" | "PENDIENTE_DE_ENVIO" | "RESUELTO" | string;
+  plazo_info?: {
+    horas_restantes: number;
+    fue_respondido: boolean;
+  } | null;
 };
 
 export type CoachTicketsResponse = {
@@ -153,6 +157,12 @@ export async function getCoachTickets(params: {
     resuelto_por: r.resuelto_por ?? null,
     resuelto_por_nombre: r.resuelto_por_nombre ?? null,
     estado: normalizeEstado(r.estado),
+    plazo_info: r.plazo_info
+      ? {
+          horas_restantes: Number(r.plazo_info.horas_restantes),
+          fue_respondido: Boolean(r.plazo_info.fue_respondido),
+        }
+      : null,
   }));
   return {
     data,

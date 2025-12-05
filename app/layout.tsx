@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
 import { SseNotificationsProvider } from "@/components/hooks/useSseNotifications";
 import { GlobalChatNotifications } from "@/components/chat/GlobalChatNotifications";
+import { CoachChatNotifier } from "@/components/chat/CoachChatNotifier";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -44,6 +45,7 @@ export default function RootLayout({
         >
           <SseNotificationsProvider>
             <GlobalChatNotifications />
+            <CoachChatNotifier />
             <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
           </SseNotificationsProvider>
           <Toaster />

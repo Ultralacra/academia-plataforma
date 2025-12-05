@@ -29,6 +29,8 @@ import {
   CheckCircle2,
   Download,
   Eye,
+  CalendarIcon,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +43,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -76,20 +84,36 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerDescription,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetFooter,
+  SheetClose,
+} from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  reassignTicket,
+  getTicketComments,
+  createTicketComment,
+  updateTicketComment,
+  deleteTicketComment,
+  type TicketComment,
+  getInternalNotes,
+  createInternalNote,
+  updateInternalNote,
+  deleteInternalNote,
+  type InternalNote,
+  deleteTicketLink,
+  createTicketLink,
+} from "@/app/admin/tickets-board/api";
 
 type StatusKey =
   | "EN_PROGRESO"
@@ -113,6 +137,24 @@ const STATUS_STYLE: Record<StatusKey, string> = {
   PAUSADO: "bg-purple-50 text-purple-700 border-purple-200",
   RESUELTO: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
+
+const estados: StatusKey[] = [
+  "PENDIENTE",
+  "EN_PROGRESO",
+  "PENDIENTE_DE_ENVIO",
+  "PAUSADO",
+  "RESUELTO",
+];
+
+function coerceStatus(raw?: string | null): StatusKey {
+  if (!raw) return "PENDIENTE";
+  const up = raw.toUpperCase();
+  if (up === "EN_PROGRESO") return "EN_PROGRESO";
+  if (up === "PENDIENTE_DE_ENVIO") return "PENDIENTE_DE_ENVIO";
+  if (up === "PAUSADO") return "PAUSADO";
+  if (up === "RESUELTO") return "RESUELTO";
+  return "PENDIENTE";
+}
 
 const PRIORITY_COLORS = {
   BAJA: "bg-slate-100 text-slate-700 border-slate-200",
@@ -184,6 +226,41 @@ function iconFor(mime: string | null, name?: string) {
   return <FileIcon className="h-4 w-4" />;
 }
 
+function TicketTimer({ hours }: { hours: number }) {
+  // Convert initial hours to milliseconds
+  const initialMs = hours * 3600 * 1000;
+  const [timeLeft, setTimeLeft] = useState(initialMs);
+
+  useEffect(() => {
+    setTimeLeft(hours * 3600 * 1000);
+  }, [hours]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => prev - 1000);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Si el tiempo se agotó, mostrar 0 en lugar de números negativos
+  if (timeLeft <= 0) {
+    return <span>0h 0m 0s</span>;
+  }
+
+  const totalSeconds = Math.floor(timeLeft / 1000);
+  const absSeconds = Math.abs(totalSeconds);
+
+  const h = Math.floor(absSeconds / 3600);
+  const m = Math.floor((absSeconds % 3600) / 60);
+  const s = absSeconds % 60;
+
+  return (
+    <span>
+      {h}h {m}m {s}s
+    </span>
+  );
+}
+
 export default function TicketsPanelCoach({
   student,
   coachCode: coachCodeProp,
@@ -228,6 +305,7 @@ export default function TicketsPanelCoach({
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
+  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -323,6 +401,40 @@ export default function TicketsPanelCoach({
   );
   const [deletingTicket, setDeletingTicket] = useState(false);
 
+  const { user } = useAuth();
+  const isAdmin = (user?.role || "").toLowerCase() === "admin";
+  const isStudent = (user?.role || "").toLowerCase() === "student";
+  const canEdit = !isStudent;
+
+  // Comentarios (Observaciones)
+  const [comments, setComments] = useState<TicketComment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [addingComment, setAddingComment] = useState(false);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+
+  // Notas Internas (Internal Notes)
+  const [internalNotes, setInternalNotes] = useState<InternalNote[]>([]);
+  const [internalNotesLoading, setInternalNotesLoading] = useState(false);
+  const [newInternalNote, setNewInternalNote] = useState("");
+  const [addingInternalNote, setAddingInternalNote] = useState(false);
+  const [editingInternalNoteId, setEditingInternalNoteId] = useState<
+    string | null
+  >(null);
+  const [editingInternalNoteText, setEditingInternalNoteText] = useState("");
+
+  // Reasignar ticket
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [reassignCoach, setReassignCoach] = useState<string>("");
+  const [reassignConfirmOpen, setReassignConfirmOpen] = useState(false);
+  const [reassignLoading, setReassignLoading] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  // Audio recording and URL states (from TicketsBoard)
+  const [newAudioUrl, setNewAudioUrl] = useState<string>("");
+  const [audioUrls, setAudioUrls] = useState<string[]>([]);
+
   useEffect(() => {
     if (!editOpen || !editTicket?.codigo) return;
     let alive = true;
@@ -344,13 +456,12 @@ export default function TicketsPanelCoach({
     };
   }, [editOpen, editTicket?.codigo]);
 
-  // Cargar detalle cuando la pestaña 'detalles' o 'archivos' esté activa (para mostrar Links)
+  // Cargar detalle cuando se abre el ticket (necesario para General y Detalle)
   useEffect(() => {
     if (!editOpen) return;
     if (!editTicket?.codigo) return;
-    if (editActiveTab !== "detalles" && editActiveTab !== "archivos") return;
     loadTicketDetail(editTicket.codigo);
-  }, [editOpen, editTicket?.codigo, editActiveTab]);
+  }, [editOpen, editTicket?.codigo]);
 
   useEffect(() => {
     let alive = true;
@@ -609,6 +720,10 @@ export default function TicketsPanelCoach({
       }
       const json = await res.json().catch(() => ({}));
       setTicketDetail(json?.data ?? json ?? null);
+
+      // Load comments and internal notes
+      loadComments(codigo);
+      loadInternalNotes(codigo);
     } catch (e: any) {
       setTicketDetailError(
         String(e?.message || e || "Error al cargar detalle")
@@ -813,10 +928,15 @@ export default function TicketsPanelCoach({
           if (prev) URL.revokeObjectURL(prev);
           return url;
         });
-        const file = new File([blob], `grabacion-${Date.now()}.webm`, {
-          type: "audio/webm",
-        });
-        setCreateFiles((prev) => [...prev, file].slice(0, 10));
+        setRecordedBlob(blob);
+
+        // Si NO estamos editando, comportamiento antiguo (agregar directo a createFiles)
+        if (!editOpen) {
+          const file = new File([blob], `grabacion-${Date.now()}.webm`, {
+            type: "audio/webm",
+          });
+          setCreateFiles((prev) => [...prev, file].slice(0, 10));
+        }
       };
       mediaRecorderRef.current = mr;
       // Start with 1s timeslices to ensure data availability
@@ -834,6 +954,28 @@ export default function TicketsPanelCoach({
       } catch {}
       setIsRecording(false);
     }, 500);
+  }
+
+  function addRecordedToFiles() {
+    if (!recordedBlob) return;
+    const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
+    const file = new File([recordedBlob], `grabacion-${Date.now()}.${ext}`, {
+      type: recordedBlob.type || "audio/webm",
+    });
+
+    if (editOpen) {
+      setEditFiles((prev) => [...prev, file]);
+    } else {
+      setCreateFiles((prev) => [...prev, file]);
+    }
+
+    // cleanup preview URL
+    if (audioPreviewUrl) {
+      URL.revokeObjectURL(audioPreviewUrl);
+      setAudioPreviewUrl(null);
+    }
+    setRecordedBlob(null);
+    toast({ title: "Grabación añadida a archivos" });
   }
 
   useEffect(() => {
@@ -1043,6 +1185,118 @@ export default function TicketsPanelCoach({
       });
     } finally {
       setDeletingFile(false);
+    }
+  }
+
+  async function loadComments(codigo: string) {
+    try {
+      setCommentsLoading(true);
+      const list = await getTicketComments(codigo);
+      setComments(list);
+    } catch (e) {
+      console.error(e);
+      setComments([]);
+    } finally {
+      setCommentsLoading(false);
+    }
+  }
+
+  async function handleAddComment() {
+    if (!editTicket?.codigo || !newComment.trim()) return;
+    try {
+      setAddingComment(true);
+      await createTicketComment(editTicket.codigo, newComment);
+      setNewComment("");
+      await loadComments(editTicket.codigo);
+      toast({ title: "Observación agregada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al agregar observación" });
+    } finally {
+      setAddingComment(false);
+    }
+  }
+
+  async function handleUpdateComment() {
+    if (!editingCommentId || !editingCommentText.trim()) return;
+    try {
+      await updateTicketComment(editingCommentId, editingCommentText);
+      setEditingCommentId(null);
+      setEditingCommentText("");
+      if (editTicket?.codigo) await loadComments(editTicket.codigo);
+      toast({ title: "Observación actualizada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al actualizar observación" });
+    }
+  }
+
+  async function handleDeleteComment(id: string) {
+    if (!confirm("¿Eliminar esta observación?")) return;
+    try {
+      await deleteTicketComment(id);
+      if (editTicket?.codigo) await loadComments(editTicket.codigo);
+      toast({ title: "Observación eliminada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al eliminar observación" });
+    }
+  }
+
+  // --- Handlers para Notas Internas ---
+
+  async function loadInternalNotes(codigo: string) {
+    try {
+      setInternalNotesLoading(true);
+      const list = await getInternalNotes(codigo);
+      setInternalNotes(list);
+    } catch (e) {
+      console.error(e);
+      setInternalNotes([]);
+    } finally {
+      setInternalNotesLoading(false);
+    }
+  }
+
+  async function handleAddInternalNote() {
+    if (!editTicket?.codigo || !newInternalNote.trim()) return;
+    try {
+      setAddingInternalNote(true);
+      await createInternalNote(editTicket.codigo, newInternalNote);
+      setNewInternalNote("");
+      await loadInternalNotes(editTicket.codigo);
+      toast({ title: "Nota interna agregada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al agregar nota interna" });
+    } finally {
+      setAddingInternalNote(false);
+    }
+  }
+
+  async function handleUpdateInternalNote() {
+    if (!editingInternalNoteId || !editingInternalNoteText.trim()) return;
+    try {
+      await updateInternalNote(editingInternalNoteId, editingInternalNoteText);
+      setEditingInternalNoteId(null);
+      setEditingInternalNoteText("");
+      if (editTicket?.codigo) await loadInternalNotes(editTicket.codigo);
+      toast({ title: "Nota interna actualizada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al actualizar nota interna" });
+    }
+  }
+
+  async function handleDeleteInternalNote(id: string) {
+    if (!confirm("¿Eliminar esta nota interna?")) return;
+    try {
+      await deleteInternalNote(id);
+      if (editTicket?.codigo) await loadInternalNotes(editTicket.codigo);
+      toast({ title: "Nota interna eliminada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error al eliminar nota interna" });
     }
   }
 
@@ -1560,15 +1814,19 @@ export default function TicketsPanelCoach({
                                 restante: saved.restante ?? null,
                                 // Mostrar SIEMPRE nombres cuando sea posible
                                 informante:
-                                  resolvePersonName(
+                                  (t as any).informante_nombre ||
+                                  (resolvePersonName(
                                     saved.informante ?? (t as any).informante
-                                  ) ?? "",
+                                  ) ??
+                                    ""),
                                 resolucion: saved.resolucion ?? "",
                                 resuelto_por:
-                                  resolvePersonName(
+                                  (t as any).resuelto_por_nombre ||
+                                  (resolvePersonName(
                                     saved.resuelto_por ??
                                       (t as any).resuelto_por
-                                  ) ?? "",
+                                  ) ??
+                                    ""),
                                 revision: saved.revision ?? "",
                                 tarea: saved.tarea ?? "",
                                 equipo: Array.isArray(saved.equipo)
@@ -1949,38 +2207,45 @@ export default function TicketsPanelCoach({
         </DialogContent>
       </Dialog>
 
-      <Drawer open={editOpen} onOpenChange={setEditOpen} direction="right">
-        <DrawerContent className="fixed right-0 top-0 bottom-0 w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl flex flex-col">
-          <DrawerHeader className="border-b">
+      <Sheet open={editOpen} onOpenChange={setEditOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-2xl md:max-w-4xl flex flex-col overflow-hidden"
+        >
+          <SheetHeader className="border-b pb-4 pr-12">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
-                <DrawerTitle className="text-lg">
-                  {editTicket?.nombre || "Detalle del ticket"}
-                </DrawerTitle>
-                <DrawerDescription className="mt-1">
+                <SheetTitle className="text-lg">
+                  {editForm.nombre ||
+                    editTicket?.nombre ||
+                    "Detalle del ticket"}
+                </SheetTitle>
+                <SheetDescription className="mt-1">
                   {editTicket?.codigo && (
                     <span className="text-xs text-slate-500">
                       Código: {editTicket.codigo}
                     </span>
                   )}
-                </DrawerDescription>
+                </SheetDescription>
               </div>
-              {editForm.estado && (
-                <Badge
+              <div className="shrink-0">
+                <Button
+                  size="sm"
                   variant="outline"
-                  className={`${
-                    STATUS_STYLE[
-                      String(editForm.estado).toUpperCase() as StatusKey
-                    ] || "bg-slate-100 text-slate-700"
-                  }`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!editTicket?.codigo) return;
+                    setReassignCoach("");
+                    setReassignOpen(true);
+                  }}
+                  disabled={!editTicket?.codigo || !canEdit}
+                  className="relative z-10 mt-1"
                 >
-                  {STATUS_LABEL[
-                    String(editForm.estado).toUpperCase() as StatusKey
-                  ] || String(editForm.estado)}
-                </Badge>
-              )}
+                  Reasignar ticket
+                </Button>
+              </div>
             </div>
-          </DrawerHeader>
+          </SheetHeader>
 
           <div className="flex-1 overflow-y-auto">
             {!editTicket ? (
@@ -1988,206 +2253,731 @@ export default function TicketsPanelCoach({
                 Selecciona un ticket
               </div>
             ) : (
-              <Tabs
-                value={editActiveTab}
-                onValueChange={setEditActiveTab}
-                className="w-full"
-              >
-                <div className="border-b px-6">
-                  <TabsList className="w-full justify-start h-12 bg-transparent p-0">
-                    <TabsTrigger
-                      value="general"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+              <>
+                <div className="px-6 pt-4">
+                  <div className="inline-flex items-center rounded-md border bg-white overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setEditActiveTab("general")}
+                      className={`px-3 py-1.5 text-xs ${
+                        editActiveTab === "general"
+                          ? "bg-slate-900 text-white"
+                          : "hover:bg-gray-50"
+                      }`}
+                      title="Editar campos"
                     >
                       General
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="detalles"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditActiveTab("detalle")}
+                      className={`px-3 py-1.5 text-xs border-l ${
+                        editActiveTab === "detalle"
+                          ? "bg-slate-900 text-white"
+                          : "hover:bg-gray-50"
+                      }`}
+                      title="Detalle del ticket (API)"
                     >
-                      Detalles
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="archivos"
-                      className="data-[state=active]:border-b-2 data-[state=active]:border-slate-900 rounded-none"
+                      Detalle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditActiveTab("notas")}
+                      className={`px-3 py-1.5 text-xs border-l ${
+                        editActiveTab === "notas"
+                          ? "bg-slate-900 text-white"
+                          : "hover:bg-gray-50"
+                      }`}
+                      title="Notas internas"
                     >
-                      Archivos
-                    </TabsTrigger>
-                  </TabsList>
+                      Notas internas
+                    </button>
+                  </div>
                 </div>
 
-                <TabsContent value="general" className="p-6 space-y-6 mt-0">
-                  {String(editForm.estado ?? "").toUpperCase() ===
-                    "PAUSADO" && (
-                    <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-                      <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
-                      <div className="text-sm text-amber-800">
-                        Este ticket está pausado y requiere acción. Por favor
-                        envía la información correspondiente.
+                <div
+                  className={editActiveTab === "general" ? "block" : "hidden"}
+                >
+                  <div className="p-6 space-y-8">
+                    {/* Alerta de Pausado */}
+                    {coerceStatus(editForm.estado as any) === "PAUSADO" && (
+                      <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                        <div className="text-sm text-amber-800">
+                          Este ticket está pausado y requiere acción. Por favor
+                          envía la información correspondiente.
+                        </div>
                       </div>
-                      <div className="ml-auto">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            try {
-                              setEditActiveTab("archivos");
-                              setTimeout(() => {
-                                editFileInputRef.current?.click();
-                              }, 0);
-                            } catch {}
-                          }}
-                        >
-                          Adjuntar ahora
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label
-                        htmlFor="edit-nombre"
-                        className="text-sm font-medium"
-                      >
-                        Título del ticket
-                      </Label>
+                    )}
+
+                    {/* Título editable */}
+                    <div className="space-y-1">
                       <Input
-                        id="edit-nombre"
-                        className="h-10"
+                        className="text-lg font-semibold border-transparent hover:border-slate-200 px-0 h-auto py-1 focus:ring-0 focus:border-slate-300 bg-transparent shadow-none"
                         value={editForm.nombre ?? ""}
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, nombre: e.target.value }))
                         }
-                        placeholder="Nombre o asunto"
+                        placeholder="Título del ticket"
+                        disabled={!canEdit}
                       />
                     </div>
 
-                    <Separator />
-
-                    {/* Resumen del ticket (sin Último estado ni Código, en lista vertical) */}
-                    {editTicket && (
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <User className="h-4 w-4 text-slate-400" />
-                          <span className="text-slate-500 min-w-[90px]">
-                            Alumno
-                          </span>
-                          <span className="truncate">
-                            {editTicket.alumno_nombre || "—"}
-                          </span>
-                        </div>
-                        {(editTicket as any).informante && (
-                          <div className="flex items-center gap-2 min-w-0">
-                            <Users className="h-4 w-4 text-slate-400" />
-                            <span className="text-slate-500 min-w-[90px]">
-                              Informante
-                            </span>
-                            <span className="truncate">
-                              {ticketDetail?.informante_nombre ||
-                                (editTicket as any).informante_nombre ||
-                                (editTicket as any).informante}
-                            </span>
-                          </div>
-                        )}
-                        {(editTicket as any).resuelto_por && (
-                          <div className="flex items-center gap-2 min-w-0">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                            <span className="text-slate-500 min-w-[90px]">
-                              Resuelto por
-                            </span>
-                            <span className="truncate">
-                              {ticketDetail?.resuelto_por_nombre ||
-                                (editTicket as any).resuelto_por_nombre ||
-                                (editTicket as any).resuelto_por}
-                            </span>
-                          </div>
-                        )}
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Calendar className="h-4 w-4 text-slate-400" />
-                          <span className="text-slate-500 min-w-[90px]">
-                            Creación
-                          </span>
-                          <span className="truncate">
-                            {fmtDate(editTicket.created_at)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Clock className="h-4 w-4 text-slate-400" />
-                          <span className="text-slate-500 min-w-[90px]">
-                            Deadline
-                          </span>
-                          <span className="truncate">
-                            {fmtDate(editForm.deadline ?? editTicket.deadline)}
-                          </span>
-                        </div>
+                    {/* Lista de Propiedades (Estilo Notion) */}
+                    <div className="grid grid-cols-[140px_1fr] gap-y-3 text-sm items-start">
+                      {/* Alumno */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <User className="h-4 w-4" /> <span>Alumno</span>
                       </div>
-                    )}
-                  </div>
-                </TabsContent>
+                      <div className="min-h-[24px] flex items-center font-medium">
+                        {editTicket?.alumno_nombre || "—"}
+                      </div>
 
-                <TabsContent value="detalles" className="p-6 space-y-6 mt-0">
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <User className="h-4 w-4 text-slate-500" />
-                      Personas involucradas
-                    </div>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="edit-informante" className="text-sm">
-                          Informante
-                        </Label>
-                        <Input
-                          id="edit-informante"
-                          className="h-10"
-                          value={
-                            (ticketDetail?.informante_nombre as any) ??
-                            ((editTicket as any)?.informante_nombre as any) ??
-                            editForm.informante ??
-                            ""
-                          }
-                          onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              informante: e.target.value,
-                            }))
-                          }
-                          disabled
-                          placeholder="Nombre del informante"
-                        />
+                      {/* Tarea (Links) - Integrado aquí */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6 pt-1">
+                        <LinkIcon className="h-4 w-4" /> <span>Tarea</span>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="edit-resuelto-por" className="text-sm">
-                          Resuelto por
-                        </Label>
-                        <Input
-                          id="edit-resuelto-por"
-                          className="h-10"
+                        {(() => {
+                          type TaskLink = {
+                            id?: string | number | null;
+                            url: string;
+                            title?: string | null;
+                          };
+                          const raw = Array.isArray(
+                            (ticketDetail as any)?.links
+                          )
+                            ? (ticketDetail as any).links
+                            : [];
+                          const taskLinks: TaskLink[] = (raw as any[])
+                            .map((it) => {
+                              if (typeof it === "string")
+                                return { id: null, url: it, title: null };
+                              const url =
+                                it?.url || it?.link || it?.enlace || "";
+                              const title =
+                                it?.titulo || it?.title || it?.nombre || null;
+                              return {
+                                id: it?.id ?? null,
+                                url,
+                                title,
+                              } as TaskLink;
+                            })
+                            .filter((t) => !!t.url);
+
+                          const onDeleteTask = async (
+                            id?: string | number | null
+                          ) => {
+                            if (!id) return;
+                            try {
+                              await deleteTicketLink(id);
+                              toast({ title: "Tarea eliminada" });
+                              if (editTicket?.codigo)
+                                await loadTicketDetail(editTicket.codigo);
+                            } catch (e) {
+                              console.error(e);
+                              toast({ title: "Error al eliminar tarea" });
+                            }
+                          };
+
+                          return (
+                            <>
+                              {taskLinks.length > 0 && (
+                                <div className="flex flex-col gap-1">
+                                  {taskLinks.map((t, i) => (
+                                    <div
+                                      key={`task-${t.id ?? i}`}
+                                      className="group flex items-center gap-2"
+                                    >
+                                      <a
+                                        href={normalizeUrl(t.url)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-sky-600 underline truncate max-w-[300px]"
+                                        title={t.url}
+                                      >
+                                        {t.title || t.url}
+                                      </a>
+                                      {canEdit && t.id != null && (
+                                        <button
+                                          onClick={() => onDeleteTask(t.id!)}
+                                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity"
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {canEdit && editTicket?.codigo && (
+                                <div className="flex items-center gap-2 mt-1">
+                                  <Input
+                                    placeholder="Agregar link..."
+                                    className="h-7 text-xs w-full max-w-[200px]"
+                                    value={newAudioUrl}
+                                    onChange={(e) =>
+                                      setNewAudioUrl(e.target.value)
+                                    }
+                                    onKeyDown={async (e) => {
+                                      if (e.key === "Enter") {
+                                        const url = (newAudioUrl || "").trim();
+                                        if (!url) return;
+                                        try {
+                                          await createTicketLink(
+                                            editTicket.codigo!,
+                                            { url }
+                                          );
+                                          setNewAudioUrl("");
+                                          await loadTicketDetail(
+                                            editTicket.codigo!
+                                          );
+                                          toast({ title: "Tarea creada" });
+                                        } catch (err) {
+                                          console.error(err);
+                                          toast({
+                                            title: "Error al crear tarea",
+                                          });
+                                        }
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                                    title="Guardar tarea"
+                                    onClick={async () => {
+                                      const url = (newAudioUrl || "").trim();
+                                      if (!url) return;
+                                      try {
+                                        await createTicketLink(
+                                          editTicket.codigo!,
+                                          { url }
+                                        );
+                                        setNewAudioUrl("");
+                                        await loadTicketDetail(
+                                          editTicket.codigo!
+                                        );
+                                        toast({ title: "Tarea creada" });
+                                      } catch (err) {
+                                        console.error(err);
+                                        toast({
+                                          title: "Error al crear tarea",
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <Plus className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Informante */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <Users className="h-4 w-4" /> <span>Informante</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        {editForm.informante || "—"}
+                      </div>
+
+                      {/* Resuelto por */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <CheckCircle2 className="h-4 w-4" />{" "}
+                        <span>Resuelto por</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        {editForm.resuelto_por || "—"}
+                      </div>
+
+                      {/* Creación */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <Clock className="h-4 w-4" /> <span>Creación</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center text-slate-700">
+                        {ticketDetail?.created_at
+                          ? new Date(ticketDetail.created_at).toLocaleString(
+                              "es-ES",
+                              {
+                                day: "numeric",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            )
+                          : "—"}
+                      </div>
+
+                      {/* Resolución */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <CalendarIcon className="h-4 w-4" />{" "}
+                        <span>Resolución</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center text-slate-700">
+                        {ticketDetail?.ultimo_estado?.estatus === "RESUELTO" &&
+                        ticketDetail?.ultimo_estado?.fecha
+                          ? new Date(
+                              ticketDetail.ultimo_estado.fecha
+                            ).toLocaleString("es-ES", {
+                              day: "numeric",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : "—"}
+                      </div>
+
+                      {/* Deadline */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <AlertTriangle className="h-4 w-4" />{" "}
+                        <span>Deadline</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        <input
+                          type="date"
+                          className="h-7 rounded border border-slate-200 px-2 text-xs"
                           value={
-                            (ticketDetail?.resuelto_por_nombre as any) ??
-                            ((editTicket as any)?.resuelto_por_nombre as any) ??
-                            editForm.resuelto_por ??
-                            ""
+                            editForm.deadline
+                              ? new Date(editForm.deadline)
+                                  .toISOString()
+                                  .split("T")[0]
+                              : ""
                           }
                           onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              resuelto_por: e.target.value,
+                            setEditForm((prev) => ({
+                              ...prev,
+                              deadline: e.target.value
+                                ? new Date(e.target.value).toISOString()
+                                : null,
                             }))
                           }
-                          disabled
-                          placeholder="Nombre de quien resolvió"
+                          disabled={!canEdit}
                         />
+                      </div>
+
+                      {/* Tiempo restante (SLA) */}
+                      {(ticketDetail?.plazo_info || editTicket?.plazo_info) &&
+                        !(ticketDetail?.plazo_info || editTicket?.plazo_info)
+                          ?.fue_respondido &&
+                        coerceStatus(editForm.estado as any) !== "RESUELTO" && (
+                          <>
+                            <div className="flex items-center gap-2 text-slate-500 h-6">
+                              <Clock className="h-4 w-4" />{" "}
+                              <span>Tiempo restante</span>
+                            </div>
+                            <div className="min-h-[24px] flex flex-col justify-center">
+                              <div
+                                className={`flex items-center gap-2 font-medium ${
+                                  (ticketDetail?.plazo_info ||
+                                    editTicket?.plazo_info)!.horas_restantes <=
+                                  0
+                                    ? "text-red-600"
+                                    : (ticketDetail?.plazo_info ||
+                                        editTicket?.plazo_info)!
+                                        .horas_restantes < 4
+                                    ? "text-amber-600"
+                                    : "text-emerald-600"
+                                }`}
+                              >
+                                <TicketTimer
+                                  hours={
+                                    (ticketDetail?.plazo_info ||
+                                      editTicket?.plazo_info)!.horas_restantes
+                                  }
+                                />
+                                {(ticketDetail?.plazo_info ||
+                                  editTicket?.plazo_info)!.horas_restantes <=
+                                  0 && (
+                                  <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                                    Requiere atención
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
+
+                      {/* Estado */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <RefreshCw className="h-4 w-4" /> <span>Estado</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild disabled={!canEdit}>
+                            <button
+                              className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
+                                STATUS_STYLE[
+                                  coerceStatus(editForm.estado as any)
+                                ]
+                              }`}
+                            >
+                              {
+                                STATUS_LABEL[
+                                  coerceStatus(editForm.estado as any)
+                                ]
+                              }
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            {estados.map((st) => (
+                              <DropdownMenuItem
+                                key={st}
+                                onClick={() =>
+                                  setEditForm((prev) => ({
+                                    ...prev,
+                                    estado: st as any,
+                                  }))
+                                }
+                                className="text-xs"
+                              >
+                                <span
+                                  className={`mr-2 inline-block h-2 w-2 rounded-full ${
+                                    STATUS_STYLE[st as StatusKey].split(" ")[0]
+                                  }`}
+                                />
+                                {STATUS_LABEL[st as StatusKey]}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
 
                     <Separator />
-                    {/* Equipo asignado y Trabajo/Resolución removidos para unificar el patrón */}
-                  </div>
 
-                  {/* Detalle desde API */}
-                  <div className="space-y-4">
+                    {/* Archivos (Compacto) */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                          <Paperclip className="h-4 w-4 text-slate-500" />{" "}
+                          Archivos
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            ref={editFileInputRef}
+                            type="file"
+                            className="hidden"
+                            multiple
+                            onChange={(e) => {
+                              const picked = Array.from(e.target.files ?? []);
+                              if (!picked.length) return;
+                              setEditFiles((prev) =>
+                                [...prev, ...picked].slice(0, 10)
+                              );
+                              e.currentTarget.value = "";
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            onClick={() => editFileInputRef.current?.click()}
+                          >
+                            + Agregar
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Lista de archivos existentes + nuevos */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {editExistingFiles.map((f) => (
+                          <div
+                            key={f.id}
+                            className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs group"
+                          >
+                            <div className="shrink-0 text-slate-400">
+                              {iconFor(f.mime_type, f.nombre_archivo)}
+                            </div>
+                            <div
+                              className="flex-1 truncate"
+                              title={f.nombre_archivo}
+                            >
+                              {f.nombre_archivo}
+                            </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() =>
+                                  downloadFile(f.id, f.nombre_archivo)
+                                }
+                                className="text-slate-400 hover:text-slate-700"
+                              >
+                                <Download className="h-3 w-3" />
+                              </button>
+                              <button
+                                onClick={() => openPreview(f)}
+                                className="text-slate-400 hover:text-slate-700"
+                              >
+                                <Eye className="h-3 w-3" />
+                              </button>
+                              {canEdit && (
+                                <button
+                                  onClick={() =>
+                                    setFileToDelete({
+                                      id: f.id,
+                                      nombre_archivo: f.nombre_archivo,
+                                    })
+                                  }
+                                  className="text-slate-400 hover:text-red-600"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        {editFiles.map((f, i) => (
+                          <div
+                            key={`new-${i}`}
+                            className="flex items-center gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
+                          >
+                            <div className="shrink-0 text-blue-400">
+                              {iconFor(f.type, f.name)}
+                            </div>
+                            <div className="flex-1 truncate font-medium text-blue-700">
+                              {f.name}
+                            </div>
+                            <button
+                              onClick={() =>
+                                setEditFiles((prev) =>
+                                  prev.filter((_, idx) => idx !== i)
+                                )
+                              }
+                              className="text-blue-400 hover:text-blue-700"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      {editFiles.length > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            if (!editTicket?.codigo) return;
+                            setUploadingEditFiles(true);
+                            try {
+                              await uploadTicketFiles(
+                                editTicket.codigo,
+                                editFiles
+                              );
+                              toast({ title: "Archivos subidos" });
+                              setEditFiles([]);
+                              const list = await getTicketFiles(
+                                editTicket.codigo
+                              );
+                              setEditExistingFiles(list);
+                            } catch (e) {
+                              console.error(e);
+                              toast({ title: "Error" });
+                            } finally {
+                              setUploadingEditFiles(false);
+                            }
+                          }}
+                          disabled={uploadingEditFiles}
+                        >
+                          {uploadingEditFiles
+                            ? "Subiendo..."
+                            : "Subir archivos"}
+                        </Button>
+                      )}
+
+                      {/* Grabador de audio (Compacto) */}
+                      <div className="flex items-center gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant={isRecording ? "destructive" : "outline"}
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            if (isRecording) stopRecording();
+                            else startRecording();
+                          }}
+                        >
+                          {isRecording ? "Detener" : "Grabar audio"}
+                        </Button>
+                        {isRecording && (
+                          <span className="text-xs text-red-500 animate-pulse">
+                            Grabando...
+                          </span>
+                        )}
+                        {audioPreviewUrl && (
+                          <div className="flex items-center gap-2">
+                            <audio
+                              src={audioPreviewUrl}
+                              controls
+                              className="h-6 w-24"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() => {
+                                URL.revokeObjectURL(audioPreviewUrl!);
+                                setAudioPreviewUrl(null);
+                                audioChunksRef.current = [];
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-6 text-xs"
+                              onClick={addRecordedToFiles}
+                            >
+                              Guardar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Observaciones */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium">
+                        Observaciones
+                      </Label>
+                      <div className="space-y-3 max-h-[300px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
+                        {commentsLoading ? (
+                          <div className="text-center py-4 text-xs text-slate-500">
+                            Cargando...
+                          </div>
+                        ) : comments.length === 0 ? (
+                          <div className="text-center py-4 text-xs text-slate-500">
+                            No hay observaciones.
+                          </div>
+                        ) : (
+                          comments.map((c) => (
+                            <div
+                              key={c.id}
+                              className="bg-white p-3 rounded border border-slate-100 shadow-sm text-sm group"
+                            >
+                              {editingCommentId === c.id ? (
+                                <div className="space-y-2">
+                                  <Textarea
+                                    value={editingCommentText}
+                                    onChange={(e) =>
+                                      setEditingCommentText(e.target.value)
+                                    }
+                                    className="min-h-[60px]"
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setEditingCommentId(null)}
+                                    >
+                                      Cancelar
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={handleUpdateComment}
+                                    >
+                                      Guardar
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex justify-between items-start mb-1">
+                                    <span className="font-semibold text-xs text-slate-700">
+                                      {c.user_nombre || "Usuario"}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      {c.created_at
+                                        ? new Date(c.created_at).toLocaleString(
+                                            "es-ES"
+                                          )
+                                        : ""}
+                                    </span>
+                                  </div>
+                                  <div className="text-slate-800 whitespace-pre-wrap break-words">
+                                    {(() => {
+                                      const content = c.contenido || "";
+                                      const urlRegex = /(https?:\/\/[^\s]+)/g;
+                                      const parts = content.split(urlRegex);
+                                      return parts.map((part, i) => {
+                                        if (part.match(urlRegex)) {
+                                          return (
+                                            <a
+                                              key={i}
+                                              href={part}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="text-blue-600 hover:underline"
+                                            >
+                                              {part}
+                                            </a>
+                                          );
+                                        }
+                                        return part;
+                                      });
+                                    })()}
+                                  </div>
+                                  {canEdit && (
+                                    <div className="mt-2 flex justify-end gap-2 opacity-50 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        onClick={() => {
+                                          setEditingCommentId(c.id);
+                                          setEditingCommentText(c.contenido);
+                                        }}
+                                        className="text-[10px] text-blue-600 hover:underline"
+                                      >
+                                        Editar
+                                      </button>
+                                      <button
+                                        onClick={() =>
+                                          handleDeleteComment(c.id)
+                                        }
+                                        className="text-[10px] text-red-600 hover:underline"
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      {canEdit && (
+                        <div className="flex gap-2 items-start">
+                          <Textarea
+                            placeholder="Escribir nueva observación..."
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            className="min-h-[40px] flex-1"
+                            rows={2}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={handleAddComment}
+                            disabled={addingComment || !newComment.trim()}
+                            className="mt-0.5"
+                          >
+                            {addingComment ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              "Enviar"
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className={editActiveTab === "detalle" ? "block" : "hidden"}
+                >
+                  <div className="p-6 space-y-4">
                     {ticketDetailLoading ? (
-                      <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
                         Cargando detalle…
                       </div>
                     ) : ticketDetailError ? (
@@ -2196,13 +2986,12 @@ export default function TicketsPanelCoach({
                       </div>
                     ) : ticketDetail ? (
                       <>
+                        {/* Resumen encabezado */}
                         <div className="rounded-lg border border-slate-200 bg-white p-4">
                           <div className="flex items-start justify-between gap-3">
                             <div>
-                              <div className="text-base font-semibold text-slate-900 break-words">
-                                {ticketDetail?.nombre ||
-                                  editTicket?.nombre ||
-                                  "Ticket"}
+                              <div className="text-base font-semibold text-slate-900">
+                                {ticketDetail?.nombre || "Ticket"}
                               </div>
                               {ticketDetail?.codigo && (
                                 <div className="text-xs text-slate-500 break-all">
@@ -2232,9 +3021,7 @@ export default function TicketsPanelCoach({
                                 Alumno
                               </div>
                               <div className="font-medium break-all">
-                                {ticketDetail?.alumno_nombre ||
-                                  editTicket?.alumno_nombre ||
-                                  "—"}
+                                {ticketDetail?.alumno_nombre || "—"}
                               </div>
                               {ticketDetail?.id_alumno && (
                                 <div className="text-xs text-slate-500 break-all">
@@ -2257,7 +3044,7 @@ export default function TicketsPanelCoach({
                                   ? new Date(
                                       ticketDetail.created_at
                                     ).toLocaleString("es-ES")
-                                  : fmtDate(editTicket?.created_at)}
+                                  : "—"}
                               </div>
                             </div>
                             <div className="space-y-1">
@@ -2269,7 +3056,7 @@ export default function TicketsPanelCoach({
                                   ? new Date(
                                       ticketDetail.deadline
                                     ).toLocaleString("es-ES")
-                                  : fmtDate(editTicket?.deadline)}
+                                  : "—"}
                               </div>
                             </div>
                             {ticketDetail?.plazo && (
@@ -2283,37 +3070,40 @@ export default function TicketsPanelCoach({
                           </div>
                         </div>
 
+                        {/* Descripción y tareas */}
                         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
                           <div className="flex items-center justify-between">
                             <div className="text-sm font-medium">
                               Descripción
                             </div>
-                            {!descEditing ? (
+                            {!descEditing && canEdit && (
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  setDescDraft(ticketDetail?.descripcion || "");
+                                  setDescDraft(
+                                    String(ticketDetail?.descripcion || "")
+                                  );
                                   setDescEditing(true);
                                 }}
                               >
                                 Editar
                               </Button>
-                            ) : null}
+                            )}
                           </div>
                           {!descEditing ? (
-                            <div className="whitespace-pre-wrap break-words text-sm text-slate-800">
+                            <div className="whitespace-pre-wrap text-sm text-slate-800">
                               {ticketDetail?.descripcion || "—"}
                             </div>
                           ) : (
                             <div className="space-y-2">
                               <Textarea
+                                rows={8}
                                 value={descDraft}
                                 onChange={(e) => setDescDraft(e.target.value)}
-                                rows={6}
                                 placeholder="Escribe la descripción del ticket..."
                               />
-                              <div className="flex items-center gap-2 justify-end">
+                              <div className="flex items-center justify-end gap-2">
                                 <Button
                                   variant="ghost"
                                   onClick={() => {
@@ -2331,7 +3121,7 @@ export default function TicketsPanelCoach({
                                     try {
                                       await updateTicket(editTicket.codigo, {
                                         descripcion: (descDraft || "").trim(),
-                                      });
+                                      } as any);
                                       await loadTicketDetail(editTicket.codigo);
                                       setDescEditing(false);
                                       toast({
@@ -2359,10 +3149,19 @@ export default function TicketsPanelCoach({
                               ...extractUrlsFromDescription(
                                 ticketDetail?.descripcion
                               ),
-                              ...((Array.isArray(ticketDetail?.links)
-                                ? ticketDetail.links
-                                : []) as string[]),
+                              ...(
+                                (Array.isArray((ticketDetail as any)?.links)
+                                  ? (ticketDetail as any).links
+                                  : []) as any[]
+                              )
+                                .map((it: any) =>
+                                  typeof it === "string"
+                                    ? it
+                                    : it?.url || it?.link || it?.enlace || ""
+                                )
+                                .filter((s: string) => !!s),
                             ];
+                            // Dedupe final
                             const seen = new Set<string>();
                             const links = urlList.filter((u) => {
                               const k = String(u || "").toLowerCase();
@@ -2373,7 +3172,9 @@ export default function TicketsPanelCoach({
                             });
                             return links.length > 0 ? (
                               <div className="pt-1">
-                                <div className="text-sm font-medium">Links</div>
+                                <div className="text-sm font-medium">
+                                  Tareas
+                                </div>
                                 <div className="mt-1 flex flex-col gap-1">
                                   {links.map((u, i) => (
                                     <a
@@ -2392,6 +3193,7 @@ export default function TicketsPanelCoach({
                           })()}
                         </div>
 
+                        {/* Coaches */}
                         {Array.isArray(ticketDetail?.coaches) &&
                           ticketDetail.coaches.length > 0 && (
                             <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -2421,6 +3223,7 @@ export default function TicketsPanelCoach({
                             </div>
                           )}
 
+                        {/* Estados */}
                         <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
                           <div className="text-sm font-medium">Estados</div>
                           {ticketDetail?.ultimo_estado?.estatus && (
@@ -2474,470 +3277,171 @@ export default function TicketsPanelCoach({
                         </div>
                       </>
                     ) : (
-                      <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
                         Sin datos de detalle
                       </div>
                     )}
                   </div>
-                </TabsContent>
+                </div>
 
-                <TabsContent value="archivos" className="p-6 space-y-6 mt-0">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Paperclip className="h-4 w-4 text-slate-500" />
-                        Archivos adjuntos
+                <div className={editActiveTab === "notas" ? "block" : "hidden"}>
+                  <div className="p-6 space-y-4">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">
+                          Notas internas (Privado)
+                        </Label>
+                        <span className="text-xs text-slate-500">
+                          Solo visible para el equipo
+                        </span>
                       </div>
-                      {editTicket?.codigo && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openFilesFor(editTicket.codigo!)}
-                        >
-                          Ver todos
-                        </Button>
-                      )}
-                    </div>
 
-                    {editFilesLoading ? (
-                      <div className="flex items-center justify-center py-8 text-slate-500">
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Cargando archivos...
-                      </div>
-                    ) : editExistingFiles.length > 0 ? (
-                      <div className="space-y-2">
-                        <div className="text-xs text-slate-500">
-                          {editExistingFiles.length} archivo(s) existente(s)
-                        </div>
-                        <div className="space-y-2">
-                          {editExistingFiles.map((f) => (
+                      {/* Lista de notas */}
+                      <div className="space-y-4 max-h-[400px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-4">
+                        {internalNotesLoading ? (
+                          <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+                            Cargando notas...
+                          </div>
+                        ) : internalNotes.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-slate-500">
+                            <p>No hay notas internas.</p>
+                          </div>
+                        ) : (
+                          internalNotes.map((note) => (
                             <div
-                              key={f.id}
-                              className="flex items-center gap-3 rounded-lg border bg-slate-50 p-3"
+                              key={note.id}
+                              className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
                             >
-                              <div className="flex h-10 w-10 items-center justify-center rounded bg-white">
-                                {iconFor(f.mime_type, f.nombre_archivo)}
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <div
-                                  className="truncate text-sm font-medium"
-                                  title={f.nombre_archivo}
-                                >
-                                  {shortenFileName(f.nombre_archivo, 30)}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+                                    {(note.user_nombre || "U")[0].toUpperCase()}
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-xs font-semibold text-slate-900">
+                                      {note.user_nombre || "Usuario"}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500">
+                                      {note.created_at
+                                        ? new Date(
+                                            note.created_at
+                                          ).toLocaleDateString()
+                                        : ""}
+                                    </span>
+                                  </div>
                                 </div>
-                                <div className="text-xs text-slate-500">
-                                  {f.tamano_bytes
-                                    ? `${Math.ceil(f.tamano_bytes / 1024)} KB`
-                                    : "—"}
+                                {canEdit && (
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+                                      onClick={() => {
+                                        setEditingInternalNoteId(note.id);
+                                        setEditingInternalNoteText(
+                                          note.contenido
+                                        );
+                                      }}
+                                    >
+                                      <FileText className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 w-6 p-0 text-slate-400 hover:text-red-600"
+                                      onClick={() =>
+                                        handleDeleteInternalNote(note.id)
+                                      }
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+
+                              {editingInternalNoteId === note.id ? (
+                                <div className="mt-2 space-y-2">
+                                  <Textarea
+                                    value={editingInternalNoteText}
+                                    onChange={(e) =>
+                                      setEditingInternalNoteText(e.target.value)
+                                    }
+                                    className="min-h-[60px] text-sm"
+                                  />
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditingInternalNoteId(null);
+                                        setEditingInternalNoteText("");
+                                      }}
+                                    >
+                                      Cancelar
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      onClick={handleUpdateInternalNote}
+                                      disabled={!editingInternalNoteText.trim()}
+                                    >
+                                      Guardar
+                                    </Button>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => openPreview(f)}
-                                  aria-label={`Ver ${f.nombre_archivo}`}
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-red-600"
-                                  onClick={() =>
-                                    setFileToDelete({
-                                      id: f.id,
-                                      nombre_archivo: f.nombre_archivo,
-                                    })
-                                  }
-                                  aria-label={`Eliminar ${f.nombre_archivo}`}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
+                              ) : (
+                                <div className="text-sm text-slate-700 whitespace-pre-wrap break-words pl-8">
+                                  {note.contenido}
+                                </div>
+                              )}
                             </div>
-                          ))}
-                        </div>
-                        {editExistingFiles.length > 4 && (
-                          <div className="text-xs text-slate-500 text-center pt-2">
-                            +{editExistingFiles.length - 4} más
-                          </div>
+                          ))
                         )}
                       </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 mb-2">
-                          <FileIcon className="h-6 w-6 text-slate-400" />
-                        </div>
-                        <p className="text-sm text-slate-500">
-                          No hay archivos adjuntos
-                        </p>
-                      </div>
-                    )}
 
-                    {/* Links detectados en la descripción (clicables) */}
-                    {(() => {
-                      const urlList: string[] = [
-                        ...extractUrlsFromDescription(
-                          ticketDetail?.descripcion
-                        ),
-                        ...((Array.isArray(ticketDetail?.links)
-                          ? ticketDetail.links
-                          : []) as string[]),
-                      ];
-                      const seen = new Set<string>();
-                      const links = urlList.filter((u) => {
-                        const k = String(u || "").toLowerCase();
-                        if (!k) return false;
-                        if (seen.has(k)) return false;
-                        seen.add(k);
-                        return true;
-                      });
-                      return links.length > 0 ? (
-                        <div className="mt-3">
-                          <div className="text-sm font-medium">Links</div>
-                          <div className="mt-1 flex flex-col gap-1">
-                            {links.map((u, i) => (
-                              <a
-                                key={`edit-links-${i}`}
-                                href={normalizeUrl(u)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-sky-600 underline break-all text-sm"
-                              >
-                                {u}
-                              </a>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null;
-                    })()}
-
-                    <Separator />
-
-                    <div className="space-y-3">
-                      <Label className="text-sm font-medium">
-                        Adjuntar nuevos archivos
-                      </Label>
-                      <input
-                        ref={editFileInputRef}
-                        type="file"
-                        className="hidden"
-                        multiple
-                        onChange={(e) => {
-                          const picked = Array.from(e.target.files ?? []);
-                          if (!picked.length) return;
-                          setEditFiles((prev) =>
-                            [...prev, ...picked].slice(0, 10)
-                          );
-                          e.currentTarget.value = "";
-                        }}
-                      />
-                      <Button
-                        variant="outline"
-                        className="w-full gap-2 bg-transparent"
-                        onClick={() => editFileInputRef.current?.click()}
-                      >
-                        <Paperclip className="h-4 w-4" />
-                        Seleccionar archivos
-                      </Button>
-                      {editFiles.length > 0 && (
-                        <div className="space-y-2">
-                          <div className="text-xs text-slate-500">
-                            {editFiles.length} archivo(s) seleccionado(s)
-                          </div>
-                          <div className="space-y-2">
-                            {editFiles.map((f, i) => (
-                              <div
-                                key={`${f.name}-${i}`}
-                                className="flex items-center gap-3 rounded-lg border bg-white p-3"
-                              >
-                                <div className="flex h-10 w-10 items-center justify-center rounded bg-slate-100">
-                                  {iconFor(f.type, f.name)}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div
-                                    className="truncate text-sm font-medium"
-                                    title={f.name}
-                                  >
-                                    {f.name}
-                                  </div>
-                                  <div className="text-xs text-slate-500">
-                                    {Math.ceil(f.size / 1024)} KB
-                                  </div>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() =>
-                                    setEditFiles((prev) =>
-                                      prev.filter((_, idx) => idx !== i)
-                                    )
-                                  }
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
+                      {/* Formulario nueva nota */}
+                      {canEdit && (
+                        <div className="flex gap-2 items-start">
+                          <Textarea
+                            value={newInternalNote}
+                            onChange={(e) => setNewInternalNote(e.target.value)}
+                            placeholder="Escribe una nota interna..."
+                            className="min-h-[80px] resize-none"
+                          />
+                          <Button
+                            onClick={handleAddInternalNote}
+                            disabled={
+                              addingInternalNote || !newInternalNote.trim()
+                            }
+                            className="shrink-0"
+                          >
+                            {addingInternalNote ? "..." : "Agregar"}
+                          </Button>
                         </div>
                       )}
-
-                      {/* Enlaces para adjuntar como URLs */}
-                      <div className="space-y-2 pt-2">
-                        <Label className="text-sm font-medium">Enlaces</Label>
-                        <div className="flex gap-2">
-                          <div className="relative flex-1">
-                            <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <Input
-                              className="h-10 pl-9"
-                              placeholder="https://..."
-                              value={editLinkInput}
-                              onChange={(e) => setEditLinkInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  const raw = editLinkInput.trim();
-                                  if (!raw) return;
-                                  const url = /^https?:\/\//i.test(raw)
-                                    ? raw
-                                    : `https://${raw}`;
-                                  try {
-                                    new URL(url);
-                                    setEditLinks((prev) =>
-                                      Array.from(new Set([...prev, url])).slice(
-                                        0,
-                                        10
-                                      )
-                                    );
-                                    setEditLinkInput("");
-                                  } catch {}
-                                }
-                              }}
-                            />
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              const raw = editLinkInput.trim();
-                              if (!raw) return;
-                              const url = /^https?:\/\//i.test(raw)
-                                ? raw
-                                : `https://${raw}`;
-                              try {
-                                new URL(url);
-                                setEditLinks((prev) =>
-                                  Array.from(new Set([...prev, url])).slice(
-                                    0,
-                                    10
-                                  )
-                                );
-                                setEditLinkInput("");
-                              } catch {}
-                            }}
-                          >
-                            Agregar
-                          </Button>
-                        </div>
-                        {editLinks.length > 0 && (
-                          <div className="space-y-2">
-                            {editLinks.map((u, i) => (
-                              <div
-                                key={`${u}-${i}`}
-                                className="flex items-center gap-2 rounded-lg border bg-slate-50 px-3 py-2"
-                              >
-                                <LinkIcon className="h-4 w-4 shrink-0 text-slate-400" />
-                                <a
-                                  href={u}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="min-w-0 flex-1 truncate text-sm text-blue-600 hover:underline"
-                                >
-                                  {u}
-                                </a>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 w-7 p-0"
-                                  onClick={() =>
-                                    setEditLinks((prev) =>
-                                      prev.filter((x) => x !== u)
-                                    )
-                                  }
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="mt-2 flex gap-2">
-                          <Button
-                            size="sm"
-                            className="flex-1"
-                            onClick={async () => {
-                              if (!editTicket?.codigo) return;
-                              if (
-                                editFiles.length === 0 &&
-                                editLinks.length === 0
-                              ) {
-                                toast({
-                                  title:
-                                    "No hay archivos ni enlaces para subir",
-                                });
-                                return;
-                              }
-                              setUploadingEditFiles(true);
-                              try {
-                                // 1) Subir archivos físicos (si hay)
-                                if (editFiles.length > 0) {
-                                  await uploadTicketFiles(
-                                    editTicket.codigo,
-                                    editFiles,
-                                    []
-                                  );
-                                  // refrescar la lista de archivos existentes
-                                  const list = await getTicketFiles(
-                                    editTicket.codigo
-                                  );
-                                  setEditExistingFiles(list);
-                                  if (openFiles === editTicket.codigo) {
-                                    setFiles(list);
-                                  }
-                                }
-
-                                // 2) Integrar enlaces a la descripción
-                                if (editLinks.length > 0) {
-                                  // asegurarnos de tener una base de descripción
-                                  const base = ticketDetail?.descripcion || "";
-                                  // extraer URLs existentes y fusionar con nuevas
-                                  const existing =
-                                    extractUrlsFromDescription(base);
-                                  const mergedSet = new Set<string>(
-                                    existing.map((u) => normalizeUrl(u))
-                                  );
-                                  for (const raw of editLinks) {
-                                    const nu = normalizeUrl(raw);
-                                    if (nu) mergedSet.add(nu);
-                                  }
-                                  const merged = Array.from(mergedSet);
-                                  // limpiar línea previa de URLs: ... (si existe)
-                                  const lines: string[] = base.split(/\r?\n/);
-                                  const withoutLine = lines.filter(
-                                    (ln: string) => !/^\s*urls\s*:/i.test(ln)
-                                  );
-                                  const cleanDesc = withoutLine
-                                    .join("\n")
-                                    .trim();
-                                  const withUrls =
-                                    merged.length > 0
-                                      ? (cleanDesc ? cleanDesc + "\n" : "") +
-                                        `URLs: ${merged.join(", ")}`
-                                      : cleanDesc;
-                                  await updateTicket(editTicket.codigo, {
-                                    descripcion: withUrls || undefined,
-                                  } as any);
-                                  // recargar detalle para reflejar cambios
-                                  await loadTicketDetail(editTicket.codigo);
-                                  toast({
-                                    title: "Enlaces guardados en descripción",
-                                  });
-                                }
-
-                                setEditFiles([]);
-                                setEditLinks([]);
-                              } catch (e) {
-                                console.error(e);
-                                toast({ title: "Error al subir/guardar" });
-                              } finally {
-                                setUploadingEditFiles(false);
-                              }
-                            }}
-                            disabled={uploadingEditFiles}
-                          >
-                            {uploadingEditFiles
-                              ? "Procesando..."
-                              : "Subir archivos / Guardar URLs"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => {
-                              setEditFiles([]);
-                              setEditLinks([]);
-                              setEditLinkInput("");
-                            }}
-                          >
-                            Limpiar
-                          </Button>
-                        </div>
-                      </div>
                     </div>
                   </div>
-                </TabsContent>
-              </Tabs>
+                </div>
+              </>
             )}
           </div>
 
-          <DrawerFooter className="border-t">
+          <SheetFooter className="border-t pt-4">
             <div className="flex items-center justify-end gap-2">
-              {editTicket?.codigo && (
+              {editTicket?.codigo && isAdmin && (
                 <Button
                   variant="destructive"
-                  onClick={() => setDeleteTicketCodigo(editTicket.codigo!)}
+                  onClick={() => setDeleteConfirmOpen(true)}
                 >
                   Eliminar
                 </Button>
               )}
-              <DrawerClose asChild>
-                <Button variant="outline">Cancelar</Button>
-              </DrawerClose>
-              <Button
-                onClick={() => {
-                  if (!editTicket) return;
-                  setRows((prev) =>
-                    prev.map((r) =>
-                      r.id === editTicket.id
-                        ? {
-                            ...r,
-                            nombre: editForm.nombre ?? r.nombre,
-                            estado: (editForm.estado as any) ?? r.estado,
-                            deadline: editForm.deadline ?? r.deadline,
-                          }
-                        : r
-                    )
-                  );
-                  setDetailsById((prev) => ({
-                    ...prev,
-                    [editTicket.id]: {
-                      prioridad: editForm.prioridad as any,
-                      plazo: editForm.plazo ?? null,
-                      restante: editForm.restante ?? null,
-                      informante: editForm.informante ?? "",
-                      resolucion: editForm.resolucion ?? "",
-                      resuelto_por: editForm.resuelto_por ?? "",
-                      revision: editForm.revision ?? "",
-                      tarea: editForm.tarea ?? "",
-                      equipo: Array.isArray(editForm.equipo)
-                        ? editForm.equipo
-                        : [],
-                    },
-                  }));
-                  toast({ title: "Cambios guardados" });
-                  setEditOpen(false);
-                }}
-              >
-                Guardar cambios
-              </Button>
+              <SheetClose asChild>
+                <Button variant="outline">Cerrar</Button>
+              </SheetClose>
             </div>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       {/* Confirmación: eliminar ticket */}
       <Dialog
