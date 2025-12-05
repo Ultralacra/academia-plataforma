@@ -31,6 +31,7 @@ import {
   Eye,
   CalendarIcon,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -287,7 +288,12 @@ export default function TicketsPanelCoach({
   const [creating, setCreating] = useState(false);
   const [localTickets, setLocalTickets] = useState<any[]>([]);
   const [coachStudents, setCoachStudents] = useState<
-    { alumno: string; nombre: string }[]
+    {
+      alumno: string;
+      nombre: string;
+      fase?: string | null;
+      estatus?: string | null;
+    }[]
   >([]);
   const [selectedAlumno, setSelectedAlumno] = useState<string>("");
   const [studentQuery, setStudentQuery] = useState("");
@@ -480,6 +486,8 @@ export default function TicketsPanelCoach({
             const simple = (list as CoachStudent[]).map((r) => ({
               alumno: r.id_alumno,
               nombre: r.alumno_nombre,
+              fase: r.fase,
+              estatus: r.estatus,
             }));
             if (alive) {
               setCoachStudents(simple);
@@ -956,6 +964,31 @@ export default function TicketsPanelCoach({
     }, 500);
   }
 
+  function clearRecording() {
+    if (audioPreviewUrl) {
+      URL.revokeObjectURL(audioPreviewUrl);
+      setAudioPreviewUrl(null);
+    }
+    setRecordedBlob(null);
+    // Remove the latest audio recording from the file list
+    setCreateFiles((prev) => {
+      let indexToRemove = -1;
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (
+          prev[i].type === "audio/webm" &&
+          prev[i].name.startsWith("grabacion-")
+        ) {
+          indexToRemove = i;
+          break;
+        }
+      }
+      if (indexToRemove !== -1) {
+        return prev.filter((_, i) => i !== indexToRemove);
+      }
+      return prev;
+    });
+  }
+
   function addRecordedToFiles() {
     if (!recordedBlob) return;
     const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
@@ -1398,7 +1431,7 @@ export default function TicketsPanelCoach({
                             : coachStudents
                           ).map((s) => (
                             <SelectItem key={s.alumno} value={s.alumno}>
-                              {s.nombre} ({s.alumno})
+                              {s.nombre}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1503,12 +1536,22 @@ export default function TicketsPanelCoach({
                     </div>
 
                     {audioPreviewUrl && (
-                      <div className="rounded-lg border bg-slate-50 p-3">
+                      <div className="rounded-lg border bg-slate-50 p-3 flex items-center gap-2">
                         <audio
                           src={audioPreviewUrl}
                           controls
                           className="w-full"
                         />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={clearRecording}
+                          className="shrink-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          title="Eliminar grabación"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     )}
 

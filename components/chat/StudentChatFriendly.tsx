@@ -70,6 +70,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // Tipos movidos a ./chat-types
 
@@ -124,6 +125,7 @@ export default function CoachChatInline({
   resolveName?: (tipo: "equipo" | "cliente" | "admin", id: string) => string;
   onBack?: () => void;
 }) {
+  const isMobile = useIsMobile();
   const normRoom = React.useMemo(
     () => (room || "").trim().toLowerCase(),
     [room]
@@ -1597,7 +1599,7 @@ export default function CoachChatInline({
                   String(msg.client_session) ===
                     String(clientSessionRef.current);
                 if (!isMineById && !isMineBySession) {
-                  // playNotificationSound(); // Deshabilitado para evitar doble sonido con GlobalChatNotifications
+                  playNotificationSound();
                   const evtBump = new CustomEvent("chat:unread-bump", {
                     detail: { chatId: msg?.id_chat, role, at: Date.now() },
                   });
@@ -1679,6 +1681,9 @@ export default function CoachChatInline({
               !senderIsMeByOutbox &&
               !senderIsMeByRecent
             ) {
+              console.log(
+                "[StudentChatFriendly] Playing sound for incoming message"
+              );
               playNotificationSound();
             }
 
@@ -4087,7 +4092,7 @@ export default function CoachChatInline({
                   Math.min(e.target.scrollHeight, 120) + "px";
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey && !isMobile) {
                   e.preventDefault();
                   send();
                 } else {

@@ -15,7 +15,6 @@ const processedMessageIds = new Set<string>();
 export function GlobalChatNotifications() {
   const { user } = useAuth();
   const socketRef = useRef<Socket | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const myParticipantIds = useRef<Record<string, string>>({});
   const { toast } = useToast();
   const pathname = usePathname();
@@ -25,13 +24,7 @@ export function GlobalChatNotifications() {
     pathnameRef.current = pathname;
   }, [pathname]);
 
-  useEffect(() => {
-    // Preload notification sound
-    audioRef.current = new Audio(
-      "https://res.cloudinary.com/dzkq67qmu/video/upload/v1733326786/notification_sound_y8j3s9.mp3"
-    );
-    audioRef.current.volume = 0.5;
-  }, []);
+  // Removed unused audioRef preload since we use globalAudio in utils now
 
   useEffect(() => {
     if (!user) return;

@@ -22,6 +22,8 @@ export type CoachStudent = {
   coach_nombre?: string;
   puesto?: string | null;
   area?: string | null;
+  fase?: string | null;
+  estatus?: string | null;
   updated_at?: string;
   created_at?: string;
 };
@@ -77,6 +79,8 @@ export async function getCoachStudents(coachCode: string) {
     coach_nombre: r.coach_nombre,
     puesto: r.puesto ?? null,
     area: r.area ?? null,
+    fase: r.fase ?? null,
+    estatus: r.estatus ?? r.status ?? null,
     updated_at: r.updated_at ?? null,
     created_at: r.created_at ?? null,
   })) as CoachStudent[];

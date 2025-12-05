@@ -26,6 +26,7 @@ import { getEmitter, normalizeDateStr, normalizeTipo } from "./chat-core";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST, apiFetch, buildUrl } from "@/lib/api-config";
 import { playNotificationSound } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -120,6 +121,7 @@ export default function CoachChatInline({
   resolveName?: (tipo: "equipo" | "cliente" | "admin", id: string) => string;
   onBack?: () => void;
 }) {
+  const isMobile = useIsMobile();
   const normRoom = React.useMemo(
     () => (room || "").trim().toLowerCase(),
     [room]
@@ -1690,6 +1692,9 @@ export default function CoachChatInline({
               !senderIsMeByOutbox &&
               !senderIsMeByRecent
             ) {
+              console.log(
+                "[CoachChatInline] Playing sound for incoming message"
+              );
               playNotificationSound();
             }
 
@@ -3765,7 +3770,7 @@ export default function CoachChatInline({
                     Math.min(e.target.scrollHeight, 100) + "px";
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+                  if (e.key === "Enter" && !e.shiftKey && !isMobile) {
                     e.preventDefault();
                     send();
                   } else {
