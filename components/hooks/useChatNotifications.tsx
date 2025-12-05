@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/use-toast";
+import { usePathname } from "next/navigation";
+import { playNotificationSound } from "@/lib/utils";
 
 type Sender = "admin" | "alumno" | "coach";
 
@@ -21,6 +23,7 @@ export function useChatNotifications(opts?: {
 }) {
   const role: Sender = opts?.role ?? "admin";
   const enableToast = opts?.enableToast ?? true;
+  const pathname = usePathname();
   const [unreadByRoom, setUnreadByRoom] = useState<PerRoom>({});
   const [lastEvent, setLastEvent] = useState<ChatNewEvent | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -75,6 +78,13 @@ export function useChatNotifications(opts?: {
               ...prev,
               [d.room]: (prev[d.room] ?? 0) + 1,
             }));
+
+            const isChatView =
+              pathname?.includes("/chat") || pathname?.includes("/teamsv2");
+            if (!isChatView) {
+              playNotificationSound();
+            }
+
             if (enableToast && document.visibilityState !== "visible") {
               try {
                 toast({

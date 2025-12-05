@@ -7,6 +7,10 @@ import { CHAT_HOST } from "@/lib/api-config";
 import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
 import { usePathname } from "next/navigation";
+import { playNotificationSound } from "@/lib/utils";
+
+// Global set for deduplication across component instances/remounts
+const processedMessageIds = new Set<string>();
 
 export function GlobalChatNotifications() {
   const { user } = useAuth();
@@ -15,19 +19,26 @@ export function GlobalChatNotifications() {
   const myParticipantIds = useRef<Record<string, string>>({});
   const { toast } = useToast();
   const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     // Preload notification sound
     audioRef.current = new Audio(
       "https://res.cloudinary.com/dzkq67qmu/video/upload/v1733326786/notification_sound_y8j3s9.mp3"
     );
+    audioRef.current.volume = 0.5;
   }, []);
 
   useEffect(() => {
     if (!user) return;
 
     // If user is coach/equipo, we use the dedicated CoachChatNotifier component
-    if (user.role === "coach" || user.role === "equipo") return;
+    const role = (user.role || "").toLowerCase();
+    if (role === "coach" || role === "equipo") return;
 
     const token = getAuthToken();
     if (!token) return;
@@ -124,6 +135,17 @@ export function GlobalChatNotifications() {
     });
 
     socket.on("chat.message", (msg: any) => {
+      // Deduplication
+      const msgId =
+        msg.id_mensaje || msg.id || `${msg.id_chat}-${msg.created_at}`;
+      if (processedMessageIds.has(msgId)) {
+        return;
+      }
+      processedMessageIds.add(msgId);
+      setTimeout(() => {
+        processedMessageIds.delete(msgId);
+      }, 10000);
+
       console.debug("[GlobalChatNotifications] Message received:", msg);
       const cid = msg.id_chat;
       const myPid = myParticipantIds.current[cid];
@@ -143,10 +165,15 @@ export function GlobalChatNotifications() {
         let msgRole = "";
         if (rawType === "cliente" || rawType === "alumno") msgRole = "student";
         else if (rawType === "equipo" || rawType === "coach") msgRole = "coach";
-        else if (rawType === "admin") msgRole = "admin";
+        else if (rawType === "admin" || rawType === "usuario")
+          msgRole = "admin";
 
         // If I am a student, and the message is from a student, it's me (or another student, but usually me in 1:1)
-        if (user.role === "student" && msgRole === "student") isMe = true;
+        if (
+          (user.role === "student" || user.role === "cliente") &&
+          msgRole === "student"
+        )
+          isMe = true;
 
         // If I am admin, and message is from admin, it's me
         if (user.role === "admin" && msgRole === "admin") isMe = true;
@@ -161,12 +188,13 @@ export function GlobalChatNotifications() {
       }
 
       if (!isMe) {
-        // Play sound
-        // Play always if hidden, or if visible but we want feedback
-        // We'll play it always for now as requested
-        // audioRef.current
-        //   ?.play()
-        //   .catch((e) => console.error("Audio play failed", e));
+        // Play sound if not in chat view (chat components handle their own sounds)
+        const currentPath = pathnameRef.current;
+        const isChatView =
+          currentPath?.includes("/chat") || currentPath?.includes("/teamsv2");
+        if (!isChatView) {
+          playNotificationSound();
+        }
 
         // Show toast
         toast({

@@ -45,3 +45,20 @@ export function getSpanishApiError(err: unknown, fallback = "Ocurrió un error")
   const pretty = k.replace(/^\s*"|"\s*$/g, "");
   return pretty.charAt(0).toUpperCase() + pretty.slice(1);
 }
+
+export function playNotificationSound() {
+  try {
+    // Sonido de notificación
+    const audio = new Audio("https://res.cloudinary.com/dzkq67qmu/video/upload/v1733326786/notification_sound_y8j3s9.mp3");
+    audio.volume = 0.5;
+    const promise = audio.play();
+    if (promise !== undefined) {
+      promise.catch((e) => {
+        // Los navegadores bloquean autoplay si no hay interacción previa
+        console.error("Error playing sound (autoplay blocked?):", e);
+      });
+    }
+  } catch (e) {
+    console.error("Audio error", e);
+  }
+}

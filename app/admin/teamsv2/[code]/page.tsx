@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,7 @@ export default function CoachDetailPage({
 }) {
   const code = params.code;
   const router = useRouter();
+  const searchParams = useSearchParams();
   const chatServerUrl = (CHAT_HOST || "").replace(/\/$/, "");
 
   const [open, setOpen] = useState(false);
@@ -827,6 +828,91 @@ export default function CoachDetailPage({
     }
   }, [activeChatTab]);
 
+  // Handle deep linking to chat via ?openChatId=...
+  useEffect(() => {
+    const openChatId = searchParams.get("openChatId");
+    if (!openChatId || !chatList || chatList.length === 0) return;
+
+    const targetChat = chatList.find(
+      (c: any) => String(c.id_chat || c.id) === openChatId
+    );
+
+    if (targetChat) {
+      const parts = targetChat.participants || targetChat.participantes || [];
+      const studentPart = parts.find(
+        (p: any) => String(p.participante_tipo).toLowerCase() === "cliente"
+      );
+      const teamPart = parts.find(
+        (p: any) =>
+          String(p.participante_tipo).toLowerCase() === "equipo" &&
+          String(p.id_equipo).toLowerCase() !== String(code).toLowerCase()
+      );
+
+      if (studentPart) {
+        const sCode = String(studentPart.id_cliente);
+        const sName = studentsList.find((s) => s.code === sCode)?.name || sCode;
+
+        setTargetTeamCode(null);
+        setTargetStudentCode(sCode);
+        setTargetStudentName(sName);
+
+        const tabKey = `student:${sCode}`;
+        setOpenTabs((prev) => {
+          const exists = prev.some((p) => p.key === tabKey);
+          return exists
+            ? prev
+            : [
+                ...prev,
+                {
+                  key: tabKey,
+                  type: "student",
+                  code: sCode,
+                  name: sName,
+                },
+              ];
+        });
+        setActiveChatTab(tabKey);
+      } else if (teamPart) {
+        const tCode = String(teamPart.id_equipo);
+        const tName =
+          teamsList.find((t) => t.codigo === tCode)?.nombre || tCode;
+
+        setTargetStudentCode(null);
+        setTargetStudentName("");
+        setTargetTeamCode(tCode);
+
+        const tabKey = `team:${tCode}`;
+        setOpenTabs((prev) => {
+          const exists = prev.some((p) => p.key === tabKey);
+          return exists
+            ? prev
+            : [
+                ...prev,
+                {
+                  key: tabKey,
+                  type: "team",
+                  code: tCode,
+                  name: tName,
+                },
+              ];
+        });
+        setActiveChatTab(tabKey);
+      }
+
+      setChatInfo({
+        chatId: targetChat.id_chat || targetChat.id,
+        myParticipantId: null,
+      });
+      setCurrentOpenChatId(targetChat.id_chat || targetChat.id);
+      setMobileChatOpen(true);
+
+      // Clean up URL
+      const newParams = new URLSearchParams(searchParams.toString());
+      newParams.delete("openChatId");
+      router.replace(`${window.location.pathname}?${newParams.toString()}`);
+    }
+  }, [searchParams, chatList, code, studentsList, teamsList, router]);
+
   // Cargar alumnos asignados para este coach/equipo (usando métricas v2)
   useEffect(() => {
     if (!code) return;
@@ -1293,7 +1379,17 @@ export default function CoachDetailPage({
                                         }`}
                                       >
                                         {item.lastAt
-                                          ? formatTime(item.lastAt)
+                                          ? new Date(
+                                              item.lastAt
+                                            ).toLocaleString("es-ES", {
+                                              timeZone: "UTC",
+                                              weekday: "short",
+                                              day: "2-digit",
+                                              month: "2-digit",
+                                              hour: "2-digit",
+                                              minute: "2-digit",
+                                              hour12: false,
+                                            })
                                           : ""}
                                       </div>
                                     </div>

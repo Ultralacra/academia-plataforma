@@ -5,26 +5,41 @@ import { io, Socket } from "socket.io-client";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useAuth } from "@/hooks/use-auth";
+import { playNotificationSound } from "@/lib/utils";
+import { usePathname, useRouter } from "next/navigation";
+
+// Global set for deduplication across component instances/remounts
+const processedMessageIds = new Set<string>();
 
 export function CoachChatNotifier() {
   const { user } = useAuth();
+  const router = useRouter();
   const socketRef = useRef<Socket | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const myParticipantIds = useRef<Record<string, string>>({});
   const { toast } = useToast();
+  const pathname = usePathname();
+  const pathnameRef = useRef(pathname);
+
+  useEffect(() => {
+    pathnameRef.current = pathname;
+  }, [pathname]);
 
   useEffect(() => {
     // Preload notification sound
     audioRef.current = new Audio(
       "https://res.cloudinary.com/dzkq67qmu/video/upload/v1733326786/notification_sound_y8j3s9.mp3"
     );
+    audioRef.current.volume = 0.5;
   }, []);
 
   useEffect(() => {
     if (!user) return;
     // Only for coaches or team members
-    if (user.role !== "coach" && user.role !== "equipo") return;
+    const role = (user.role || "").toLowerCase();
+    if (role !== "coach" && role !== "equipo") return;
 
     const token = getAuthToken();
     if (!token) return;
@@ -88,35 +103,49 @@ export function CoachChatNotifier() {
     });
 
     socket.on("chat.message", (msg: any) => {
+      // Deduplication
+      const msgId =
+        msg.id_mensaje || msg.id || `${msg.id_chat}-${msg.created_at}`;
+      if (processedMessageIds.has(msgId)) {
+        return;
+      }
+      processedMessageIds.add(msgId);
+      // Cleanup ID after 10 seconds
+      setTimeout(() => {
+        processedMessageIds.delete(msgId);
+      }, 10000);
+
       const cid = msg.id_chat;
       const myPid = myParticipantIds.current[cid];
       const senderPid = msg.id_chat_participante_emisor;
 
       let isMe = false;
 
-      // Check if I am a participant in this chat
-      // if (!myParticipantIds.current[cid]) {
-      //   // If I'm not tracking this chat, ignore the message
-      //   return;
-      // }
-
-      // Check by participant ID
+      // 1. Check by participant ID (most reliable if we have it)
       if (myPid && senderPid && String(myPid) === String(senderPid)) {
         isMe = true;
-      } else {
-        // Fallback checks
-        const rawType = (msg.participante_tipo || "").toLowerCase();
-        // If the message comes from "equipo" or "coach", it is considered "me" for the coach
-        if (rawType === "equipo" || rawType === "coach") isMe = true;
-
-        // Name/Email check
-        if (msg.nombre_emisor && user.name && msg.nombre_emisor === user.name) {
-          isMe = true;
-        }
-        if (msg.email_emisor && user.email && msg.email_emisor === user.email) {
-          isMe = true;
-        }
       }
+
+      // 2. Check by email (very reliable)
+      if (
+        !isMe &&
+        msg.email_emisor &&
+        user.email &&
+        msg.email_emisor === user.email
+      ) {
+        isMe = true;
+      }
+
+      // 3. Check by name (fallback)
+      if (
+        !isMe &&
+        msg.nombre_emisor &&
+        user.name &&
+        msg.nombre_emisor === user.name
+      ) {
+        isMe = true;
+      }
+
       if (!isMe) {
         console.log(
           "[CoachChatNotifier] Notification triggered for message:",
@@ -125,10 +154,8 @@ export function CoachChatNotifier() {
           user.email
         );
 
-        // Play sound
-        // audioRef.current
-        //   ?.play()
-        //   .catch((e) => console.error("Audio play failed", e));
+        // Play sound ALWAYS if it's not me
+        playNotificationSound();
 
         // Show toast with specific coach styling
         const t = toast({
@@ -147,7 +174,7 @@ export function CoachChatNotifier() {
     return () => {
       socket.disconnect();
     };
-  }, [user, toast]);
+  }, [user, toast, router]);
 
   return null;
 }

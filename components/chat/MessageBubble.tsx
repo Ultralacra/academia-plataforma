@@ -187,9 +187,14 @@ export default function MessageBubble({
 
         <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 select-none justify-end">
           <span>
-            {new Date(msg.at).toLocaleTimeString("es-ES", {
+            {new Date(msg.at).toLocaleString("es-ES", {
+              timeZone: "UTC",
+              weekday: "short",
+              day: "2-digit",
+              month: "2-digit",
               hour: "2-digit",
               minute: "2-digit",
+              hour12: false,
             })}
           </span>
           {mine &&

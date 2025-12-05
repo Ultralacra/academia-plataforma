@@ -25,6 +25,7 @@ import {
 import { getEmitter, normalizeDateStr, normalizeTipo } from "./chat-core";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST, apiFetch, buildUrl } from "@/lib/api-config";
+import { playNotificationSound } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -135,6 +136,18 @@ export default function CoachChatInline({
   const itemsRef = React.useRef<Message[]>([]);
   React.useEffect(() => {
     itemsRef.current = items;
+    if (items.length > 0) {
+      console.log(
+        "[CoachChatInline] Lista de horas:",
+        items.map((m) => ({
+          id: m.id,
+          text: (m.text || "").slice(0, 20),
+          at: m.at,
+          dateObj: new Date(m.at),
+          localTime: new Date(m.at).toLocaleTimeString(),
+        }))
+      );
+    }
   }, [items]);
   // Debug opcional: imprimir un resumen solo si chatDebug=1
   // React.useEffect(() => {
@@ -1595,6 +1608,7 @@ export default function CoachChatInline({
                   String(msg.client_session) ===
                     String(clientSessionRef.current);
                 if (!isMineById && !isMineBySession) {
+                  playNotificationSound();
                   const evtBump = new CustomEvent("chat:unread-bump", {
                     detail: { chatId: msg?.id_chat, role, at: Date.now() },
                   });
@@ -1642,6 +1656,7 @@ export default function CoachChatInline({
               !!msg?.client_session &&
               String(msg.client_session) === String(clientSessionRef.current);
             let senderIsMeByOutbox = false;
+            let matchedClientId: string | null = null;
             try {
               const txt = String(msg?.contenido ?? msg?.texto ?? "").trim();
               const tMsg = Date.parse(
@@ -1655,6 +1670,7 @@ export default function CoachChatInline({
                 const nearNow = Math.abs(Date.now() - (ob.at || 0)) < 12000;
                 if (near || nearNow) {
                   senderIsMeByOutbox = true;
+                  matchedClientId = ob.clientId;
                   break;
                 }
               }
@@ -1667,6 +1683,16 @@ export default function CoachChatInline({
               currentChatId,
               attsLive
             );
+
+            if (
+              !senderIsMeById &&
+              !senderIsMeBySession &&
+              !senderIsMeByOutbox &&
+              !senderIsMeByRecent
+            ) {
+              playNotificationSound();
+            }
+
             // logging eliminado
             // Determinar remitente de forma consistente usando el helper central
             // evalSenderForMapping para evitar discrepancias entre join/poll/realtime.
@@ -1689,6 +1715,23 @@ export default function CoachChatInline({
             if (attsLive && attsLive.length) newMsg.attachments = attsLive;
             setItems((prev) => {
               const next = [...prev];
+
+              // 1. Intentar coincidencia exacta por ID optimista (si lo encontramos en outbox)
+              if (matchedClientId) {
+                const idx = next.findIndex((m) => m.id === matchedClientId);
+                if (idx >= 0) {
+                  const mm = next[idx];
+                  const keepSender = !evalR.byId ? mm.sender : sender;
+                  next[idx] = {
+                    ...newMsg,
+                    sender: keepSender,
+                    at: mm.at, // Preservar timestamp local
+                    read: mm.read || false,
+                  } as Message;
+                  return next;
+                }
+              }
+
               const attKey = (arr?: Attachment[]) =>
                 (arr || [])
                   .map((a) => `${a.name}:${a.size}:${a.mime}`)
@@ -3007,9 +3050,14 @@ export default function CoachChatInline({
       if (!iso) return "";
       const d = new Date(iso);
       if (isNaN(d.getTime())) return "";
-      return d.toLocaleTimeString("es-ES", {
+      return d.toLocaleString("es-ES", {
+        timeZone: "UTC",
+        weekday: "short",
+        day: "2-digit",
+        month: "2-digit",
         hour: "2-digit",
         minute: "2-digit",
+        hour12: false,
       });
     } catch {
       return "";
@@ -3201,7 +3249,7 @@ export default function CoachChatInline({
         <div
           ref={scrollRef}
           onScroll={onScrollContainer}
-          className="relative flex-1 overflow-y-auto p-1 md:px-2"
+          className="relative flex-1 overflow-y-auto px-4 py-2"
           style={{
             backgroundImage: `url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")`,
             backgroundRepeat: "repeat",
@@ -3344,7 +3392,7 @@ export default function CoachChatInline({
                             .filter((a) => (a.mime || "").startsWith("audio/"))
                             .map((a) => {
                               const url = getAttachmentUrl(a);
-                              const timeLabel = formatTime(m.at);
+                              const timeLabel = ""; // formatTime(m.at);
                               const attSelected =
                                 selectionMode &&
                                 selectedAttachmentIds.has(a.id);
@@ -3397,7 +3445,7 @@ export default function CoachChatInline({
                             const attSelected =
                               selectionMode && selectedAttachmentIds.has(a.id);
                             if (isAudio) {
-                              const timeLabel = formatTime(m.at);
+                              const timeLabel = ""; // formatTime(m.at);
                               return (
                                 <div
                                   key={a.id}
@@ -3707,11 +3755,14 @@ export default function CoachChatInline({
             </button>
 
             <div className="flex-1 bg-white rounded-lg flex items-center min-h-[42px] px-4 py-2 shadow-sm border border-white focus-within:border-white mx-1">
-              <input
+              <textarea
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
                   if (e.target.value.trim()) notifyTyping(true);
+                  e.target.style.height = "auto";
+                  e.target.style.height =
+                    Math.min(e.target.scrollHeight, 100) + "px";
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
@@ -3722,8 +3773,13 @@ export default function CoachChatInline({
                   }
                 }}
                 placeholder="Escribe un mensaje"
+                rows={1}
                 className="w-full bg-transparent border-none focus:ring-0 text-[#111b21] placeholder:text-[#8696a0] text-[15px] max-h-[100px] overflow-y-auto resize-none outline-none"
-                style={{ outline: "none", boxShadow: "none" }}
+                style={{
+                  outline: "none",
+                  boxShadow: "none",
+                  minHeight: "24px",
+                }}
               />
             </div>
 
