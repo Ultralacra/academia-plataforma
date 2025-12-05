@@ -96,6 +96,7 @@ export default function CoachChatInline({
   onConnectionChange,
   onChatInfo,
   requestListSignal,
+  joinSignal,
   listParams,
   onChatsList,
   resolveName,
@@ -116,6 +117,7 @@ export default function CoachChatInline({
     participants?: any[] | null;
   }) => void;
   requestListSignal?: number;
+  joinSignal?: number;
   listParams?: any;
   onChatsList?: (list: any[]) => void;
   resolveName?: (tipo: "equipo" | "cliente" | "admin", id: string) => string;
@@ -394,6 +396,37 @@ export default function CoachChatInline({
       }
     })();
   }, [connected, precreateOnParticipants, socketio?.participants]);
+
+  // Forzar intento de creación/union cuando se recibe joinSignal explícito
+  React.useEffect(() => {
+    (async () => {
+      try {
+        console.log("[CoachChatInline] joinSignal effect fired", {
+          joinSignal,
+        });
+        if (!connected) {
+          console.log("[CoachChatInline] joinSignal: not connected yet");
+          return;
+        }
+        const parts = participantsRef.current ?? socketio?.participants;
+        if (!Array.isArray(parts) || parts.length === 0) {
+          console.log("[CoachChatInline] joinSignal: no participants", {
+            parts,
+          });
+          return;
+        }
+        // Intentar asegurar chat listo (crear si no existe)
+        console.log(
+          "[CoachChatInline] joinSignal: calling ensureChatReadyForSend"
+        );
+        const ok = await ensureChatReadyForSend();
+        console.log(
+          "[CoachChatInline] joinSignal: ensureChatReadyForSend result",
+          { ok, chatId: chatIdRef.current }
+        );
+      } catch {}
+    })();
+  }, [joinSignal, connected, socketio?.participants]);
 
   const getDistanceFromBottom = React.useCallback((): number => {
     try {
@@ -2611,6 +2644,7 @@ export default function CoachChatInline({
           try {
             sio.emit("chat.join", { id_chat: idToJoin }, (ack: any) => {
               try {
+                console.log("[CoachChatInline] chat.join ACK (existing):", ack);
                 if (ack && ack.success) {
                   const data = ack.data || {};
                   const cid = data.id_chat ?? idToJoin;
@@ -2628,6 +2662,59 @@ export default function CoachChatInline({
                   joinDataRef.current = {
                     participants: joinedParticipantsRef.current,
                   };
+                  // Si el ACK trae mensajes, mapearlos y poblar el estado de mensajes
+                  try {
+                    const msgsSrc = Array.isArray(data.messages)
+                      ? data.messages
+                      : Array.isArray((data as any).mensajes)
+                      ? (data as any).mensajes
+                      : [];
+                    if (Array.isArray(msgsSrc) && msgsSrc.length > 0) {
+                      const myPidLocal =
+                        data?.my_participante ?? myParticipantIdRef.current;
+                      const mapped: Message[] = msgsSrc.map((m: any) => {
+                        const ev = evalSenderForMapping(m, cid, "join");
+                        const sender: Sender = ev.sender;
+                        const msg: Message = {
+                          id: String(
+                            m?.id_mensaje ??
+                              m?.id_archivo ??
+                              `${Date.now()}-${Math.random()}`
+                          ),
+                          room: normRoom,
+                          sender,
+                          text: String(
+                            m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                          ).trim(),
+                          at: String(
+                            normalizeDateStr(m?.fecha_envio) ||
+                              new Date().toISOString()
+                          ),
+                          delivered: true,
+                          read: !!m?.leido,
+                          srcParticipantId: getEmitter(m),
+                          attachments: mapArchivoToAttachments(m),
+                          uiKey: String(
+                            m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                          ),
+                        } as Message;
+                        (msg as any).__senderById = !!ev.byId;
+                        (msg as any).__senderReason = ev.reason;
+                        return msg;
+                      });
+                      const reconciled = reconcilePreserveSender(mapped);
+                      const merged = mergePreservingOptimistics(reconciled);
+                      setItems(merged);
+                      try {
+                        mapped.forEach((mm) => seenRef.current.add(mm.id));
+                      } catch {}
+                    }
+                  } catch (e) {
+                    console.error(
+                      "Error procesando ACK de join (existing):",
+                      e
+                    );
+                  }
                   resolve(true);
                 } else resolve(false);
               } catch {
@@ -2700,6 +2787,10 @@ export default function CoachChatInline({
         try {
           sio.emit("chat.join", { id_chat: chatIdRef.current }, (ack: any) => {
             try {
+              console.log(
+                "[CoachChatInline] chat.join ACK (post-create):",
+                ack
+              );
               if (ack && ack.success) {
                 const data = ack.data || {};
                 if (data.my_participante) {

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Button } from "@/components/ui/button";
@@ -70,7 +70,6 @@ export default function CoachDetailPage({
 }) {
   const code = params.code;
   const router = useRouter();
-  const searchParams = useSearchParams();
   const chatServerUrl = (CHAT_HOST || "").replace(/\/$/, "");
 
   const [open, setOpen] = useState(false);
@@ -370,7 +369,14 @@ export default function CoachDetailPage({
     const matches = list.filter((it) =>
       chatHasEquipoPair(it, code, targetCode)
     );
-    if (matches.length === 0) return null;
+    if (matches.length === 0) {
+      // Fallback: sometimes `chat.list` no incluye participantes; intentar empatar por id_chat === targetCode
+      const byId = list.find(
+        (it) => String(it?.id_chat ?? it?.id ?? "") === String(targetCode)
+      );
+      if (byId) return byId?.id_chat ?? byId?.id ?? null;
+      return null;
+    }
     matches.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
     const top = matches[0];
     return top?.id_chat ?? top?.id ?? null;
@@ -383,7 +389,14 @@ export default function CoachDetailPage({
     const matches = list.filter((it) =>
       chatHasClienteEquipoPair(it, String(alumnoCode), String(code))
     );
-    if (matches.length === 0) return null;
+    if (matches.length === 0) {
+      // Fallback: intentar empatar por id_chat === alumnoCode cuando falta info de participantes
+      const byId = list.find(
+        (it) => String(it?.id_chat ?? it?.id ?? "") === String(alumnoCode)
+      );
+      if (byId) return byId?.id_chat ?? byId?.id ?? null;
+      return null;
+    }
     matches.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
     const top = matches[0];
     return top?.id_chat ?? top?.id ?? null;
@@ -808,13 +821,28 @@ export default function CoachDetailPage({
     if (!activeChatTab) return;
     const [type, ...rest] = activeChatTab.split(":");
     const codeKey = rest.join(":");
+    try {
+      console.log("[teamsv2] Tab activa:", activeChatTab, { type, codeKey });
+    } catch {}
     if (type === "team") {
       setTargetStudentCode(null);
       setTargetStudentName("");
       setTargetTeamCode(codeKey);
       const existing = pickExistingChatIdForTarget(codeKey);
+      try {
+        console.log("[teamsv2] Cambiando a chat EQUIPO", {
+          my: code,
+          target: codeKey,
+          existingChatId: existing,
+        });
+      } catch {}
       setChatInfo({ chatId: existing, myParticipantId: null });
       setCurrentOpenChatId(existing ?? null);
+      // Si no existe aún, forzar intento de creación/union
+      if (existing == null) {
+        setRequestListSignal((n) => (n ?? 0) + 1);
+        setSessionsOfferSignal((n) => n + 1); // reutilizamos como joinSignal
+      }
     } else if (type === "student") {
       setTargetTeamCode(null);
       setTargetStudentCode(codeKey);
@@ -823,95 +851,32 @@ export default function CoachDetailPage({
       );
       setTargetStudentName(stu?.name || codeKey);
       const existing = pickExistingChatIdForStudent(codeKey);
+      try {
+        console.log("[teamsv2] Cambiando a chat ALUMNO", {
+          my: code,
+          target: codeKey,
+          existingChatId: existing,
+        });
+      } catch {}
       setChatInfo({ chatId: existing, myParticipantId: null });
       setCurrentOpenChatId(existing ?? null);
+      if (existing == null) {
+        setRequestListSignal((n) => (n ?? 0) + 1);
+        setSessionsOfferSignal((n) => n + 1);
+      }
+    } else if (type === "chat") {
+      // Soporte para pestañas creadas por id_chat directo
+      const id = codeKey;
+      try {
+        console.log("[teamsv2] Cambiando a chat por ID", { chatId: id });
+      } catch {}
+      setTargetTeamCode(null);
+      setTargetStudentCode(null);
+      setTargetStudentName("");
+      setChatInfo({ chatId: id, myParticipantId: null });
+      setCurrentOpenChatId(id ?? null);
     }
   }, [activeChatTab]);
-
-  // Handle deep linking to chat via ?openChatId=...
-  useEffect(() => {
-    const openChatId = searchParams.get("openChatId");
-    if (!openChatId || !chatList || chatList.length === 0) return;
-
-    const targetChat = chatList.find(
-      (c: any) => String(c.id_chat || c.id) === openChatId
-    );
-
-    if (targetChat) {
-      const parts = targetChat.participants || targetChat.participantes || [];
-      const studentPart = parts.find(
-        (p: any) => String(p.participante_tipo).toLowerCase() === "cliente"
-      );
-      const teamPart = parts.find(
-        (p: any) =>
-          String(p.participante_tipo).toLowerCase() === "equipo" &&
-          String(p.id_equipo).toLowerCase() !== String(code).toLowerCase()
-      );
-
-      if (studentPart) {
-        const sCode = String(studentPart.id_cliente);
-        const sName = studentsList.find((s) => s.code === sCode)?.name || sCode;
-
-        setTargetTeamCode(null);
-        setTargetStudentCode(sCode);
-        setTargetStudentName(sName);
-
-        const tabKey = `student:${sCode}`;
-        setOpenTabs((prev) => {
-          const exists = prev.some((p) => p.key === tabKey);
-          return exists
-            ? prev
-            : [
-                ...prev,
-                {
-                  key: tabKey,
-                  type: "student",
-                  code: sCode,
-                  name: sName,
-                },
-              ];
-        });
-        setActiveChatTab(tabKey);
-      } else if (teamPart) {
-        const tCode = String(teamPart.id_equipo);
-        const tName =
-          teamsList.find((t) => t.codigo === tCode)?.nombre || tCode;
-
-        setTargetStudentCode(null);
-        setTargetStudentName("");
-        setTargetTeamCode(tCode);
-
-        const tabKey = `team:${tCode}`;
-        setOpenTabs((prev) => {
-          const exists = prev.some((p) => p.key === tabKey);
-          return exists
-            ? prev
-            : [
-                ...prev,
-                {
-                  key: tabKey,
-                  type: "team",
-                  code: tCode,
-                  name: tName,
-                },
-              ];
-        });
-        setActiveChatTab(tabKey);
-      }
-
-      setChatInfo({
-        chatId: targetChat.id_chat || targetChat.id,
-        myParticipantId: null,
-      });
-      setCurrentOpenChatId(targetChat.id_chat || targetChat.id);
-      setMobileChatOpen(true);
-
-      // Clean up URL
-      const newParams = new URLSearchParams(searchParams.toString());
-      newParams.delete("openChatId");
-      router.replace(`${window.location.pathname}?${newParams.toString()}`);
-    }
-  }, [searchParams, chatList, code, studentsList, teamsList, router]);
 
   // Cargar alumnos asignados para este coach/equipo (usando métricas v2)
   useEffect(() => {
@@ -1310,8 +1275,10 @@ export default function CoachDetailPage({
                                       item.topChatId ?? null
                                     );
 
-                                    // Add to tabs
-                                    const tabKey = item.key;
+                                    // Add to tabs (normalizar clave a tipo:codigo)
+                                    const tabKey = `${item.type}:${String(
+                                      item.code
+                                    )}`;
                                     setOpenTabs((prev) => {
                                       const exists = prev.some(
                                         (p) => p.key === tabKey
@@ -1379,17 +1346,7 @@ export default function CoachDetailPage({
                                         }`}
                                       >
                                         {item.lastAt
-                                          ? new Date(
-                                              item.lastAt
-                                            ).toLocaleString("es-ES", {
-                                              timeZone: "UTC",
-                                              weekday: "short",
-                                              day: "2-digit",
-                                              month: "2-digit",
-                                              hour: "2-digit",
-                                              minute: "2-digit",
-                                              hour12: false,
-                                            })
+                                          ? formatTime(item.lastAt)
                                           : ""}
                                       </div>
                                     </div>
@@ -1444,7 +1401,14 @@ export default function CoachDetailPage({
                                   ? "bg-white text-slate-900 border-teal-500 shadow-sm"
                                   : "bg-slate-100 text-slate-700 border-transparent hover:bg-slate-200"
                               }`}
-                              onClick={() => setActiveChatTab(t.key)}
+                              onClick={() => {
+                                setActiveChatTab(t.key);
+                                // Asegurar que el panel de conversación esté visible en móvil
+                                setMobileChatOpen(true);
+                                try {
+                                  console.log("[teamsv2] Click pestaña", t);
+                                } catch {}
+                              }}
                               title={t.name}
                             >
                               <span className="max-w-[180px] truncate">
@@ -1547,6 +1511,7 @@ export default function CoachDetailPage({
                         autoJoin: chatInfo.chatId != null,
                         chatId: chatInfo.chatId ?? undefined,
                       }}
+                      joinSignal={sessionsOfferSignal}
                       resolveName={(tipo, id) => {
                         const key = String(id || "").toLowerCase();
                         if (tipo === "equipo") {

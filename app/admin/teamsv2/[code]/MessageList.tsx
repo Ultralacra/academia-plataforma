@@ -11,44 +11,73 @@ import {
 import { Paperclip, Download } from "lucide-react";
 import { Message, Attachment, Sender } from "./chat-types";
 import { Button } from "@/components/ui/button";
+import AudioBubble from "./AudioBubble";
 
 function MessageAttachment({
   attachment,
   onPreview,
+  isMine,
+  timeLabel,
+  delivered,
+  read,
 }: {
   attachment: Attachment;
   onPreview: (attachment: Attachment) => void;
+  isMine: boolean;
+  timeLabel?: string;
+  delivered?: boolean;
+  read?: boolean;
 }) {
   const isImage = attachment.mime.startsWith("image/");
+  const isAudio = attachment.mime.startsWith("audio/");
   return (
-    <div
-      className="mt-2 p-2 border rounded-md flex items-center gap-3 hover:bg-muted/50 cursor-pointer"
-      onClick={() => onPreview(attachment)}
-    >
-      <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
-        {isImage && attachment.url ? (
-          <img
+    <div className="mt-2">
+      {isAudio && attachment.url ? (
+        <div className="flex items-center gap-2">
+          <AudioBubble
             src={attachment.url}
-            alt={attachment.name}
-            className="w-full h-full object-cover rounded-md"
+            isMine={isMine}
+            timeLabel={timeLabel}
+            delivered={delivered}
+            read={read}
           />
-        ) : (
-          <Paperclip className="w-5 h-5 text-muted-foreground" />
-        )}
-      </div>
-      <div className="flex-1">
-        <p className="text-sm font-medium truncate">{attachment.name}</p>
-        <p className="text-xs text-muted-foreground">{attachment.mime}</p>
-      </div>
-      <Button size="icon" variant="ghost" asChild>
-        <a
-          href={attachment.url}
-          download={attachment.name}
-          onClick={(e) => e.stopPropagation()}
+          <Button size="icon" variant="ghost" asChild>
+            <a href={attachment.url} download={attachment.name}>
+              <Download className="w-4 h-4" />
+            </a>
+          </Button>
+        </div>
+      ) : (
+        <div
+          className="p-2 border rounded-md flex items-center gap-3 hover:bg-muted/50 cursor-pointer"
+          onClick={() => onPreview(attachment)}
         >
-          <Download className="w-4 h-4" />
-        </a>
-      </Button>
+          <div className="w-10 h-10 rounded-md bg-muted flex items-center justify-center">
+            {isImage && attachment.url ? (
+              <img
+                src={attachment.url}
+                alt={attachment.name}
+                className="w-full h-full object-cover rounded-md"
+              />
+            ) : (
+              <Paperclip className="w-5 h-5 text-muted-foreground" />
+            )}
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium truncate">{attachment.name}</p>
+            <p className="text-xs text-muted-foreground">{attachment.mime}</p>
+          </div>
+          <Button size="icon" variant="ghost" asChild>
+            <a
+              href={attachment.url}
+              download={attachment.name}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Download className="w-4 h-4" />
+            </a>
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -90,6 +119,10 @@ function MessageBubble({
             key={att.id}
             attachment={att}
             onPreview={onPreviewAttachment}
+            isMine={isMine}
+            timeLabel={formatTime(message.at)}
+            delivered={message.delivered}
+            read={message.read}
           />
         ))}
         <div
@@ -98,6 +131,30 @@ function MessageBubble({
           }`}
         >
           {formatTime(message.at)}
+          {isMine && (
+            <span className="ml-2 inline-flex items-center gap-1">
+              {message.read ? (
+                // doble check cuando está leído
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-3 w-3"
+                  fill="currentColor"
+                >
+                  <path d="M1 14l4 4L15 8" />
+                  <path d="M9 14l4 4L23 8" />
+                </svg>
+              ) : message.delivered ? (
+                // un check cuando está entregado
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-3 w-3"
+                  fill="currentColor"
+                >
+                  <path d="M1 14l4 4L15 8" />
+                </svg>
+              ) : null}
+            </span>
+          )}
         </div>
       </div>
     </div>

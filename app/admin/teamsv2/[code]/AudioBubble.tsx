@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { getAuthToken } from "@/lib/auth";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Download } from "lucide-react";
 
 export default function AudioBubble({
   src,
@@ -217,11 +217,26 @@ export default function AudioBubble({
         </div>
         <div className="mt-0.5 text-[11px] text-gray-600 flex items-center justify-between">
           <span>{mmss(dur || 0)}</span>
-          {timeLabel ? (
-            <span className="text-right text-gray-500">{timeLabel}</span>
-          ) : (
-            <span />
-          )}
+          <div className="flex items-center gap-2">
+            {timeLabel ? (
+              <span className="text-right text-gray-500">{timeLabel}</span>
+            ) : (
+              <span />
+            )}
+            {blobUrl && (
+              <a
+                href={blobUrl}
+                download
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center p-1 rounded hover:bg-slate-100"
+                title="Abrir en pestaña nueva / Descargar audio"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Download className="w-4 h-4 text-gray-600" />
+              </a>
+            )}
+          </div>
         </div>
       </div>
     </div>
