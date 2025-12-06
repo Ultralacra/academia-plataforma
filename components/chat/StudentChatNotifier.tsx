@@ -112,12 +112,8 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
           audioRef.current?.play().catch(() => {});
         }
 
-        // Mostrar Snackbar (Toast)
-        toast({
-          title: `Nuevo mensaje de ${msg.nombre_emisor || "Soporte"}`,
-          description:
-            msg.contenido || (msg.archivo ? "📎 Archivo adjunto" : ""),
-        });
+        // Snackbar deshabilitado temporalmente para el alumno al recibir/enviar
+        // Si deseas mostrarlo solo fuera de la vista de chat, podemos condicionarlo por pathname.
       }
     });
 

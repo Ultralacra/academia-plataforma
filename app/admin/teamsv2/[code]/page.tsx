@@ -1120,7 +1120,7 @@ export default function CoachDetailPage({
       "chat:unread-count-updated",
       onUnreadCountUpdated as any
     );
-    // window.addEventListener("chat:list-refresh", onListRefresh as any);
+    window.addEventListener("chat:list-refresh", onListRefresh as any);
     // const iv = setInterval(() => {
     //   setChatsLoading(true);
     //   setRequestListSignal((n) => (n ?? 0) + 1);
@@ -1135,7 +1135,7 @@ export default function CoachDetailPage({
         "chat:unread-count-updated",
         onUnreadCountUpdated as any
       );
-      // window.removeEventListener("chat:list-refresh", onListRefresh as any);
+      window.removeEventListener("chat:list-refresh", onListRefresh as any);
       // clearInterval(iv);
     };
   }, []);

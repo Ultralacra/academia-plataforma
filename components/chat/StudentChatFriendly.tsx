@@ -564,7 +564,7 @@ export default function CoachChatInline({
       if (items.length === 0) return;
       const last = items[items.length - 1];
       const isMine = mine(last.sender);
-      if (!isMine) playNotification();
+      if (!isMine) playNotificationSound();
     } catch {}
   }, [items.length]);
 
@@ -1556,10 +1556,27 @@ export default function CoachChatInline({
                   return msg;
                 });
                 const reconciled = reconcilePreserveSender(mapped);
-                const merged = mergePreservingOptimistics(reconciled);
-                setItems(merged);
+                const fresh = mergePreservingOptimistics(reconciled);
+                // Merge incremental estable: actualizar por id y añadir nuevos al final
+                setItems((prev) => {
+                  const byId = new Map<string, any>();
+                  prev.forEach((m) => byId.set(String(m.id), m));
+                  const next = [...prev];
+                  for (const m of fresh) {
+                    const id = String(m.id);
+                    if (byId.has(id)) {
+                      const idx = next.findIndex((x) => String(x.id) === id);
+                      if (idx >= 0) next[idx] = { ...byId.get(id), ...m };
+                    }
+                  }
+                  for (const m of fresh) {
+                    const id = String(m.id);
+                    if (!byId.has(id)) next.push(m);
+                  }
+                  return next;
+                });
                 try {
-                  mapped.forEach((mm) => seenRef.current.add(mm.id));
+                  fresh.forEach((mm) => seenRef.current.add(mm.id));
                 } catch {}
               } catch {}
             });
@@ -1815,12 +1832,13 @@ export default function CoachChatInline({
                   .map((a) => `${a.name}:${a.size}:${a.mime}`)
                   .sort()
                   .join("|");
+              // Evitar reorden intermitente: fusiones sólo con evidencia fuerte (misma sesión)
               for (let i = next.length - 1; i >= 0; i--) {
                 const mm = next[i];
                 const tNew = Date.parse(newMsg.at || "");
                 const tOld = Date.parse(mm.at || "");
                 const near =
-                  !isNaN(tNew) && !isNaN(tOld) && Math.abs(tNew - tOld) < 60000;
+                  !isNaN(tNew) && !isNaN(tOld) && Math.abs(tNew - tOld) < 15000;
                 const sameText =
                   (mm.text || "").trim() === (newMsg.text || "").trim();
                 const sameAtts =
@@ -1829,9 +1847,8 @@ export default function CoachChatInline({
                 // Si coincide texto y adjuntos, y es reciente (o es mi sesión explícita), fusionamos
                 const isMyOptimistic =
                   mm.sender === role && mm.delivered === false;
-                const match =
-                  (near && sameText && sameAtts) ||
-                  (senderIsMeBySession && sameText && isMyOptimistic);
+                // Sólo fusionar si es mi sesión y coincide el texto (para evitar colisiones por adjuntos sin texto)
+                const match = senderIsMeBySession && sameText && isMyOptimistic;
 
                 if (match) {
                   const keepSender = !evalR.byId ? mm.sender : sender;

@@ -188,15 +188,7 @@ export function GlobalChatNotifications() {
         if (!isChatView) {
           playNotificationSound();
         }
-
-        // Show toast
-        toast({
-          title: `Nuevo mensaje de ${msg.nombre_emisor || "Coach"}`,
-          description:
-            msg.contenido ||
-            (msg.archivo ? "📎 Archivo adjunto" : "Nuevo mensaje"),
-          duration: 5000,
-        });
+        // Snackbar deshabilitado globalmente para evitar notificaciones visuales
 
         // Update unread count in localStorage
         if (msg.id_chat) {

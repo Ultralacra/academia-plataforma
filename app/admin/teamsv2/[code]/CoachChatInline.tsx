@@ -416,15 +416,15 @@ export default function CoachChatInline({
     })();
   }, [connected, precreateOnParticipants, socketio?.participants]);
 
-  // Forzar intento de creación/union cuando se recibe joinSignal explícito
+  // Forzar intento de unión cuando se recibe joinSignal explícito (sin crear)
   React.useEffect(() => {
     (async () => {
       try {
         if (!connected) return;
         const parts = participantsRef.current ?? socketio?.participants;
         if (!Array.isArray(parts) || parts.length === 0) return;
-        // Intentar asegurar chat listo (crear si no existe)
-        await ensureChatReadyForSend();
+        // Solo buscar y unir si existe; NO crear en selección de contacto
+        await ensureChatReadyForSend({ onlyFind: true });
       } catch {}
     })();
   }, [joinSignal, connected, socketio?.participants]);
@@ -463,17 +463,7 @@ export default function CoachChatInline({
     });
   }, [items.length, getDistanceFromBottom]);
 
-  // Disparar sonido cuando llega un nuevo mensaje que no es mío
-  React.useEffect(() => {
-    try {
-      if (items.length === 0) return;
-      const last = items[items.length - 1];
-      const isMine = mine(last.sender);
-      if (!isMine) {
-        playNotification();
-      }
-    } catch {}
-  }, [items.length]);
+  // Sonido sólo lo dispara el handler de realtime; evitamos sonar al cargar historial
 
   // Scroll síncrono antes de pintar cuando llegan los primeros mensajes
   React.useLayoutEffect(() => {
@@ -1601,10 +1591,29 @@ export default function CoachChatInline({
                   return msg;
                 });
                 const reconciled = reconcilePreserveSender(mapped);
-                const merged = mergePreservingOptimistics(reconciled);
-                setItems(merged);
+                const fresh = mergePreservingOptimistics(reconciled);
+                // Merge incremental estable: actualizar por id y añadir nuevos al final, sin reordenar lo existente
+                setItems((prev) => {
+                  const byId = new Map<string, any>();
+                  prev.forEach((m) => byId.set(String(m.id), m));
+                  const next = [...prev];
+                  // Actualizar existentes
+                  for (const m of fresh) {
+                    const id = String(m.id);
+                    if (byId.has(id)) {
+                      const idx = next.findIndex((x) => String(x.id) === id);
+                      if (idx >= 0) next[idx] = { ...byId.get(id), ...m };
+                    }
+                  }
+                  // Añadir nuevos (orden del servidor) sin tocar los existentes
+                  for (const m of fresh) {
+                    const id = String(m.id);
+                    if (!byId.has(id)) next.push(m);
+                  }
+                  return next;
+                });
                 try {
-                  mapped.forEach((mm) => seenRef.current.add(mm.id));
+                  fresh.forEach((mm) => seenRef.current.add(mm.id));
                 } catch {}
               } catch {}
             });
@@ -1695,6 +1704,29 @@ export default function CoachChatInline({
         sio.on("chat.message", (msg: any) => {
           try {
             lastRealtimeAtRef.current = Date.now();
+            // Log explícito cuando el emisor es un alumno/cliente
+            try {
+              const tipoNormMsg = normalizeTipo(
+                msg?.participante_tipo || undefined
+              );
+              if (tipoNormMsg === "cliente") {
+                const emitter = getEmitter(msg);
+                console.log("[CoachChatInline] ← Mensaje de alumno", {
+                  id_chat: msg?.id_chat,
+                  id_mensaje: msg?.id_mensaje ?? msg?.id,
+                  texto_preview: String(
+                    msg?.contenido ?? msg?.texto ?? ""
+                  ).slice(0, 140),
+                  participante_tipo: msg?.participante_tipo,
+                  id_cliente: msg?.id_cliente,
+                  id_equipo: msg?.id_equipo,
+                  email_emisor: msg?.email_emisor,
+                  nombre_emisor: msg?.nombre_emisor,
+                  client_session: msg?.client_session,
+                  emitter_participante: emitter,
+                });
+              }
+            } catch {}
             const currentChatId = chatIdRef.current;
             // dbg("event chat.message", {
             //   id_chat: msg?.id_chat,
@@ -1727,7 +1759,28 @@ export default function CoachChatInline({
                   !!msg?.client_session &&
                   String(msg.client_session) ===
                     String(clientSessionRef.current);
-                if (!isMineById && !isMineBySession) {
+                const tipoNormOther = normalizeTipo(
+                  msg?.participante_tipo || undefined
+                );
+                const isMineByTipoOther = (() => {
+                  if (role === "coach") {
+                    return (
+                      tipoNormOther === "equipo" &&
+                      socketio?.idEquipo != null &&
+                      String(msg?.id_equipo ?? "") === String(socketio.idEquipo)
+                    );
+                  }
+                  if (role === "alumno") {
+                    return (
+                      tipoNormOther === "cliente" &&
+                      (socketio as any)?.idCliente != null &&
+                      String(msg?.id_cliente ?? "") ===
+                        String((socketio as any).idCliente)
+                    );
+                  }
+                  return false;
+                })();
+                if (!isMineById && !isMineBySession && !isMineByTipoOther) {
                   playNotificationSound();
                   const evtBump = new CustomEvent("chat:unread-bump", {
                     detail: { chatId: msg?.id_chat, role, at: Date.now() },
@@ -1803,12 +1856,32 @@ export default function CoachChatInline({
               currentChatId,
               attsLive
             );
+            const tipoNorm = normalizeTipo(msg?.participante_tipo || undefined);
+            const senderIsMeByTipo = (() => {
+              if (role === "coach") {
+                return (
+                  tipoNorm === "equipo" &&
+                  socketio?.idEquipo != null &&
+                  String(msg?.id_equipo ?? "") === String(socketio.idEquipo)
+                );
+              }
+              if (role === "alumno") {
+                return (
+                  tipoNorm === "cliente" &&
+                  (socketio as any)?.idCliente != null &&
+                  String(msg?.id_cliente ?? "") ===
+                    String((socketio as any).idCliente)
+                );
+              }
+              return false;
+            })();
 
             if (
               !senderIsMeById &&
               !senderIsMeBySession &&
               !senderIsMeByOutbox &&
-              !senderIsMeByRecent
+              !senderIsMeByRecent &&
+              !senderIsMeByTipo
             ) {
               console.log(
                 "[CoachChatInline] Playing sound for incoming message"
@@ -1860,13 +1933,14 @@ export default function CoachChatInline({
                   .map((a) => `${a.name}:${a.size}:${a.mime}`)
                   .sort()
                   .join("|");
+              // Evitar reorden intermitente: permitir fusiones sólo con evidencia fuerte (misma sesión)
               for (let i = next.length - 1; i >= 0; i--) {
                 const mm = next[i];
                 const tNew = Date.parse(newMsg.at || "");
                 const tOld = Date.parse(mm.at || "");
-                // Aumentamos tolerancia a 60s para evitar duplicados por skew de reloj
+                // Reducimos tolerancia a 15s para minimizar fusiones ambiguas
                 const near =
-                  !isNaN(tNew) && !isNaN(tOld) && Math.abs(tNew - tOld) < 60000;
+                  !isNaN(tNew) && !isNaN(tOld) && Math.abs(tNew - tOld) < 15000;
                 const sameText =
                   (mm.text || "").trim() === (newMsg.text || "").trim();
                 const sameAtts =
@@ -1875,9 +1949,8 @@ export default function CoachChatInline({
                 // Si coincide texto y adjuntos, y es reciente (o es mi sesión explícita), fusionamos
                 const isMyOptimistic =
                   mm.sender === role && mm.delivered === false;
-                const match =
-                  (near && sameText && sameAtts) ||
-                  (senderIsMeBySession && sameText && isMyOptimistic);
+                // Sólo fusionar si es mi sesión y coincide el texto
+                const match = senderIsMeBySession && sameText && isMyOptimistic;
 
                 if (match) {
                   const keepSender = !evalR.byId ? mm.sender : sender;
@@ -2589,11 +2662,13 @@ export default function CoachChatInline({
       if (!Array.isArray(participants) || participants.length === 0)
         return false;
       const baseAutoCreate =
-        socketio?.autoCreate !== undefined ? socketio.autoCreate : true;
+        socketio?.autoCreate !== undefined ? socketio.autoCreate : false;
+      // Política:
+      // - coach/admin: respetan baseAutoCreate (por defecto false)
+      // - alumno: crea SOLO cuando se llama explícitamente con allowCreate=true
+      //   (ignora baseAutoCreate para evitar creaciones accidentales en join/selección)
       const autoCreate =
-        role === "alumno"
-          ? !!opts?.allowCreate && !!baseAutoCreate
-          : baseAutoCreate;
+        role === "alumno" ? !!opts?.allowCreate : baseAutoCreate;
       dbg("ensureChatReadyForSend:start", {
         autoCreate,
         count: participants.length,

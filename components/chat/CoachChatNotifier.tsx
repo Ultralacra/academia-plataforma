@@ -90,6 +90,12 @@ export function CoachChatNotifier() {
         socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
           if (joinAck && joinAck.success && joinAck.data?.my_participante) {
             myParticipantIds.current[cid] = joinAck.data.my_participante;
+            try {
+              const evt = new CustomEvent("chat:list-refresh", {
+                detail: { reason: "chat-created", id_chat: cid },
+              });
+              window.dispatchEvent(evt);
+            } catch {}
           }
         });
       }
@@ -140,6 +146,28 @@ export function CoachChatNotifier() {
       }
 
       if (!isMe) {
+        // Log explícito si el emisor es alumno/cliente
+        try {
+          const rawType = String(msg?.participante_tipo || "").toLowerCase();
+          const isAlumno = rawType === "cliente" || rawType === "alumno";
+          if (isAlumno) {
+            const preview = String(msg?.contenido ?? msg?.texto ?? "").slice(
+              0,
+              140
+            );
+            console.log("[CoachChatNotifier] ← Mensaje de alumno", {
+              id_chat: msg?.id_chat,
+              id_mensaje: msg?.id_mensaje ?? msg?.id,
+              texto_preview: preview,
+              participante_tipo: msg?.participante_tipo,
+              id_cliente: msg?.id_cliente,
+              id_equipo: msg?.id_equipo,
+              email_emisor: msg?.email_emisor,
+              nombre_emisor: msg?.nombre_emisor,
+              client_session: msg?.client_session,
+            });
+          }
+        } catch {}
         console.log(
           "[CoachChatNotifier] Notification triggered for message:",
           msg,
@@ -147,20 +175,14 @@ export function CoachChatNotifier() {
           user.email
         );
 
-        // Play sound ALWAYS if it's not me
-        playNotificationSound();
-
-        // Show toast with specific coach styling
-        const t = toast({
-          title: `Nuevo mensaje de ${msg.nombre_emisor || "Alumno"}`,
-          description:
-            msg.contenido ||
-            (msg.archivo ? "📎 Archivo adjunto" : "Nuevo mensaje"),
-          duration: 5000,
-          className:
-            "bg-indigo-50 border-indigo-200 text-indigo-900 dark:bg-indigo-900/30 dark:border-indigo-800 dark:text-indigo-100",
-        });
-        console.log("[CoachChatNotifier] Toast dispatched:", t);
+        // Reproducir sonido solo cuando no estamos en una vista de chat
+        // (las vistas de chat ya reproducen el sonido por su cuenta, y así evitamos dobles)
+        const currentPath = pathnameRef.current;
+        const isChatView =
+          currentPath?.includes("/chat") || currentPath?.includes("/teamsv2");
+        if (!isChatView) {
+          playNotificationSound();
+        }
       }
     });
 
