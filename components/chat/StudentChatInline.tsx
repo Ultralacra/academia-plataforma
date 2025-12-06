@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import CoachChatInline from "@/app/admin/teamsv2/[code]/CoachChatInline";
+import CoachChatInline from "@/components/chat/StudentChatFriendly";
 import { CHAT_HOST } from "@/lib/api-config";
 import { dataService } from "@/lib/data-service";
 import { apiFetch } from "@/lib/api-config";
@@ -167,7 +167,7 @@ export default function StudentChatInline({
       subtitle={subtitle}
       variant="card"
       className={className}
-      precreateOnParticipants
+      precreateOnParticipants={false}
       resolveName={resolveName}
       socketio={{
         url: SOCKET_URL || undefined,

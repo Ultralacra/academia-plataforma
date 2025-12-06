@@ -47,18 +47,71 @@ export function getSpanishApiError(err: unknown, fallback = "Ocurrió un error")
 }
 
 let globalAudio: HTMLAudioElement | null = null;
+let audioUnlocked = false;
+let audioUnlockAttached = false;
+
+function ensureAudioUnlocked() {
+  if (typeof window === "undefined") return;
+  if (audioUnlocked) return;
+  if (audioUnlockAttached) return;
+  audioUnlockAttached = true;
+  const unlock = () => {
+    try {
+      if (!globalAudio) {
+        // Prefer user-provided MP3 in /public; fallback to embedded WAV if it fails
+        const el = document.createElement("audio");
+        el.src = "/new-notification-022-370046.mp3";
+        el.preload = "auto";
+        el.volume = 0.0;
+        document.body.appendChild(el);
+        globalAudio = el;
+        // Prime once
+        el.play().catch(() => {
+          try {
+            // Fallback to embedded beep if MP3 not available or blocked
+            el.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YYQAAACAgICAgICAgP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA";
+            el.play().catch(() => {});
+          } catch {}
+        });
+        setTimeout(() => {
+          try { el.pause(); el.volume = 1.0; } catch {}
+        }, 200);
+      }
+      audioUnlocked = true;
+    } catch {}
+  };
+  try {
+    window.addEventListener("click", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+  } catch {}
+}
 
 export function playNotificationSound() {
   try {
-    // Always create a new instance to avoid state issues, for debugging
-    const audio = new Audio("https://res.cloudinary.com/dzkq67qmu/video/upload/v1733326786/notification_sound_y8j3s9.mp3");
-    audio.volume = 0.5;
-    
-    console.log("[Utils] Playing notification sound (new instance)...");
-    const promise = audio.play();
-    if (promise !== undefined) {
-      promise.catch((e) => {
+    ensureAudioUnlocked();
+    if (globalAudio) {
+      globalAudio.currentTime = 0;
+      globalAudio.volume = 1.0;
+      const p = globalAudio.play();
+      if (p && typeof p.catch === "function") {
+        p.catch((e: any) => {
+          console.error("Error playing sound (autoplay blocked?):", e);
+        });
+      }
+      return;
+    }
+    // Fallback: create local audio and try to play (may fail pre-unlock)
+    const local = new Audio();
+    local.src = "/new-notification-022-370046.mp3";
+    local.volume = 1.0;
+    const pr = local.play();
+    if (pr && typeof pr.catch === "function") {
+      pr.catch((e: any) => {
         console.error("Error playing sound (autoplay blocked?):", e);
+        try {
+          local.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YYQAAACAgICAgICAgP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA";
+          local.play().catch(() => {});
+        } catch {}
       });
     }
   } catch (e) {

@@ -776,7 +776,7 @@ export default function StudentCoachChatPanel({
                 subtitle={targetSubtitle}
                 variant="card"
                 className="flex-1 min-h-0 rounded-lg shadow-sm overflow-hidden"
-                precreateOnParticipants
+                precreateOnParticipants={false}
                 onBack={isChatOpen ? handleBack : undefined}
                 resolveName={(tipo, id) => {
                   const sid = String(id ?? "");
@@ -801,8 +801,8 @@ export default function StudentCoachChatPanel({
                     ? String(resolvedEquipoCode)
                     : undefined,
                   participants: participants,
-                  // Permitir creación automática siempre que tengamos algún código/ID de coach
-                  autoCreate: !!resolvedEquipoCode,
+                  // No crear automáticamente: solo al enviar o adjuntar desde el alumno
+                  autoCreate: false,
                   autoJoin: !!selectedChatId,
                   chatId: selectedChatId ?? undefined,
                 }}

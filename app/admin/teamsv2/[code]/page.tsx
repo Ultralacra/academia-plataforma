@@ -57,6 +57,7 @@ import Spinner from "@/components/ui/spinner";
 
 // Tipo compacto para lista de alumnos en chat (evita genérico multilínea en TSX)
 type StudentMini = {
+  id?: string;
   code: string;
   name: string;
   state?: string | null;
@@ -71,6 +72,9 @@ export default function CoachDetailPage({
   const code = params.code;
   const router = useRouter();
   const chatServerUrl = (CHAT_HOST || "").replace(/\/$/, "");
+  // Modo mantenimiento para chat: cuando NEXT_PUBLIC_CHAT_MAINTENANCE=1
+  const chatMaintenance =
+    (process.env.NEXT_PUBLIC_CHAT_MAINTENANCE || "") === "1";
 
   const [open, setOpen] = useState(false);
   const { user } = useAuth();
@@ -386,8 +390,20 @@ export default function CoachDetailPage({
     alumnoCode: string
   ): string | number | null {
     const list = Array.isArray(chatList) ? chatList : [];
-    const matches = list.filter((it) =>
-      chatHasClienteEquipoPair(it, String(alumnoCode), String(code))
+    // Try to resolve ID
+    const s =
+      studentsList.find(
+        (x) => (x.code || "").toLowerCase() === String(alumnoCode).toLowerCase()
+      ) ||
+      allStudentsList.find(
+        (x) => (x.code || "").toLowerCase() === String(alumnoCode).toLowerCase()
+      );
+    const sId = s?.id;
+
+    const matches = list.filter(
+      (it) =>
+        chatHasClienteEquipoPair(it, String(alumnoCode), String(code)) ||
+        (sId && chatHasClienteEquipoPair(it, String(sId), String(code)))
     );
     if (matches.length === 0) {
       // Fallback: intentar empatar por id_chat === alumnoCode cuando falta info de participantes
@@ -515,7 +531,9 @@ export default function CoachDetailPage({
         : key;
 
       const stu = studentsList.find(
-        (s) => (s.code || "").toLowerCase() === key
+        (s) =>
+          (s.code || "").toLowerCase() === key ||
+          (s.id && String(s.id).toLowerCase() === key)
       );
       let targetName = stu?.name;
       if (!targetName) {
@@ -564,9 +582,14 @@ export default function CoachDetailPage({
   const unifiedChatList = useMemo(() => {
     const q = (contactQuery || "").trim().toLowerCase();
     const allItems: any[] = [];
+    const processedChatIds = new Set<string>();
 
     // 1. Add existing chats (Teams)
     chatsByContact.forEach((c) => {
+      (c.chats || []).forEach((chat: any) => {
+        const id = chat?.id_chat ?? chat?.id;
+        if (id) processedChatIds.add(String(id));
+      });
       const count = (Array.isArray(c.chats) ? c.chats : []).reduce(
         (acc: number, it: any) => {
           const id = it?.id_chat ?? it?.id;
@@ -597,6 +620,10 @@ export default function CoachDetailPage({
 
     // 2. Add existing chats (Students)
     chatsByStudent.forEach((c) => {
+      (c.chats || []).forEach((chat: any) => {
+        const id = chat?.id_chat ?? chat?.id;
+        if (id) processedChatIds.add(String(id));
+      });
       const count = (Array.isArray(c.chats) ? c.chats : []).reduce(
         (acc: number, it: any) => {
           const id = it?.id_chat ?? it?.id;
@@ -609,7 +636,10 @@ export default function CoachDetailPage({
       let resolvedName = c.targetName;
       if (resolvedName === c.targetCode) {
         const s = studentsList.find(
-          (st) => (st.code || "").toLowerCase() === c.targetCode.toLowerCase()
+          (st) =>
+            (st.code || "").toLowerCase() === c.targetCode.toLowerCase() ||
+            (st.id &&
+              String(st.id).toLowerCase() === c.targetCode.toLowerCase())
         );
         if (s?.name) resolvedName = s.name;
         else {
@@ -642,7 +672,57 @@ export default function CoachDetailPage({
         setCachedContactName(topId, resolvedName);
     });
 
-    // 3. If searching, find contacts/students WITHOUT active chats
+    // 3. Add orphan chats (not classified as Team or Student)
+    const orphans = (Array.isArray(chatList) ? chatList : []).filter((chat) => {
+      const id = chat?.id_chat ?? chat?.id;
+      return id && !processedChatIds.has(String(id));
+    });
+
+    orphans.forEach((chat) => {
+      const id = chat?.id_chat ?? chat?.id;
+      const lastAt = getChatTimestamp(chat);
+      const last = getChatLastMessage(chat);
+      const lastRead = id != null ? getLastReadByChatId(id) : 0;
+      const hasUnread = lastAt > (lastRead || 0);
+      const unreadCount = getUnreadCountByChatId(id);
+
+      // Try to find a name from participants even if incomplete
+      let name = "(Sin nombre)";
+      const parts = itemParticipants(chat);
+      const clientPart = parts.find(
+        (p) => normalizeTipo(p?.participante_tipo) === "cliente"
+      );
+      if (clientPart) {
+        const cid =
+          clientPart.id_cliente ?? clientPart.id_alumno ?? clientPart.client_id;
+        if (cid) {
+          const s = studentsList.find(
+            (st) =>
+              (st.code || "").toLowerCase() === String(cid).toLowerCase() ||
+              (st.id &&
+                String(st.id).toLowerCase() === String(cid).toLowerCase())
+          );
+          name = s?.name || String(cid);
+        }
+      }
+
+      allItems.push({
+        type: "student", // Treat as student by default for UI
+        key: `orphan:${id}`,
+        code: id, // Use chat ID as code since we don't have a better one
+        name: name,
+        lastAt: lastAt,
+        lastText: (last.text || "").trim(),
+        hasUnread: hasUnread,
+        unreadCount: unreadCount,
+        topChatId: id,
+        chats: [chat],
+        avatarColor: "bg-gray-500",
+        isNew: false,
+      });
+    });
+
+    // 4. If searching, find contacts/students WITHOUT active chats
     if (q) {
       // Teams without chat
       const existingTeamKeys = new Set(
@@ -681,15 +761,19 @@ export default function CoachDetailPage({
         allStudentsList.length > 0 ? allStudentsList : studentsList;
 
       sourceList.forEach((s) => {
-        if (!existingStudentKeys.has((s.code || "").toLowerCase())) {
+        const hasChat =
+          existingStudentKeys.has((s.code || "").toLowerCase()) ||
+          (s.id && existingStudentKeys.has(String(s.id).toLowerCase()));
+
+        if (!hasChat) {
           if (
             (s.name || "").toLowerCase().includes(q) ||
             (s.code || "").toLowerCase().includes(q)
           ) {
             allItems.push({
               type: "student",
-              key: `student:${s.code}`,
-              code: s.code,
+              key: `student:${s.id || s.code}`,
+              code: s.id || s.code,
               name: s.name || s.code,
               lastAt: 0,
               lastText: "",
@@ -894,6 +978,7 @@ export default function CoachDetailPage({
           ? teams.clientsByCoachDetail
           : [];
         const rows = (flat.length > 0 ? flat : detail).map((r: any) => ({
+          id: r.id ? String(r.id) : undefined,
           code: String(r.codigo ?? r.code ?? "").trim(),
           name: String(r.nombre ?? r.name ?? "").trim(),
           state: r.estado ?? r.state ?? null,
@@ -914,6 +999,7 @@ export default function CoachDetailPage({
         if (ctrl.signal.aborted) return;
         setAllStudentsList(
           all.map((s) => ({
+            id: s.id ? String(s.id) : undefined,
             code: s.code || String(s.id),
             name: s.name,
             state: s.state,
@@ -1034,11 +1120,11 @@ export default function CoachDetailPage({
       "chat:unread-count-updated",
       onUnreadCountUpdated as any
     );
-    window.addEventListener("chat:list-refresh", onListRefresh as any);
-    const iv = setInterval(() => {
-      setChatsLoading(true);
-      setRequestListSignal((n) => (n ?? 0) + 1);
-    }, 25000);
+    // window.addEventListener("chat:list-refresh", onListRefresh as any);
+    // const iv = setInterval(() => {
+    //   setChatsLoading(true);
+    //   setRequestListSignal((n) => (n ?? 0) + 1);
+    // }, 25000);
     return () => {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener(
@@ -1049,8 +1135,8 @@ export default function CoachDetailPage({
         "chat:unread-count-updated",
         onUnreadCountUpdated as any
       );
-      window.removeEventListener("chat:list-refresh", onListRefresh as any);
-      clearInterval(iv);
+      // window.removeEventListener("chat:list-refresh", onListRefresh as any);
+      // clearInterval(iv);
     };
   }, []);
 
@@ -1256,6 +1342,21 @@ export default function CoachDetailPage({
                                     isActive ? "bg-slate-100" : ""
                                   }`}
                                   onClick={() => {
+                                    try {
+                                      const chatIds = (item.chats || [])
+                                        .map((it: any) => it?.id_chat ?? it?.id)
+                                        .filter((x: any) => x != null);
+                                      console.log(
+                                        "[CoachDetailPage] Click en conversación",
+                                        {
+                                          tipo: item.type,
+                                          codigo: item.code,
+                                          nombre: item.name,
+                                          chatIds,
+                                          topChatId: item.topChatId ?? null,
+                                        }
+                                      );
+                                    } catch {}
                                     setMobileChatOpen(true);
                                     if (item.type === "team") {
                                       setTargetStudentCode(null);
@@ -1335,8 +1436,11 @@ export default function CoachDetailPage({
                                   {/* Content */}
                                   <div className="min-w-0 flex-1 border-b border-slate-50 pb-3 group-hover:border-transparent transition-colors h-full flex flex-col justify-center">
                                     <div className="flex items-baseline justify-between gap-2">
-                                      <div className="text-[15px] font-medium truncate text-slate-900">
-                                        {item.name}
+                                      <div className="text-[15px] font-medium truncate text-slate-900 flex items-center gap-2">
+                                        <span>{item.name}</span>
+                                        <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1 rounded">
+                                          {item.id}
+                                        </span>
                                       </div>
                                       <div
                                         className={`text-[11px] flex-shrink-0 ${
@@ -1388,75 +1492,8 @@ export default function CoachDetailPage({
                       mobileChatOpen ? "flex" : "hidden md:flex"
                     }`}
                   >
-                    {/* Pestañas de contactos/alumnos abiertos */}
-                    {openTabs.length > 0 && (
-                      <div className="px-2 py-2 bg-slate-50 border border-slate-200 rounded-md mb-2 overflow-x-auto whitespace-nowrap">
-                        {openTabs.map((t) => {
-                          const active = activeChatTab === t.key;
-                          return (
-                            <button
-                              key={t.key}
-                              className={`inline-flex items-center h-8 px-2 mr-2 rounded-md border text-xs transition ${
-                                active
-                                  ? "bg-white text-slate-900 border-teal-500 shadow-sm"
-                                  : "bg-slate-100 text-slate-700 border-transparent hover:bg-slate-200"
-                              }`}
-                              onClick={() => {
-                                setActiveChatTab(t.key);
-                                // Asegurar que el panel de conversación esté visible en móvil
-                                setMobileChatOpen(true);
-                                try {
-                                  console.log("[teamsv2] Click pestaña", t);
-                                } catch {}
-                              }}
-                              title={t.name}
-                            >
-                              <span className="max-w-[180px] truncate">
-                                {t.name}
-                              </span>
-                              <span
-                                role="button"
-                                className={`ml-1 inline-flex items-center justify-center w-5 h-5 rounded ${
-                                  active
-                                    ? "hover:bg-slate-100"
-                                    : "hover:bg-slate-300"
-                                }`}
-                                title="Cerrar"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOpenTabs((prev) => {
-                                    const rest = prev.filter(
-                                      (p) => p.key !== t.key
-                                    );
-                                    // Reasignar activa si cerramos la actual
-                                    if (active) {
-                                      if (rest.length > 0)
-                                        setActiveChatTab(
-                                          rest[rest.length - 1].key
-                                        );
-                                      else {
-                                        setActiveChatTab(null);
-                                        setTargetTeamCode(null);
-                                        setTargetStudentCode(null);
-                                        setTargetStudentName("");
-                                        setChatInfo({
-                                          chatId: null,
-                                          myParticipantId: null,
-                                        });
-                                        setCurrentOpenChatId(null);
-                                      }
-                                    }
-                                    return rest;
-                                  });
-                                }}
-                              >
-                                ×
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                    {/* Pestañas de contactos/alumnos abiertos (ELIMINADAS POR SOLICITUD) */}
+
                     <CoachChatInline
                       onBack={() => setMobileChatOpen(false)}
                       key={`chat-${code}-${
@@ -1602,6 +1639,7 @@ export default function CoachDetailPage({
                         try {
                           console.log("=== ON CHATS LIST (PAGE) ===");
                           console.log("Total:", list?.length);
+                          console.log("ALL CHATS ARRAY:", list);
                           if (Array.isArray(list)) {
                             // Imprimir ID y nombre resuelto del contacto (equipo o alumno)
                             list.forEach((it: any, i: number) => {
@@ -1745,8 +1783,67 @@ export default function CoachDetailPage({
                               );
                             }
                           );
+
+                          // --- ANÁLISIS DE DUPLICADOS ---
+                          const studentCounts = new Map<string, any[]>();
+                          (Array.isArray(list) ? list : []).forEach(
+                            (chat: any) => {
+                              const parts =
+                                chat.participants || chat.participantes || [];
+                              const student = parts.find(
+                                (p: any) =>
+                                  String(p.participante_tipo).toLowerCase() ===
+                                  "cliente"
+                              );
+                              if (student && student.id_cliente) {
+                                const id = String(student.id_cliente);
+                                if (!studentCounts.has(id))
+                                  studentCounts.set(id, []);
+                                studentCounts.get(id)?.push(chat);
+                              }
+                            }
+                          );
+
+                          console.log("=== REPORTE DE DUPLICADOS ===");
+                          let duplicatesFound = false;
+                          studentCounts.forEach((chats, studentId) => {
+                            if (chats.length > 1) {
+                              duplicatesFound = true;
+                              // Buscar nombre
+                              const s =
+                                studentsMap.get(studentId.toLowerCase()) ||
+                                allStudentsList.find(
+                                  (st) =>
+                                    (st.code || "").toLowerCase() ===
+                                    studentId.toLowerCase()
+                                );
+                              const name = s?.name || studentId;
+                              console.warn(
+                                `ALUMNO DUPLICADO: ${name} (${studentId}) tiene ${chats.length} conversaciones.`
+                              );
+                              chats.forEach((c) =>
+                                console.log(
+                                  `   -> ChatID: ${
+                                    c.id_chat || c.id
+                                  } | Creado: ${
+                                    c.created_at || c.fecha_creacion
+                                  }`
+                                )
+                              );
+                            }
+                          });
+                          if (!duplicatesFound) {
+                            console.log(
+                              "No se encontraron conversaciones duplicadas para el mismo alumno."
+                            );
+                          }
+                          console.log("=============================");
                         } catch {}
-                        setChatList(list);
+
+                        // Mostrar TODAS las conversaciones tal como vienen del servidor.
+                        const fullList = Array.isArray(list) ? list : [];
+
+                        setChatList(fullList);
                         setChatsLoading(false);
                         try {
                           if (targetTeamCode) {

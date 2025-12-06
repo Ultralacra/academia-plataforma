@@ -126,6 +126,10 @@ export default function CoachChatInline({
   onBack?: () => void;
 }) {
   const isMobile = useIsMobile();
+  const [convList, setConvList] = React.useState<any[]>([]);
+  const [contacts, setContacts] = React.useState<
+    Array<{ codigo_equipo: string; area?: string }>
+  >([]);
   const normRoom = React.useMemo(
     () => (room || "").trim().toLowerCase(),
     [room]
@@ -483,6 +487,86 @@ export default function CoachChatInline({
     setPreviewAttachment(a);
     setPreviewOpen(true);
   };
+
+  // Sonido de notificación (similar al Inline)
+  const audioCtxRef = React.useRef<AudioContext | null>(null);
+  const audioElRef = React.useRef<HTMLAudioElement | null>(null);
+  const unlockedRef = React.useRef(false);
+  React.useEffect(() => {
+    function unlock() {
+      try {
+        if (!audioCtxRef.current) {
+          const Ctx =
+            (window as any).AudioContext || (window as any).webkitAudioContext;
+          audioCtxRef.current = Ctx ? new Ctx() : null;
+        }
+        if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+          audioCtxRef.current.resume().catch(() => {});
+        }
+        if (!audioElRef.current) {
+          const el = document.createElement("audio");
+          // Fallback embebido: pequeño WAV en data URI
+          el.src =
+            "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YYQAAACAgICAgICAgP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA";
+          el.preload = "auto";
+          el.volume = 0.0;
+          document.body.appendChild(el);
+          audioElRef.current = el;
+          el.play().catch(() => {});
+          setTimeout(() => {
+            el.pause();
+            el.volume = 1.0;
+          }, 200);
+        }
+        unlockedRef.current = true;
+      } catch {}
+    }
+    const onClick = () => unlock();
+    const onKey = () => unlock();
+    try {
+      window.addEventListener("click", onClick, { once: true });
+      window.addEventListener("keydown", onKey, { once: true });
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener("click", onClick);
+        window.removeEventListener("keydown", onKey);
+      } catch {}
+    };
+  }, []);
+
+  const playNotification = React.useCallback(() => {
+    try {
+      const el = audioElRef.current;
+      if (el) {
+        el.currentTime = 0;
+        el.volume = 1.0;
+        el.play().catch(() => {});
+        return;
+      }
+      const ctx = audioCtxRef.current;
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.value = 0.001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } catch {}
+  }, []);
+
+  React.useEffect(() => {
+    try {
+      if (items.length === 0) return;
+      const last = items[items.length - 1];
+      const isMine = mine(last.sender);
+      if (!isMine) playNotification();
+    } catch {}
+  }, [items.length]);
 
   // Componente AudioBubble extraído a './AudioBubble'
 
@@ -2175,6 +2259,32 @@ export default function CoachChatInline({
             } catch {}
           } catch {}
 
+          // Log específico para alumno: conversación activa y mensajes como array sencillo
+          try {
+            const conversationInfo = {
+              chatId: cid,
+              participants: Array.isArray(joinedParticipantsRef.current)
+                ? joinedParticipantsRef.current
+                : [],
+            };
+            const messagesArray = mapped.map((m) => ({
+              id: m.id,
+              sender: m.sender,
+              text: m.text,
+              at: m.at,
+              attachments: Array.isArray(m.attachments)
+                ? m.attachments.map((a) => ({
+                    id: a.id,
+                    name: a.name,
+                    mime: a.mime,
+                    size: a.size,
+                  }))
+                : [],
+            }));
+            console.log("[Alumno] Conversación activa", conversationInfo);
+            console.log("[Alumno] Mensajes (array)", messagesArray);
+          } catch {}
+
           {
             const reconciled = reconcilePreserveSender(mapped);
             const merged = mergePreservingOptimistics(reconciled);
@@ -2324,6 +2434,7 @@ export default function CoachChatInline({
           );
           if (!needEnrich) {
             onChatsList?.(baseList);
+            setConvList(baseList);
             try {
               const toLine2 = (it: any) => {
                 const id = it?.id_chat ?? it?.id ?? null;
@@ -2475,10 +2586,39 @@ export default function CoachChatInline({
             );
           } catch {}
           onChatsList?.(merged);
+          setConvList(merged);
         } catch {}
       });
     } catch {}
   }, [connected, requestListSignal]);
+
+  // Cargar contactos asignados del alumno (coach de Atención al Cliente preferido)
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (role !== "alumno") return;
+        const alumnoCode = (socketio as any)?.idCliente
+          ? String((socketio as any).idCliente)
+          : null;
+        if (!alumnoCode) return;
+        const j = await apiFetch<any>(
+          `${endpoints.coachClient.list}?alumno=${encodeURIComponent(
+            alumnoCode
+          )}`
+        );
+        const rows: any[] = Array.isArray(j?.data) ? j.data : [];
+        const list = rows
+          .map((r) => ({
+            codigo_equipo: String(
+              r.codigo_equipo ?? r.codigo_coach ?? r.codigo ?? ""
+            ),
+            area: r.area || undefined,
+          }))
+          .filter((x) => !!x.codigo_equipo);
+        setContacts(list);
+      } catch {}
+    })();
+  }, [role, (socketio as any)?.idCliente]);
 
   const refreshListNow = React.useCallback(() => {
     try {
@@ -2540,6 +2680,7 @@ export default function CoachChatInline({
             (list || []).forEach((it: any) => console.log(" -", toLine(it)));
           } catch {}
           onChatsList?.(list);
+          setConvList(list);
         } catch {}
       });
     } catch {}
@@ -2555,18 +2696,43 @@ export default function CoachChatInline({
     } catch {}
   }, [items.length, connected, chatId]);
 
+  // Evitar creación automática en recarga para alumno: solo buscar y unir si existe
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (!connected) return;
+        if (chatIdRef.current != null) return;
+        const parts = participantsRef.current ?? socketio?.participants;
+        if (!Array.isArray(parts) || parts.length === 0) return;
+        // Solo localizar y hacer join si existe (no crear aquí)
+        const found = await ensureChatReadyForSend({ onlyFind: true });
+        if (!found) {
+          // No crear automáticamente; esperar acción del usuario
+        }
+      } catch {}
+    })();
+  }, [connected, socketio?.participants]);
+
   async function ensureChatReadyForSend(opts?: {
     onlyFind?: boolean;
+    allowCreate?: boolean;
   }): Promise<boolean> {
     try {
-      if (chatId != null) return true;
+      if (chatIdRef.current != null) return true;
       const sio = sioRef.current;
       if (!sio) return false;
       const participants = participantsRef.current ?? socketio?.participants;
       if (!Array.isArray(participants) || participants.length === 0)
         return false;
-      const autoCreate =
-        socketio?.autoCreate !== undefined ? socketio.autoCreate : true;
+      const autoCreate = (() => {
+        const base =
+          socketio?.autoCreate !== undefined
+            ? socketio.autoCreate
+            : role !== "alumno";
+        // Permitir creación solo si se pasa allowCreate explícito (p. ej., al enviar el primer mensaje)
+        if (role === "alumno") return !!opts?.allowCreate && !!base;
+        return base;
+      })();
       dbg("ensureChatReadyForSend:start", {
         autoCreate,
         count: participants.length,
@@ -2831,7 +2997,8 @@ export default function CoachChatInline({
           hasAttachments,
           textLen: val.length,
         });
-        const ok = await ensureChatReadyForSend();
+        // Para alumno, permitir crear únicamente al momento de enviar su primer mensaje
+        const ok = await ensureChatReadyForSend({ allowCreate: true });
         if (chatIdRef.current == null) {
           for (let i = 0; i < 15 && chatIdRef.current == null; i++) {
             await new Promise((r) => setTimeout(r, 100));
@@ -3197,57 +3364,189 @@ export default function CoachChatInline({
   return (
     <>
       <div
-        className={`relative h-full flex flex-col w-full min-h-0 chat-root ${
-          className || ""
-        }`}
+        className={`relative h-full flex ${
+          role === "alumno" ? "flex-row" : "flex-col"
+        } w-full min-h-0 chat-root ${className || ""}`}
       >
-        <div
-          className={`flex items-center justify-between px-3 transition-all duration-300 bg-[#075E54] text-white ${
-            headerCollapsed ? "py-1.5" : "py-2 md:px-4 md:py-3"
-          }`}
-        >
-          {!headerCollapsed ? (
-            <>
-              <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 mr-2">
-                {onBack && (
-                  <button
-                    onClick={onBack}
-                    className="p-1 mr-1 rounded-full hover:bg-white/10 text-white md:hidden"
-                    title="Volver"
-                  >
-                    <ArrowLeft className="w-5 h-5" />
-                  </button>
-                )}
-                <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-xs md:text-sm flex-shrink-0">
-                  {(title || "C").charAt(0).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium truncate leading-tight">
-                    {title}
+        {role === "alumno" && (
+          <div
+            className={`${
+              isMobile && chatId ? "hidden" : "flex"
+            } md:flex flex-col w-[280px] flex-shrink-0 border-r border-gray-200 bg-white`}
+          >
+            <div className="px-3 py-2 border-b bg-gray-50 text-xs text-gray-600">
+              Conversaciones
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {convList.length === 0 ? (
+                <div className="p-3 text-xs text-gray-700">
+                  <div className="mb-2 text-xs text-gray-500">
+                    Sin conversaciones. Contactos asignados:
                   </div>
-                  {subtitle && (
-                    <div className="text-[10px] md:text-xs text-gray-200 truncate leading-tight">
-                      {subtitle}
-                    </div>
+                  {contacts.length === 0 ? (
+                    <div className="text-xs text-gray-400">Sin contactos</div>
+                  ) : (
+                    contacts.map((c, idx) => (
+                      <button
+                        key={`${c.codigo_equipo}-${idx}`}
+                        type="button"
+                        className="w-full text-left px-3 py-2 border-b hover:bg-gray-50 transition"
+                        onClick={() => {
+                          setChatId(null);
+                          chatIdRef.current = null;
+                          // Seleccionar participantes: alumno + equipo; NO crear aún.
+                          participantsRef.current = [
+                            {
+                              participante_tipo: "cliente",
+                              id_cliente: String(
+                                (socketio as any)?.idCliente || ""
+                              ),
+                            },
+                            {
+                              participante_tipo: "equipo",
+                              id_equipo: String(c.codigo_equipo),
+                            },
+                          ];
+                          // Intentar unir si ya existe; si no, esperar a envío.
+                          ensureChatReadyForSend({ onlyFind: true });
+                        }}
+                      >
+                        <div className="text-sm font-medium truncate text-gray-800">
+                          {nameOf("equipo", c.codigo_equipo)}
+                        </div>
+                        {c.area && (
+                          <div className="text-[11px] text-gray-500">
+                            {c.area}
+                          </div>
+                        )}
+                      </button>
+                    ))
                   )}
                 </div>
-              </div>
-              <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-                <div
-                  className="flex items-center gap-1.5"
-                  title={connected ? "Conectado" : "Desconectado"}
-                >
-                  <div
-                    className={`w-2 h-2 rounded-full ${
-                      connected ? "bg-green-400" : "bg-white/30"
-                    }`}
-                  />
-                  <span className="text-xs text-gray-200 hidden sm:inline">
-                    {connected ? "en línea" : "offline"}
-                  </span>
+              ) : (
+                convList.map((it: any) => {
+                  const id = it?.id_chat ?? it?.id;
+                  const parts = it?.participants || it?.participantes || [];
+                  const equipos = (Array.isArray(parts) ? parts : [])
+                    .filter(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "equipo"
+                    )
+                    .map((p: any) => nameOf("equipo", p?.id_equipo))
+                    .filter(Boolean);
+                  const clientes = (Array.isArray(parts) ? parts : [])
+                    .filter(
+                      (p: any) =>
+                        normalizeTipo(p?.participante_tipo) === "cliente"
+                    )
+                    .map((p: any) => nameOf("cliente", p?.id_cliente))
+                    .filter(Boolean);
+                  const title = equipos.length
+                    ? equipos.join(", ")
+                    : clientes.join(", ");
+                  const lastAt =
+                    it?.last_message_at ||
+                    it?.fecha_ultimo_mensaje ||
+                    it?.updated_at ||
+                    it?.fecha_actualizacion ||
+                    it?.created_at ||
+                    it?.fecha_creacion;
+                  const lastLabel = lastAt ? formatTime(String(lastAt)) : "";
+                  let unread = 0;
+                  try {
+                    const key = `chatUnreadById:alumno:${String(id)}`;
+                    unread = parseInt(localStorage.getItem(key) || "0", 10);
+                    if (isNaN(unread)) unread = 0;
+                  } catch {}
+                  const active =
+                    chatIdRef.current != null &&
+                    String(chatIdRef.current) === String(id);
+                  return (
+                    <button
+                      key={String(id)}
+                      type="button"
+                      onClick={() => {
+                        // Join-only: no crear; solo unir conversación existente
+                        if (id != null) tryJoin(id);
+                      }}
+                      className={`w-full text-left px-3 py-2 border-b hover:bg-gray-50 transition ${
+                        active ? "bg-gray-100" : "bg-white"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium truncate text-gray-800">
+                          {title || `Chat ${String(id)}`}
+                        </div>
+                        {unread > 0 && (
+                          <span className="ml-2 inline-flex min-w-[18px] h-[18px] rounded-full bg-[#25d366] text-white text-[11px] items-center justify-center px-1">
+                            {unread > 99 ? "99+" : unread}
+                          </span>
+                        )}
+                      </div>
+                      {lastLabel && (
+                        <div className="text-[11px] text-gray-500">
+                          {lastLabel}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+        <div
+          className={`flex-1 flex flex-col min-w-0 ${
+            isMobile && !chatId ? "hidden" : "flex"
+          }`}
+        >
+          <div
+            className={`flex items-center justify-between px-3 transition-all duration-300 bg-[#075E54] text-white ${
+              headerCollapsed ? "py-1.5" : "py-2 md:px-4 md:py-3"
+            }`}
+          >
+            {!headerCollapsed ? (
+              <>
+                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1 mr-2">
+                  {onBack && (
+                    <button
+                      onClick={onBack}
+                      className="p-1 mr-1 rounded-full hover:bg-white/10 text-white md:hidden"
+                      title="Volver"
+                    >
+                      <ArrowLeft className="w-5 h-5" />
+                    </button>
+                  )}
+                  <div className="h-8 w-8 md:h-10 md:w-10 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-xs md:text-sm flex-shrink-0">
+                    {(title || "C").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate leading-tight">
+                      {title}
+                    </div>
+                    {subtitle && (
+                      <div className="text-[10px] md:text-xs text-gray-200 truncate leading-tight">
+                        {subtitle}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {/* Botón para crear chat manual si aún no existe */}
-                {/*  {!chatIdRef.current && !chatId && (
+                <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+                  <div
+                    className="flex items-center gap-1.5"
+                    title={connected ? "Conectado" : "Desconectado"}
+                  >
+                    <div
+                      className={`w-2 h-2 rounded-full ${
+                        connected ? "bg-green-400" : "bg-white/30"
+                      }`}
+                    />
+                    <span className="text-xs text-gray-200 hidden sm:inline">
+                      {connected ? "en línea" : "offline"}
+                    </span>
+                  </div>
+                  {/* Botón para crear chat manual si aún no existe */}
+                  {/*  {!chatIdRef.current && !chatId && (
               <button
                 onClick={async () => {
                   if (creatingChat) return;
@@ -3266,353 +3565,432 @@ export default function CoachChatInline({
                 <span className="sm:hidden">Crear</span>
               </button>
             )} */}
-                {role !== "alumno" && (
-                  <button
-                    onClick={handleGenerateTicket}
-                    disabled={!(chatIdRef.current ?? chatId) || ticketLoading}
-                    className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
-                    title={
-                      chatIdRef.current ?? chatId
-                        ? "Generar ticket de esta conversación"
-                        : "Sin chat activo"
-                    }
-                  >
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Generar ticket
-                  </button>
-                )}
-                {role !== "alumno" && (
-                  <button
-                    onClick={() => {
-                      if (selectionMode) {
-                        setSelectionMode(false);
-                        setSelectedMessageIds(new Set());
-                        setSelectedAttachmentIds(new Set());
-                      } else {
-                        setSelectionMode(true);
+                  {role !== "alumno" && (
+                    <button
+                      onClick={handleGenerateTicket}
+                      disabled={!(chatIdRef.current ?? chatId) || ticketLoading}
+                      className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
+                      title={
+                        chatIdRef.current ?? chatId
+                          ? "Generar ticket de esta conversación"
+                          : "Sin chat activo"
                       }
-                    }}
-                    className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition"
-                    title={
-                      selectionMode
-                        ? "Cancelar selección"
-                        : "Activar selección de mensajes y archivos"
-                    }
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Generar ticket
+                    </button>
+                  )}
+                  {role !== "alumno" && (
+                    <button
+                      onClick={() => {
+                        if (selectionMode) {
+                          setSelectionMode(false);
+                          setSelectedMessageIds(new Set());
+                          setSelectedAttachmentIds(new Set());
+                        } else {
+                          setSelectionMode(true);
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition"
+                      title={
+                        selectionMode
+                          ? "Cancelar selección"
+                          : "Activar selección de mensajes y archivos"
+                      }
+                    >
+                      {selectionMode ? "Cancelar" : "Seleccionar"}
+                    </button>
+                  )}
+                  {selectionMode && (
+                    <span className="text-[11px] px-2 py-1 rounded bg-white/10 text-white">
+                      {selectedMessageIds.size} msg /{" "}
+                      {selectedAttachmentIds.size} adj
+                    </span>
+                  )}
+                  {/* Menú de acciones (3 puntitos) */}
+                  <AlertDialog
+                    open={confirmDeleteOpen}
+                    onOpenChange={setConfirmDeleteOpen}
                   >
-                    {selectionMode ? "Cancelar" : "Seleccionar"}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                          title="Más acciones"
+                        >
+                          <MoreVertical className="h-4 w-4 text-white" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <AlertDialogTrigger asChild>
+                          <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
+                            <Trash2 className="h-4 w-4 mr-2" /> Eliminar
+                            conversación
+                          </DropdownMenuItem>
+                        </AlertDialogTrigger>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>
+                          ¿Eliminar esta conversación?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Se eliminarán los mensajes del chat{" "}
+                          {String(chatIdRef.current ?? chatId ?? "")}. Esta
+                          acción no se puede deshacer.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDeleteChat}
+                          className="bg-red-600 hover:bg-red-700"
+                        >
+                          Eliminar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  <button
+                    onClick={() => setHeaderCollapsed(true)}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                    title="Contraer encabezado"
+                  >
+                    <ChevronUp className="h-4 w-4 text-white" />
                   </button>
-                )}
-                {selectionMode && (
-                  <span className="text-[11px] px-2 py-1 rounded bg-white/10 text-white">
-                    {selectedMessageIds.size} msg / {selectedAttachmentIds.size}{" "}
-                    adj
-                  </span>
-                )}
-                {/* Menú de acciones (3 puntitos) */}
-                <AlertDialog
-                  open={confirmDeleteOpen}
-                  onOpenChange={setConfirmDeleteOpen}
-                >
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
-                        title="Más acciones"
-                      >
-                        <MoreVertical className="h-4 w-4 text-white" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <AlertDialogTrigger asChild>
-                        <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
-                          <Trash2 className="h-4 w-4 mr-2" /> Eliminar
-                          conversación
-                        </DropdownMenuItem>
-                      </AlertDialogTrigger>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        ¿Eliminar esta conversación?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Se eliminarán los mensajes del chat{" "}
-                        {String(chatIdRef.current ?? chatId ?? "")}. Esta acción
-                        no se puede deshacer.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={handleDeleteChat}
-                        className="bg-red-600 hover:bg-red-700"
-                      >
-                        Eliminar
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2">
+                  {onBack && (
+                    <button
+                      onClick={onBack}
+                      className="p-1 rounded-full hover:bg-white/10 text-white md:hidden"
+                      title="Volver"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
+                  )}
+                  <div className="h-6 w-6 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-[10px] flex-shrink-0">
+                    {(title || "C").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="text-xs font-medium truncate">{title}</div>
+                </div>
                 <button
-                  onClick={() => setHeaderCollapsed(true)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
-                  title="Contraer encabezado"
+                  onClick={() => setHeaderCollapsed(false)}
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
+                  title="Expandir encabezado"
                 >
-                  <ChevronUp className="h-4 w-4 text-white" />
+                  <ChevronDown className="h-4 w-4 text-white" />
                 </button>
               </div>
-            </>
-          ) : (
-            <div className="flex items-center justify-between w-full">
-              <div className="flex items-center gap-2">
-                {onBack && (
-                  <button
-                    onClick={onBack}
-                    className="p-1 rounded-full hover:bg-white/10 text-white md:hidden"
-                    title="Volver"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                )}
-                <div className="h-6 w-6 rounded-full bg-[#128C7E] flex items-center justify-center text-white font-semibold text-[10px] flex-shrink-0">
-                  {(title || "C").charAt(0).toUpperCase()}
+            )}
+          </div>
+
+          <div
+            ref={scrollRef}
+            onScroll={onScrollContainer}
+            className="relative flex-1 overflow-y-auto px-4 py-2 bg-[#ECE5DD]"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+              scrollbarGutter: "stable both-edges",
+              overscrollBehavior: "contain",
+              overflowY: "scroll",
+            }}
+          >
+            {isJoining && items.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                  <div className="text-sm text-gray-500">
+                    Cargando mensajes…
+                  </div>
                 </div>
-                <div className="text-xs font-medium truncate">{title}</div>
               </div>
-              <button
-                onClick={() => setHeaderCollapsed(false)}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/10 focus:outline-none"
-                title="Expandir encabezado"
-              >
-                <ChevronDown className="h-4 w-4 text-white" />
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div
-          ref={scrollRef}
-          onScroll={onScrollContainer}
-          className="relative flex-1 overflow-y-auto px-4 py-2 bg-[#ECE5DD]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fillRule='evenodd'%3E%3Cg fill='%23d9d9d9' fillOpacity='0.15'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-            scrollbarGutter: "stable both-edges",
-            overscrollBehavior: "contain",
-            overflowY: "scroll",
-          }}
-        >
-          {isJoining && items.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-2">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-                <div className="text-sm text-gray-500">Cargando mensajes…</div>
+            ) : items.length === 0 ? (
+              <div className="h-full flex items-center justify-center">
+                <div className="text-sm text-gray-500 bg-white/60 px-4 py-2 rounded-lg shadow-sm">
+                  Sin mensajes aún
+                </div>
               </div>
-            </div>
-          ) : items.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="text-sm text-gray-500 bg-white/60 px-4 py-2 rounded-lg shadow-sm">
-                Sin mensajes aún
-              </div>
-            </div>
-          ) : (
-            items.map((m, idx) => {
-              const isMine = mine(m.sender);
-              const prev = idx > 0 ? items[idx - 1] : null;
-              const next = idx + 1 < items.length ? items[idx + 1] : null;
-              const samePrev = prev && prev.sender === m.sender;
-              const sameNext = next && next.sender === m.sender;
-              const newGroup = !samePrev;
-              const endGroup = !sameNext;
-              const isSelected = selectionMode && selectedMessageIds.has(m.id);
+            ) : (
+              items.map((m, idx) => {
+                const isMine = mine(m.sender);
+                const prev = idx > 0 ? items[idx - 1] : null;
+                const next = idx + 1 < items.length ? items[idx + 1] : null;
+                const samePrev = prev && prev.sender === m.sender;
+                const sameNext = next && next.sender === m.sender;
+                const newGroup = !samePrev;
+                const endGroup = !sameNext;
+                const isSelected =
+                  selectionMode && selectedMessageIds.has(m.id);
 
-              let radius = "rounded-lg";
-              if (isMine) {
-                if (newGroup && !endGroup) radius = "rounded-lg rounded-br-sm";
-                if (!newGroup && !endGroup)
-                  radius =
-                    "rounded-tr-sm rounded-br-sm rounded-tl-lg rounded-bl-lg";
-                if (!newGroup && endGroup) radius = "rounded-lg rounded-tr-sm";
-              } else {
-                if (newGroup && !endGroup) radius = "rounded-lg rounded-bl-sm";
-                if (!newGroup && !endGroup)
-                  radius =
-                    "rounded-tl-sm rounded-bl-sm rounded-tr-lg rounded-br-lg";
-              }
+                let radius = "rounded-lg";
+                if (isMine) {
+                  if (newGroup && !endGroup)
+                    radius = "rounded-lg rounded-br-sm";
+                  if (!newGroup && !endGroup)
+                    radius =
+                      "rounded-tr-sm rounded-br-sm rounded-tl-lg rounded-bl-lg";
+                  if (!newGroup && endGroup)
+                    radius = "rounded-lg rounded-tr-sm";
+                } else {
+                  if (newGroup && !endGroup)
+                    radius = "rounded-lg rounded-bl-sm";
+                  if (!newGroup && !endGroup)
+                    radius =
+                      "rounded-tl-sm rounded-bl-sm rounded-tr-lg rounded-br-lg";
+                }
 
-              const wrapperMt = newGroup ? "mt-1" : "mt-0.5";
+                const wrapperMt = newGroup ? "mt-1" : "mt-0.5";
 
-              const hasAudioOnly =
-                Array.isArray(m.attachments) &&
-                m.attachments.some((a) =>
-                  (a.mime || "").startsWith("audio/")
-                ) &&
-                (!m.text || m.text.trim() === "");
+                const hasAudioOnly =
+                  Array.isArray(m.attachments) &&
+                  m.attachments.some((a) =>
+                    (a.mime || "").startsWith("audio/")
+                  ) &&
+                  (!m.text || m.text.trim() === "");
 
-              const isAttachmentOnly =
-                Array.isArray(m.attachments) &&
-                m.attachments.length > 0 &&
-                (!m.text || m.text.trim() === "");
+                const isAttachmentOnly =
+                  Array.isArray(m.attachments) &&
+                  m.attachments.length > 0 &&
+                  (!m.text || m.text.trim() === "");
 
-              return (
-                <div
-                  key={m.uiKey || m.id}
-                  className={`flex ${
-                    isMine ? "justify-end" : "justify-start"
-                  } ${wrapperMt}`}
-                >
+                return (
                   <div
-                    onClick={() => {
-                      if (selectionMode && !isAttachmentOnly)
-                        toggleMessageSelection(m.id);
-                    }}
-                    className={`relative ${
-                      selectionMode && !isAttachmentOnly
-                        ? "cursor-pointer"
-                        : "cursor-default"
-                    } w-fit ${
-                      hasAudioOnly
-                        ? "p-0 bg-transparent shadow-none"
-                        : "max-w-[90%] md:max-w-[85%] px-2.5 py-1.5 md:px-3 md:py-2 shadow-sm " +
-                          (isMine ? "bg-[#DCF8C6]" : "bg-white")
-                    } ${radius} ${isSelected ? "ring-2 ring-violet-500" : ""}`}
+                    key={m.uiKey || m.id}
+                    className={`flex ${
+                      isMine ? "justify-end" : "justify-start"
+                    } ${wrapperMt}`}
                   >
-                    {selectionMode && !isAttachmentOnly && (
-                      <>
-                        <div className="absolute inset-0 z-10 bg-transparent" />
-                        <span
-                          className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
-                            isSelected
-                              ? "bg-violet-600 text-white"
-                              : "bg-gray-300 text-gray-700"
-                          }`}
-                        >
-                          {isSelected ? "✓" : "+"}
-                        </span>
-                      </>
-                    )}
-                    {m.text?.trim() ? (
-                      <div className="text-sm md:text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
-                        {renderTextWithLinks(m.text)}
-                      </div>
-                    ) : null}
-                    {Array.isArray(m.attachments) &&
-                      m.attachments.length > 0 &&
-                      (hasAudioOnly ? (
-                        <div className="mt-0">
-                          {m.attachments
-                            .filter((a) => (a.mime || "").startsWith("audio/"))
-                            .map((a) => {
+                    <div
+                      onClick={() => {
+                        if (selectionMode && !isAttachmentOnly)
+                          toggleMessageSelection(m.id);
+                      }}
+                      className={`relative ${
+                        selectionMode && !isAttachmentOnly
+                          ? "cursor-pointer"
+                          : "cursor-default"
+                      } w-fit ${
+                        hasAudioOnly
+                          ? "p-0 bg-transparent shadow-none"
+                          : "max-w-[90%] md:max-w-[85%] px-2.5 py-1.5 md:px-3 md:py-2 shadow-sm " +
+                            (isMine ? "bg-[#DCF8C6]" : "bg-white")
+                      } ${radius} ${
+                        isSelected ? "ring-2 ring-violet-500" : ""
+                      }`}
+                    >
+                      {selectionMode && !isAttachmentOnly && (
+                        <>
+                          <div className="absolute inset-0 z-10 bg-transparent" />
+                          <span
+                            className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                              isSelected
+                                ? "bg-violet-600 text-white"
+                                : "bg-gray-300 text-gray-700"
+                            }`}
+                          >
+                            {isSelected ? "✓" : "+"}
+                          </span>
+                        </>
+                      )}
+                      {m.text?.trim() ? (
+                        <div className="text-sm md:text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
+                          {renderTextWithLinks(m.text)}
+                        </div>
+                      ) : null}
+                      {Array.isArray(m.attachments) &&
+                        m.attachments.length > 0 &&
+                        (hasAudioOnly ? (
+                          <div className="mt-0">
+                            {m.attachments
+                              .filter((a) =>
+                                (a.mime || "").startsWith("audio/")
+                              )
+                              .map((a) => {
+                                const url = getAttachmentUrl(a);
+                                const timeLabel = ""; // formatTime(m.at);
+                                const attSelected =
+                                  selectionMode &&
+                                  selectedAttachmentIds.has(a.id);
+                                return (
+                                  <div
+                                    key={a.id}
+                                    className={`rounded-md relative ${
+                                      attSelected
+                                        ? "ring-2 ring-violet-500"
+                                        : ""
+                                    }`}
+                                    onClick={(e) => {
+                                      if (selectionMode) {
+                                        e.stopPropagation();
+                                        toggleAttachmentSelection(a.id);
+                                      }
+                                    }}
+                                  >
+                                    <AudioBubble
+                                      src={url}
+                                      isMine={isMine}
+                                      timeLabel={timeLabel}
+                                    />
+                                    {selectionMode && (
+                                      <span
+                                        className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                                          attSelected
+                                            ? "bg-violet-600 text-white"
+                                            : "bg-gray-300 text-gray-700"
+                                        }`}
+                                      >
+                                        {attSelected ? "✓" : "+"}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        ) : (
+                          <div
+                            className={`mt-2 grid ${
+                              (m.attachments?.length || 0) === 1
+                                ? "grid-cols-1"
+                                : "grid-cols-2"
+                            } gap-2 w-fit`}
+                          >
+                            {m.attachments.map((a) => {
                               const url = getAttachmentUrl(a);
-                              const timeLabel = ""; // formatTime(m.at);
+                              const isImg = (a.mime || "").startsWith("image/");
+                              const isVideo = (a.mime || "").startsWith(
+                                "video/"
+                              );
+                              const isAudio = (a.mime || "").startsWith(
+                                "audio/"
+                              );
                               const attSelected =
                                 selectionMode &&
                                 selectedAttachmentIds.has(a.id);
+                              if (isAudio) {
+                                const timeLabel = ""; // formatTime(m.at);
+                                return (
+                                  <div
+                                    key={a.id}
+                                    className={`rounded-md relative ${
+                                      attSelected
+                                        ? "ring-2 ring-violet-500"
+                                        : ""
+                                    }`}
+                                    onClick={(e) => {
+                                      if (selectionMode) {
+                                        e.stopPropagation();
+                                        toggleAttachmentSelection(a.id);
+                                      }
+                                    }}
+                                  >
+                                    <AudioBubble
+                                      src={url}
+                                      isMine={isMine}
+                                      timeLabel={timeLabel}
+                                    />
+                                    {selectionMode && (
+                                      <span
+                                        className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
+                                          attSelected
+                                            ? "bg-violet-600 text-white"
+                                            : "bg-gray-300 text-gray-700"
+                                        }`}
+                                      >
+                                        {attSelected ? "✓" : "+"}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              if (isVideo) {
+                                return (
+                                  <div
+                                    key={a.id}
+                                    onClick={(e) => {
+                                      if (selectionMode) {
+                                        e.stopPropagation();
+                                        toggleAttachmentSelection(a.id);
+                                      }
+                                    }}
+                                    className={`rounded-md overflow-hidden bg-white/60 relative ${
+                                      selectionMode ? "cursor-pointer" : ""
+                                    } ${
+                                      attSelected
+                                        ? "ring-2 ring-violet-500"
+                                        : ""
+                                    }`}
+                                  >
+                                    <VideoPlayer
+                                      src={url}
+                                      className="h-full w-full max-h-40"
+                                      selectMode={selectionMode}
+                                      onSelect={() =>
+                                        toggleAttachmentSelection(a.id)
+                                      }
+                                    />
+                                    {selectionMode && (
+                                      <span
+                                        className={`absolute top-1 left-1 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
+                                          attSelected
+                                            ? "bg-violet-600 text-white"
+                                            : "bg-gray-300 text-gray-700"
+                                        }`}
+                                      >
+                                        {attSelected ? "✓" : "+"}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              }
                               return (
-                                <div
+                                <button
                                   key={a.id}
-                                  className={`rounded-md relative ${
-                                    attSelected ? "ring-2 ring-violet-500" : ""
-                                  }`}
+                                  type="button"
                                   onClick={(e) => {
                                     if (selectionMode) {
                                       e.stopPropagation();
                                       toggleAttachmentSelection(a.id);
+                                    } else if (isImg && url) {
+                                      setFullImageSrc(url);
+                                    } else {
+                                      openPreview(a);
                                     }
                                   }}
-                                >
-                                  <AudioBubble
-                                    src={url}
-                                    isMine={isMine}
-                                    timeLabel={timeLabel}
-                                  />
-                                  {selectionMode && (
-                                    <span
-                                      className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
-                                        attSelected
-                                          ? "bg-violet-600 text-white"
-                                          : "bg-gray-300 text-gray-700"
-                                      }`}
-                                    >
-                                      {attSelected ? "✓" : "+"}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                        </div>
-                      ) : (
-                        <div
-                          className={`mt-2 grid ${
-                            (m.attachments?.length || 0) === 1
-                              ? "grid-cols-1"
-                              : "grid-cols-2"
-                          } gap-2 w-fit`}
-                        >
-                          {m.attachments.map((a) => {
-                            const url = getAttachmentUrl(a);
-                            const isImg = (a.mime || "").startsWith("image/");
-                            const isVideo = (a.mime || "").startsWith("video/");
-                            const isAudio = (a.mime || "").startsWith("audio/");
-                            const attSelected =
-                              selectionMode && selectedAttachmentIds.has(a.id);
-                            if (isAudio) {
-                              const timeLabel = ""; // formatTime(m.at);
-                              return (
-                                <div
-                                  key={a.id}
-                                  className={`rounded-md relative ${
-                                    attSelected ? "ring-2 ring-violet-500" : ""
-                                  }`}
-                                  onClick={(e) => {
-                                    if (selectionMode) {
-                                      e.stopPropagation();
-                                      toggleAttachmentSelection(a.id);
-                                    }
-                                  }}
-                                >
-                                  <AudioBubble
-                                    src={url}
-                                    isMine={isMine}
-                                    timeLabel={timeLabel}
-                                  />
-                                  {selectionMode && (
-                                    <span
-                                      className={`absolute -top-2 -left-2 h-5 w-5 rounded-full text-[11px] grid place-items-center z-20 ${
-                                        attSelected
-                                          ? "bg-violet-600 text-white"
-                                          : "bg-gray-300 text-gray-700"
-                                      }`}
-                                    >
-                                      {attSelected ? "✓" : "+"}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            }
-                            if (isVideo) {
-                              return (
-                                <div
-                                  key={a.id}
-                                  onClick={(e) => {
-                                    if (selectionMode) {
-                                      e.stopPropagation();
-                                      toggleAttachmentSelection(a.id);
-                                    }
-                                  }}
-                                  className={`rounded-md overflow-hidden bg-white/60 relative ${
-                                    selectionMode ? "cursor-pointer" : ""
+                                  className={`relative rounded-md bg-white/60 text-left px-2 py-2 flex items-center gap-2 border border-gray-200 shadow-sm ${
+                                    selectionMode
+                                      ? "cursor-pointer"
+                                      : "cursor-default"
                                   } ${
                                     attSelected ? "ring-2 ring-violet-500" : ""
                                   }`}
+                                  title={a.name}
+                                  style={{ width: 220 }}
                                 >
-                                  <VideoPlayer
-                                    src={url}
-                                    className="h-full w-full max-h-40"
-                                    selectMode={selectionMode}
-                                    onSelect={() =>
-                                      toggleAttachmentSelection(a.id)
-                                    }
-                                  />
+                                  {isImg ? (
+                                    <img
+                                      src={url || "/placeholder.svg"}
+                                      alt={a.name}
+                                      className="h-9 w-9 rounded object-cover flex-shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="h-9 w-9 rounded bg-gray-200 grid place-items-center text-[10px] font-medium text-gray-700 flex-shrink-0">
+                                      DOC
+                                    </div>
+                                  )}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-[11px] font-medium text-gray-800 truncate">
+                                      {a.name}
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 truncate">
+                                      {(a.mime || "").split("/")[1] ||
+                                        "archivo"}
+                                    </div>
+                                  </div>
                                   {selectionMode && (
                                     <span
                                       className={`absolute top-1 left-1 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
@@ -3624,522 +4002,470 @@ export default function CoachChatInline({
                                       {attSelected ? "✓" : "+"}
                                     </span>
                                   )}
-                                </div>
+                                </button>
                               );
-                            }
-                            return (
-                              <button
-                                key={a.id}
-                                type="button"
-                                onClick={(e) => {
-                                  if (selectionMode) {
-                                    e.stopPropagation();
-                                    toggleAttachmentSelection(a.id);
-                                  } else if (isImg && url) {
-                                    setFullImageSrc(url);
-                                  } else {
-                                    openPreview(a);
-                                  }
-                                }}
-                                className={`relative rounded-md bg-white/60 text-left px-2 py-2 flex items-center gap-2 border border-gray-200 shadow-sm ${
-                                  selectionMode
-                                    ? "cursor-pointer"
-                                    : "cursor-default"
-                                } ${
-                                  attSelected ? "ring-2 ring-violet-500" : ""
-                                }`}
-                                title={a.name}
-                                style={{ width: 220 }}
-                              >
-                                {isImg ? (
-                                  <img
-                                    src={url || "/placeholder.svg"}
-                                    alt={a.name}
-                                    className="h-9 w-9 rounded object-cover flex-shrink-0"
-                                  />
-                                ) : (
-                                  <div className="h-9 w-9 rounded bg-gray-200 grid place-items-center text-[10px] font-medium text-gray-700 flex-shrink-0">
-                                    DOC
-                                  </div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-[11px] font-medium text-gray-800 truncate">
-                                    {a.name}
-                                  </div>
-                                  <div className="text-[10px] text-gray-500 truncate">
-                                    {(a.mime || "").split("/")[1] || "archivo"}
-                                  </div>
-                                </div>
-                                {selectionMode && (
-                                  <span
-                                    className={`absolute top-1 left-1 h-5 w-5 rounded-full text-[11px] grid place-items-center ${
-                                      attSelected
-                                        ? "bg-violet-600 text-white"
-                                        : "bg-gray-300 text-gray-700"
-                                    }`}
-                                  >
-                                    {attSelected ? "✓" : "+"}
-                                  </span>
-                                )}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
-                    {!hasAudioOnly && (
-                      <div
-                        className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
-                          isMine ? "text-gray-600" : "text-gray-500"
-                        }`}
-                      >
-                        <span>{formatTime(m.at)}</span>
-                        {isMine && (
-                          <span
-                            className={`ml-0.5 ${
-                              m.read ? "text-[#53BDEB]" : "text-gray-500"
-                            }`}
-                          >
-                            {!m.delivered ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : m.read ? (
-                              <CheckCheck className="h-3.5 w-3.5" />
-                            ) : (
-                              <CheckCheck className="h-3.5 w-3.5" />
-                            )}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-          {loadingMessages && items.length > 0 && (
-            <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-4 bg-transparent">
-              <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow">
-                <Loader2 className="h-3 w-3 animate-spin text-gray-600" />
-                <span className="text-xs text-gray-600">Actualizando…</span>
-              </div>
-            </div>
-          )}
-          {/* Indicador de escritura como overlay absoluto para no alterar el layout */}
-          <div
-            className={`pointer-events-none absolute left-4 bottom-4 transition-opacity duration-150 ${
-              otherTyping ? "opacity-100" : "opacity-0"
-            }`}
-            aria-hidden
-          >
-            <div className="bg-white/95 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200">
-              <div className="flex gap-1 items-center">
-                <span
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "0ms" }}
-                ></span>
-                <span
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "150ms" }}
-                ></span>
-                <span
-                  className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                  style={{ animationDelay: "300ms" }}
-                ></span>
-              </div>
-            </div>
-          </div>
-          {/* Indicador de nuevos mensajes (flotante) */}
-          {newMessagesCount > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  const sc = scrollRef.current;
-                  if (sc) {
-                    sc.scrollTop = sc.scrollHeight;
-                    pinnedToBottomRef.current = true;
-                  }
-                } catch {}
-                setNewMessagesCount(0);
-              }}
-              className="fixed md:absolute right-4 md:right-4 bottom-20 md:bottom-4 z-30 inline-flex items-center gap-2 rounded-full bg-[#25d366] text-white shadow-md px-3 py-1.5 text-sm hover:bg-[#1ebe57] transition"
-              title={`${newMessagesCount} nuevo${
-                newMessagesCount === 1 ? "" : "s"
-              }`}
-            >
-              <span className="min-w-[18px] h-[18px] rounded-full bg-white/20 grid place-items-center text-[11px] font-semibold px-1">
-                {newMessagesCount > 99 ? "99+" : newMessagesCount}
-              </span>
-              Nuevos mensajes
-            </button>
-          )}
-          <div ref={bottomRef} />
-        </div>
-
-        <div
-          className="sticky bottom-0 z-20 flex-shrink-0 px-2 py-2 md:px-3 md:py-3 bg-[#F0F0F0] border-t border-gray-200 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
-          onDragOver={(e) => {
-            try {
-              if (e.dataTransfer?.types?.includes("Files")) {
-                e.preventDefault();
-              }
-            } catch {}
-          }}
-          onDrop={(e) => {
-            try {
-              if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
-                e.preventDefault();
-                addPendingAttachments(e.dataTransfer.files);
-              }
-            } catch {}
-          }}
-        >
-          <div className="flex items-center gap-1 md:gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              onChange={handleFilesSelected}
-              className="hidden"
-              // Permitimos todos los tipos; el backend decidirá cómo manejarlos
-              accept="*/*"
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              title={uploading ? "Subiendo archivos…" : "Adjuntar archivos"}
-              className="p-1.5 md:p-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 flex-shrink-0"
-            >
-              <Paperclip className="w-5 h-5 md:w-5 md:h-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                // Toggle grabación de audio
-                if (recording) {
-                  // Pequeño delay para asegurar que el último chunk se capture
-                  setTimeout(() => {
-                    try {
-                      mediaRecorderRef.current?.stop();
-                    } catch {}
-                    setRecording(false);
-                    try {
-                      if (recordTimerRef.current) {
-                        clearInterval(recordTimerRef.current);
-                        recordTimerRef.current = null;
-                      }
-                      setRecordStartAt(null);
-                    } catch {}
-                  }, 500); // 500ms de buffer final
-                } else {
-                  (async () => {
-                    try {
-                      if (
-                        typeof navigator === "undefined" ||
-                        !navigator.mediaDevices?.getUserMedia
-                      ) {
-                        setUploadError(
-                          "Grabación no soportada en este navegador."
-                        );
-                        return;
-                      }
-                      // Estrategia robusta de getUserMedia
-                      // 1) { audio: true } (deja que el navegador elija)
-                      // 2) Si falla, { audio: { echoCancellation, noiseSuppression } }
-                      // 3) Si aún falla, detecta un deviceId disponible y úsalo
-                      let stream: MediaStream | null = null;
-                      let firstErr: any = null;
-                      try {
-                        stream = await navigator.mediaDevices.getUserMedia({
-                          audio: true,
-                        });
-                      } catch (e1: any) {
-                        firstErr = e1;
-                        try {
-                          stream = await navigator.mediaDevices.getUserMedia({
-                            audio: {
-                              echoCancellation: true,
-                              noiseSuppression: true,
-                            } as any,
-                          });
-                        } catch (e2: any) {
-                          try {
-                            const devices =
-                              await navigator.mediaDevices.enumerateDevices();
-                            const mics = devices.filter(
-                              (d) => d.kind === "audioinput"
-                            );
-                            if (mics.length > 0 && mics[0].deviceId) {
-                              stream =
-                                await navigator.mediaDevices.getUserMedia({
-                                  audio: {
-                                    deviceId: { exact: mics[0].deviceId },
-                                  } as any,
-                                });
-                            } else {
-                              throw e2;
-                            }
-                          } catch (e3: any) {
-                            throw firstErr || e2 || e3;
-                          }
-                        }
-                      }
-                      recordedChunksRef.current = [];
-                      const mimes = [
-                        "audio/webm;codecs=opus",
-                        "audio/webm",
-                        "audio/ogg;codecs=opus",
-                        "audio/ogg",
-                        "audio/mp4",
-                        "audio/aac",
-                      ];
-                      let mimeType: string | undefined = undefined;
-                      for (const c of mimes) {
-                        if (
-                          (window as any).MediaRecorder?.isTypeSupported?.(c)
-                        ) {
-                          mimeType = c;
-                          break;
-                        }
-                      }
-                      const mr = new MediaRecorder(
-                        stream,
-                        mimeType ? { mimeType } : undefined
-                      );
-                      mediaRecorderRef.current = mr;
-                      mr.ondataavailable = (ev) => {
-                        if (ev.data && ev.data.size > 0)
-                          recordedChunksRef.current.push(ev.data);
-                      };
-                      mr.onstop = () => {
-                        try {
-                          const chosenType =
-                            mr.mimeType || mimeType || "audio/webm";
-                          const blob = new Blob(recordedChunksRef.current, {
-                            type: chosenType,
-                          });
-                          // Validar que haya datos
-                          if (blob.size === 0) {
-                            console.warn("Audio grabado vacío");
-                            return;
-                          }
-                          const ts = new Date();
-                          const pad = (n: number) => String(n).padStart(2, "0");
-                          const ext = (() => {
-                            const t = (blob.type || "").toLowerCase();
-                            if (t.includes("ogg")) return "ogg";
-                            if (t.includes("mp4") || t.includes("aac"))
-                              return "m4a";
-                            return "webm";
-                          })();
-                          const fname = `grabacion-${ts.getFullYear()}${pad(
-                            ts.getMonth() + 1
-                          )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
-                            ts.getMinutes()
-                          )}${pad(ts.getSeconds())}.${ext}`;
-                          const file = new File([blob], fname, {
-                            type: blob.type || chosenType,
-                          });
-                          if ((file.size || 0) > MAX_FILE_SIZE) {
-                            setUploadError(
-                              "El audio grabado excede el límite de 50MB y no se adjuntará."
-                            );
-                          } else {
-                            addPendingAttachments([file] as any);
-                          }
-                        } catch {
-                          setUploadError(
-                            "No se pudo procesar el audio grabado."
-                          );
-                        }
-                        try {
-                          stream.getTracks().forEach((t) => t.stop());
-                        } catch {}
-                        try {
-                          if (recordTimerRef.current) {
-                            clearInterval(recordTimerRef.current);
-                            recordTimerRef.current = null;
-                          }
-                          setRecordStartAt(null);
-                        } catch {}
-                      };
-                      // Usar timeslice de 1000ms para asegurar chunks periódicos
-                      mr.start(1000);
-                      setRecording(true);
-                      try {
-                        setRecordStartAt(Date.now());
-                        recordTimerRef.current = setInterval(
-                          () => setRecordTick(Date.now()),
-                          250
-                        );
-                      } catch {}
-                    } catch (err: any) {
-                      const name = err?.name || "";
-                      if (
-                        name === "NotFoundError" ||
-                        name === "DevicesNotFoundError"
-                      ) {
-                        setUploadError(
-                          "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador."
-                        );
-                      } else if (
-                        name === "NotAllowedError" ||
-                        name === "PermissionDeniedError"
-                      ) {
-                        setUploadError(
-                          "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio."
-                        );
-                      } else if (name === "NotReadableError") {
-                        setUploadError(
-                          "El micrófono está siendo usado por otra aplicación o no es accesible."
-                        );
-                      } else {
-                        setUploadError(
-                          (err?.message || "No se pudo iniciar la grabación") +
-                            " (" +
-                            (name || "error") +
-                            ")"
-                        );
-                      }
-                    }
-                  })();
-                }
-              }}
-              title={recording ? "Detener grabación" : "Grabar audio"}
-              className={`p-1.5 md:p-2 rounded-md transition-colors flex-shrink-0 ${
-                recording
-                  ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
-                  : "text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              {recording ? (
-                <Square className="w-4 h-4 md:w-4 md:h-4" />
-              ) : (
-                <Mic className="w-5 h-5 md:w-5 md:h-5" />
-              )}
-            </button>
-            {recording && (
-              <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-xs">
-                <span className="inline-block w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
-                <span>
-                  {(() => {
-                    const ms = Math.max(
-                      0,
-                      recordStartAt ? recordTick - recordStartAt : 0
-                    );
-                    const s = Math.floor(ms / 1000);
-                    const mm = Math.floor(s / 60);
-                    const ss = String(s % 60).padStart(2, "0");
-                    return `${mm}:${ss}`;
-                  })()}
-                </span>
-                <span className="opacity-70">Grabando…</span>
-              </div>
-            )}
-            {attachments.length > 0 && (
-              <div className="flex-1 overflow-x-auto">
-                <div className="flex items-center gap-2">
-                  {attachments.map((a, i) => (
-                    <div
-                      key={i}
-                      className="group relative flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs text-gray-700"
-                    >
-                      {a.preview ? (
-                        // Pequeña miniatura si es imagen/video
-                        a.file.type.startsWith("image/") ? (
-                          <img
-                            src={a.preview}
-                            alt={a.file.name}
-                            className="h-6 w-6 rounded object-cover"
-                          />
-                        ) : (
-                          <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
-                            {a.file.type.startsWith("video/")
-                              ? "VID"
-                              : a.file.type.startsWith("audio/")
-                              ? "AUD"
-                              : "FILE"}
+                            })}
                           </div>
-                        )
-                      ) : (
-                        <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
-                          FILE
+                        ))}
+                      {!hasAudioOnly && (
+                        <div
+                          className={`mt-1 text-[11px] flex items-center gap-1 justify-end select-none ${
+                            isMine ? "text-gray-600" : "text-gray-500"
+                          }`}
+                        >
+                          <span>{formatTime(m.at)}</span>
+                          {isMine && (
+                            <span
+                              className={`ml-0.5 ${
+                                m.read ? "text-[#53BDEB]" : "text-gray-500"
+                              }`}
+                            >
+                              {!m.delivered ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : m.read ? (
+                                <CheckCheck className="h-3.5 w-3.5" />
+                              ) : (
+                                <CheckCheck className="h-3.5 w-3.5" />
+                              )}
+                            </span>
+                          )}
                         </div>
                       )}
-                      <div className="max-w-[160px] truncate">
-                        {a.file.name}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeAttachment(i)}
-                        className="ml-1 rounded px-1 text-gray-500 hover:text-gray-800"
-                        title="Quitar adjunto"
-                      >
-                        ×
-                      </button>
                     </div>
-                  ))}
+                  </div>
+                );
+              })
+            )}
+            {loadingMessages && items.length > 0 && (
+              <div className="pointer-events-none absolute inset-0 flex items-start justify-center pt-4 bg-transparent">
+                <div className="flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 rounded-full shadow">
+                  <Loader2 className="h-3 w-3 animate-spin text-gray-600" />
+                  <span className="text-xs text-gray-600">Actualizando…</span>
                 </div>
               </div>
             )}
-            <textarea
-              value={text}
-              onChange={(e) => {
-                setText(e.target.value);
-                if (e.target.value.trim()) notifyTyping(true);
-                e.target.style.height = "auto";
-                e.target.style.height =
-                  Math.min(e.target.scrollHeight, 120) + "px";
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !isMobile) {
-                  e.preventDefault();
-                  send();
-                } else {
-                  notifyTyping(true);
-                }
-              }}
-              placeholder="Mensaje"
-              rows={1}
-              className="flex-1 bg-white border border-gray-300 rounded-3xl px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors shadow-sm min-w-0 resize-none overflow-y-auto"
-              style={{ minHeight: "42px", maxHeight: "120px" }}
-            />
-            <button
-              onClick={send}
-              disabled={uploading || (!text.trim() && attachments.length === 0)}
-              className="p-2 md:p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors shadow flex-shrink-0"
+            {/* Indicador de escritura como overlay absoluto para no alterar el layout */}
+            <div
+              className={`pointer-events-none absolute left-4 bottom-4 transition-opacity duration-150 ${
+                otherTyping ? "opacity-100" : "opacity-0"
+              }`}
+              aria-hidden
             >
-              {uploading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
-              ) : (
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                  />
-                </svg>
-              )}
-            </button>
-          </div>
-          {uploadError && (
-            <div className="mt-2 text-xs text-rose-600">{uploadError}</div>
-          )}
-          {(uploading || uploadState.active) && (
-            <div className="mt-1 text-[11px] text-gray-700 flex items-center gap-2">
-              <span className="inline-block h-3 w-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
-              <span>
-                Subiendo archivos {uploadState.done}/{uploadState.total}
-                {uploadState.current ? ` — ${uploadState.current}` : ""}
-              </span>
+              <div className="bg-white/95 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200">
+                <div className="flex gap-1 items-center">
+                  <span
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: "0ms" }}
+                  ></span>
+                  <span
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: "150ms" }}
+                  ></span>
+                  <span
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: "300ms" }}
+                  ></span>
+                </div>
+              </div>
             </div>
-          )}
+            {/* Indicador de nuevos mensajes (flotante) */}
+            {newMessagesCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    const sc = scrollRef.current;
+                    if (sc) {
+                      sc.scrollTop = sc.scrollHeight;
+                      pinnedToBottomRef.current = true;
+                    }
+                  } catch {}
+                  setNewMessagesCount(0);
+                }}
+                className="fixed md:absolute right-4 md:right-4 bottom-20 md:bottom-4 z-30 inline-flex items-center gap-2 rounded-full bg-[#25d366] text-white shadow-md px-3 py-1.5 text-sm hover:bg-[#1ebe57] transition"
+                title={`${newMessagesCount} nuevo${
+                  newMessagesCount === 1 ? "" : "s"
+                }`}
+              >
+                <span className="min-w-[18px] h-[18px] rounded-full bg-white/20 grid place-items-center text-[11px] font-semibold px-1">
+                  {newMessagesCount > 99 ? "99+" : newMessagesCount}
+                </span>
+                Nuevos mensajes
+              </button>
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          <div
+            className="sticky bottom-0 z-20 flex-shrink-0 px-2 py-2 md:px-3 md:py-3 bg-[#F0F0F0] border-t border-gray-200 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]"
+            onDragOver={(e) => {
+              try {
+                if (e.dataTransfer?.types?.includes("Files")) {
+                  e.preventDefault();
+                }
+              } catch {}
+            }}
+            onDrop={(e) => {
+              try {
+                if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+                  e.preventDefault();
+                  addPendingAttachments(e.dataTransfer.files);
+                }
+              } catch {}
+            }}
+          >
+            <div className="flex items-center gap-1 md:gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFilesSelected}
+                className="hidden"
+                // Permitimos todos los tipos; el backend decidirá cómo manejarlos
+                accept="*/*"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                title={uploading ? "Subiendo archivos…" : "Adjuntar archivos"}
+                className="p-1.5 md:p-2 text-gray-600 hover:text-gray-800 transition-colors disabled:opacity-50 flex-shrink-0"
+              >
+                <Paperclip className="w-5 h-5 md:w-5 md:h-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  // Toggle grabación de audio
+                  if (recording) {
+                    // Pequeño delay para asegurar que el último chunk se capture
+                    setTimeout(() => {
+                      try {
+                        mediaRecorderRef.current?.stop();
+                      } catch {}
+                      setRecording(false);
+                      try {
+                        if (recordTimerRef.current) {
+                          clearInterval(recordTimerRef.current);
+                          recordTimerRef.current = null;
+                        }
+                        setRecordStartAt(null);
+                      } catch {}
+                    }, 500); // 500ms de buffer final
+                  } else {
+                    (async () => {
+                      try {
+                        if (
+                          typeof navigator === "undefined" ||
+                          !navigator.mediaDevices?.getUserMedia
+                        ) {
+                          setUploadError(
+                            "Grabación no soportada en este navegador."
+                          );
+                          return;
+                        }
+                        // Estrategia robusta de getUserMedia
+                        // 1) { audio: true } (deja que el navegador elija)
+                        // 2) Si falla, { audio: { echoCancellation, noiseSuppression } }
+                        // 3) Si aún falla, detecta un deviceId disponible y úsalo
+                        let stream: MediaStream | null = null;
+                        let firstErr: any = null;
+                        try {
+                          stream = await navigator.mediaDevices.getUserMedia({
+                            audio: true,
+                          });
+                        } catch (e1: any) {
+                          firstErr = e1;
+                          try {
+                            stream = await navigator.mediaDevices.getUserMedia({
+                              audio: {
+                                echoCancellation: true,
+                                noiseSuppression: true,
+                              } as any,
+                            });
+                          } catch (e2: any) {
+                            try {
+                              const devices =
+                                await navigator.mediaDevices.enumerateDevices();
+                              const mics = devices.filter(
+                                (d) => d.kind === "audioinput"
+                              );
+                              if (mics.length > 0 && mics[0].deviceId) {
+                                stream =
+                                  await navigator.mediaDevices.getUserMedia({
+                                    audio: {
+                                      deviceId: { exact: mics[0].deviceId },
+                                    } as any,
+                                  });
+                              } else {
+                                throw e2;
+                              }
+                            } catch (e3: any) {
+                              throw firstErr || e2 || e3;
+                            }
+                          }
+                        }
+                        recordedChunksRef.current = [];
+                        const mimes = [
+                          "audio/webm;codecs=opus",
+                          "audio/webm",
+                          "audio/ogg;codecs=opus",
+                          "audio/ogg",
+                          "audio/mp4",
+                          "audio/aac",
+                        ];
+                        let mimeType: string | undefined = undefined;
+                        for (const c of mimes) {
+                          if (
+                            (window as any).MediaRecorder?.isTypeSupported?.(c)
+                          ) {
+                            mimeType = c;
+                            break;
+                          }
+                        }
+                        const mr = new MediaRecorder(
+                          stream,
+                          mimeType ? { mimeType } : undefined
+                        );
+                        mediaRecorderRef.current = mr;
+                        mr.ondataavailable = (ev) => {
+                          if (ev.data && ev.data.size > 0)
+                            recordedChunksRef.current.push(ev.data);
+                        };
+                        mr.onstop = () => {
+                          try {
+                            const chosenType =
+                              mr.mimeType || mimeType || "audio/webm";
+                            const blob = new Blob(recordedChunksRef.current, {
+                              type: chosenType,
+                            });
+                            // Validar que haya datos
+                            if (blob.size === 0) {
+                              console.warn("Audio grabado vacío");
+                              return;
+                            }
+                            const ts = new Date();
+                            const pad = (n: number) =>
+                              String(n).padStart(2, "0");
+                            const ext = (() => {
+                              const t = (blob.type || "").toLowerCase();
+                              if (t.includes("ogg")) return "ogg";
+                              if (t.includes("mp4") || t.includes("aac"))
+                                return "m4a";
+                              return "webm";
+                            })();
+                            const fname = `grabacion-${ts.getFullYear()}${pad(
+                              ts.getMonth() + 1
+                            )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
+                              ts.getMinutes()
+                            )}${pad(ts.getSeconds())}.${ext}`;
+                            const file = new File([blob], fname, {
+                              type: blob.type || chosenType,
+                            });
+                            if ((file.size || 0) > MAX_FILE_SIZE) {
+                              setUploadError(
+                                "El audio grabado excede el límite de 50MB y no se adjuntará."
+                              );
+                            } else {
+                              addPendingAttachments([file] as any);
+                            }
+                          } catch {
+                            setUploadError(
+                              "No se pudo procesar el audio grabado."
+                            );
+                          }
+                          try {
+                            stream.getTracks().forEach((t) => t.stop());
+                          } catch {}
+                          try {
+                            if (recordTimerRef.current) {
+                              clearInterval(recordTimerRef.current);
+                              recordTimerRef.current = null;
+                            }
+                            setRecordStartAt(null);
+                          } catch {}
+                        };
+                        // Usar timeslice de 1000ms para asegurar chunks periódicos
+                        mr.start(1000);
+                        setRecording(true);
+                        try {
+                          setRecordStartAt(Date.now());
+                          recordTimerRef.current = setInterval(
+                            () => setRecordTick(Date.now()),
+                            250
+                          );
+                        } catch {}
+                      } catch (err: any) {
+                        const name = err?.name || "";
+                        if (
+                          name === "NotFoundError" ||
+                          name === "DevicesNotFoundError"
+                        ) {
+                          setUploadError(
+                            "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador."
+                          );
+                        } else if (
+                          name === "NotAllowedError" ||
+                          name === "PermissionDeniedError"
+                        ) {
+                          setUploadError(
+                            "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio."
+                          );
+                        } else if (name === "NotReadableError") {
+                          setUploadError(
+                            "El micrófono está siendo usado por otra aplicación o no es accesible."
+                          );
+                        } else {
+                          setUploadError(
+                            (err?.message ||
+                              "No se pudo iniciar la grabación") +
+                              " (" +
+                              (name || "error") +
+                              ")"
+                          );
+                        }
+                      }
+                    })();
+                  }
+                }}
+                title={recording ? "Detener grabación" : "Grabar audio"}
+                className={`p-1.5 md:p-2 rounded-md transition-colors flex-shrink-0 ${
+                  recording
+                    ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
+                    : "text-gray-600 hover:text-gray-800"
+                }`}
+              >
+                {recording ? (
+                  <Square className="w-4 h-4 md:w-4 md:h-4" />
+                ) : (
+                  <Mic className="w-5 h-5 md:w-5 md:h-5" />
+                )}
+              </button>
+              {recording && (
+                <div className="flex items-center gap-2 px-2 py-1 rounded-full bg-rose-100 text-rose-700 text-xs">
+                  <span className="inline-block w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+                  <span>
+                    {(() => {
+                      const ms = Math.max(
+                        0,
+                        recordStartAt ? recordTick - recordStartAt : 0
+                      );
+                      const s = Math.floor(ms / 1000);
+                      const mm = Math.floor(s / 60);
+                      const ss = String(s % 60).padStart(2, "0");
+                      return `${mm}:${ss}`;
+                    })()}
+                  </span>
+                  <span className="opacity-70">Grabando…</span>
+                </div>
+              )}
+              {attachments.length > 0 && (
+                <div className="flex-1 overflow-x-auto">
+                  <div className="flex items-center gap-2">
+                    {attachments.map((a, i) => (
+                      <div
+                        key={i}
+                        className="group relative flex items-center gap-2 rounded-md border bg-white px-2 py-1 text-xs text-gray-700"
+                      >
+                        {a.preview ? (
+                          // Pequeña miniatura si es imagen/video
+                          a.file.type.startsWith("image/") ? (
+                            <img
+                              src={a.preview}
+                              alt={a.file.name}
+                              className="h-6 w-6 rounded object-cover"
+                            />
+                          ) : (
+                            <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
+                              {a.file.type.startsWith("video/")
+                                ? "VID"
+                                : a.file.type.startsWith("audio/")
+                                ? "AUD"
+                                : "FILE"}
+                            </div>
+                          )
+                        ) : (
+                          <div className="h-6 w-6 rounded bg-gray-200 grid place-items-center text-[10px]">
+                            FILE
+                          </div>
+                        )}
+                        <div className="max-w-[160px] truncate">
+                          {a.file.name}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeAttachment(i)}
+                          className="ml-1 rounded px-1 text-gray-500 hover:text-gray-800"
+                          title="Quitar adjunto"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <textarea
+                value={text}
+                onChange={(e) => {
+                  setText(e.target.value);
+                  if (e.target.value.trim()) notifyTyping(true);
+                  e.target.style.height = "auto";
+                  e.target.style.height =
+                    Math.min(e.target.scrollHeight, 120) + "px";
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !isMobile) {
+                    e.preventDefault();
+                    send();
+                  } else {
+                    notifyTyping(true);
+                  }
+                }}
+                placeholder="Mensaje"
+                rows={1}
+                className="flex-1 bg-white border border-gray-300 rounded-3xl px-3 py-2 md:px-4 md:py-2.5 text-sm md:text-[15px] focus:outline-none focus:border-[#128C7E] transition-colors shadow-sm min-w-0 resize-none overflow-y-auto"
+                style={{ minHeight: "42px", maxHeight: "120px" }}
+              />
+              <button
+                onClick={send}
+                disabled={
+                  uploading || (!text.trim() && attachments.length === 0)
+                }
+                className="p-2 md:p-2.5 rounded-full bg-[#128C7E] text-white disabled:opacity-50 disabled:bg-gray-400 hover:bg-[#075E54] transition-colors shadow flex-shrink-0"
+              >
+                {uploading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+                    />
+                  </svg>
+                )}
+              </button>
+            </div>
+            {uploadError && (
+              <div className="mt-2 text-xs text-rose-600">{uploadError}</div>
+            )}
+            {(uploading || uploadState.active) && (
+              <div className="mt-1 text-[11px] text-gray-700 flex items-center gap-2">
+                <span className="inline-block h-3 w-3 border-2 border-gray-300 border-t-transparent rounded-full animate-spin" />
+                <span>
+                  Subiendo archivos {uploadState.done}/{uploadState.total}
+                  {uploadState.current ? ` — ${uploadState.current}` : ""}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {/* Modal: Vista previa de adjuntos (extraído) */}

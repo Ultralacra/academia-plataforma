@@ -49,6 +49,11 @@ export function useChatSocket({
     (async () => {
       const token = socketio?.token ?? getAuthToken();
       const url = socketio?.url || CHAT_HOST || "http://localhost:3001";
+      try {
+        // Imprimir en consola el token usado para la conexión del chat
+        // (útil para debugging en cliente)
+        console.log("[useChatSocket] chat connection token:", token);
+      } catch {}
       const sio = io(url, {
         auth: { token },
         transports: ["websocket"],

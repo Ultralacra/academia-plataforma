@@ -358,24 +358,43 @@ export default function CoachChatInline({
     try {
       const parts = participantsRef.current ?? socketio?.participants;
       const key = JSON.stringify(parts || []);
-      if (key === lastPartsKeyRef.current) return;
-      lastPartsKeyRef.current = key;
-      if (!precreateOnParticipants) return;
-      // Solo limpiar mensajes si aún no se ha unido a un chat o no hay items.
-      // Evita parpadeo cuando ya hay conversación activa y cambia referencia mínima de participantes.
-      const hasActiveChat = chatIdRef.current != null;
-      const hasMessages = (itemsRef.current?.length || 0) > 0;
-      setChatId(null);
-      chatIdRef.current = null;
-      if (!hasActiveChat || !hasMessages) {
+      const participantsChanged = key !== lastPartsKeyRef.current;
+
+      if (participantsChanged) {
+        lastPartsKeyRef.current = key;
+        if (!precreateOnParticipants) return;
+
+        // Si cambiaron los participantes, usamos el chatId que venga en props (si existe)
+        // o reseteamos a null para buscar/crear.
+        const nextChatId = socketio?.chatId ?? null;
+
+        setChatId(nextChatId);
+        chatIdRef.current = nextChatId;
+
+        // Limpiar mensajes anteriores
         setItems([]);
         seenRef.current = new Set();
+        setOtherTyping(false);
+        lastJoinedChatIdRef.current = null;
+        setLoadingMessages(true);
+      } else {
+        // Si no cambiaron participantes, pero nos llega un chatId nuevo (ej. se resolvió asíncronamente)
+        if (
+          socketio?.chatId &&
+          String(socketio.chatId) !== String(chatIdRef.current)
+        ) {
+          setChatId(socketio.chatId);
+          chatIdRef.current = socketio.chatId;
+          // Recargar
+          setItems([]);
+          seenRef.current = new Set();
+          setOtherTyping(false);
+          lastJoinedChatIdRef.current = null;
+          setLoadingMessages(true);
+        }
       }
-      setOtherTyping(false);
-      lastJoinedChatIdRef.current = null;
-      setLoadingMessages(true);
     } catch {}
-  }, [socketio?.participants, precreateOnParticipants]);
+  }, [socketio?.participants, precreateOnParticipants, socketio?.chatId]);
 
   // Unión automática a chat existente cuando cambian los participantes (solo join, sin crear)
   React.useEffect(() => {
@@ -401,29 +420,11 @@ export default function CoachChatInline({
   React.useEffect(() => {
     (async () => {
       try {
-        console.log("[CoachChatInline] joinSignal effect fired", {
-          joinSignal,
-        });
-        if (!connected) {
-          console.log("[CoachChatInline] joinSignal: not connected yet");
-          return;
-        }
+        if (!connected) return;
         const parts = participantsRef.current ?? socketio?.participants;
-        if (!Array.isArray(parts) || parts.length === 0) {
-          console.log("[CoachChatInline] joinSignal: no participants", {
-            parts,
-          });
-          return;
-        }
+        if (!Array.isArray(parts) || parts.length === 0) return;
         // Intentar asegurar chat listo (crear si no existe)
-        console.log(
-          "[CoachChatInline] joinSignal: calling ensureChatReadyForSend"
-        );
-        const ok = await ensureChatReadyForSend();
-        console.log(
-          "[CoachChatInline] joinSignal: ensureChatReadyForSend result",
-          { ok, chatId: chatIdRef.current }
-        );
+        await ensureChatReadyForSend();
       } catch {}
     })();
   }, [joinSignal, connected, socketio?.participants]);
@@ -461,6 +462,18 @@ export default function CoachChatInline({
       } catch {}
     });
   }, [items.length, getDistanceFromBottom]);
+
+  // Disparar sonido cuando llega un nuevo mensaje que no es mío
+  React.useEffect(() => {
+    try {
+      if (items.length === 0) return;
+      const last = items[items.length - 1];
+      const isMine = mine(last.sender);
+      if (!isMine) {
+        playNotification();
+      }
+    } catch {}
+  }, [items.length]);
 
   // Scroll síncrono antes de pintar cuando llegan los primeros mensajes
   React.useLayoutEffect(() => {
@@ -699,6 +712,80 @@ export default function CoachChatInline({
     }
   }
 
+  // Notificación sonora al recibir mensajes (evitar bloqueos de autoplay)
+  const audioCtxRef = React.useRef<AudioContext | null>(null);
+  const unlockedRef = React.useRef(false);
+  const audioElRef = React.useRef<HTMLAudioElement | null>(null);
+  React.useEffect(() => {
+    function unlock() {
+      try {
+        if (!audioCtxRef.current) {
+          const Ctx =
+            (window as any).AudioContext || (window as any).webkitAudioContext;
+          audioCtxRef.current = Ctx ? new Ctx() : null;
+        }
+        if (audioCtxRef.current && audioCtxRef.current.state === "suspended") {
+          audioCtxRef.current.resume().catch(() => {});
+        }
+        // Prime a tiny silent play to satisfy autoplay policies
+        if (!audioElRef.current) {
+          const el = document.createElement("audio");
+          // Embed WAV data URI como fallback; si luego subes /sounds/notify.mp3, puedes cambiar el src.
+          el.src =
+            "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YYQAAACAgICAgICAgP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA";
+          el.preload = "auto";
+          el.volume = 0.0;
+          document.body.appendChild(el);
+          audioElRef.current = el;
+          el.play().catch(() => {});
+          setTimeout(() => {
+            el.pause();
+            el.volume = 1.0;
+          }, 200);
+        }
+        unlockedRef.current = true;
+      } catch {}
+    }
+    const onClick = () => unlock();
+    const onKey = () => unlock();
+    try {
+      window.addEventListener("click", onClick, { once: true });
+      window.addEventListener("keydown", onKey, { once: true });
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener("click", onClick);
+        window.removeEventListener("keydown", onKey);
+      } catch {}
+    };
+  }, []);
+
+  const playNotification = React.useCallback(() => {
+    try {
+      // 1) Intentar <audio> si existe fuente
+      const el = audioElRef.current;
+      if (el) {
+        el.currentTime = 0;
+        el.volume = 1.0;
+        el.play().catch(() => {});
+        return;
+      }
+      // 2) Fallback: breve beep con WebAudio
+      const ctx = audioCtxRef.current;
+      if (!ctx) return;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880; // beep agudo
+      gain.gain.value = 0.001; // volumen bajo
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } catch {}
+  }, []);
+
   // Subida de archivos al chat actual mediante FormData
   async function uploadFiles(selected: FileList | File[]) {
     try {
@@ -707,7 +794,7 @@ export default function CoachChatInline({
 
       // Asegurar que exista chatId
       if (chatIdRef.current == null) {
-        const ok = await ensureChatReadyForSend();
+        const ok = await ensureChatReadyForSend({ allowCreate: true });
         if (!ok || chatIdRef.current == null) {
           setUploadError("No hay chat activo para subir archivos.");
           return;
@@ -1447,9 +1534,7 @@ export default function CoachChatInline({
         const token = await resolveToken();
         // Log explícito del token cuando inicia el chat (coach/alumno/admin)
         try {
-          if (chatDebug()) {
-            // dbg("auth token", token);
-          }
+          console.log("[CoachChatInline] Token de conexión:", token);
         } catch {}
         if (!token) {
           setConnected(false);
@@ -2339,16 +2424,20 @@ export default function CoachChatInline({
           const list = Array.isArray(ack?.data) ? ack.data : [];
           const baseList: any[] = Array.isArray(list) ? list : [];
 
-          // FIX: Renderizar inmediatamente lo que llega para quitar el loading,
-          // aunque falten participantes (se enriquecerán después si es necesario).
-          onChatsList?.(baseList);
-
           const needEnrich = baseList.some(
             (it) => !Array.isArray(it?.participants || it?.participantes)
           );
+
+          // Enviar SIEMPRE la lista base inmediatamente para render instantáneo en UI
+          try {
+            onChatsList?.(baseList);
+          } catch {}
+
+          // Si hace falta enriquecer, proceder en segundo plano y reenviar luego
           if (!needEnrich) {
             return;
           }
+
           // Enriquecer inmediatamente sin throttle para resolver nombres rápido
           lastEnrichAtRef.current = Date.now();
           const sorted = [...baseList]
@@ -2490,6 +2579,7 @@ export default function CoachChatInline({
 
   async function ensureChatReadyForSend(opts?: {
     onlyFind?: boolean;
+    allowCreate?: boolean;
   }): Promise<boolean> {
     try {
       if (chatId != null) return true;
@@ -2498,8 +2588,12 @@ export default function CoachChatInline({
       const participants = participantsRef.current ?? socketio?.participants;
       if (!Array.isArray(participants) || participants.length === 0)
         return false;
-      const autoCreate =
+      const baseAutoCreate =
         socketio?.autoCreate !== undefined ? socketio.autoCreate : true;
+      const autoCreate =
+        role === "alumno"
+          ? !!opts?.allowCreate && !!baseAutoCreate
+          : baseAutoCreate;
       dbg("ensureChatReadyForSend:start", {
         autoCreate,
         count: participants.length,
@@ -2644,7 +2738,6 @@ export default function CoachChatInline({
           try {
             sio.emit("chat.join", { id_chat: idToJoin }, (ack: any) => {
               try {
-                console.log("[CoachChatInline] chat.join ACK (existing):", ack);
                 if (ack && ack.success) {
                   const data = ack.data || {};
                   const cid = data.id_chat ?? idToJoin;
@@ -2662,59 +2755,45 @@ export default function CoachChatInline({
                   joinDataRef.current = {
                     participants: joinedParticipantsRef.current,
                   };
-                  // Si el ACK trae mensajes, mapearlos y poblar el estado de mensajes
                   try {
                     const msgsSrc = Array.isArray(data.messages)
                       ? data.messages
                       : Array.isArray((data as any).mensajes)
                       ? (data as any).mensajes
                       : [];
-                    if (Array.isArray(msgsSrc) && msgsSrc.length > 0) {
-                      const myPidLocal =
-                        data?.my_participante ?? myParticipantIdRef.current;
-                      const mapped: Message[] = msgsSrc.map((m: any) => {
-                        const ev = evalSenderForMapping(m, cid, "join");
-                        const sender: Sender = ev.sender;
-                        const msg: Message = {
-                          id: String(
-                            m?.id_mensaje ??
-                              m?.id_archivo ??
-                              `${Date.now()}-${Math.random()}`
-                          ),
-                          room: normRoom,
-                          sender,
-                          text: String(
-                            m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
-                          ).trim(),
-                          at: String(
-                            normalizeDateStr(m?.fecha_envio) ||
-                              new Date().toISOString()
-                          ),
-                          delivered: true,
-                          read: !!m?.leido,
-                          srcParticipantId: getEmitter(m),
-                          attachments: mapArchivoToAttachments(m),
-                          uiKey: String(
-                            m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
-                          ),
-                        } as Message;
-                        (msg as any).__senderById = !!ev.byId;
-                        (msg as any).__senderReason = ev.reason;
-                        return msg;
-                      });
-                      const reconciled = reconcilePreserveSender(mapped);
-                      const merged = mergePreservingOptimistics(reconciled);
-                      setItems(merged);
-                      try {
-                        mapped.forEach((mm) => seenRef.current.add(mm.id));
-                      } catch {}
-                    }
-                  } catch (e) {
-                    console.error(
-                      "Error procesando ACK de join (existing):",
-                      e
-                    );
-                  }
+                    const mapped: Message[] = msgsSrc.map((m: any) => {
+                      const ev = evalSenderForMapping(m, cid, "join");
+                      const sender: Sender = ev.sender;
+                      return {
+                        id: String(
+                          m?.id_mensaje ??
+                            m?.id_archivo ??
+                            `${Date.now()}-${Math.random()}`
+                        ),
+                        room: normRoom,
+                        sender,
+                        text: String(
+                          m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                        ).trim(),
+                        at: String(
+                          normalizeDateStr(m?.fecha_envio) ||
+                            new Date().toISOString()
+                        ),
+                        delivered: true,
+                        read: !!m?.leido,
+                        srcParticipantId: getEmitter(m),
+                        attachments: mapArchivoToAttachments(m),
+                        uiKey: String(
+                          m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                        ),
+                      } as Message;
+                    });
+                    console.log("[CoachChatInline] JOIN OK", {
+                      chatId: cid,
+                      mensajes_count: mapped.length,
+                    });
+                    console.log("[CoachChatInline] MENSAJES (array)", mapped);
+                  } catch {}
                   resolve(true);
                 } else resolve(false);
               } catch {
@@ -2787,10 +2866,6 @@ export default function CoachChatInline({
         try {
           sio.emit("chat.join", { id_chat: chatIdRef.current }, (ack: any) => {
             try {
-              console.log(
-                "[CoachChatInline] chat.join ACK (post-create):",
-                ack
-              );
               if (ack && ack.success) {
                 const data = ack.data || {};
                 if (data.my_participante) {
@@ -2832,7 +2907,7 @@ export default function CoachChatInline({
           hasAttachments,
           textLen: val.length,
         });
-        const ok = await ensureChatReadyForSend();
+        const ok = await ensureChatReadyForSend({ allowCreate: true });
         if (chatIdRef.current == null) {
           for (let i = 0; i < 15 && chatIdRef.current == null; i++) {
             await new Promise((r) => setTimeout(r, 100));
