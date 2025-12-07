@@ -1043,6 +1043,7 @@ export default function AdminChatPage() {
                 // listParams vacío => el backend debe retornar todas las conversaciones accesibles (global admin view)
                 listParams={{}}
                 onChatsList={(list) =>
+                  // Mantener exactamente el orden que retorna el endpoint
                   setAdminChats(Array.isArray(list) ? list : [])
                 }
                 onChatInfo={(info) => {

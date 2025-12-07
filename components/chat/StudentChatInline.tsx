@@ -167,7 +167,9 @@ export default function StudentChatInline({
       subtitle={subtitle}
       variant="card"
       className={className}
-      precreateOnParticipants={false}
+      // Activar precreateOnParticipants para que el alumno intente localizar
+      // y unirse automáticamente a la conversación existente al cargar.
+      precreateOnParticipants={true}
       resolveName={resolveName}
       socketio={{
         url: SOCKET_URL || undefined,

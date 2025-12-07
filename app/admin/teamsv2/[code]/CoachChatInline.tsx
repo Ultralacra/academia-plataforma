@@ -343,6 +343,18 @@ export default function CoachChatInline({
   React.useEffect(() => {
     participantsRef.current = socketio?.participants;
   }, [socketio?.participants]);
+
+  // Log when parent updates participants (helpful for debugging selection)
+  React.useEffect(() => {
+    try {
+      if (socketio?.participants) {
+        console.log(
+          "[CoachChatInline] socketio.participants changed (selection):",
+          socketio.participants
+        );
+      }
+    } catch {}
+  }, [socketio?.participants]);
   React.useEffect(() => {
     listParamsRef.current = listParams;
   }, [listParams]);
@@ -2515,7 +2527,7 @@ export default function CoachChatInline({
           lastEnrichAtRef.current = Date.now();
           const sorted = [...baseList]
             .sort((a, b) => getItemTimestamp(b) - getItemTimestamp(a))
-            .slice(0, 10);
+            .slice(0, 50);
           const enriched: any[] = [];
           for (const it of sorted) {
             const id = it?.id_chat ?? it?.id;
@@ -2601,7 +2613,7 @@ export default function CoachChatInline({
             });
 
             // Tomamos los más recientes que necesiten datos
-            const toEnrich = sorted.slice(0, 15).filter((c: any) => {
+            const toEnrich = sorted.slice(0, 50).filter((c: any) => {
               const parts = c.participants || c.participantes;
               return !Array.isArray(parts) || parts.length === 0;
             });
@@ -2818,6 +2830,16 @@ export default function CoachChatInline({
                   const cid = data.id_chat ?? idToJoin;
                   setChatId(cid);
                   chatIdRef.current = cid;
+                  // Force list refresh on join existing
+                  try {
+                    const evt = new CustomEvent("chat:list-refresh", {
+                      detail: {
+                        reason: "chat-joined-existing",
+                        id_chat: cid,
+                      },
+                    });
+                    window.dispatchEvent(evt);
+                  } catch {}
                   if (data.my_participante) {
                     setMyParticipantId(data.my_participante);
                     myParticipantIdRef.current = data.my_participante;
@@ -2889,6 +2911,14 @@ export default function CoachChatInline({
       const tryCreate = async (eventName: string): Promise<boolean> => {
         return await new Promise<boolean>((resolve) => {
           try {
+            try {
+              console.log(
+                "[CoachChatInline] Emitting create event:",
+                eventName,
+                "participants:",
+                participants
+              );
+            } catch {}
             sio.emit(eventName, { participants }, (ack: any) => {
               try {
                 if (ack && ack.success && ack.data) {
@@ -2902,6 +2932,16 @@ export default function CoachChatInline({
                   if (cid != null) {
                     setChatId(cid);
                     chatIdRef.current = cid;
+                    // Force list refresh on creation
+                    try {
+                      const evt = new CustomEvent("chat:list-refresh", {
+                        detail: {
+                          reason: "chat-created-local",
+                          id_chat: cid,
+                        },
+                      });
+                      window.dispatchEvent(evt);
+                    } catch {}
                   }
                   joinedParticipantsRef.current = Array.isArray(
                     data.participants || data.participantes

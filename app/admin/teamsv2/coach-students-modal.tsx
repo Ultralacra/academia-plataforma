@@ -78,8 +78,57 @@ export function CoachStudentsModal({
 }: CoachStudentsModalProps) {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<CoachStudent[]>([]);
+  const [existingStudentMap, setExistingStudentMap] = useState<
+    Map<string, string | number>
+  >(new Map());
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
+
+  // Escuchar evento global con alumnos que ya tienen conversación
+  useEffect(() => {
+    const handler = (ev: any) => {
+      try {
+        const arr: any[] = Array.isArray(ev?.detail?.students)
+          ? ev.detail.students
+          : [];
+        const m = new Map<string, string | number>();
+        for (const it of arr) {
+          try {
+            const id = String(it?.id ?? "");
+            const cid =
+              it?.chatId ?? it?.chat_id ?? it?.chatid ?? it?.id_chat ?? null;
+            if (id) m.set(id, cid ?? "");
+          } catch {}
+        }
+        setExistingStudentMap(m);
+      } catch {
+        setExistingStudentMap(new Map());
+      }
+    };
+    window.addEventListener("chat:existing-students", handler as EventListener);
+    // Fallback: si ya existe un valor global publicado previamente, úsalo ahora
+    try {
+      const globalArr = (window as any).__chat_existing_students;
+      if (Array.isArray(globalArr)) {
+        const m2 = new Map<string, string | number>();
+        for (const it of globalArr) {
+          try {
+            const id = String(it?.id ?? "");
+            const cid =
+              it?.chatId ?? it?.chat_id ?? it?.chatid ?? it?.id_chat ?? null;
+            if (id) m2.set(id, cid ?? "");
+          } catch {}
+        }
+        if (m2.size > 0) setExistingStudentMap(m2);
+      }
+    } catch {}
+
+    return () =>
+      window.removeEventListener(
+        "chat:existing-students",
+        handler as EventListener
+      );
+  }, []);
 
   // Cargar al abrir (y cuando cambie coachCode)
   useEffect(() => {
@@ -105,12 +154,15 @@ export function CoachStudentsModal({
   // Filtro local por id_alumno o alumno_nombre
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter((it) => {
-      const a = (it.id_alumno ?? "").toLowerCase();
-      const n = (it.alumno_nombre ?? "").toLowerCase();
-      return a.includes(term) || n.includes(term);
-    });
+    const base = term
+      ? items.filter((it) => {
+          const a = (it.id_alumno ?? "").toLowerCase();
+          const n = (it.alumno_nombre ?? "").toLowerCase();
+          return a.includes(term) || n.includes(term);
+        })
+      : items;
+    // No excluir; en su lugar mostraremos la opción de abrir conversación existente
+    return base;
   }, [items, q]);
 
   function exportCsv() {
@@ -255,27 +307,58 @@ export function CoachStudentsModal({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filtered.map((r, idx) => (
-                      <TableRow
-                        key={`${r.id}_${r.id_alumno}`}
-                        className="border-t border-gray-100 hover:bg-gray-50"
-                      >
-                        <TableCell className="px-3 py-2 truncate text-gray-900">
-                          {r.id_alumno ? (
-                            <Link
-                              href={`/admin/alumnos/${encodeURIComponent(
-                                String(r.id_alumno)
-                              )}`}
-                              className="text-gray-900 hover:underline"
-                            >
-                              {r.alumno_nombre}
-                            </Link>
-                          ) : (
-                            r.alumno_nombre
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    filtered.map((r, idx) => {
+                      const studentId = String(r.id_alumno ?? "");
+                      const existing = existingStudentMap.get(studentId);
+                      return (
+                        <TableRow
+                          key={`${r.id}_${r.id_alumno}`}
+                          className="border-t border-gray-100 hover:bg-gray-50"
+                        >
+                          <TableCell className="px-3 py-2 truncate text-gray-900 flex items-center justify-between">
+                            <div className="min-w-0">
+                              {r.id_alumno ? (
+                                <Link
+                                  href={`/admin/alumnos/${encodeURIComponent(
+                                    String(r.id_alumno)
+                                  )}`}
+                                  className="text-gray-900 hover:underline"
+                                >
+                                  {r.alumno_nombre}
+                                </Link>
+                              ) : (
+                                r.alumno_nombre
+                              )}
+                            </div>
+                            {existing ? (
+                              <div className="ml-3 flex items-center gap-2">
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-yellow-100 text-yellow-800"
+                                >
+                                  Conversación existente
+                                </Badge>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    try {
+                                      window.dispatchEvent(
+                                        new CustomEvent("chat:open", {
+                                          detail: { chatId: existing },
+                                        })
+                                      );
+                                    } catch {}
+                                    onOpenChange(false);
+                                  }}
+                                >
+                                  Abrir
+                                </Button>
+                              </div>
+                            ) : null}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>

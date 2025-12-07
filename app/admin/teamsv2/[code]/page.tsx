@@ -23,6 +23,7 @@ import {
   updateCoach,
   deleteCoach,
   type CoachItem,
+  getCoachStudents,
 } from "../api";
 import { getOptions, type OpcionItem } from "@/app/admin/opciones/api";
 import {
@@ -54,6 +55,7 @@ import SessionsPanel from "../components/SessionsPanel";
 import { Textarea } from "@/components/ui/textarea";
 import { CHAT_HOST } from "@/lib/api-config";
 import Spinner from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // Tipo compacto para lista de alumnos en chat (evita genérico multilínea en TSX)
 type StudentMini = {
@@ -581,323 +583,212 @@ export default function CoachDetailPage({
 
   const unifiedChatList = useMemo(() => {
     const q = (contactQuery || "").trim().toLowerCase();
-    const allItems: any[] = [];
-    const processedChatIds = new Set<string>();
+    const list = Array.isArray(chatList) ? chatList : [];
 
-    // 1. Add existing chats (Teams)
-    chatsByContact.forEach((c) => {
-      (c.chats || []).forEach((chat: any) => {
-        const id = chat?.id_chat ?? chat?.id;
-        if (id) processedChatIds.add(String(id));
-      });
-      const count = (Array.isArray(c.chats) ? c.chats : []).reduce(
-        (acc: number, it: any) => {
-          const id = it?.id_chat ?? it?.id;
-          if (id == null) return acc;
-          return acc + getUnreadCountByChatId(id);
-        },
-        0
-      );
-      // Persistir nombre de contacto por chatId
-      const topId = c.topChatId;
-      if (topId != null && c.targetName)
-        setCachedContactName(topId, c.targetName);
-      allItems.push({
-        type: "team",
-        key: `team:${c.targetCode}`,
-        code: c.targetCode,
-        name: c.targetName,
-        lastAt: c.lastAt,
-        lastText: c.lastText,
-        hasUnread: c.hasUnread,
-        unreadCount: count,
-        topChatId: c.topChatId,
-        chats: c.chats,
-        avatarColor: "bg-teal-500",
-        isNew: false,
-      });
-    });
+    const grouped = new Map<string, any>();
+    const orderedKeys: string[] = [];
 
-    // 2. Add existing chats (Students)
-    chatsByStudent.forEach((c) => {
-      (c.chats || []).forEach((chat: any) => {
-        const id = chat?.id_chat ?? chat?.id;
-        if (id) processedChatIds.add(String(id));
-      });
-      const count = (Array.isArray(c.chats) ? c.chats : []).reduce(
-        (acc: number, it: any) => {
-          const id = it?.id_chat ?? it?.id;
-          if (id == null) return acc;
-          return acc + getUnreadCountByChatId(id);
-        },
-        0
+    // 1. Process chatList in order (Server Order)
+    list.forEach((chat) => {
+      const id = chat?.id_chat ?? chat?.id;
+      const otherTeam = chatOtherTeamCode(chat, code);
+      const otherStudent = chatOtherStudentCode(chat);
+      const hasParticipants = Array.isArray(
+        chat.participants || chat.participantes
       );
-      // Try to resolve name again if it looks like a code
-      let resolvedName = c.targetName;
-      if (resolvedName === c.targetCode) {
-        const s = studentsList.find(
-          (st) =>
-            (st.code || "").toLowerCase() === c.targetCode.toLowerCase() ||
-            (st.id &&
-              String(st.id).toLowerCase() === c.targetCode.toLowerCase())
-        );
-        if (s?.name) resolvedName = s.name;
-        else {
-          // Try from chat participants
+      // const isLoading = !hasParticipants; // Moved down
+
+      let type = "student";
+      let targetCode = String(id);
+      let key = `orphan:${id}`;
+      let name = String(id); // Default to ID
+      let avatarColor = "bg-gray-500";
+
+      if (otherTeam) {
+        type = "team";
+        targetCode = otherTeam;
+        key = `team:${otherTeam.toLowerCase()}`;
+        const t = teamsMap.get(targetCode.toLowerCase());
+        name = t?.nombre || targetCode;
+        avatarColor = "bg-teal-500";
+      } else if (otherStudent) {
+        type = "student";
+        targetCode = otherStudent;
+        key = `student:${otherStudent.toLowerCase()}`;
+        const s =
+          studentsMap.get(targetCode.toLowerCase()) ||
+          allStudentsList.find(
+            (st) => (st.code || "").toLowerCase() === targetCode.toLowerCase()
+          );
+        name = s?.name || targetCode;
+        if (!s?.name) {
           const fromChat = getParticipantNameFromChat(
-            c.chats?.[0],
+            chat,
             "cliente",
-            c.targetCode
+            targetCode
           );
-          if (fromChat) resolvedName = fromChat;
+          if (fromChat) name = fromChat;
         }
-      }
-
-      allItems.push({
-        type: "student",
-        key: `student:${c.targetCode}`,
-        code: c.targetCode,
-        name: resolvedName,
-        lastAt: c.lastAt,
-        lastText: c.lastText,
-        hasUnread: c.hasUnread,
-        unreadCount: count,
-        topChatId: c.topChatId,
-        chats: c.chats,
-        avatarColor: "bg-emerald-500",
-        isNew: false,
-      });
-      const topId = c.topChatId;
-      if (topId != null && resolvedName)
-        setCachedContactName(topId, resolvedName);
-    });
-
-    // 3. Add orphan chats (not classified as Team or Student)
-    const orphans = (Array.isArray(chatList) ? chatList : []).filter((chat) => {
-      const id = chat?.id_chat ?? chat?.id;
-      return id && !processedChatIds.has(String(id));
-    });
-
-    orphans.forEach((chat) => {
-      const id = chat?.id_chat ?? chat?.id;
-      const lastAt = getChatTimestamp(chat);
-      const last = getChatLastMessage(chat);
-      const lastRead = id != null ? getLastReadByChatId(id) : 0;
-      const hasUnread = lastAt > (lastRead || 0);
-      const unreadCount = getUnreadCountByChatId(id);
-
-      // Try to find a name from participants even if incomplete
-      let name = "(Sin nombre)";
-      const parts = itemParticipants(chat);
-      const clientPart = parts.find(
-        (p) => normalizeTipo(p?.participante_tipo) === "cliente"
-      );
-      if (clientPart) {
-        const cid =
-          clientPart.id_cliente ?? clientPart.id_alumno ?? clientPart.client_id;
-        if (cid) {
-          const s = studentsList.find(
-            (st) =>
-              (st.code || "").toLowerCase() === String(cid).toLowerCase() ||
-              (st.id &&
-                String(st.id).toLowerCase() === String(cid).toLowerCase())
-          );
-          name = s?.name || String(cid);
-        }
-      }
-
-      allItems.push({
-        type: "student", // Treat as student by default for UI
-        key: `orphan:${id}`,
-        code: id, // Use chat ID as code since we don't have a better one
-        name: name,
-        lastAt: lastAt,
-        lastText: (last.text || "").trim(),
-        hasUnread: hasUnread,
-        unreadCount: unreadCount,
-        topChatId: id,
-        chats: [chat],
-        avatarColor: "bg-gray-500",
-        isNew: false,
-      });
-    });
-
-    // 4. If searching, find contacts/students WITHOUT active chats
-    if (q) {
-      // Teams without chat
-      const existingTeamKeys = new Set(
-        chatsByContact.map((c) => c.targetCode.toLowerCase())
-      );
-      teamsList.forEach((t) => {
-        if (!existingTeamKeys.has((t.codigo || "").toLowerCase())) {
-          if (
-            (t.nombre || "").toLowerCase().includes(q) ||
-            (t.codigo || "").toLowerCase().includes(q)
-          ) {
-            allItems.push({
-              type: "team",
-              key: `team:${t.codigo}`,
-              code: t.codigo,
-              name: t.nombre || t.codigo,
-              lastAt: 0,
-              lastText: "",
-              hasUnread: false,
-              unreadCount: 0,
-              topChatId: null,
-              chats: [],
-              avatarColor: "bg-teal-500",
-              isNew: true,
-            });
+        avatarColor = "bg-emerald-500";
+      } else {
+        const parts = itemParticipants(chat);
+        const clientPart = parts.find(
+          (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
+        );
+        if (clientPart) {
+          const cid =
+            clientPart.id_cliente ??
+            clientPart.id_alumno ??
+            clientPart.client_id;
+          if (cid) {
+            const s =
+              studentsList.find(
+                (st) =>
+                  (st.code || "").toLowerCase() === String(cid).toLowerCase()
+              ) ||
+              allStudentsList.find(
+                (st) =>
+                  (st.code || "").toLowerCase() === String(cid).toLowerCase()
+              );
+            name = s?.name || String(cid);
           }
         }
+      }
+
+      // Determine if we should show skeleton
+      // const isNameResolved =
+      //   name &&
+      //   name !== targetCode &&
+      //   name !== String(id) &&
+      //   name !== "(Sin nombre)";
+      // const isLoading = !hasParticipants && !isNameResolved;
+
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          type,
+          key,
+          code: targetCode,
+          name,
+          chats: [],
+          avatarColor,
+          isNew: false,
+          topChatId: id,
+          // isLoading,
+        });
+        orderedKeys.push(key);
+      }
+
+      const group = grouped.get(key);
+      group.chats.push(chat);
+    });
+
+    // 2. Build result list
+    const result = orderedKeys.map((key) => {
+      const group = grouped.get(key);
+      const top = group.chats[0];
+      const topChatId = top?.id_chat ?? top?.id ?? null;
+      const lastAt = getChatTimestamp(top);
+      const last = getChatLastMessage(top);
+
+      const unreadCount = group.chats.reduce((acc: number, it: any) => {
+        const cid = it?.id_chat ?? it?.id;
+        return acc + (cid ? getUnreadCountByChatId(cid) : 0);
+      }, 0);
+
+      const lastRead = topChatId != null ? getLastReadByChatId(topChatId) : 0;
+      const hasUnread = lastAt > (lastRead || 0);
+
+      if (topChatId && group.name && group.name !== "(Sin nombre)") {
+        setCachedContactName(topChatId, group.name);
+      }
+
+      return {
+        ...group,
+        topChatId,
+        lastAt,
+        lastText: (last.text || "").trim(),
+        hasUnread,
+        unreadCount,
+      };
+    });
+
+    // 3. Add "New" contacts (Search results)
+    if (q) {
+      const existingKeys = new Set(orderedKeys);
+
+      teamsList.forEach((t) => {
+        const k = `team:${(t.codigo || "").toLowerCase()}`;
+        if (
+          !existingKeys.has(k) &&
+          ((t.nombre || "").toLowerCase().includes(q) ||
+            (t.codigo || "").toLowerCase().includes(q))
+        ) {
+          result.push({
+            type: "team",
+            key: k,
+            code: t.codigo,
+            name: t.nombre || t.codigo,
+            lastAt: 0,
+            lastText: "",
+            hasUnread: false,
+            unreadCount: 0,
+            topChatId: null,
+            chats: [],
+            avatarColor: "bg-teal-500",
+            isNew: true,
+          });
+        }
       });
 
-      // Students without chat
-      const existingStudentKeys = new Set(
-        chatsByStudent.map((c) => c.targetCode.toLowerCase())
-      );
-      // Use allStudentsList if available for broader search, otherwise studentsList
       const sourceList =
         allStudentsList.length > 0 ? allStudentsList : studentsList;
-
       sourceList.forEach((s) => {
-        const hasChat =
-          existingStudentKeys.has((s.code || "").toLowerCase()) ||
-          (s.id && existingStudentKeys.has(String(s.id).toLowerCase()));
-
-        if (!hasChat) {
-          if (
-            (s.name || "").toLowerCase().includes(q) ||
-            (s.code || "").toLowerCase().includes(q)
-          ) {
-            allItems.push({
-              type: "student",
-              key: `student:${s.id || s.code}`,
-              code: s.id || s.code,
-              name: s.name || s.code,
-              lastAt: 0,
-              lastText: "",
-              hasUnread: false,
-              unreadCount: 0,
-              topChatId: null,
-              chats: [],
-              avatarColor: "bg-emerald-500",
-              isNew: true,
-            });
-          }
+        const k = `student:${(s.code || String(s.id)).toLowerCase()}`;
+        if (
+          !existingKeys.has(k) &&
+          ((s.name || "").toLowerCase().includes(q) ||
+            (s.code || "").toLowerCase().includes(q))
+        ) {
+          result.push({
+            type: "student",
+            key: k,
+            code: s.code || String(s.id),
+            name: s.name || s.code,
+            lastAt: 0,
+            lastText: "",
+            hasUnread: false,
+            unreadCount: 0,
+            topChatId: null,
+            chats: [],
+            avatarColor: "bg-emerald-500",
+            isNew: true,
+          });
         }
       });
     }
 
-    // Filter by query if present (for existing chats too)
-    let result = allItems;
+    // 4. Filter by query
+    let finalResult = result;
     if (q) {
-      result = result.filter(
+      finalResult = finalResult.filter(
         (item) =>
           (item.name || "").toLowerCase().includes(q) ||
           (item.code || "").toLowerCase().includes(q)
       );
     }
 
-    // Fallback: if we have chats but participants info is missing (enrichment pending),
-    // render a flat list directly from chatList so the user doesn't get an empty state.
-    if (
-      result.length === 0 &&
-      (Array.isArray(chatList) ? chatList.length : 0) > 0
-    ) {
-      const flat = (Array.isArray(chatList) ? chatList : []).map((it: any) => {
-        const id = it?.id_chat ?? it?.id ?? null;
-        const lm = getChatLastMessage(it);
-        const lastAt = getChatTimestamp(it);
-        // Resolver nombre del contacto según el tipo de chat
-        // 1) Equipo ↔ Equipo (contacto otro equipo)
-        const otherTeamCode = chatOtherTeamCode(it, code);
-        // 2) Cliente ↔ Equipo (contacto alumno)
-        const otherStudentCode = chatOtherStudentCode(it);
-        let contactName = "Soporte X Academy";
-        let avatarColor = "bg-teal-500";
-
-        // Intentar cache primero
-        const cached = getCachedContactName(id);
-
-        if (otherStudentCode) {
-          const sKey = String(otherStudentCode).toLowerCase();
-          const stu = studentsMap.get(sKey);
-          if (stu?.name) contactName = stu.name;
-          else {
-            // Fallback rápido: buscar en allStudentsList si la lista asignada aún no cargó
-            const fromAll = allStudentsList.find(
-              (s) => (s.code || "").toLowerCase() === sKey
-            );
-            contactName = fromAll?.name || String(otherStudentCode);
-          }
-          avatarColor = "bg-emerald-500";
-        } else if (otherTeamCode) {
-          const otherKey = String(otherTeamCode).toLowerCase();
-          const team = teamsMap.get(otherKey);
-          contactName = team?.nombre || String(otherTeamCode);
-          avatarColor = "bg-teal-500";
-        }
-
-        // Si falló la resolución (es default o código) y tenemos cache válido, usar cache
-        const isDefault = contactName === "Soporte X Academy";
-        const isCode =
-          contactName === String(otherStudentCode) ||
-          contactName === String(otherTeamCode);
-
-        if ((isDefault || isCode) && cached && cached !== "Soporte X Academy") {
-          contactName = cached;
-          // Si recuperamos nombre de cache y no sabíamos el tipo, asumimos alumno si no es equipo conocido
-          if (!otherTeamCode && isDefault) avatarColor = "bg-emerald-500";
-        }
-
-        // Persistir en cache SOLO si es un nombre válido (no default, no código)
-        if (
-          id != null &&
-          contactName &&
-          contactName !== "Soporte X Academy" &&
-          contactName !== String(otherStudentCode) &&
-          contactName !== String(otherTeamCode)
-        ) {
-          setCachedContactName(id, contactName);
-        }
-
-        return {
-          type: otherStudentCode ? "student" : "team",
-          key: `chat:${id ?? Math.random()}`,
-          code: String(id ?? ""),
-          name: contactName,
-          lastAt,
-          lastText: lm.text,
-          hasUnread: false,
-          unreadCount: 0,
-          topChatId: id,
-          chats: [it],
-          avatarColor,
-          isNew: false,
-        };
-      });
-      result = flat;
-    }
-
-    // Sort: Active chats first (by time), then new contacts
-    result.sort((a, b) => {
-      const timeA = a.lastAt || 0;
-      const timeB = b.lastAt || 0;
-      if (timeA !== timeB) return timeB - timeA;
-      return (a.name || "").localeCompare(b.name || "");
-    });
-
-    return result;
+    return finalResult;
   }, [
-    chatsByContact,
-    chatsByStudent,
+    chatList,
     teamsList,
     studentsList,
     allStudentsList,
     contactQuery,
     readsBump,
     unreadBump,
+    teamsMap,
+    studentsMap,
+    code,
   ]);
 
   // Sincroniza la pestaña activa con la selección del chat (equipo/alumno)
@@ -962,30 +853,27 @@ export default function CoachDetailPage({
     }
   }, [activeChatTab]);
 
-  // Cargar alumnos asignados para este coach/equipo (usando métricas v2)
+  // Cargar alumnos asignados para este coach/equipo (usando getCoachStudents para asegurar nombres)
   useEffect(() => {
     if (!code) return;
     const ctrl = new AbortController();
     (async () => {
       try {
         setStudentsLoading(true);
-        const res = await fetchMetrics(undefined, undefined, code);
-        const teams = (res?.data as any)?.teams;
-        const flat: any[] = Array.isArray(teams?.allClientsByCoachFlat)
-          ? teams.allClientsByCoachFlat
-          : [];
-        const detail: any[] = Array.isArray(teams?.clientsByCoachDetail)
-          ? teams.clientsByCoachDetail
-          : [];
-        const rows = (flat.length > 0 ? flat : detail).map((r: any) => ({
-          id: r.id ? String(r.id) : undefined,
-          code: String(r.codigo ?? r.code ?? "").trim(),
-          name: String(r.nombre ?? r.name ?? "").trim(),
-          state: r.estado ?? r.state ?? null,
-          stage: r.etapa ?? r.stage ?? null,
+        // Usamos getCoachStudents que devuelve la lista oficial de alumnos asignados con nombres
+        const rows = await getCoachStudents(code);
+
+        const mapped: StudentMini[] = rows.map((r) => ({
+          id: String(r.id),
+          code: r.id_alumno || String(r.id), // id_alumno suele ser el código
+          name: r.alumno_nombre || "(Sin nombre)",
+          state: r.estatus,
+          stage: r.fase,
         }));
-        if (!ctrl.signal.aborted) setStudentsList(rows.filter((r) => r.code));
-      } catch {
+
+        if (!ctrl.signal.aborted) setStudentsList(mapped);
+      } catch (e) {
+        console.error("Error loading students:", e);
         if (!ctrl.signal.aborted) setStudentsList([]);
       } finally {
         if (!ctrl.signal.aborted) setStudentsLoading(false);
@@ -1804,40 +1692,7 @@ export default function CoachDetailPage({
                             }
                           );
 
-                          console.log("=== REPORTE DE DUPLICADOS ===");
-                          let duplicatesFound = false;
-                          studentCounts.forEach((chats, studentId) => {
-                            if (chats.length > 1) {
-                              duplicatesFound = true;
-                              // Buscar nombre
-                              const s =
-                                studentsMap.get(studentId.toLowerCase()) ||
-                                allStudentsList.find(
-                                  (st) =>
-                                    (st.code || "").toLowerCase() ===
-                                    studentId.toLowerCase()
-                                );
-                              const name = s?.name || studentId;
-                              console.warn(
-                                `ALUMNO DUPLICADO: ${name} (${studentId}) tiene ${chats.length} conversaciones.`
-                              );
-                              chats.forEach((c) =>
-                                console.log(
-                                  `   -> ChatID: ${
-                                    c.id_chat || c.id
-                                  } | Creado: ${
-                                    c.created_at || c.fecha_creacion
-                                  }`
-                                )
-                              );
-                            }
-                          });
-                          if (!duplicatesFound) {
-                            console.log(
-                              "No se encontraron conversaciones duplicadas para el mismo alumno."
-                            );
-                          }
-                          console.log("=============================");
+                          // (Reporte de duplicados removido para limpiar consola)
                         } catch {}
 
                         // Mostrar TODAS las conversaciones tal como vienen del servidor.

@@ -127,6 +127,40 @@ export default function CoachChatInline({
 }) {
   const isMobile = useIsMobile();
   const [convList, setConvList] = React.useState<any[]>([]);
+  const convListRef = React.useRef<any[]>([]);
+
+  const chatListsEqual = React.useCallback((a: any[], b: any[]) => {
+    try {
+      if (a === b) return true;
+      if (!Array.isArray(a) || !Array.isArray(b)) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        const ai = a[i];
+        const bi = b[i];
+        const idA = String(ai?.id_chat ?? ai?.id ?? "");
+        const idB = String(bi?.id_chat ?? bi?.id ?? "");
+        if (idA !== idB) return false;
+        const atA = String(
+          ai?.last_message_at ??
+            ai?.fecha_ultimo_mensaje ??
+            ai?.updated_at ??
+            ai?.created_at ??
+            ""
+        );
+        const atB = String(
+          bi?.last_message_at ??
+            bi?.fecha_ultimo_mensaje ??
+            bi?.updated_at ??
+            bi?.created_at ??
+            ""
+        );
+        if (atA !== atB) return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
   const [contacts, setContacts] = React.useState<
     Array<{ codigo_equipo: string; area?: string }>
   >([]);
@@ -2451,7 +2485,10 @@ export default function CoachChatInline({
           );
           if (!needEnrich) {
             onChatsList?.(baseList);
-            setConvList(baseList);
+            if (!chatListsEqual(convListRef.current, baseList)) {
+              convListRef.current = baseList;
+              setConvList(baseList);
+            }
             try {
               const toLine2 = (it: any) => {
                 const id = it?.id_chat ?? it?.id ?? null;
@@ -2603,7 +2640,10 @@ export default function CoachChatInline({
             );
           } catch {}
           onChatsList?.(merged);
-          setConvList(merged);
+          if (!chatListsEqual(convListRef.current, merged)) {
+            convListRef.current = merged;
+            setConvList(merged);
+          }
         } catch {}
       });
     } catch {}
@@ -2697,7 +2737,10 @@ export default function CoachChatInline({
             (list || []).forEach((it: any) => console.log(" -", toLine(it)));
           } catch {}
           onChatsList?.(list);
-          setConvList(list);
+          if (!chatListsEqual(convListRef.current, list)) {
+            convListRef.current = list;
+            setConvList(list);
+          }
         } catch {}
       });
     } catch {}
@@ -3000,6 +3043,114 @@ export default function CoachChatInline({
       return false;
     }
   }
+
+  // -------------------------
+  // Memoized chat list component
+  // -------------------------
+  type ChatListProps = {
+    list: any[];
+    nameOf: (tipo: string, id: any) => string;
+    tryJoin: (id: any) => void;
+    activeChatId: any;
+  };
+
+  const ChatListItem = React.memo(
+    function ChatListItem({ it, nameOf, tryJoin, activeChatId }: any) {
+      const id = it?.id_chat ?? it?.id;
+      const parts = it?.participants || it?.participantes || [];
+      const equipos = (Array.isArray(parts) ? parts : [])
+        .filter((p: any) => normalizeTipo(p?.participante_tipo) === "equipo")
+        .map((p: any) => nameOf("equipo", p?.id_equipo))
+        .filter(Boolean);
+      const clientes = (Array.isArray(parts) ? parts : [])
+        .filter((p: any) => normalizeTipo(p?.participante_tipo) === "cliente")
+        .map((p: any) => nameOf("cliente", p?.id_cliente))
+        .filter(Boolean);
+      const title = equipos.length ? equipos.join(", ") : clientes.join(", ");
+      const lastAt =
+        it?.last_message_at ||
+        it?.fecha_ultimo_mensaje ||
+        it?.updated_at ||
+        it?.fecha_actualizacion ||
+        it?.created_at ||
+        it?.fecha_creacion;
+      const lastLabel = lastAt ? formatTime(String(lastAt)) : "";
+      let unread = 0;
+      try {
+        const key = `chatUnreadById:alumno:${String(id)}`;
+        unread = parseInt(localStorage.getItem(key) || "0", 10);
+        if (isNaN(unread)) unread = 0;
+      } catch {}
+      const active =
+        activeChatId != null && String(activeChatId) === String(id);
+
+      return (
+        <button
+          key={String(id)}
+          type="button"
+          onClick={() => {
+            if (id != null) tryJoin(id);
+          }}
+          className={`w-full text-left px-3 py-2 border-b hover:bg-gray-50 transition ${
+            active ? "bg-gray-100" : "bg-white"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium truncate text-gray-800">
+              {title || `Chat ${String(id)}`}
+            </div>
+            {unread > 0 && (
+              <span className="ml-2 inline-flex min-w-[18px] h-[18px] rounded-full bg-[#25d366] text-white text-[11px] items-center justify-center px-1">
+                {unread > 99 ? "99+" : unread}
+              </span>
+            )}
+          </div>
+          {lastLabel && (
+            <div className="text-[11px] text-gray-500">{lastLabel}</div>
+          )}
+        </button>
+      );
+    },
+    (prev, next) => {
+      // shallow compare important props to avoid unnecessary rerenders
+      try {
+        const ida = String(prev.it?.id_chat ?? prev.it?.id ?? "");
+        const idb = String(next.it?.id_chat ?? next.it?.id ?? "");
+        if (ida !== idb) return false;
+        const atA = String(
+          prev.it?.last_message_at ?? prev.it?.updated_at ?? ""
+        );
+        const atB = String(
+          next.it?.last_message_at ?? next.it?.updated_at ?? ""
+        );
+        if (atA !== atB) return false;
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  );
+
+  const ChatList = React.memo(function ChatList({
+    list,
+    nameOf,
+    tryJoin,
+    activeChatId,
+  }: ChatListProps) {
+    return (
+      <>
+        {list.map((it) => (
+          <ChatListItem
+            key={String(it?.id_chat ?? it?.id ?? Math.random())}
+            it={it}
+            nameOf={nameOf}
+            tryJoin={tryJoin}
+            activeChatId={activeChatId}
+          />
+        ))}
+      </>
+    );
+  });
 
   async function send() {
     const val = text.trim();
@@ -3441,73 +3592,12 @@ export default function CoachChatInline({
                   )}
                 </div>
               ) : (
-                convList.map((it: any) => {
-                  const id = it?.id_chat ?? it?.id;
-                  const parts = it?.participants || it?.participantes || [];
-                  const equipos = (Array.isArray(parts) ? parts : [])
-                    .filter(
-                      (p: any) =>
-                        normalizeTipo(p?.participante_tipo) === "equipo"
-                    )
-                    .map((p: any) => nameOf("equipo", p?.id_equipo))
-                    .filter(Boolean);
-                  const clientes = (Array.isArray(parts) ? parts : [])
-                    .filter(
-                      (p: any) =>
-                        normalizeTipo(p?.participante_tipo) === "cliente"
-                    )
-                    .map((p: any) => nameOf("cliente", p?.id_cliente))
-                    .filter(Boolean);
-                  const title = equipos.length
-                    ? equipos.join(", ")
-                    : clientes.join(", ");
-                  const lastAt =
-                    it?.last_message_at ||
-                    it?.fecha_ultimo_mensaje ||
-                    it?.updated_at ||
-                    it?.fecha_actualizacion ||
-                    it?.created_at ||
-                    it?.fecha_creacion;
-                  const lastLabel = lastAt ? formatTime(String(lastAt)) : "";
-                  let unread = 0;
-                  try {
-                    const key = `chatUnreadById:alumno:${String(id)}`;
-                    unread = parseInt(localStorage.getItem(key) || "0", 10);
-                    if (isNaN(unread)) unread = 0;
-                  } catch {}
-                  const active =
-                    chatIdRef.current != null &&
-                    String(chatIdRef.current) === String(id);
-                  return (
-                    <button
-                      key={String(id)}
-                      type="button"
-                      onClick={() => {
-                        // Join-only: no crear; solo unir conversación existente
-                        if (id != null) tryJoin(id);
-                      }}
-                      className={`w-full text-left px-3 py-2 border-b hover:bg-gray-50 transition ${
-                        active ? "bg-gray-100" : "bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium truncate text-gray-800">
-                          {title || `Chat ${String(id)}`}
-                        </div>
-                        {unread > 0 && (
-                          <span className="ml-2 inline-flex min-w-[18px] h-[18px] rounded-full bg-[#25d366] text-white text-[11px] items-center justify-center px-1">
-                            {unread > 99 ? "99+" : unread}
-                          </span>
-                        )}
-                      </div>
-                      {lastLabel && (
-                        <div className="text-[11px] text-gray-500">
-                          {lastLabel}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })
+                <ChatList
+                  list={convList}
+                  nameOf={nameOf}
+                  tryJoin={tryJoin}
+                  activeChatId={chatIdRef.current ?? chatId}
+                />
               )}
             </div>
           </div>
