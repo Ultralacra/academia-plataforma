@@ -1745,7 +1745,7 @@ export default function TicketsPanelCoach({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-2">
             {(
               [
                 "PENDIENTE",
@@ -1761,7 +1761,7 @@ export default function TicketsPanelCoach({
               return (
                 <div
                   key={col}
-                  className="flex flex-col rounded-xl border border-slate-200 bg-white"
+                  className="flex flex-col rounded-lg border border-slate-200 bg-white min-w-0"
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={async (e) => {
                     e.preventDefault();
@@ -1775,21 +1775,21 @@ export default function TicketsPanelCoach({
                     await handleChangeEstado(codigo, col);
                   }}
                 >
-                  <div className="flex items-center justify-between border-b px-4 py-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-between border-b px-3 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <Badge
                         variant="outline"
-                        className={`font-medium ${STATUS_STYLE[col]}`}
+                        className={`font-medium text-[10px] px-1.5 py-0 ${STATUS_STYLE[col]}`}
                       >
                         {STATUS_LABEL[col]}
                       </Badge>
-                      <span className="text-sm text-slate-500">
+                      <span className="text-xs text-slate-500">
                         {items.length}
                       </span>
                     </div>
                   </div>
 
-                  <div className="flex-1 space-y-2 p-3">
+                  <div className="flex-1 space-y-2 p-2">
                     {items.map((t) => (
                       <div
                         key={t.id}
@@ -1800,15 +1800,15 @@ export default function TicketsPanelCoach({
                           e.dataTransfer.effectAllowed = "move";
                         }}
                         className={
-                          "group rounded-lg border bg-white p-3 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-all " +
+                          "group rounded border bg-white p-2 shadow-sm hover:shadow-md cursor-grab active:cursor-grabbing transition-all " +
                           (String(t.estado ?? "").toUpperCase() === "PAUSADO"
                             ? "border-amber-300 ring-1 ring-amber-200 hover:border-amber-400"
                             : "border-slate-200 hover:border-slate-300")
                         }
                       >
-                        <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-start justify-between gap-1 mb-1.5">
                           <h4
-                            className="flex-1 text-sm font-medium text-slate-900 line-clamp-2"
+                            className="flex-1 text-xs font-medium text-slate-900 line-clamp-2 leading-tight"
                             title={t.nombre ?? undefined}
                           >
                             {t.nombre ?? "—"}
@@ -1817,7 +1817,7 @@ export default function TicketsPanelCoach({
                             type="button"
                             variant="ghost"
                             size="sm"
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                             onClick={() => {
                               setEditTicket(t);
                               const saved = detailsById[t.id] || {};
@@ -1883,25 +1883,25 @@ export default function TicketsPanelCoach({
                               setEditOpen(true);
                             }}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <Pencil className="h-3 w-3" />
                           </Button>
                         </div>
-                        <div className="space-y-2 text-xs text-slate-600">
+                        <div className="space-y-1 text-[10px] text-slate-600">
                           {String(t.estado ?? "").toUpperCase() ===
                             "PAUSADO" && (
-                            <div className="flex items-center gap-1.5 text-amber-700">
-                              <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
-                              <span className="text-[11px] font-medium">
+                            <div className="flex items-center gap-1 text-amber-700">
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                              <span className="font-medium">
                                 Requiere atención
                               </span>
                             </div>
                           )}
                           {t.alumno_nombre && (
                             <div
-                              className="flex items-center gap-1.5 truncate"
+                              className="flex items-center gap-1 truncate"
                               title={t.alumno_nombre || undefined}
                             >
-                              <User className="h-3.5 w-3.5 text-slate-400" />
+                              <User className="h-3 w-3 text-slate-400" />
                               <span className="truncate">
                                 {t.alumno_nombre}
                               </span>
@@ -1909,16 +1909,16 @@ export default function TicketsPanelCoach({
                           )}
                           {(t as any).informante && (
                             <div
-                              className="flex items-center gap-1.5 truncate"
+                              className="flex items-center gap-1 truncate"
                               title={
                                 (t as any).informante_nombre ||
                                 (t as any).informante ||
                                 undefined
                               }
                             >
-                              <Users className="h-3.5 w-3.5 text-slate-400" />
+                              <Users className="h-3 w-3 text-slate-400" />
                               <span className="truncate">
-                                Informante:{" "}
+                                Inf:{" "}
                                 {(t as any).informante_nombre ||
                                   (t as any).informante}
                               </span>
@@ -1926,42 +1926,42 @@ export default function TicketsPanelCoach({
                           )}
                           {(t as any).resuelto_por && (
                             <div
-                              className="flex items-center gap-1.5 truncate"
+                              className="flex items-center gap-1 truncate"
                               title={
                                 (t as any).resuelto_por_nombre ||
                                 (t as any).resuelto_por ||
                                 undefined
                               }
                             >
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                               <span className="truncate">
-                                Resuelto por:{" "}
+                                Res:{" "}
                                 {(t as any).resuelto_por_nombre ||
                                   (t as any).resuelto_por}
                               </span>
                             </div>
                           )}
-                          <div className="flex flex-wrap gap-1.5">
-                            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
-                              <Calendar className="h-3 w-3 text-slate-400" />
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            <span className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-slate-50 px-1 py-0 text-[9px] text-slate-600">
+                              <Calendar className="h-2.5 w-2.5 text-slate-400" />
                               {fmtDate(t.created_at)}
                             </span>
                             {t.deadline && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700">
-                                <Clock className="h-3 w-3" />
+                              <span className="inline-flex items-center gap-0.5 rounded border border-amber-200 bg-amber-50 px-1 py-0 text-[9px] text-amber-700">
+                                <Clock className="h-2.5 w-2.5" />
                                 {fmtDate(t.deadline)}
                               </span>
                             )}
                           </div>
                           {t.codigo && (
                             <button
-                              className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
+                              className="flex items-center gap-1 text-slate-600 hover:text-slate-900 transition-colors pt-0.5"
                               onClick={() => openFilesFor(t.codigo)}
                               type="button"
                             >
-                              <FileIcon className="h-3.5 w-3.5" />
+                              <FileIcon className="h-3 w-3" />
                               <span className="underline decoration-slate-300 hover:decoration-slate-900">
-                                Ver archivos
+                                Archivos
                               </span>
                             </button>
                           )}
