@@ -2165,20 +2165,60 @@ export default function TicketsBoard() {
                             {estados.map((st) => (
                               <DropdownMenuItem
                                 key={st}
-                                onClick={() =>
+                                onClick={async () => {
+                                  const newStatus = st as StatusKey;
                                   setEditForm((prev) => ({
                                     ...prev,
-                                    estado: st as any,
-                                  }))
-                                }
+                                    estado: newStatus,
+                                  }));
+
+                                  if (selectedTicket?.codigo) {
+                                    try {
+                                      await updateTicket(
+                                        selectedTicket.codigo,
+                                        { estado: newStatus }
+                                      );
+
+                                      setTickets((prev) =>
+                                        prev.map((t) =>
+                                          t.id === selectedTicket.id
+                                            ? { ...t, estado: newStatus }
+                                            : t
+                                        )
+                                      );
+
+                                      if (ticketDetail) {
+                                        setTicketDetail((prev: any) => ({
+                                          ...prev,
+                                          estado: newStatus,
+                                        }));
+                                      }
+
+                                      setSelectedTicket((prev) =>
+                                        prev
+                                          ? { ...prev, estado: newStatus }
+                                          : null
+                                      );
+
+                                      toast({ title: "Estado actualizado" });
+                                    } catch (e) {
+                                      console.error(e);
+                                      toast({
+                                        title: "Error al actualizar estado",
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }
+                                }}
                                 className="text-xs"
                               >
-                                <span
-                                  className={`mr-2 inline-block h-2 w-2 rounded-full ${
-                                    STATUS_STYLE[st as StatusKey].split(" ")[0]
+                                <div
+                                  className={`inline-flex items-center rounded-md px-2 py-0.5 border ${
+                                    STATUS_STYLE[st as StatusKey]
                                   }`}
-                                />
-                                {STATUS_LABEL[st as StatusKey]}
+                                >
+                                  {STATUS_LABEL[st as StatusKey]}
+                                </div>
                               </DropdownMenuItem>
                             ))}
                           </DropdownMenuContent>
