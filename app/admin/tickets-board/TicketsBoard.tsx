@@ -1248,19 +1248,69 @@ export default function TicketsBoard() {
                 coerceStatus(t.estado) === (estado as StatusKey);
               if (!statusMatch) return false;
               if (onlyMyTickets && user?.codigo) {
-                const myCode = String(user.codigo);
+                const myCode = String(user.codigo).trim();
                 // Creados por mí
-                const createdByMe = String(t.informante || "") === myCode;
-                // Asignados a mí (si el ticket incluye arreglo de coaches)
+                const createdByMe =
+                  String(t.informante || "").trim() === myCode;
+
+                // Asignados a mí: revisar coaches del ticket, overrides y fallback global técnicos
+                const normalize = (s: any) =>
+                  String(s || "")
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .toUpperCase()
+                    .trim();
+
                 let assignedToMe = false;
                 try {
-                  const coachesArr = (t as any)?.coaches;
-                  if (Array.isArray(coachesArr)) {
-                    assignedToMe = coachesArr.some(
-                      (co: any) => String(co?.codigo_equipo || "") === myCode
+                  const coachesArr = Array.isArray((t as any)?.coaches)
+                    ? (t as any).coaches
+                    : [];
+                  const overrides = Array.isArray((t as any)?.coaches_override)
+                    ? (t as any).coaches_override
+                    : [];
+
+                  // a) coaches del ticket
+                  assignedToMe = coachesArr.some(
+                    (co: any) =>
+                      String(co?.codigo_equipo || "").trim() === myCode
+                  );
+
+                  // b) overrides como objetos o ids
+                  if (!assignedToMe && overrides.length > 0) {
+                    const overrideObjects = overrides.filter(
+                      (o: any) => o && typeof o === "object"
                     );
+                    if (overrideObjects.length > 0) {
+                      assignedToMe = overrideObjects.some(
+                        (o: any) =>
+                          String(o?.codigo_equipo || o?.codigo || "").trim() ===
+                          myCode
+                      );
+                    } else {
+                      assignedToMe = overrides.some(
+                        (o: any) => String(o || "").trim() === myCode
+                      );
+                    }
+                  }
+
+                  // c) fallback: si es técnico y coaches vacío, usar lista global de técnicos
+                  if (!assignedToMe) {
+                    const tipo = normalize((t as any)?.tipo);
+                    if (
+                      tipo.includes("TECNIC") &&
+                      (!Array.isArray(coachesArr) || coachesArr.length === 0)
+                    ) {
+                      assignedToMe = (coaches || []).some(
+                        (gc: any) =>
+                          String(gc?.codigo || "").trim() === myCode &&
+                          (normalize(gc?.area).includes("TECNIC") ||
+                            normalize(gc?.puesto).includes("TECNIC"))
+                      );
+                    }
                   }
                 } catch {}
+
                 return createdByMe || assignedToMe;
               }
               return true;
@@ -1427,37 +1477,159 @@ export default function TicketsBoard() {
                                 </div>
                               )}
 
-                              {Array.isArray((t as any).coaches) &&
-                                (t as any).coaches.length > 0 && (
+                              {(() => {
+                                // 1. Obtener coaches del ticket y overrides
+                                const ticketCoaches =
+                                  t.coaches && Array.isArray(t.coaches)
+                                    ? t.coaches
+                                    : [];
+                                const overrides = Array.isArray(
+                                  t.coaches_override
+                                )
+                                  ? t.coaches_override
+                                  : [];
+
+                                let result: any[] = [];
+
+                                // Helper para limpiar IDs
+                                const clean = (s: any) =>
+                                  String(s || "").trim();
+
+                                // 2. Si hay overrides, tienen prioridad absoluta
+                                if (overrides.length > 0) {
+                                  // Caso A: overrides son objetos del coach
+                                  const overrideObjects = overrides.filter(
+                                    (o: any) => o && typeof o === "object"
+                                  ) as any[];
+                                  if (overrideObjects.length > 0) {
+                                    result = overrideObjects.map((o) => ({
+                                      codigo_equipo:
+                                        o.codigo_equipo ?? o.codigo ?? null,
+                                      nombre: o.nombre ?? "Coach",
+                                      puesto: o.puesto ?? o.rol ?? null,
+                                      area: o.area ?? o.departamento ?? null,
+                                    }));
+                                  } else {
+                                    // Caso B: overrides son ids (strings)
+                                    const fromTicket = ticketCoaches.filter(
+                                      (c) =>
+                                        overrides.some(
+                                          (o: any) =>
+                                            clean(o) === clean(c.codigo_equipo)
+                                        )
+                                    );
+
+                                    result = [...fromTicket];
+
+                                    // Completar desde lista global si faltan
+                                    if (
+                                      result.length < overrides.length &&
+                                      coaches.length > 0
+                                    ) {
+                                      const foundIds = new Set(
+                                        result.map((c) =>
+                                          clean(c.codigo_equipo)
+                                        )
+                                      );
+                                      const missing = (
+                                        overrides as any[]
+                                      ).filter((o) => !foundIds.has(clean(o)));
+
+                                      const fromGlobal = coaches
+                                        .filter((c) =>
+                                          missing.some(
+                                            (m) => clean(m) === clean(c.codigo)
+                                          )
+                                        )
+                                        .map((c) => ({
+                                          codigo_equipo: c.codigo,
+                                          nombre: c.nombre,
+                                          puesto: c.puesto,
+                                          area: c.area,
+                                        }));
+
+                                      result = [...result, ...fromGlobal];
+                                    }
+                                  }
+                                }
+                                // 3. Si NO hay overrides, aplicar lógica de fallback por tipo
+                                else {
+                                  const normalize = (s: any) =>
+                                    String(s || "")
+                                      .normalize("NFD")
+                                      .replace(/[\u0300-\u036f]/g, "")
+                                      .toUpperCase()
+                                      .trim();
+
+                                  const tipo = normalize(t.tipo);
+
+                                  // Si es técnico (TECNICA o TECNICO), priorizar coaches técnicos
+                                  if (tipo.includes("TECNIC")) {
+                                    const techs = ticketCoaches.filter((c) => {
+                                      // Normalizar area y puesto para ignorar tildes (TÉCNICO vs TECNICO)
+                                      const area = normalize(c.area);
+                                      const puesto = normalize(c.puesto);
+                                      return (
+                                        area.includes("TECNIC") ||
+                                        puesto.includes("TECNIC")
+                                      );
+                                    });
+                                    if (techs.length > 0) {
+                                      result = techs;
+                                    } else {
+                                      // Si el ticket no trae coaches, usar lista global de área técnica
+                                      const globalTechs = (coaches || [])
+                                        .filter((gc) => {
+                                          const area = normalize(gc.area);
+                                          const puesto = normalize(gc.puesto);
+                                          return (
+                                            area.includes("TECNIC") ||
+                                            puesto.includes("TECNIC")
+                                          );
+                                        })
+                                        .map((gc) => ({
+                                          codigo_equipo: gc.codigo,
+                                          nombre: gc.nombre,
+                                          puesto: gc.puesto,
+                                          area: gc.area,
+                                        }));
+                                      result = globalTechs;
+                                    }
+                                  } else {
+                                    // Si no es técnico y no hay override, mostrar todos
+                                    result = ticketCoaches;
+                                  }
+                                }
+
+                                // 4. Renderizar
+                                if (result.length === 0) return null;
+
+                                return (
                                   <div className="flex flex-wrap gap-1.5">
-                                    {(t as any).coaches
-                                      .slice(0, 3)
-                                      .map((c: any, idx: number) => (
-                                        <span
-                                          key={`${
-                                            c.codigo_equipo ?? c.nombre ?? idx
-                                          }`}
-                                          className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-200"
-                                          title={`${c.nombre ?? "Coach"}${
-                                            c.area ? ` · ${c.area}` : ""
-                                          }${c.puesto ? ` · ${c.puesto}` : ""}`}
-                                        >
-                                          {(c.nombre ?? "Coach").slice(0, 20)}
-                                          {c.area
-                                            ? ` · ${String(c.area).slice(
-                                                0,
-                                                10
-                                              )}`
-                                            : ""}
-                                        </span>
-                                      ))}
-                                    {((t as any).coaches?.length ?? 0) > 3 && (
+                                    {result.slice(0, 3).map((c, idx) => (
+                                      <span
+                                        key={`${
+                                          c.codigo_equipo ?? c.nombre ?? idx
+                                        }`}
+                                        className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-200"
+                                        title={`${c.nombre ?? "Coach"}${
+                                          c.area ? ` · ${c.area}` : ""
+                                        }${c.puesto ? ` · ${c.puesto}` : ""}`}
+                                      >
+                                        {(c.nombre ?? "Coach").slice(0, 20)}
+                                        {c.area
+                                          ? ` · ${String(c.area).slice(0, 10)}`
+                                          : ""}
+                                      </span>
+                                    ))}
+                                    {result.length > 3 && (
                                       <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
-                                        +{(t as any).coaches.length - 3}
+                                        +{result.length - 3}
                                       </span>
                                     )}
                                   </div>
-                                )}
+                                );
+                              })()}
 
                               {(t as any).ultimo_estado?.estatus && (
                                 <div className="border-t border-slate-100 pt-2 text-xs text-slate-500">

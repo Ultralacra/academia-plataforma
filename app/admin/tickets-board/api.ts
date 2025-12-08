@@ -34,6 +34,15 @@ export type TicketBoardItem = {
     fecha_primera_respuesta: string | null;
     estado_plazo: string;
   } | null;
+  coaches_override?: Array<
+    | string
+    | {
+        codigo_equipo?: string | null;
+        nombre?: string | null;
+        puesto?: string | null;
+        area?: string | null;
+      }
+  > | null;
 };
 
 export type TicketBoardResponse = {
@@ -106,14 +115,26 @@ export async function getTickets(opts: {
     estado: r.estado ?? null,
     tipo: r.tipo ?? null,
     plazo: r.plazo ?? null,
-    coaches: Array.isArray(r.coaches)
-      ? r.coaches.map((c: any) => ({
-          codigo_equipo: c.codigo_equipo ?? null,
-          nombre: c.nombre ?? null,
-          puesto: c.puesto ?? null,
-          area: c.area ?? null,
-        }))
-      : [],
+    // Mapeo tolerante de coaches: acepta distintas claves y normaliza propiedades
+    coaches: (() => {
+      const raw = Array.isArray(r.coaches)
+        ? r.coaches
+        : Array.isArray((r as any)?.equipos)
+        ? (r as any).equipos
+        : Array.isArray((r as any)?.coaches_asignados)
+        ? (r as any).coaches_asignados
+        : [];
+      return raw.map((c: any) => ({
+        codigo_equipo:
+          (c?.codigo_equipo ?? c?.codigo ?? c?.id ?? c?.id_equipo ?? null) &&
+          String(c?.codigo_equipo ?? c?.codigo ?? c?.id ?? c?.id_equipo).trim(),
+        nombre: (c?.nombre ?? null) && String(c?.nombre).trim(),
+        puesto: (c?.puesto ?? c?.rol ?? null) && String(c?.puesto ?? c?.rol).trim(),
+        area:
+          (c?.area ?? c?.departamento ?? null) &&
+          String(c?.area ?? c?.departamento).trim(),
+      }));
+    })(),
     ultimo_estado: r.ultimo_estado
       ? {
           estatus: r.ultimo_estado.estatus ?? r.ultimo_estado.estado ?? null,
@@ -125,6 +146,33 @@ export async function getTickets(opts: {
       informante: r.informante ?? null,
       informante_nombre: r.informante_nombre ?? null,
       plazo_info: r.plazo_info ?? null,
+      // Acepta variantes de clave para override; puede venir como array de ids o de objetos coach
+      coaches_override: (() => {
+        const raw =
+          (r as any)?.coaches_override ??
+          (r as any)?.coach_override ??
+          (r as any)?.override_coaches ??
+          (r as any)?.asignado_a ??
+          [];
+        if (!Array.isArray(raw)) {
+          if (raw == null) return [];
+          return [raw];
+        }
+        // Si los elementos son objetos, normalizarlos; si son strings/ids, trim
+        return raw.map((x: any) => {
+          if (x && typeof x === "object") {
+            return {
+              codigo_equipo:
+                (x.codigo_equipo ?? x.codigo ?? x.id ?? null) &&
+                String(x.codigo_equipo ?? x.codigo ?? x.id).trim(),
+              nombre: x.nombre ?? null,
+              puesto: x.puesto ?? x.rol ?? null,
+              area: x.area ?? x.departamento ?? null,
+            };
+          }
+          return String(x).trim();
+        });
+      })(),
   }));
 
   return {
