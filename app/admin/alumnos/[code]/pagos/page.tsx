@@ -22,6 +22,7 @@ import {
   Clock,
   Split,
   Gift,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -150,13 +151,19 @@ export default function StudentPaymentsPage() {
   const [editingInstallments, setEditingInstallments] = useState<
     PaymentConfig["installments"]
   >([]);
-  const [shiftDates, setShiftDates] = useState(false);
+
+  // Recalculate state
+  const [recalcPopoverOpen, setRecalcPopoverOpen] = useState(false);
+  const [recalcDate, setRecalcDate] = useState("");
 
   // Split state
   const [splitPopoverOpen, setSplitPopoverOpen] = useState<string | null>(null);
-  const [splitData, setSplitData] = useState({
-    amount1: "",
-    date2: "",
+  const [splitData, setSplitData] = useState<{
+    parts: number;
+    dates: string[];
+  }>({
+    parts: 2,
+    dates: [],
   });
 
   useEffect(() => {
@@ -336,72 +343,88 @@ export default function StudentPaymentsPage() {
     if (originalIndex === -1) return;
 
     const original = editingInstallments[originalIndex];
-    const amount1 = Number(splitData.amount1);
-    const amount2 = original.amount - amount1;
+    const parts = splitData.parts;
 
-    if (amount1 <= 0 || amount1 >= original.amount) {
+    if (parts < 2) {
       toast({
-        title: "Monto inválido",
-        description: "El monto debe ser menor al total de la cuota",
+        title: "Error",
+        description: "Debe dividir en al menos 2 partes",
         variant: "destructive",
       });
       return;
     }
 
-    // Validate date
-    const date1 = new Date(original.date);
-    const date2 = new Date(splitData.date2);
-
-    // Find next installment date to ensure we don't overlap
-    const nextInstallment = editingInstallments
-      .filter((i) => new Date(i.date) > date1 && i.id !== originalId)
-      .sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-      )[0];
-
-    if (nextInstallment && date2 >= new Date(nextInstallment.date)) {
-      toast({
-        title: "Fecha inválida",
-        description: "La segunda parte debe ser antes de la siguiente cuota",
-        variant: "destructive",
-      });
-      return;
+    // Validate dates: "sin pasar la fecha de la cuota original"
+    const originalDateObj = new Date(original.date);
+    // Ensure we have enough dates, fill with original date if missing
+    const datesToUse = [...splitData.dates];
+    while (datesToUse.length < parts) {
+      datesToUse.push(original.date);
     }
 
-    const newInst1 = {
-      ...original,
-      amount: amount1,
-      concept: (original.concept || "Cuota") + " (Parte 1)",
-    };
-    const newInst2 = {
-      ...original,
-      id: Math.random().toString(36).substr(2, 9),
-      amount: amount2,
-      date: splitData.date2,
-      concept: (original.concept || "Cuota") + " (Parte 2)",
-    };
+    for (const dStr of datesToUse) {
+      if (new Date(dStr) > originalDateObj) {
+        toast({
+          title: "Fecha inválida",
+          description:
+            "Las fechas de las partes no pueden ser posteriores a la fecha original.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    const amountPerPart = original.amount / parts;
+    const newInstallmentsToAdd = [];
+
+    for (let i = 0; i < parts; i++) {
+      newInstallmentsToAdd.push({
+        ...original,
+        id: i === 0 ? original.id : Math.random().toString(36).substr(2, 9),
+        amount: amountPerPart,
+        date: datesToUse[i],
+        concept: `${original.concept || "Cuota"} (Parte ${i + 1}/${parts})`,
+      });
+    }
 
     const newInstallments = [...editingInstallments];
-    newInstallments[originalIndex] = newInst1;
-    newInstallments.splice(originalIndex + 1, 0, newInst2);
+    newInstallments.splice(originalIndex, 1, ...newInstallmentsToAdd);
 
     setEditingInstallments(newInstallments);
     setSplitPopoverOpen(null);
-    setSplitData({ amount1: "", date2: "" });
+    setSplitData({ parts: 2, dates: [] });
     toast({ title: "Cuota dividida exitosamente" });
   }
 
   function handleDateChange(index: number, newDate: string) {
-    const oldDate = new Date(editingInstallments[index].date);
-    const nDate = new Date(newDate);
-    const diffTime = nDate.getTime() - oldDate.getTime();
-
     const newInst = [...editingInstallments];
     newInst[index].date = newDate;
+    setEditingInstallments(newInst);
+  }
 
-    if (shiftDates) {
-      // Shift all subsequent dates by the same difference
-      for (let i = index + 1; i < newInst.length; i++) {
+  function handleRecalculateDates(startDate: string) {
+    if (!startDate) return;
+
+    const newInst = [...editingInstallments];
+
+    // Find first unpaid installment
+    const firstUnpaidIndex = newInst.findIndex((i) => !isInstallmentPaid(i));
+
+    if (firstUnpaidIndex === -1) {
+      toast({
+        title: "No hay cuotas pendientes para recalcular",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const oldDate = new Date(newInst[firstUnpaidIndex].date);
+    const newStart = new Date(startDate);
+    const diffTime = newStart.getTime() - oldDate.getTime();
+
+    // Apply shift to all unpaid installments starting from the first one found
+    for (let i = firstUnpaidIndex; i < newInst.length; i++) {
+      if (!isInstallmentPaid(newInst[i])) {
         const current = new Date(newInst[i].date);
         const shifted = new Date(current.getTime() + diffTime);
         newInst[i].date = shifted.toISOString().split("T")[0];
@@ -409,6 +432,8 @@ export default function StudentPaymentsPage() {
     }
 
     setEditingInstallments(newInst);
+    setRecalcPopoverOpen(false);
+    toast({ title: "Fechas recalculadas" });
   }
 
   function saveEditedPlan() {
@@ -1274,16 +1299,43 @@ export default function StudentPaymentsPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="shift-dates"
-                      checked={shiftDates}
-                      onCheckedChange={setShiftDates}
-                    />
-                    <Label htmlFor="shift-dates" className="text-xs">
-                      Recalcular fechas siguientes
-                    </Label>
-                  </div>
+                  <Popover
+                    open={recalcPopoverOpen}
+                    onOpenChange={setRecalcPopoverOpen}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Recalcular fechas
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-4 z-[9999]" align="end">
+                      <div className="flex flex-col gap-4">
+                        <div className="space-y-2">
+                          <h4 className="font-medium leading-none">
+                            Recalcular desde
+                          </h4>
+                          <p className="text-sm text-muted-foreground">
+                            Selecciona la nueva fecha para la primera cuota
+                            pendiente.
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            type="date"
+                            value={recalcDate}
+                            onChange={(e) => setRecalcDate(e.target.value)}
+                          />
+                          <Button
+                            onClick={() => handleRecalculateDates(recalcDate)}
+                          >
+                            Aplicar
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
                   <Button
                     size="sm"
                     variant="outline"
@@ -1364,76 +1416,17 @@ export default function StudentPaymentsPage() {
                               </Badge>
                             ) : (
                               <div className="flex items-center justify-end gap-1">
-                                <Popover
-                                  open={splitPopoverOpen === inst.id}
-                                  onOpenChange={(open) =>
-                                    setSplitPopoverOpen(open ? inst.id : null)
-                                  }
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  title="Dividir cuota"
+                                  onClick={() => {
+                                    setSplitData({ parts: 2, dates: [] });
+                                    setSplitPopoverOpen(inst.id);
+                                  }}
                                 >
-                                  <PopoverTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      title="Dividir cuota"
-                                    >
-                                      <Split className="w-4 h-4" />
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-80">
-                                    <div className="grid gap-4">
-                                      <div className="space-y-2">
-                                        <h4 className="font-medium leading-none">
-                                          Dividir cuota
-                                        </h4>
-                                        <p className="text-sm text-muted-foreground">
-                                          Divide esta cuota en dos partes.
-                                        </p>
-                                      </div>
-                                      <div className="grid gap-2">
-                                        <div className="grid grid-cols-3 items-center gap-4">
-                                          <Label htmlFor="amount1">
-                                            Monto 1
-                                          </Label>
-                                          <Input
-                                            id="amount1"
-                                            type="number"
-                                            className="col-span-2 h-8"
-                                            value={splitData.amount1}
-                                            onChange={(e) =>
-                                              setSplitData({
-                                                ...splitData,
-                                                amount1: e.target.value,
-                                              })
-                                            }
-                                          />
-                                        </div>
-                                        <div className="grid grid-cols-3 items-center gap-4">
-                                          <Label htmlFor="date2">Fecha 2</Label>
-                                          <Input
-                                            id="date2"
-                                            type="date"
-                                            className="col-span-2 h-8"
-                                            value={splitData.date2}
-                                            onChange={(e) =>
-                                              setSplitData({
-                                                ...splitData,
-                                                date2: e.target.value,
-                                              })
-                                            }
-                                          />
-                                        </div>
-                                        <Button
-                                          size="sm"
-                                          onClick={() =>
-                                            handleSplitInstallment(inst.id)
-                                          }
-                                        >
-                                          Confirmar división
-                                        </Button>
-                                      </div>
-                                    </div>
-                                  </PopoverContent>
-                                </Popover>
+                                  <Split className="w-4 h-4" />
+                                </Button>
 
                                 <Button
                                   variant="ghost"
@@ -1574,6 +1567,210 @@ export default function StudentPaymentsPage() {
                 Cancelar
               </Button>
               <Button onClick={handleAddInstallment}>Agregar</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Registrar Pago */}
+        <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Registrar Pago</DialogTitle>
+              <DialogDescription>
+                Ingresa los detalles del pago recibido.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Monto</Label>
+                  <Input
+                    type="number"
+                    value={newPayment.monto}
+                    onChange={(e) =>
+                      setNewPayment({ ...newPayment, monto: e.target.value })
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Moneda</Label>
+                  <Select
+                    value={newPayment.moneda}
+                    onValueChange={(v) =>
+                      setNewPayment({ ...newPayment, moneda: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="COP">COP</SelectItem>
+                      <SelectItem value="MXN">MXN</SelectItem>
+                      <SelectItem value="EUR">EUR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Fecha de Pago</Label>
+                <Input
+                  type="date"
+                  value={newPayment.fecha_pago}
+                  onChange={(e) =>
+                    setNewPayment({ ...newPayment, fecha_pago: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Método de Pago</Label>
+                <Select
+                  value={newPayment.metodo_pago}
+                  onValueChange={(v) =>
+                    setNewPayment({ ...newPayment, metodo_pago: v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="transferencia">Transferencia</SelectItem>
+                    <SelectItem value="efectivo">Efectivo</SelectItem>
+                    <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                    <SelectItem value="otro">Otro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Referencia / Comprobante</Label>
+                <Input
+                  value={newPayment.referencia}
+                  onChange={(e) =>
+                    setNewPayment({ ...newPayment, referencia: e.target.value })
+                  }
+                  placeholder="Nro. de transacción"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Observaciones</Label>
+                <Input
+                  value={newPayment.observaciones}
+                  onChange={(e) =>
+                    setNewPayment({
+                      ...newPayment,
+                      observaciones: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setRegisterOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleRegisterPayment}>Registrar Pago</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal Dividir Cuota */}
+        <Dialog
+          open={!!splitPopoverOpen}
+          onOpenChange={(open) => !open && setSplitPopoverOpen(null)}
+        >
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Dividir cuota</DialogTitle>
+              <DialogDescription>
+                Divide esta cuota en varias partes. El monto se dividirá
+                equitativamente.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="parts" className="text-right">
+                  Cantidad de partes
+                </Label>
+                <Input
+                  id="parts"
+                  type="number"
+                  min={2}
+                  max={12}
+                  className="col-span-3"
+                  value={splitData.parts}
+                  onChange={(e) =>
+                    setSplitData({
+                      ...splitData,
+                      parts: parseInt(e.target.value) || 2,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                {Array.from({ length: splitData.parts }).map((_, i) => {
+                  const originalInst = editingInstallments.find(
+                    (inst) => inst.id === splitPopoverOpen
+                  );
+                  const amount = originalInst
+                    ? originalInst.amount / splitData.parts
+                    : 0;
+                  // Default date is original date if not set
+                  const date =
+                    splitData.dates[i] ||
+                    (originalInst ? originalInst.date : "");
+
+                  return (
+                    <div
+                      key={i}
+                      className="grid grid-cols-2 gap-2 items-center border p-2 rounded"
+                    >
+                      <div className="text-sm">
+                        <span className="font-medium">Parte {i + 1}</span>
+                        <div className="text-muted-foreground">
+                          {new Intl.NumberFormat("es-CO", {
+                            style: "currency",
+                            currency: config?.currency || "USD",
+                          }).format(amount)}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <Label className="text-xs text-muted-foreground">
+                          Fecha límite
+                        </Label>
+                        <Input
+                          type="date"
+                          value={date}
+                          onChange={(e) => {
+                            const newDates = [...splitData.dates];
+                            // Fill gaps if needed with original date
+                            while (newDates.length < splitData.parts) {
+                              newDates.push(originalInst?.date || "");
+                            }
+                            newDates[i] = e.target.value;
+                            setSplitData({ ...splitData, dates: newDates });
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setSplitPopoverOpen(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={() =>
+                  splitPopoverOpen && handleSplitInstallment(splitPopoverOpen)
+                }
+              >
+                Confirmar división
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
