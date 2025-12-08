@@ -1247,11 +1247,17 @@ export default function TicketsBoard() {
               const statusMatch =
                 coerceStatus(t.estado) === (estado as StatusKey);
               if (!statusMatch) return false;
-              if (onlyMyTickets && user?.codigo) {
-                const myCode = String(user.codigo).trim();
+              if (
+                onlyMyTickets &&
+                (user?.codigo || typeof user?.id !== "undefined")
+              ) {
+                const myCode = String(user?.codigo ?? "").trim();
+                const myId = String(user?.id ?? "").trim();
                 // Creados por mí
+                const informanteStr = String(t.informante || "").trim();
                 const createdByMe =
-                  String(t.informante || "").trim() === myCode;
+                  informanteStr === myCode ||
+                  (!!myId && informanteStr === myId);
 
                 // Asignados a mí: revisar coaches del ticket, overrides y fallback global técnicos
                 const normalize = (s: any) =>
@@ -1271,10 +1277,10 @@ export default function TicketsBoard() {
                     : [];
 
                   // a) coaches del ticket
-                  assignedToMe = coachesArr.some(
-                    (co: any) =>
-                      String(co?.codigo_equipo || "").trim() === myCode
-                  );
+                  assignedToMe = coachesArr.some((co: any) => {
+                    const code = String(co?.codigo_equipo || "").trim();
+                    return code === myCode || (!!myId && code === myId);
+                  });
 
                   // b) overrides como objetos o ids
                   if (!assignedToMe && overrides.length > 0) {
@@ -1282,15 +1288,17 @@ export default function TicketsBoard() {
                       (o: any) => o && typeof o === "object"
                     );
                     if (overrideObjects.length > 0) {
-                      assignedToMe = overrideObjects.some(
-                        (o: any) =>
-                          String(o?.codigo_equipo || o?.codigo || "").trim() ===
-                          myCode
-                      );
+                      assignedToMe = overrideObjects.some((o: any) => {
+                        const code = String(
+                          o?.codigo_equipo || o?.codigo || o?.id || ""
+                        ).trim();
+                        return code === myCode || (!!myId && code === myId);
+                      });
                     } else {
-                      assignedToMe = overrides.some(
-                        (o: any) => String(o || "").trim() === myCode
-                      );
+                      assignedToMe = overrides.some((o: any) => {
+                        const code = String(o || "").trim();
+                        return code === myCode || (!!myId && code === myId);
+                      });
                     }
                   }
 
@@ -1301,12 +1309,16 @@ export default function TicketsBoard() {
                       tipo.includes("TECNIC") &&
                       (!Array.isArray(coachesArr) || coachesArr.length === 0)
                     ) {
-                      assignedToMe = (coaches || []).some(
-                        (gc: any) =>
-                          String(gc?.codigo || "").trim() === myCode &&
-                          (normalize(gc?.area).includes("TECNIC") ||
-                            normalize(gc?.puesto).includes("TECNIC"))
-                      );
+                      assignedToMe = (coaches || []).some((gc: any) => {
+                        const code = String(gc?.codigo || "").trim();
+                        const isTech =
+                          normalize(gc?.area).includes("TECNIC") ||
+                          normalize(gc?.puesto).includes("TECNIC");
+                        return (
+                          isTech &&
+                          (code === myCode || (!!myId && code === myId))
+                        );
+                      });
                     }
                   }
                 } catch {}
@@ -1577,23 +1589,9 @@ export default function TicketsBoard() {
                                     if (techs.length > 0) {
                                       result = techs;
                                     } else {
-                                      // Si el ticket no trae coaches, usar lista global de área técnica
-                                      const globalTechs = (coaches || [])
-                                        .filter((gc) => {
-                                          const area = normalize(gc.area);
-                                          const puesto = normalize(gc.puesto);
-                                          return (
-                                            area.includes("TECNIC") ||
-                                            puesto.includes("TECNIC")
-                                          );
-                                        })
-                                        .map((gc) => ({
-                                          codigo_equipo: gc.codigo,
-                                          nombre: gc.nombre,
-                                          puesto: gc.puesto,
-                                          area: gc.area,
-                                        }));
-                                      result = globalTechs;
+                                      // No rellenar desde lista global al renderizar tarjeta.
+                                      // Si el ticket no trae coaches y no hay override, no mostramos chips.
+                                      result = [];
                                     }
                                   } else {
                                     // Si no es técnico y no hay override, mostrar todos
@@ -1937,7 +1935,7 @@ export default function TicketsBoard() {
                   )}
                 </SheetDescription>
               </div>
-              <div className="shrink-0">
+              {/* <div className="shrink-0">
                 <Button
                   size="sm"
                   variant="outline"
@@ -1952,7 +1950,7 @@ export default function TicketsBoard() {
                 >
                   Reasignar ticket
                 </Button>
-              </div>
+              </div> */}
             </div>
           </SheetHeader>
 
