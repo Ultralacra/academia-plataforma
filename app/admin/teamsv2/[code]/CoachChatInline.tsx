@@ -1548,12 +1548,12 @@ export default function CoachChatInline({
         const sio = url
           ? io(url, {
               auth: { token },
-              transports: ["websocket", "polling"],
+              transports: ["websocket"],
               timeout: 20000,
             })
           : io({
               auth: { token },
-              transports: ["websocket", "polling"],
+              transports: ["websocket"],
               timeout: 20000,
             });
         sioRef.current = sio;
@@ -2121,6 +2121,11 @@ export default function CoachChatInline({
           try {
             if (!ack || ack.success === false) return;
             const data = ack.data || {};
+            // Actualizar título con el nombre del contacto del chat actual
+            try {
+              const name = resolveContactNameFromChat(data);
+              if (name) setDisplayTitle(name);
+            } catch {}
             const msgsSrc = Array.isArray(data.messages)
               ? data.messages
               : Array.isArray((data as any).mensajes)
@@ -2494,8 +2499,68 @@ export default function CoachChatInline({
 
           if (Array.isArray(ack?.data)) {
             console.log("--- LISTA DE CHATS RECIBIDA DEL SERVIDOR ---");
-            ack.data.forEach((c: any, i: number) => console.log(`[${i}]`, c));
+            ack.data.forEach((c: any, i: number) => {
+              // Resolver nombre del contacto desde otros_participantes / my_participante_nombre
+              const arr = Array.isArray((c as any)?.otros_participantes)
+                ? (c as any).otros_participantes
+                : [];
+              const cliente = arr.find(
+                (p: any) =>
+                  String(p?.participante_tipo || "").toLowerCase() === "cliente"
+              );
+              const equipo = arr.find(
+                (p: any) =>
+                  String(p?.participante_tipo || "").toLowerCase() === "equipo"
+              );
+              const contactName =
+                cliente?.nombre_participante ||
+                equipo?.nombre_participante ||
+                null;
+              const myName = (c as any)?.my_participante_nombre || null;
+              console.log(`[${i}]`, {
+                id_chat: c?.id_chat ?? c?.id ?? null,
+                my_participante: c?.my_participante ?? null,
+                my_participante_nombre: myName,
+                otros_participantes: arr,
+                resolved_contact_name: contactName,
+              });
+            });
             console.log("--------------------------------------------");
+
+            // Usar el nombre del contacto del chat activo (si existe); de lo contrario, el primero
+            try {
+              const currentId = chatIdRef.current ?? chatId ?? null;
+              let target = null as any;
+              if (currentId) {
+                target = ack.data.find(
+                  (c: any) =>
+                    String(c?.id_chat ?? c?.id ?? "") === String(currentId)
+                );
+              }
+              if (!target) target = ack.data[0];
+              if (target) {
+                const arr = Array.isArray((target as any)?.otros_participantes)
+                  ? (target as any).otros_participantes
+                  : [];
+                const cliente = arr.find(
+                  (p: any) =>
+                    String(p?.participante_tipo || "").toLowerCase() ===
+                    "cliente"
+                );
+                const equipo = arr.find(
+                  (p: any) =>
+                    String(p?.participante_tipo || "").toLowerCase() ===
+                    "equipo"
+                );
+                const contactName =
+                  cliente?.nombre_participante ||
+                  equipo?.nombre_participante ||
+                  null;
+                if (contactName && typeof contactName === "string") {
+                  setDisplayTitle(contactName);
+                }
+              }
+            } catch {}
           }
 
           // Logging eliminado para optimizar rendimiento
@@ -2516,6 +2581,39 @@ export default function CoachChatInline({
           // Enviar SIEMPRE la lista base inmediatamente para render instantáneo en UI
           try {
             onChatsList?.(baseList);
+          } catch {}
+
+          // También actualizar el título desde la lista base por si aún no se han enriquecido los participantes
+          try {
+            const currentId = chatIdRef.current ?? chatId ?? null;
+            let target = null as any;
+            if (currentId) {
+              target = baseList.find(
+                (c: any) =>
+                  String(c?.id_chat ?? c?.id ?? "") === String(currentId)
+              );
+            }
+            if (!target) target = baseList[0];
+            if (target) {
+              const arr = Array.isArray((target as any)?.otros_participantes)
+                ? (target as any).otros_participantes
+                : [];
+              const cliente = arr.find(
+                (p: any) =>
+                  String(p?.participante_tipo || "").toLowerCase() === "cliente"
+              );
+              const equipo = arr.find(
+                (p: any) =>
+                  String(p?.participante_tipo || "").toLowerCase() === "equipo"
+              );
+              const contactName =
+                cliente?.nombre_participante ||
+                equipo?.nombre_participante ||
+                null;
+              if (contactName && typeof contactName === "string") {
+                setDisplayTitle(contactName);
+              }
+            }
           } catch {}
 
           // Si hace falta enriquecer, proceder en segundo plano y reenviar luego
@@ -3383,6 +3481,55 @@ export default function CoachChatInline({
     }
   }
 
+  const [displayTitle, setDisplayTitle] = React.useState<string>(title || "");
+  const resolveContactNameFromChat = (chat: any): string | null => {
+    try {
+      const arr = Array.isArray((chat as any)?.otros_participantes)
+        ? (chat as any).otros_participantes
+        : [];
+      const cliente = arr.find(
+        (p: any) =>
+          String(p?.participante_tipo || "").toLowerCase() === "cliente"
+      );
+      const equipo = arr.find(
+        (p: any) =>
+          String(p?.participante_tipo || "").toLowerCase() === "equipo"
+      );
+      const name =
+        cliente?.nombre_participante || equipo?.nombre_participante || null;
+      return typeof name === "string" && name.trim() ? name : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // Establecer el título inmediatamente desde los participantes pasados por props (sin esperar a chat.list)
+  React.useEffect(() => {
+    try {
+      const parts = Array.isArray(socketio?.participants)
+        ? socketio?.participants
+        : [];
+      if (parts.length > 0) {
+        // Priorizar cliente; si no hay, equipo distinto al del coach
+        const cliente = parts.find(
+          (p: any) =>
+            String(p?.participante_tipo || "").toLowerCase() === "cliente"
+        );
+        const equipo = parts.find(
+          (p: any) =>
+            String(p?.participante_tipo || "").toLowerCase() === "equipo" &&
+            (socketio?.idEquipo == null ||
+              String(p?.id_equipo) !== String(socketio?.idEquipo))
+        );
+        const name =
+          cliente?.nombre_participante || equipo?.nombre_participante || null;
+        if (name && typeof name === "string") {
+          setDisplayTitle(name);
+        }
+      }
+    } catch {}
+  }, [socketio?.participants, socketio?.idEquipo]);
+
   return (
     <>
       <div
@@ -3409,12 +3556,12 @@ export default function CoachChatInline({
             {!headerCollapsed && (
               <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-semibold text-sm flex-shrink-0 overflow-hidden">
                 {/* Avatar placeholder o inicial */}
-                {(title || "C").charAt(0).toUpperCase()}
+                {(displayTitle || "C").charAt(0).toUpperCase()}
               </div>
             )}
             <div className="min-w-0 flex-1 flex flex-col justify-center">
               <div className="text-[#111b21] text-base font-normal leading-tight truncate">
-                {title}
+                {displayTitle}
               </div>
               {!headerCollapsed &&
                 (subtitle ? (

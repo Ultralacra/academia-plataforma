@@ -427,6 +427,16 @@ export default function CoachDetailPage({
   ): string | null {
     try {
       const parts = itemParticipants(chat);
+      // Preferir el nombre directo entregado por el servidor
+      for (const p of parts) {
+        if (normalizeTipo(p?.participante_tipo) === type) {
+          const pId =
+            type === "cliente" ? p?.id_cliente ?? p?.id_alumno : p?.id_equipo;
+          if (String(pId).toLowerCase() === String(id).toLowerCase()) {
+            if (p?.nombre_participante) return p.nombre_participante;
+          }
+        }
+      }
       for (const p of parts) {
         if (normalizeTipo(p?.participante_tipo) === type) {
           const pId =
@@ -436,6 +446,7 @@ export default function CoachDetailPage({
             if (p?.cliente?.nombre) return p.cliente.nombre;
             if (p?.alumno?.nombre) return p.alumno.nombre;
             if (p?.equipo?.nombre) return p.equipo.nombre;
+            if (p?.nombre_participante) return p.nombre_participante;
             if (p?.nombre) return p.nombre;
             if (p?.name) return p.name;
           }
@@ -608,51 +619,42 @@ export default function CoachDetailPage({
         type = "team";
         targetCode = otherTeam;
         key = `team:${otherTeam.toLowerCase()}`;
-        const t = teamsMap.get(targetCode.toLowerCase());
-        name = t?.nombre || targetCode;
+        // Preferir nombre directo de otros_participantes
+        const arr = Array.isArray((chat as any)?.otros_participantes)
+          ? (chat as any).otros_participantes
+          : [];
+        const matchTeam = arr.find(
+          (p: any) =>
+            normalizeTipo(p?.participante_tipo) === "equipo" &&
+            String(p?.id_equipo).toLowerCase() === targetCode.toLowerCase()
+        );
+        name = matchTeam?.nombre_participante || targetCode;
         avatarColor = "bg-teal-500";
       } else if (otherStudent) {
         type = "student";
         targetCode = otherStudent;
         key = `student:${otherStudent.toLowerCase()}`;
-        const s =
-          studentsMap.get(targetCode.toLowerCase()) ||
-          allStudentsList.find(
-            (st) => (st.code || "").toLowerCase() === targetCode.toLowerCase()
-          );
-        name = s?.name || targetCode;
-        if (!s?.name) {
-          const fromChat = getParticipantNameFromChat(
-            chat,
-            "cliente",
-            targetCode
-          );
-          if (fromChat) name = fromChat;
-        }
+        // Preferir nombre directo de otros_participantes
+        const arr = Array.isArray((chat as any)?.otros_participantes)
+          ? (chat as any).otros_participantes
+          : [];
+        const matchClient = arr.find(
+          (p: any) =>
+            normalizeTipo(p?.participante_tipo) === "cliente" &&
+            String(
+              p?.id_cliente ?? p?.id_alumno ?? p?.client_id
+            ).toLowerCase() === targetCode.toLowerCase()
+        );
+        name = matchClient?.nombre_participante || targetCode;
         avatarColor = "bg-emerald-500";
       } else {
-        const parts = itemParticipants(chat);
-        const clientPart = parts.find(
-          (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
-        );
-        if (clientPart) {
-          const cid =
-            clientPart.id_cliente ??
-            clientPart.id_alumno ??
-            clientPart.client_id;
-          if (cid) {
-            const s =
-              studentsList.find(
-                (st) =>
-                  (st.code || "").toLowerCase() === String(cid).toLowerCase()
-              ) ||
-              allStudentsList.find(
-                (st) =>
-                  (st.code || "").toLowerCase() === String(cid).toLowerCase()
-              );
-            name = s?.name || String(cid);
-          }
-        }
+        // Orphan: usar my_participante_nombre o el primer otros_participantes.nombre_participante
+        const myName = (chat as any)?.my_participante_nombre;
+        const arr = Array.isArray((chat as any)?.otros_participantes)
+          ? (chat as any).otros_participantes
+          : [];
+        const firstName = arr[0]?.nombre_participante;
+        name = myName || firstName || name;
       }
 
       // Determine if we should show skeleton
@@ -1391,16 +1393,25 @@ export default function CoachDetailPage({
                         targetTeamCode ?? targetStudentCode ?? "inbox"
                       }`}
                       role="coach"
+                      // Mostrar el nombre del contacto de la conversación (no el coach)
                       title={
-                        coach?.nombre
+                        targetStudentCode
+                          ? targetStudentName || targetStudentCode
+                          : targetTeamCode
+                          ? targetTeamName || targetTeamCode
+                          : coach?.nombre
                           ? `Equipo: ${coach?.nombre}`
                           : `Equipo ${code}`
                       }
                       subtitle={
-                        targetTeamCode
-                          ? `con ${targetTeamName}`
-                          : targetStudentCode
-                          ? `con ${targetStudentName || targetStudentCode}`
+                        targetStudentCode
+                          ? coach?.nombre
+                            ? `con ${coach?.nombre}`
+                            : `Equipo ${code}`
+                          : targetTeamCode
+                          ? coach?.nombre
+                            ? `Equipo: ${coach?.nombre}`
+                            : `Equipo ${code}`
                           : undefined
                       }
                       variant="card"
@@ -1535,19 +1546,37 @@ export default function CoachDetailPage({
                               const otherTeam = chatOtherTeamCode(it, code);
                               const otherStudent = chatOtherStudentCode(it);
                               let contactName: string | null = null;
+                              const arr = Array.isArray(
+                                (it as any)?.otros_participantes
+                              )
+                                ? (it as any).otros_participantes
+                                : [];
                               if (otherStudent) {
-                                const key = String(otherStudent).toLowerCase();
-                                const s =
-                                  studentsMap.get(key) ||
-                                  allStudentsList.find(
-                                    (st) =>
-                                      (st.code || "").toLowerCase() === key
-                                  );
-                                contactName = s?.name || String(otherStudent);
+                                const matchClient = arr.find(
+                                  (p: any) =>
+                                    normalizeTipo(p?.participante_tipo) ===
+                                      "cliente" &&
+                                    String(
+                                      p?.id_cliente ??
+                                        p?.id_alumno ??
+                                        p?.client_id
+                                    ).toLowerCase() ===
+                                      String(otherStudent).toLowerCase()
+                                );
+                                contactName =
+                                  matchClient?.nombre_participante ||
+                                  String(otherStudent);
                               } else if (otherTeam) {
-                                const key = String(otherTeam).toLowerCase();
-                                const t = teamsMap.get(key);
-                                contactName = t?.nombre || String(otherTeam);
+                                const matchTeam = arr.find(
+                                  (p: any) =>
+                                    normalizeTipo(p?.participante_tipo) ===
+                                      "equipo" &&
+                                    String(p?.id_equipo).toLowerCase() ===
+                                      String(otherTeam).toLowerCase()
+                                );
+                                contactName =
+                                  matchTeam?.nombre_participante ||
+                                  String(otherTeam);
                               }
                               console.log(`Chat ${i}:`, {
                                 id,
@@ -1649,19 +1678,37 @@ export default function CoachDetailPage({
                               const otherTeam = chatOtherTeamCode(it, code);
                               const otherStudent = chatOtherStudentCode(it);
                               let contactName: string | null = null;
+                              const arr = Array.isArray(
+                                (it as any)?.otros_participantes
+                              )
+                                ? (it as any).otros_participantes
+                                : [];
                               if (otherStudent) {
-                                const key = String(otherStudent).toLowerCase();
-                                const s =
-                                  studentsMap.get(key) ||
-                                  allStudentsList.find(
-                                    (st) =>
-                                      (st.code || "").toLowerCase() === key
-                                  );
-                                contactName = s?.name || String(otherStudent);
+                                const matchClient = arr.find(
+                                  (p: any) =>
+                                    normalizeTipo(p?.participante_tipo) ===
+                                      "cliente" &&
+                                    String(
+                                      p?.id_cliente ??
+                                        p?.id_alumno ??
+                                        p?.client_id
+                                    ).toLowerCase() ===
+                                      String(otherStudent).toLowerCase()
+                                );
+                                contactName =
+                                  matchClient?.nombre_participante ||
+                                  String(otherStudent);
                               } else if (otherTeam) {
-                                const key = String(otherTeam).toLowerCase();
-                                const t = teamsMap.get(key);
-                                contactName = t?.nombre || String(otherTeam);
+                                const matchTeam = arr.find(
+                                  (p: any) =>
+                                    normalizeTipo(p?.participante_tipo) ===
+                                      "equipo" &&
+                                    String(p?.id_equipo).toLowerCase() ===
+                                      String(otherTeam).toLowerCase()
+                                );
+                                contactName =
+                                  matchTeam?.nombre_participante ||
+                                  String(otherTeam);
                               }
                               console.log(
                                 "   contacto:",

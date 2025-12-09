@@ -248,6 +248,13 @@ export default function TicketsBoard() {
     url?: string;
   }>(null);
 
+  // Estado para modal de descarga y progreso básico
+  const [downloadModalOpen, setDownloadModalOpen] = useState(false);
+  const [downloadMessage, setDownloadMessage] = useState(
+    "Descargando archivo..."
+  );
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+
   const [selectedTicket, setSelectedTicket] = useState<TicketBoardItem | null>(
     null
   );
@@ -552,6 +559,9 @@ export default function TicketsBoard() {
 
   async function downloadFile(fileId: string, nombre: string) {
     try {
+      setDownloadMessage("Descargando archivo...");
+      setDownloadProgress(null);
+      setDownloadModalOpen(true);
       const f = await getTicketFile(fileId);
       const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
         c.charCodeAt(0)
@@ -569,6 +579,40 @@ export default function TicketsBoard() {
       URL.revokeObjectURL(url);
     } catch (e) {
       console.error(e);
+      toast({
+        title: "Error al descargar",
+        description: "No se pudo descargar el archivo.",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadModalOpen(false);
+      setDownloadProgress(null);
+    }
+  }
+
+  // Descarga múltiple con progreso simple
+  async function downloadFiles(
+    filesToDownload: Array<{ id: string; nombre_archivo: string }>
+  ) {
+    if (!filesToDownload?.length) return;
+    setDownloadModalOpen(true);
+    setDownloadMessage("Descargando archivos...");
+    setDownloadProgress(0);
+    try {
+      for (let i = 0; i < filesToDownload.length; i++) {
+        const f = filesToDownload[i];
+        await downloadFile(f.id, f.nombre_archivo);
+        setDownloadProgress(
+          Math.round(((i + 1) / filesToDownload.length) * 100)
+        );
+        setDownloadMessage(
+          `Descargando (${i + 1}/${filesToDownload.length})...`
+        );
+      }
+    } finally {
+      setDownloadModalOpen(false);
+      setDownloadProgress(null);
+      setDownloadMessage("Descargando archivo...");
     }
   }
 
@@ -578,11 +622,11 @@ export default function TicketsBoard() {
     mime_type: string | null;
   }) {
     try {
-      setPreviewOpen(true);
       setPreviewLoading(true);
       const cached = blobCache[f.id];
       if (cached) {
         setPreviewFile({ ...f, url: cached });
+        setPreviewOpen(true);
         return;
       }
       const res = await getTicketFile(f.id);
@@ -595,9 +639,11 @@ export default function TicketsBoard() {
       const url = URL.createObjectURL(blob);
       setBlobCache((prev) => ({ ...prev, [f.id]: url }));
       setPreviewFile({ ...f, url });
+      setPreviewOpen(true);
     } catch (e) {
       console.error(e);
       setPreviewFile({ ...f });
+      setPreviewOpen(true);
     } finally {
       setPreviewLoading(false);
     }
@@ -1119,6 +1165,44 @@ export default function TicketsBoard() {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Modal de estado de descarga */}
+      <Dialog open={downloadModalOpen} onOpenChange={setDownloadModalOpen}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>{downloadMessage}</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center py-4">
+            {downloadProgress == null ? (
+              <Spinner className="h-8 w-8" />
+            ) : (
+              <div className="flex flex-col items-center gap-2">
+                <div className="relative">
+                  <div className="h-16 w-16 rounded-full border-4 border-muted" />
+                  <div
+                    className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin"
+                    style={{ animationDuration: "0.8s" }}
+                  />
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {downloadProgress}%
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de vista previa cargando */}
+      <Dialog open={previewLoading} onOpenChange={(o) => setPreviewLoading(o)}>
+        <DialogContent className="sm:max-w-[320px]">
+          <DialogHeader>
+            <DialogTitle>Preparando vista previa...</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center justify-center py-4">
+            <Spinner className="h-8 w-8" />
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-1">
           <h1 className="text-lg font-semibold tracking-tight text-slate-900">
@@ -1935,7 +2019,7 @@ export default function TicketsBoard() {
                   )}
                 </SheetDescription>
               </div>
-              {/* <div className="shrink-0">
+              <div className="shrink-0">
                 <Button
                   size="sm"
                   variant="outline"
@@ -1950,7 +2034,7 @@ export default function TicketsBoard() {
                 >
                   Reasignar ticket
                 </Button>
-              </div> */}
+              </div>
             </div>
           </SheetHeader>
 
