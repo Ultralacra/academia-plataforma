@@ -330,6 +330,7 @@ export default function TicketsPanelCoach({
       mime_type: string | null;
       tamano_bytes: number | null;
       created_at: string | null;
+      url?: string;
     }[]
   >([]);
   const [fileToDelete, setFileToDelete] = useState<null | {
@@ -806,11 +807,36 @@ export default function TicketsPanelCoach({
     if (match) setCreateTipo(match.key);
   }, [openCreate, coachArea, tipos]);
 
-  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
     const picked = Array.from(e.target.files ?? []);
     if (!picked.length) return;
+
+    const processed: File[] = [];
+    for (const f of picked) {
+      if (f.type.startsWith("audio/")) {
+        toast({
+          title: "Procesando audio...",
+          description: `Convirtiendo ${f.name} a MP3`,
+        });
+        try {
+          const mp3 = await convertBlobToMp3(f);
+          processed.push(mp3);
+        } catch (err) {
+          console.error(err);
+          processed.push(f);
+          toast({
+            title: "Error al convertir audio",
+            description: "Se usará el archivo original",
+            variant: "destructive",
+          });
+        }
+      } else {
+        processed.push(f);
+      }
+    }
+
     setCreateFiles((prev) => {
-      const next = [...prev, ...picked];
+      const next = [...prev, ...processed];
       return next.slice(0, 10);
     });
     e.currentTarget.value = "";
@@ -950,6 +976,10 @@ export default function TicketsPanelCoach({
 
         // Si NO estamos editando, convertir a MP3 y agregar a createFiles
         if (!editOpen) {
+          toast({
+            title: "Procesando audio...",
+            description: "Convirtiendo a MP3",
+          });
           convertBlobToMp3(blob)
             .then((mp3File) => {
               setCreateFiles((prev) => [...prev, mp3File].slice(0, 10));
@@ -1011,6 +1041,7 @@ export default function TicketsPanelCoach({
 
   function addRecordedToFiles() {
     if (!recordedBlob) return;
+    toast({ title: "Procesando audio...", description: "Convirtiendo a MP3" });
     convertBlobToMp3(recordedBlob)
       .then((mp3File) => {
         if (editOpen) {
@@ -1045,12 +1076,17 @@ export default function TicketsPanelCoach({
   }
 
   async function convertBlobToMp3(blob: Blob): Promise<File> {
+    // 1) Decodificar blob a PCM usando AudioContext
     const arrayBuffer = await blob.arrayBuffer();
-    const audioCtx = new (window.AudioContext ||
-      (window as any).webkitAudioContext)();
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) throw new Error("AudioContext no soportado");
+    const audioCtx = new AudioCtx();
+
     const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
     const numChannels = audioBuffer.numberOfChannels;
     const sampleRate = audioBuffer.sampleRate;
+
+    // Obtener datos del primer canal (mono) o mezclar canales
     let pcm = audioBuffer.getChannelData(0);
     if (numChannels > 1) {
       const ch2 = audioBuffer.getChannelData(1);
@@ -1058,20 +1094,65 @@ export default function TicketsPanelCoach({
       for (let i = 0; i < pcm.length; i++) mixed[i] = (pcm[i] + ch2[i]) / 2;
       pcm = mixed;
     }
+
+    // 2) Convertir Float32 PCM a Int16 para el encoder MP3
     const pcmInt16 = new Int16Array(pcm.length);
     for (let i = 0; i < pcm.length; i++) {
       let s = Math.max(-1, Math.min(1, pcm[i]));
       pcmInt16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
-    const lameMod: any = await import("lamejs");
-    const Mp3Encoder =
-      (lameMod && (lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder)) || null;
+
+    // 3) Usar lamejs para codificar a MP3
+    let Mp3Encoder: any = null;
+
+    // Helper para cargar script
+    const loadScript = (src: string) => {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+          resolve(true);
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = () => resolve(true);
+        script.onerror = () => reject(new Error(`Error loading ${src}`));
+        document.body.appendChild(script);
+      });
+    };
+
+    try {
+      // Primero intentamos usar la versión global si existe
+      if (typeof (window as any).lamejs !== "undefined") {
+        Mp3Encoder = (window as any).lamejs.Mp3Encoder;
+      } else {
+        // Si no, intentamos cargar desde CDN
+        await loadScript(
+          "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"
+        );
+        Mp3Encoder = (window as any).lamejs?.Mp3Encoder;
+      }
+
+      if (!Mp3Encoder) {
+        // Fallback: intentar import dinámico si estamos en entorno que lo soporte
+        try {
+          const lameMod: any = await import("lamejs");
+          Mp3Encoder = lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder;
+        } catch (e) {
+          console.warn("Dynamic import failed", e);
+        }
+      }
+    } catch (e) {
+      console.error("Error loading lamejs", e);
+    }
+
     if (!Mp3Encoder) throw new Error("Mp3Encoder no disponible en lamejs");
+
     const channels = 1;
     const kbps = 128;
     const encoder = new Mp3Encoder(channels, sampleRate, kbps);
     const samplesPerFrame = 1152;
     let mp3Data: Uint8Array[] = [];
+
     for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
       const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
       const mp3buf = encoder.encodeBuffer(chunk);
@@ -1079,13 +1160,16 @@ export default function TicketsPanelCoach({
     }
     const end = encoder.flush();
     if (end && end.length > 0) mp3Data.push(end);
+
     const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
     const mp3File = new File([mp3Blob], `grabacion-${Date.now()}.mp3`, {
       type: "audio/mpeg",
     });
+
     try {
       audioCtx.close();
     } catch {}
+
     return mp3File;
   }
 
@@ -1213,23 +1297,131 @@ export default function TicketsPanelCoach({
 
   async function downloadFile(fileId: string, nombre: string) {
     try {
-      const f = await getTicketFile(fileId);
-      const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
-        c.charCodeAt(0)
-      );
-      const blob = new Blob([b], {
-        type: f.mime_type || "application/octet-stream",
-      });
+      // setDownloadMessage("Descargando archivo...");
+      // setDownloadProgress(null);
+      // setDownloadModalOpen(true);
+
+      const local = files.find((f) => f.id === fileId);
+      let blob: Blob | null = null;
+      let finalName = nombre || local?.nombre_archivo || "archivo";
+      let finalMime = local?.mime_type || "";
+
+      // 1. Intentar descargar desde URL directa si existe (evita base64 pesado)
+      if (local?.url) {
+        try {
+          const res = await fetch(local.url);
+          if (res.ok) {
+            blob = await res.blob();
+            finalMime = blob.type || finalMime;
+          }
+        } catch (err) {
+          console.warn(
+            "Fallo descarga directa (posible CORS), intentando vía API...",
+            err
+          );
+        }
+      }
+
+      // 2. Si no hay URL o falló el fetch, usar endpoint de API (base64)
+      if (!blob) {
+        try {
+          const f = await getTicketFile(fileId);
+          const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
+            c.charCodeAt(0)
+          );
+          blob = new Blob([b], {
+            type: f.mime_type || "application/octet-stream",
+          });
+          finalName = nombre || f.nombre_archivo || "archivo";
+          finalMime = f.mime_type || "";
+        } catch (e) {
+          console.error("Fallo descarga vía API", e);
+        }
+      }
+
+      // 3. Si todo falla pero tenemos URL, intentar abrir en nueva pestaña (último recurso)
+      if ((!blob || blob.size === 0) && local?.url) {
+        // setDownloadModalOpen(false);
+        window.open(local.url, "_blank");
+        toast({ title: "Abriendo archivo en nueva pestaña..." });
+        return;
+      }
+
+      if (!blob || blob.size === 0)
+        throw new Error("No se pudo obtener el archivo por ningún medio");
+
+      // 3. Crear URL local y forzar descarga
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = nombre || f.nombre_archivo || "archivo";
+
+      // --- DETECCIÓN DE FORMATO REAL (SNIFFING) ---
+      // Esto soluciona el problema de archivos "rotos" que son WebM pero tienen extensión .mp3
+      try {
+        const header = await blob.slice(0, 12).arrayBuffer();
+        const uint8 = new Uint8Array(header);
+        const hex = Array.from(uint8)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")
+          .toUpperCase();
+
+        let detectedExt = "";
+
+        // WebM signature: 1A 45 DF A3
+        if (hex.startsWith("1A45DFA3")) {
+          detectedExt = ".webm";
+        }
+        // Ogg signature: 4F 67 67 53
+        else if (hex.startsWith("4F676753")) {
+          detectedExt = ".ogg";
+        }
+        // WAV signature: 52 49 46 46 (RIFF)
+        else if (hex.startsWith("52494646")) {
+          detectedExt = ".wav";
+        }
+        // MP3 ID3: 49 44 33
+        else if (hex.startsWith("494433")) {
+          detectedExt = ".mp3";
+        }
+        // MP3 Sync (approx): FF FB, FF F3, etc.
+        else if (hex.startsWith("FF")) {
+          detectedExt = ".mp3";
+        }
+        // M4A / MP4 (ftyp en offset 4)
+        else if (
+          hex.length >= 24 &&
+          String.fromCharCode(uint8[4], uint8[5], uint8[6], uint8[7]) === "ftyp"
+        ) {
+          detectedExt = ".m4a";
+        }
+
+        if (detectedExt) {
+          // Si detectamos que es WebM/Ogg pero se llama .mp3, lo corregimos
+          if (
+            (detectedExt === ".webm" || detectedExt === ".ogg") &&
+            finalName.toLowerCase().endsWith(".mp3")
+          ) {
+            finalName = finalName.slice(0, -4) + detectedExt;
+          }
+          // Si no tiene extensión, se la ponemos
+          else if (!/\.[a-z0-9]{3,4}$/i.test(finalName)) {
+            finalName += detectedExt;
+          }
+        }
+      } catch (e) {
+        console.warn("Error sniffing file type", e);
+      }
+
+      a.download = finalName;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      // setDownloadModalOpen(false);
     } catch (e) {
       console.error(e);
+      // setDownloadModalOpen(false);
+      toast({ title: "Error al descargar archivo" });
     }
   }
 
@@ -1619,6 +1811,7 @@ export default function TicketsPanelCoach({
                           src={audioPreviewUrl}
                           controls
                           className="w-full"
+                          controlsList="nodownload"
                         />
                         <Button
                           type="button"
@@ -2271,7 +2464,12 @@ export default function TicketsPanelCoach({
                 }
                 if (m.startsWith("audio/")) {
                   return (
-                    <audio src={previewFile.url} controls className="w-full" />
+                    <audio
+                      src={previewFile.url}
+                      controls
+                      className="w-full"
+                      controlsList="nodownload"
+                    />
                   );
                 }
                 if (m.startsWith("text/")) {
@@ -2830,11 +3028,37 @@ export default function TicketsPanelCoach({
                             type="file"
                             className="hidden"
                             multiple
-                            onChange={(e) => {
+                            onChange={async (e) => {
                               const picked = Array.from(e.target.files ?? []);
                               if (!picked.length) return;
+
+                              const processed: File[] = [];
+                              for (const f of picked) {
+                                if (f.type.startsWith("audio/")) {
+                                  toast({
+                                    title: "Procesando audio...",
+                                    description: `Convirtiendo ${f.name} a MP3`,
+                                  });
+                                  try {
+                                    const mp3 = await convertBlobToMp3(f);
+                                    processed.push(mp3);
+                                  } catch (err) {
+                                    console.error(err);
+                                    processed.push(f);
+                                    toast({
+                                      title: "Error al convertir audio",
+                                      description:
+                                        "Se usará el archivo original",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                } else {
+                                  processed.push(f);
+                                }
+                              }
+
                               setEditFiles((prev) =>
-                                [...prev, ...picked].slice(0, 10)
+                                [...prev, ...processed].slice(0, 10)
                               );
                               e.currentTarget.value = "";
                             }}
@@ -2977,6 +3201,7 @@ export default function TicketsPanelCoach({
                               src={audioPreviewUrl}
                               controls
                               className="h-6 w-24"
+                              controlsList="nodownload"
                             />
                             <Button
                               size="sm"

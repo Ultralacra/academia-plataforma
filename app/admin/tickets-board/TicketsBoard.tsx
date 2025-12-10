@@ -126,15 +126,19 @@ const STATUS_STYLE: Record<StatusKey, string> = {
   RESUELTO: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
 
-// Función para convertir audio a MP3 (copiada de CoachChatInline)
-async function convertBlobToMp3(blob: Blob): Promise<File> {
+// Función para convertir audio a MP3 (robusta con CDN fallback)
+export async function convertBlobToMp3(blob: Blob): Promise<File> {
+  // 1) Decodificar blob a PCM usando AudioContext
   const arrayBuffer = await blob.arrayBuffer();
-  const AudioCtx: any =
-    (window as any).AudioContext || (window as any).webkitAudioContext;
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) throw new Error("AudioContext no soportado");
   const audioCtx = new AudioCtx();
+
   const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
   const numChannels = audioBuffer.numberOfChannels;
   const sampleRate = audioBuffer.sampleRate;
+
+  // Obtener datos del primer canal (mono) o mezclar canales
   let pcm = audioBuffer.getChannelData(0);
   if (numChannels > 1) {
     const ch2 = audioBuffer.getChannelData(1);
@@ -142,37 +146,91 @@ async function convertBlobToMp3(blob: Blob): Promise<File> {
     for (let i = 0; i < pcm.length; i++) mixed[i] = (pcm[i] + ch2[i]) / 2;
     pcm = mixed;
   }
+
+  // 2) Convertir Float32 PCM a Int16 para el encoder MP3
   const pcmInt16 = new Int16Array(pcm.length);
   for (let i = 0; i < pcm.length; i++) {
     let s = Math.max(-1, Math.min(1, pcm[i]));
     pcmInt16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
-  const lameMod: any = await import("lamejs");
-  const Mp3Encoder =
-    (lameMod && (lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder)) || null;
-  if (!Mp3Encoder) throw new Error("Mp3Encoder no disponible en lamejs");
+
+  // 3) Usar lamejs para codificar a MP3
+  let Mp3Encoder: any = null;
+
+  // Helper para cargar script
+  const loadScript = (src: string) => {
+    return new Promise((resolve, reject) => {
+      if (document.querySelector(`script[src="${src}"]`)) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = src;
+      script.onload = () => resolve(true);
+      script.onerror = () => reject(new Error(`Error loading ${src}`));
+      document.body.appendChild(script);
+    });
+  };
+
+  try {
+    // Primero intentamos usar la versión global si existe
+    if (typeof (window as any).lamejs !== "undefined") {
+      Mp3Encoder = (window as any).lamejs.Mp3Encoder;
+    } else {
+      // Si no, intentamos cargar desde CDN
+      await loadScript("https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js");
+      if (typeof (window as any).lamejs !== "undefined") {
+        Mp3Encoder = (window as any).lamejs.Mp3Encoder;
+      }
+    }
+  } catch (e) {
+    console.error("Error cargando lamejs:", e);
+  }
+
+  if (!Mp3Encoder) {
+    // Fallback: try dynamic import if CDN fails or just in case
+    try {
+      // @ts-ignore
+      const lameMod: any = await import("lamejs");
+      Mp3Encoder =
+        lameMod && (lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder);
+    } catch {}
+  }
+
+  if (!Mp3Encoder) {
+    throw new Error("Mp3Encoder no disponible. No se pudo cargar lamejs.");
+  }
+
   const channels = 1;
-  const kbps = 128;
+  const kbps = 128; // bitrate estándar
   const encoder = new Mp3Encoder(channels, sampleRate, kbps);
+
   const samplesPerFrame = 1152;
   let mp3Data: Uint8Array[] = [];
-  for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
-    const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
-    const mp3buf = encoder.encodeBuffer(chunk);
-    if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
+
+  try {
+    for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
+      const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
+      const mp3buf = encoder.encodeBuffer(chunk);
+      if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
+    }
+    const end = encoder.flush();
+    if (end && end.length > 0) mp3Data.push(end);
+  } catch (err) {
+    console.error("Error durante la codificación MP3:", err);
+    throw err;
   }
-  const end = encoder.flush();
-  if (end && end.length > 0) mp3Data.push(end);
-  const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const ts = new Date();
-  const fname = `grabacion-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(
-    ts.getDate()
-  )}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.mp3`;
-  const mp3File = new File([mp3Blob], fname, { type: "audio/mpeg" });
+
+  // 4) Crear Blob/File MP3
+  const mp3Blob = new Blob(mp3Data as any[], { type: "audio/mpeg" });
+  const mp3File = new File([mp3Blob], `grabacion-${Date.now()}.mp3`, {
+    type: "audio/mpeg",
+  });
+
   try {
     audioCtx.close();
   } catch {}
+
   return mp3File;
 }
 
@@ -659,40 +717,114 @@ export default function TicketsBoard({
             finalMime = blob.type || finalMime;
           }
         } catch (err) {
-          console.warn("Fallo descarga directa, intentando vía API...", err);
+          console.warn(
+            "Fallo descarga directa (posible CORS), intentando vía API...",
+            err
+          );
         }
       }
 
       // 2. Si no hay URL o falló el fetch, usar endpoint de API (base64)
       if (!blob) {
-        const f = await getTicketFile(fileId);
-        const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
-          c.charCodeAt(0)
-        );
-        blob = new Blob([b], {
-          type: f.mime_type || "application/octet-stream",
-        });
-        finalName = nombre || f.nombre_archivo || "archivo";
-        finalMime = f.mime_type || "";
+        try {
+          const f = await getTicketFile(fileId);
+          const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
+            c.charCodeAt(0)
+          );
+          blob = new Blob([b], {
+            type: f.mime_type || "application/octet-stream",
+          });
+          finalName = nombre || f.nombre_archivo || "archivo";
+          finalMime = f.mime_type || "";
+        } catch (e) {
+          console.error("Fallo descarga vía API", e);
+        }
       }
 
-      if (!blob) throw new Error("No se pudo obtener el archivo");
+      // 3. Si todo falla pero tenemos URL, intentar abrir en nueva pestaña (último recurso)
+      if (!blob && local?.url) {
+        setDownloadModalOpen(false);
+        window.open(local.url, "_blank");
+        toast({ title: "Abriendo archivo en nueva pestaña..." });
+        return;
+      }
+
+      if (!blob)
+        throw new Error("No se pudo obtener el archivo por ningún medio");
 
       // 3. Crear URL local y forzar descarga
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
 
-      // Asegurar extensión correcta para audios
-      if (finalMime.startsWith("audio/") && !/\.\w+$/.test(finalName)) {
-        if (finalMime.includes("mpeg") || finalMime.includes("mp3"))
-          finalName += ".mp3";
-        else if (finalMime.includes("wav")) finalName += ".wav";
-        else if (finalMime.includes("ogg")) finalName += ".ogg";
-        else if (finalMime.includes("webm")) finalName += ".webm";
-        else if (finalMime.includes("mp4") || finalMime.includes("aac"))
-          finalName += ".m4a";
+      // --- DETECCIÓN DE FORMATO REAL (SNIFFING) ---
+      // Esto soluciona el problema de archivos "rotos" que son WebM pero tienen extensión .mp3
+      try {
+        const header = await blob.slice(0, 12).arrayBuffer();
+        const uint8 = new Uint8Array(header);
+        const hex = Array.from(uint8)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join("")
+          .toUpperCase();
+
+        let detectedExt = "";
+
+        // WebM signature: 1A 45 DF A3
+        if (hex.startsWith("1A45DFA3")) {
+          detectedExt = ".webm";
+        }
+        // Ogg signature: 4F 67 67 53
+        else if (hex.startsWith("4F676753")) {
+          detectedExt = ".ogg";
+        }
+        // WAV signature: 52 49 46 46 (RIFF)
+        else if (hex.startsWith("52494646")) {
+          detectedExt = ".wav";
+        }
+        // MP3 ID3: 49 44 33
+        else if (hex.startsWith("494433")) {
+          detectedExt = ".mp3";
+        }
+        // MP3 Sync (approx): FF FB, FF F3, etc.
+        else if (hex.startsWith("FF")) {
+          detectedExt = ".mp3";
+        }
+        // M4A / MP4 (ftyp en offset 4)
+        else if (
+          hex.length >= 24 &&
+          String.fromCharCode(uint8[4], uint8[5], uint8[6], uint8[7]) === "ftyp"
+        ) {
+          detectedExt = ".m4a";
+        }
+
+        if (detectedExt) {
+          // Si detectamos que es WebM/Ogg pero se llama .mp3, lo corregimos
+          if (
+            (detectedExt === ".webm" || detectedExt === ".ogg") &&
+            finalName.toLowerCase().endsWith(".mp3")
+          ) {
+            finalName = finalName.slice(0, -4) + detectedExt;
+          }
+          // Si no tiene extensión, se la ponemos
+          else if (!/\.[a-z0-9]{3,4}$/i.test(finalName)) {
+            finalName += detectedExt;
+          }
+          // Si tiene una extensión diferente y estamos seguros del formato, reemplazamos
+          else if (!finalName.toLowerCase().endsWith(detectedExt)) {
+            // Prioridad a la detección real para formatos contenedores
+            if (
+              detectedExt === ".webm" ||
+              detectedExt === ".ogg" ||
+              detectedExt === ".m4a"
+            ) {
+              finalName = finalName.replace(/\.[^.]+$/, "") + detectedExt;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Error detectando formato real:", e);
       }
+      // --------------------------------------------
 
       a.download = finalName;
       document.body.appendChild(a);
@@ -853,129 +985,46 @@ export default function TicketsBoard({
     }, 500);
   }
 
-  function addRecordedToFiles() {
+  async function addRecordedToFiles() {
     if (!recordedBlob) return;
-    // Convertir la grabación a MP3 en el cliente
-    convertBlobToMp3(recordedBlob)
-      .then((mp3File) => {
-        setEditFiles((prev) => [...prev, mp3File]);
-        toast({ title: "Grabación convertida a MP3" });
-      })
-      .catch((err) => {
-        console.error(err);
-        // Fallback: adjuntar el original si falla la conversión
-        const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
-        const file = new File(
-          [recordedBlob],
-          `grabacion-${Date.now()}.${ext}`,
-          { type: recordedBlob.type || "audio/webm" }
-        );
-        setEditFiles((prev) => [...prev, file]);
-        toast({ title: "Conversión a MP3 falló, adjuntado original" });
-      })
-      .finally(() => {
-        if (recordedUrl) {
-          URL.revokeObjectURL(recordedUrl);
-          setRecordedUrl(null);
-        }
-        setRecordedBlob(null);
-      });
-  }
 
-  // Conversión de Blob de audio (webm/ogg) a MP3 usando WebAudio + lamejs
-  async function convertBlobToMp3(blob: Blob): Promise<File> {
-    // 1) Decodificar blob a PCM usando AudioContext
-    const arrayBuffer = await blob.arrayBuffer();
-    const audioCtx = new (window.AudioContext ||
-      (window as any).webkitAudioContext)();
-    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-    const numChannels = audioBuffer.numberOfChannels;
-    const sampleRate = audioBuffer.sampleRate;
-    // Obtener datos del primer canal (mono) o mezclar canales
-    let pcm = audioBuffer.getChannelData(0);
-    if (numChannels > 1) {
-      const ch2 = audioBuffer.getChannelData(1);
-      const mixed = new Float32Array(pcm.length);
-      for (let i = 0; i < pcm.length; i++) mixed[i] = (pcm[i] + ch2[i]) / 2;
-      pcm = mixed;
-    }
-
-    // 2) Convertir Float32 PCM a Int16 para el encoder MP3
-    const pcmInt16 = new Int16Array(pcm.length);
-    for (let i = 0; i < pcm.length; i++) {
-      let s = Math.max(-1, Math.min(1, pcm[i]));
-      pcmInt16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-    }
-
-    // 3) Usar lamejs para codificar a MP3
-    // Intentar cargar desde window.lamejs (CDN) o importar dinámicamente
-    let Mp3Encoder: any = null;
-
-    // Helper para cargar script
-    const loadScript = (src: string) => {
-      return new Promise((resolve, reject) => {
-        if (document.querySelector(`script[src="${src}"]`)) {
-          resolve(true);
-          return;
-        }
-        const script = document.createElement("script");
-        script.src = src;
-        script.onload = () => resolve(true);
-        script.onerror = () => reject(new Error(`Error loading ${src}`));
-        document.body.appendChild(script);
-      });
-    };
-
-    try {
-      // Primero intentamos usar la versión global si existe
-      if (typeof (window as any).lamejs !== "undefined") {
-        Mp3Encoder = (window as any).lamejs.Mp3Encoder;
-      } else {
-        // Si no, intentamos cargar desde CDN
-        await loadScript(
-          "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"
-        );
-        if (typeof (window as any).lamejs !== "undefined") {
-          Mp3Encoder = (window as any).lamejs.Mp3Encoder;
-        }
-      }
-    } catch (e) {
-      console.error("Error cargando lamejs:", e);
-    }
-
-    if (!Mp3Encoder) {
-      throw new Error("Mp3Encoder no disponible. No se pudo cargar lamejs.");
-    }
-
-    const channels = 1;
-    const kbps = 128; // bitrate estándar
-    const encoder = new Mp3Encoder(channels, sampleRate, kbps);
-
-    const samplesPerFrame = 1152;
-    let mp3Data: Uint8Array[] = [];
-
-    try {
-      for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
-        const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
-        const mp3buf = encoder.encodeBuffer(chunk);
-        if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
-      }
-      const end = encoder.flush();
-      if (end && end.length > 0) mp3Data.push(end);
-    } catch (err) {
-      console.error("Error durante la codificación MP3:", err);
-      throw err;
-    }
-
-    // 4) Crear Blob/File MP3
-    const mp3Blob = new Blob(mp3Data as any[], { type: "audio/mpeg" });
-    const mp3File = new File([mp3Blob], `grabacion-${Date.now()}.mp3`, {
-      type: "audio/mpeg",
+    // Notificar al usuario que se está procesando
+    toast({
+      title: "Procesando audio...",
+      description: "Optimizando y convirtiendo a MP3.",
     });
+
     try {
-      audioCtx.close();
-    } catch {}
-    return mp3File;
+      // Convertir la grabación a MP3 en el cliente
+      const mp3File = await convertBlobToMp3(recordedBlob);
+      setEditFiles((prev) => [...prev, mp3File]);
+      toast({
+        title: "Audio agregado",
+        description: "Grabación guardada como MP3.",
+      });
+    } catch (err) {
+      console.error("Error converting recording to MP3:", err);
+
+      // Fallback: adjuntar el original si falla la conversión
+      const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
+      const file = new File([recordedBlob], `grabacion-${Date.now()}.${ext}`, {
+        type: recordedBlob.type || "audio/webm",
+      });
+      setEditFiles((prev) => [...prev, file]);
+
+      toast({
+        title: "Advertencia",
+        description:
+          "No se pudo convertir a MP3. Se guardó en formato original.",
+        variant: "destructive",
+      });
+    } finally {
+      if (recordedUrl) {
+        URL.revokeObjectURL(recordedUrl);
+        setRecordedUrl(null);
+      }
+      setRecordedBlob(null);
+    }
   }
 
   function addAudioUrl() {
@@ -1313,6 +1362,8 @@ export default function TicketsBoard({
         for (const f of filesToUpload) {
           const type = (f.type || "").toLowerCase();
           const isImage = type.startsWith("image/") && type !== "image/svg+xml";
+          const isAudio = type.startsWith("audio/");
+
           if (isImage) {
             const originalSizeKb = Math.round(f.size / 1024);
             console.log(
@@ -1332,10 +1383,25 @@ export default function TicketsBoard({
               );
               processed.push(f);
             }
+          } else if (
+            isAudio &&
+            !type.includes("mp3") &&
+            !type.includes("mpeg")
+          ) {
+            // Convertir audio a MP3 si no lo es
+            try {
+              console.log(`[Upload] Convirtiendo audio a MP3: ${f.name}`);
+              const mp3 = await convertBlobToMp3(f);
+              console.log(`[Upload] Audio convertido: ${mp3.name}`);
+              processed.push(mp3);
+            } catch (e) {
+              console.error("Error converting audio to mp3", e);
+              processed.push(f);
+            }
           } else {
-            // No imagen: mantener archivo, log básico
+            // No imagen ni audio convertible: mantener archivo, log básico
             console.log(
-              `[Upload] Archivo no imagen: name=${f.name}, type=${
+              `[Upload] Archivo: name=${f.name}, type=${
                 f.type
               }, size=${Math.round(f.size / 1024)} KB`
             );
@@ -2219,15 +2285,21 @@ export default function TicketsBoard({
                             ` · ${Math.round(f.tamano_bytes / 1024)} KB`}
                         </div>
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 w-8 p-0"
-                            onClick={() => downloadFile(f.id, f.nombre_archivo)}
-                            aria-label={`Descargar ${f.nombre_archivo}`}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          {!(
+                            f.mime_type || mimeFromName(f.nombre_archivo)
+                          )?.startsWith("audio/") && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                              onClick={() =>
+                                downloadFile(f.id, f.nombre_archivo)
+                              }
+                              aria-label={`Descargar ${f.nombre_archivo}`}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -2303,7 +2375,12 @@ export default function TicketsBoard({
                 }
                 if (m.startsWith("audio/")) {
                   return (
-                    <audio src={previewFile.url} controls className="w-full" />
+                    <audio
+                      src={previewFile.url}
+                      controls
+                      className="w-full"
+                      controlsList="nodownload"
+                    />
                   );
                 }
                 if (m.startsWith("text/")) {
@@ -2913,14 +2990,18 @@ export default function TicketsBoard({
                               {f.nombre_archivo}
                             </div>
                             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() =>
-                                  downloadFile(f.id, f.nombre_archivo)
-                                }
-                                className="text-slate-400 hover:text-slate-700"
-                              >
-                                <Download className="h-3 w-3" />
-                              </button>
+                              {!(
+                                f.mime_type || mimeFromName(f.nombre_archivo)
+                              )?.startsWith("audio/") && (
+                                <button
+                                  onClick={() =>
+                                    downloadFile(f.id, f.nombre_archivo)
+                                  }
+                                  className="text-slate-400 hover:text-slate-700"
+                                >
+                                  <Download className="h-3 w-3" />
+                                </button>
+                              )}
                               <button
                                 onClick={() => openPreview(f)}
                                 className="text-slate-400 hover:text-slate-700"

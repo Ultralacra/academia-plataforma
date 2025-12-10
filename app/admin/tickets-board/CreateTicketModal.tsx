@@ -36,6 +36,7 @@ import {
   uploadTicketFiles,
   type StudentRow,
 } from "@/app/admin/alumnos/api";
+import { convertBlobToMp3 } from "./TicketsBoard";
 
 export function CreateTicketModal({
   open,
@@ -164,7 +165,31 @@ export function CreateTicketModal({
         // Subir uno por uno
         for (let i = 0; i < files.length; i++) {
           setUploadProgress({ current: i + 1, total: files.length });
-          await uploadTicketFiles(String(ticketId), [files[i]]);
+
+          let fileToUpload = files[i];
+          const type = (fileToUpload.type || "").toLowerCase();
+
+          // Convertir audio a MP3 si es necesario
+          if (
+            type.startsWith("audio/") &&
+            !type.includes("mp3") &&
+            !type.includes("mpeg")
+          ) {
+            try {
+              console.log(
+                `[CreateTicket] Convirtiendo audio a MP3: ${fileToUpload.name}`
+              );
+              fileToUpload = await convertBlobToMp3(fileToUpload);
+              console.log(
+                `[CreateTicket] Audio convertido: ${fileToUpload.name}`
+              );
+            } catch (e) {
+              console.error("Error converting audio to mp3 in modal", e);
+              // Fallback: upload original
+            }
+          }
+
+          await uploadTicketFiles(String(ticketId), [fileToUpload]);
         }
       }
 
