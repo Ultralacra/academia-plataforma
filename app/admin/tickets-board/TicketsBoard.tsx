@@ -47,6 +47,7 @@ import {
   AlertTriangle,
   Link as LinkIcon,
   Plus,
+  Maximize,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -362,6 +363,7 @@ export default function TicketsBoard({
     mime_type: string | null;
     url?: string;
   }>(null);
+  const videoPreviewRef = useRef<HTMLVideoElement>(null);
 
   // Estado para modal de descarga y progreso básico
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
@@ -2367,20 +2369,45 @@ export default function TicketsBoard({
                 }
                 if (m.startsWith("video/")) {
                   return (
-                    <VideoPlayer
-                      src={previewFile.url}
-                      className="mx-auto max-h-[65vh] rounded-md"
-                    />
+                    <div className="relative flex flex-col items-center gap-2">
+                      <div className="relative w-full bg-black rounded-md overflow-hidden">
+                        <video
+                          ref={videoPreviewRef}
+                          src={previewFile.url}
+                          controls
+                          autoPlay
+                          controlsList="nodownload"
+                          className="mx-auto max-h-[65vh] w-full object-contain"
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2"
+                        onClick={() => {
+                          const v = videoPreviewRef.current;
+                          if (v) {
+                            if (v.requestFullscreen) v.requestFullscreen();
+                            // @ts-ignore
+                            else if (v.webkitRequestFullscreen)
+                              // @ts-ignore
+                              v.webkitRequestFullscreen();
+                            // @ts-ignore
+                            else if (v.msRequestFullscreen)
+                              // @ts-ignore
+                              v.msRequestFullscreen();
+                          }
+                        }}
+                      >
+                        <Maximize className="h-4 w-4" />
+                        Ver pantalla completa
+                      </Button>
+                    </div>
                   );
                 }
                 if (m.startsWith("audio/")) {
                   return (
-                    <audio
-                      src={previewFile.url}
-                      controls
-                      className="w-full"
-                      controlsList="nodownload"
-                    />
+                    <audio src={previewFile.url} controls className="w-full" />
                   );
                 }
                 if (m.startsWith("text/")) {

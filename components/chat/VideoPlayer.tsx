@@ -55,11 +55,11 @@ export default function VideoPlayer({
       />
 
       {!isPlaying && !selectMode && (
-        <div
-          className="absolute inset-0 flex items-center justify-center bg-black/10 cursor-pointer z-10 hover:bg-black/20 transition-colors"
-          onClick={handlePlayClick}
-        >
-          <div className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-[2px] flex items-center justify-center hover:bg-black/50 transition-all hover:scale-105 shadow-lg border border-white/20">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/10 z-10 transition-colors pointer-events-none">
+          <div
+            className="w-12 h-12 rounded-full bg-black/40 backdrop-blur-[2px] flex items-center justify-center hover:bg-black/50 transition-all hover:scale-105 shadow-lg border border-white/20 cursor-pointer pointer-events-auto"
+            onClick={handlePlayClick}
+          >
             <Play className="w-6 h-6 text-white fill-white ml-1" />
           </div>
         </div>
