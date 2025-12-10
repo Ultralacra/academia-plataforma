@@ -128,6 +128,8 @@ export default function AudioBubble({
         );
       } catch {}
       a.play().catch((e) => {
+        // Ignorar errores de interrupción (usuario pausó rápido)
+        if (e.name === "AbortError") return;
         console.error("Play error", e);
         setPlaying(false);
         setError(true);

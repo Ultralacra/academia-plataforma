@@ -27,6 +27,7 @@ import {
   normalizeDateStr,
   normalizeTipo,
 } from "@/app/admin/teamsv2/[code]/chat-core";
+import { convertBlobToMp3 } from "@/lib/audio-converter";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST, apiFetch, buildUrl } from "@/lib/api-config";
 import { playNotificationSound } from "@/lib/utils";
@@ -4351,31 +4352,51 @@ export default function CoachChatInline({
                               console.warn("Audio grabado vacío");
                               return;
                             }
-                            const ts = new Date();
-                            const pad = (n: number) =>
-                              String(n).padStart(2, "0");
-                            const ext = (() => {
-                              const t = (blob.type || "").toLowerCase();
-                              if (t.includes("ogg")) return "ogg";
-                              if (t.includes("mp4") || t.includes("aac"))
-                                return "m4a";
-                              return "webm";
-                            })();
-                            const fname = `grabacion-${ts.getFullYear()}${pad(
-                              ts.getMonth() + 1
-                            )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
-                              ts.getMinutes()
-                            )}${pad(ts.getSeconds())}.${ext}`;
-                            const file = new File([blob], fname, {
-                              type: blob.type || chosenType,
-                            });
-                            if ((file.size || 0) > MAX_FILE_SIZE) {
-                              setUploadError(
-                                "El audio grabado excede el límite de 50MB y no se adjuntará."
-                              );
-                            } else {
-                              addPendingAttachments([file] as any);
-                            }
+
+                            // Convertir a MP3
+                            convertBlobToMp3(blob)
+                              .then((mp3File) => {
+                                if ((mp3File.size || 0) > MAX_FILE_SIZE) {
+                                  setUploadError(
+                                    "El audio grabado excede el límite de 50MB y no se adjuntará."
+                                  );
+                                } else {
+                                  addPendingAttachments([mp3File] as any);
+                                }
+                              })
+                              .catch((err) => {
+                                console.error(
+                                  "Error convirtiendo a MP3, usando original",
+                                  err
+                                );
+                                const ts = new Date();
+                                const pad = (n: number) =>
+                                  String(n).padStart(2, "0");
+                                const ext = (() => {
+                                  const t = (blob.type || "").toLowerCase();
+                                  if (t.includes("ogg")) return "ogg";
+                                  if (t.includes("mp4") || t.includes("aac"))
+                                    return "m4a";
+                                  return "webm";
+                                })();
+                                const fname = `grabacion-${ts.getFullYear()}${pad(
+                                  ts.getMonth() + 1
+                                )}${pad(ts.getDate())}-${pad(
+                                  ts.getHours()
+                                )}${pad(ts.getMinutes())}${pad(
+                                  ts.getSeconds()
+                                )}.${ext}`;
+                                const file = new File([blob], fname, {
+                                  type: blob.type || chosenType,
+                                });
+                                if ((file.size || 0) > MAX_FILE_SIZE) {
+                                  setUploadError(
+                                    "El audio grabado excede el límite de 50MB y no se adjuntará."
+                                  );
+                                } else {
+                                  addPendingAttachments([file] as any);
+                                }
+                              });
                           } catch {
                             setUploadError(
                               "No se pudo procesar el audio grabado."
