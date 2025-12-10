@@ -59,6 +59,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -236,6 +237,7 @@ export default function TicketsBoard() {
       mime_type: string | null;
       tamano_bytes: number | null;
       created_at: string | null;
+      url?: string | null;
     }[]
   >([]);
   const [blobCache, setBlobCache] = useState<Record<string, string>>({});
@@ -549,6 +551,11 @@ export default function TicketsBoard() {
       setFilesLoading(true);
       const list = await getTicketFiles(code);
       setFiles(list);
+      try {
+        const urls = (list || []).map((f: any) => f?.url).filter(Boolean);
+        // Log de URLs para verificación
+        console.log("Ticket files URLs:", urls);
+      } catch {}
     } catch (e) {
       console.error(e);
       setFiles([]);
@@ -562,6 +569,19 @@ export default function TicketsBoard() {
       setDownloadMessage("Descargando archivo...");
       setDownloadProgress(null);
       setDownloadModalOpen(true);
+      // Si ya tenemos una URL directa del archivo, usarla sin pedir base64
+      const local = files.find((f) => f.id === fileId);
+      if (local?.url) {
+        const a = document.createElement("a");
+        a.href = local.url as string;
+        a.download = nombre || local.nombre_archivo || "archivo";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setDownloadModalOpen(false);
+        setDownloadProgress(null);
+        return;
+      }
       const f = await getTicketFile(fileId);
       const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
         c.charCodeAt(0)
@@ -620,12 +640,19 @@ export default function TicketsBoard() {
     id: string;
     nombre_archivo: string;
     mime_type: string | null;
+    url?: string | null;
   }) {
     try {
       setPreviewLoading(true);
       const cached = blobCache[f.id];
       if (cached) {
         setPreviewFile({ ...f, url: cached });
+        setPreviewOpen(true);
+        return;
+      }
+      // Si el backend ya provee una URL pública, úsala directamente
+      if (f.url) {
+        setPreviewFile({ ...f, url: f.url });
         setPreviewOpen(true);
         return;
       }
@@ -663,7 +690,14 @@ export default function TicketsBoard() {
       }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mediaStreamRef.current = stream;
-      const mr = new MediaRecorder(stream);
+      // Intenta usar el mimeType más compatible; MediaRecorder no soporta MP3 nativo en la mayoría de navegadores
+      // Grabamos en webm/ogg y luego convertimos a MP3 con lamejs
+      const options: MediaRecorderOptions = {};
+      const supported = ["audio/webm", "audio/ogg"].filter((t) =>
+        MediaRecorder.isTypeSupported ? MediaRecorder.isTypeSupported(t) : true
+      );
+      if (supported.length > 0) options.mimeType = supported[0] as any;
+      const mr = new MediaRecorder(stream, options);
       const chunks: BlobPart[] = [];
       let recordedType = "";
       mr.ondataavailable = (ev) => {
@@ -718,18 +752,89 @@ export default function TicketsBoard() {
 
   function addRecordedToFiles() {
     if (!recordedBlob) return;
-    const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
-    const file = new File([recordedBlob], `grabacion-${Date.now()}.${ext}`, {
-      type: recordedBlob.type || "audio/webm",
-    });
-    setEditFiles((prev) => [...prev, file]);
-    // cleanup preview URL
-    if (recordedUrl) {
-      URL.revokeObjectURL(recordedUrl);
-      setRecordedUrl(null);
+    // Convertir la grabación a MP3 en el cliente
+    convertBlobToMp3(recordedBlob)
+      .then((mp3File) => {
+        setEditFiles((prev) => [...prev, mp3File]);
+        toast({ title: "Grabación convertida a MP3" });
+      })
+      .catch((err) => {
+        console.error(err);
+        // Fallback: adjuntar el original si falla la conversión
+        const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
+        const file = new File(
+          [recordedBlob],
+          `grabacion-${Date.now()}.${ext}`,
+          { type: recordedBlob.type || "audio/webm" }
+        );
+        setEditFiles((prev) => [...prev, file]);
+        toast({ title: "Conversión a MP3 falló, adjuntado original" });
+      })
+      .finally(() => {
+        if (recordedUrl) {
+          URL.revokeObjectURL(recordedUrl);
+          setRecordedUrl(null);
+        }
+        setRecordedBlob(null);
+      });
+  }
+
+  // Conversión de Blob de audio (webm/ogg) a MP3 usando WebAudio + lamejs
+  async function convertBlobToMp3(blob: Blob): Promise<File> {
+    // 1) Decodificar blob a PCM usando AudioContext
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new (window.AudioContext ||
+      (window as any).webkitAudioContext)();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    // Obtener datos del primer canal (mono) o mezclar canales
+    let pcm = audioBuffer.getChannelData(0);
+    if (numChannels > 1) {
+      const ch2 = audioBuffer.getChannelData(1);
+      const mixed = new Float32Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) mixed[i] = (pcm[i] + ch2[i]) / 2;
+      pcm = mixed;
     }
-    setRecordedBlob(null);
-    toast({ title: "Grabación añadida a archivos" });
+
+    // 2) Convertir Float32 PCM a Int16 para el encoder MP3
+    const pcmInt16 = new Int16Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) {
+      let s = Math.max(-1, Math.min(1, pcm[i]));
+      pcmInt16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+
+    // 3) Usar lamejs para codificar a MP3
+    // Importación dinámica para evitar cargar la librería si no se usa
+    const lameMod: any = await import(
+      /* webpackChunkName: "lamejs" */ "lamejs"
+    );
+    const Mp3Encoder =
+      (lameMod && (lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder)) || null;
+    if (!Mp3Encoder) throw new Error("Mp3Encoder no disponible en lamejs");
+    const channels = 1;
+    const kbps = 128; // bitrate estándar
+    const encoder = new Mp3Encoder(channels, sampleRate, kbps);
+
+    const samplesPerFrame = 1152;
+    let mp3Data: Uint8Array[] = [];
+    for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
+      const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
+      const mp3buf = encoder.encodeBuffer(chunk);
+      if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
+    }
+    const end = encoder.flush();
+    if (end && end.length > 0) mp3Data.push(end);
+
+    // 4) Crear Blob/File MP3
+    const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
+    const mp3File = new File([mp3Blob], `grabacion-${Date.now()}.mp3`, {
+      type: "audio/mpeg",
+    });
+    try {
+      audioCtx.close();
+    } catch {}
+    return mp3File;
   }
 
   function addAudioUrl() {
@@ -1001,6 +1106,10 @@ export default function TicketsBoard() {
       setFilesLoading(true);
       const list = await getTicketFiles(codigo);
       setFiles(list);
+      try {
+        const urls = (list || []).map((f: any) => f?.url).filter(Boolean);
+        console.log("Ticket files URLs:", urls);
+      } catch {}
     } catch (e) {
       console.error(e);
       setFiles([]);
@@ -1056,10 +1165,49 @@ export default function TicketsBoard() {
         .join("\n\n")
         .slice(0, 4000);
 
-      // Subir archivos seleccionados (incluye audios grabados) antes de actualizar metadata
-      if (editFiles.length > 0) {
+      // Preparar archivos: comprimir imágenes a WebP y registrar tamaños
+      let filesToUpload: File[] = [...editFiles];
+      if (filesToUpload.length > 0) {
+        const processed: File[] = [];
+        for (const f of filesToUpload) {
+          const type = (f.type || "").toLowerCase();
+          const isImage = type.startsWith("image/") && type !== "image/svg+xml";
+          if (isImage) {
+            const originalSizeKb = Math.round(f.size / 1024);
+            console.log(
+              `[Upload] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`
+            );
+            try {
+              const webp = await compressImageToWebp(f, 0.8);
+              const webpSizeKb = Math.round(webp.size / 1024);
+              console.log(
+                `[Upload] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`
+              );
+              processed.push(webp);
+            } catch (err) {
+              console.error(
+                "[Upload] Error convirtiendo a WebP, usando original",
+                err
+              );
+              processed.push(f);
+            }
+          } else {
+            // No imagen: mantener archivo, log básico
+            console.log(
+              `[Upload] Archivo no imagen: name=${f.name}, type=${
+                f.type
+              }, size=${Math.round(f.size / 1024)} KB`
+            );
+            processed.push(f);
+          }
+        }
+        filesToUpload = processed;
+      }
+
+      // Subir archivos seleccionados (incluye audios grabados y imágenes procesadas)
+      if (filesToUpload.length > 0) {
         try {
-          await uploadTicketFiles(selectedTicket.codigo, editFiles);
+          await uploadTicketFiles(selectedTicket.codigo, filesToUpload);
           toast({ title: "Archivos subidos" });
           setEditFiles([]);
           await loadFilesForTicket(selectedTicket.codigo);
@@ -1130,6 +1278,52 @@ export default function TicketsBoard() {
     }
   }
 
+  // Comprimir imagen a WebP usando canvas en el navegador
+  async function compressImageToWebp(file: File, quality = 0.8): Promise<File> {
+    // Cargar imagen en un elemento Image
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = (e) => reject(e);
+      reader.readAsDataURL(file);
+    });
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = (e) => reject(e);
+      image.src = dataUrl;
+    });
+    // Dibujar en canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("No se pudo crear contexto de canvas");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Exportar a WebP
+    const blob: Blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => {
+          if (!b) return reject(new Error("Falló toBlob WebP"));
+          resolve(b);
+        },
+        "image/webp",
+        quality
+      );
+    });
+    const webpFile = new File([blob], renameToWebp(file.name), {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+    return webpFile;
+  }
+
+  function renameToWebp(name: string) {
+    const dot = name.lastIndexOf(".");
+    const base = dot > -1 ? name.slice(0, dot) : name;
+    return `${base}.webp`;
+  }
+
   function iconFor(mime: string | null, name?: string) {
     const m = mime || mimeFromName(name) || "";
     if (m.startsWith("image/")) return <FileImage className="h-4 w-4" />;
@@ -1170,6 +1364,9 @@ export default function TicketsBoard() {
         <DialogContent className="sm:max-w-[360px]">
           <DialogHeader>
             <DialogTitle>{downloadMessage}</DialogTitle>
+            <DialogDescription>
+              Progreso de descarga de archivos asociados al ticket.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-center py-4">
             {downloadProgress == null ? (
@@ -1197,6 +1394,9 @@ export default function TicketsBoard() {
         <DialogContent className="sm:max-w-[320px]">
           <DialogHeader>
             <DialogTitle>Preparando vista previa...</DialogTitle>
+            <DialogDescription>
+              Cargando contenido para previsualización del archivo.
+            </DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-center py-4">
             <Spinner className="h-8 w-8" />
@@ -1765,6 +1965,9 @@ export default function TicketsBoard() {
             <DialogTitle className="text-lg font-semibold">
               Archivos adjuntos
             </DialogTitle>
+            <DialogDescription>
+              Lista de archivos vinculados al ticket seleccionado.
+            </DialogDescription>
           </DialogHeader>
           {filesLoading ? (
             <div className="flex items-center justify-center py-12 text-sm text-slate-500">
@@ -1885,6 +2088,9 @@ export default function TicketsBoard() {
             <DialogTitle className="text-lg font-semibold">
               {previewFile?.nombre_archivo || "Previsualización"}
             </DialogTitle>
+            <DialogDescription>
+              Vista previa del archivo seleccionado del ticket.
+            </DialogDescription>
           </DialogHeader>
           {previewLoading ? (
             <div className="flex items-center justify-center py-16 text-sm text-slate-500">
@@ -1973,6 +2179,9 @@ export default function TicketsBoard() {
             <DialogTitle className="text-lg font-semibold">
               Confirmar eliminación
             </DialogTitle>
+            <DialogDescription>
+              Esta acción eliminará el archivo de forma permanente.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-slate-700">
@@ -2593,9 +2802,58 @@ export default function TicketsBoard() {
                             if (!selectedTicket?.codigo) return;
                             setUploadingFiles(true);
                             try {
+                              // Procesar imágenes -> WebP con logs antes de subir desde el botón
+                              let filesToUpload: File[] = [...editFiles];
+                              if (filesToUpload.length > 0) {
+                                const processed: File[] = [];
+                                for (const f of filesToUpload) {
+                                  const type = (f.type || "").toLowerCase();
+                                  const isImage =
+                                    type.startsWith("image/") &&
+                                    type !== "image/svg+xml";
+                                  if (isImage) {
+                                    const originalSizeKb = Math.round(
+                                      f.size / 1024
+                                    );
+                                    console.log(
+                                      `[UploadButton] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`
+                                    );
+                                    try {
+                                      const webp = await compressImageToWebp(
+                                        f,
+                                        0.8
+                                      );
+                                      const webpSizeKb = Math.round(
+                                        webp.size / 1024
+                                      );
+                                      console.log(
+                                        `[UploadButton] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`
+                                      );
+                                      processed.push(webp);
+                                    } catch (err) {
+                                      console.error(
+                                        "[UploadButton] Error convirtiendo a WebP, usando original",
+                                        err
+                                      );
+                                      processed.push(f);
+                                    }
+                                  } else {
+                                    console.log(
+                                      `[UploadButton] Archivo no imagen: name=${
+                                        f.name
+                                      }, type=${f.type}, size=${Math.round(
+                                        f.size / 1024
+                                      )} KB`
+                                    );
+                                    processed.push(f);
+                                  }
+                                }
+                                filesToUpload = processed;
+                              }
+
                               await uploadTicketFiles(
                                 selectedTicket.codigo,
-                                editFiles
+                                filesToUpload
                               );
                               toast({ title: "Archivos subidos" });
                               setEditFiles([]);

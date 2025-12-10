@@ -46,6 +46,7 @@
     "embla-carousel-react": "8.5.1",
     "geist": "latest",
     "input-otp": "1.4.1",
+    "lamejs": "^1.2.1",
     "lucide-react": "^0.454.0",
     "motion": "^12.23.22",
     "next": "14.2.16",

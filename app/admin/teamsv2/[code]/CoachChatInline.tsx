@@ -81,6 +81,56 @@ function dbg(...args: any[]) {
   } catch {}
 }
 
+// Convierte un Blob de audio (webm/ogg/aac/mp4) a MP3 usando WebAudio + lamejs
+async function convertBlobToMp3(blob: Blob): Promise<File> {
+  const arrayBuffer = await blob.arrayBuffer();
+  const AudioCtx: any =
+    (window as any).AudioContext || (window as any).webkitAudioContext;
+  const audioCtx = new AudioCtx();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  const numChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  let pcm = audioBuffer.getChannelData(0);
+  if (numChannels > 1) {
+    const ch2 = audioBuffer.getChannelData(1);
+    const mixed = new Float32Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) mixed[i] = (pcm[i] + ch2[i]) / 2;
+    pcm = mixed;
+  }
+  const pcmInt16 = new Int16Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) {
+    let s = Math.max(-1, Math.min(1, pcm[i]));
+    pcmInt16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  const lameMod: any = await import("lamejs");
+  const Mp3Encoder =
+    (lameMod && (lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder)) || null;
+  if (!Mp3Encoder) throw new Error("Mp3Encoder no disponible en lamejs");
+  const channels = 1;
+  const kbps = 128;
+  const encoder = new Mp3Encoder(channels, sampleRate, kbps);
+  const samplesPerFrame = 1152;
+  let mp3Data: Uint8Array[] = [];
+  for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
+    const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
+    const mp3buf = encoder.encodeBuffer(chunk);
+    if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
+  }
+  const end = encoder.flush();
+  if (end && end.length > 0) mp3Data.push(end);
+  const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ts = new Date();
+  const fname = `grabacion-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(
+    ts.getDate()
+  )}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.mp3`;
+  const mp3File = new File([mp3Blob], fname, { type: "audio/mpeg" });
+  try {
+    audioCtx.close();
+  } catch {}
+  return mp3File;
+}
+
 // Pistas de subida movidas a ./chat-recent-upload
 
 // Config movida a ./chat-types
@@ -4359,16 +4409,36 @@ export default function CoachChatInline({
                             )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
                               ts.getMinutes()
                             )}${pad(ts.getSeconds())}.${ext}`;
-                            const file = new File([blob], fname, {
-                              type: blob.type || chosenType,
-                            });
-                            if ((file.size || 0) > MAX_FILE_SIZE) {
-                              setUploadError(
-                                "El audio grabado excede el límite de 50MB y no se adjuntará."
-                              );
-                            } else {
-                              addPendingAttachments([file] as any);
-                            }
+                            // Convertir a MP3 antes de adjuntar
+                            (async () => {
+                              try {
+                                const mp3File = await convertBlobToMp3(blob);
+                                const out =
+                                  mp3File ||
+                                  new File([blob], fname, {
+                                    type: blob.type || chosenType,
+                                  });
+                                if ((out.size || 0) > MAX_FILE_SIZE) {
+                                  setUploadError(
+                                    "El audio grabado excede el límite de 50MB y no se adjuntará."
+                                  );
+                                } else {
+                                  addPendingAttachments([out] as any);
+                                }
+                              } catch (convErr) {
+                                console.error(convErr);
+                                const out = new File([blob], fname, {
+                                  type: blob.type || chosenType,
+                                });
+                                if ((out.size || 0) > MAX_FILE_SIZE) {
+                                  setUploadError(
+                                    "El audio grabado excede el límite de 50MB y no se adjuntará."
+                                  );
+                                } else {
+                                  addPendingAttachments([out] as any);
+                                }
+                              }
+                            })();
                           } catch {
                             setUploadError(
                               "No se pudo procesar el audio grabado."

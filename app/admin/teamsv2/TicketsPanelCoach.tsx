@@ -924,13 +924,23 @@ export default function TicketsPanelCoach({
       });
       const MR: any = (window as any).MediaRecorder;
       if (!MR) return;
-      const mr: any = new MR(stream);
+      const options: any = {};
+      const candidates = ["audio/webm", "audio/ogg"];
+      const isTypeSupported = MR.isTypeSupported?.bind(MR) ?? (() => true);
+      for (const t of candidates) {
+        if (isTypeSupported(t)) {
+          options.mimeType = t;
+          break;
+        }
+      }
+      const mr: any = new MR(stream, options);
       audioChunksRef.current = [];
       mr.ondataavailable = (e: any) => {
         if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data);
       };
       mr.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        const recordedType = options.mimeType || "audio/webm";
+        const blob = new Blob(audioChunksRef.current, { type: recordedType });
         const url = URL.createObjectURL(blob);
         setAudioPreviewUrl((prev) => {
           if (prev) URL.revokeObjectURL(prev);
@@ -938,12 +948,22 @@ export default function TicketsPanelCoach({
         });
         setRecordedBlob(blob);
 
-        // Si NO estamos editando, comportamiento antiguo (agregar directo a createFiles)
+        // Si NO estamos editando, convertir a MP3 y agregar a createFiles
         if (!editOpen) {
-          const file = new File([blob], `grabacion-${Date.now()}.webm`, {
-            type: "audio/webm",
-          });
-          setCreateFiles((prev) => [...prev, file].slice(0, 10));
+          convertBlobToMp3(blob)
+            .then((mp3File) => {
+              setCreateFiles((prev) => [...prev, mp3File].slice(0, 10));
+              toast({ title: "Grabación convertida a MP3" });
+            })
+            .catch((err) => {
+              console.error(err);
+              const ext = recordedType.includes("ogg") ? "ogg" : "webm";
+              const file = new File([blob], `grabacion-${Date.now()}.${ext}`, {
+                type: recordedType,
+              });
+              setCreateFiles((prev) => [...prev, file].slice(0, 10));
+              toast({ title: "Conversión a MP3 falló, adjuntado original" });
+            });
         }
       };
       mediaRecorderRef.current = mr;
@@ -991,24 +1011,82 @@ export default function TicketsPanelCoach({
 
   function addRecordedToFiles() {
     if (!recordedBlob) return;
-    const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
-    const file = new File([recordedBlob], `grabacion-${Date.now()}.${ext}`, {
-      type: recordedBlob.type || "audio/webm",
+    convertBlobToMp3(recordedBlob)
+      .then((mp3File) => {
+        if (editOpen) {
+          setEditFiles((prev) => [...prev, mp3File]);
+        } else {
+          setCreateFiles((prev) => [...prev, mp3File]);
+        }
+        toast({ title: "Grabación convertida a MP3" });
+      })
+      .catch((err) => {
+        console.error(err);
+        const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
+        const file = new File(
+          [recordedBlob],
+          `grabacion-${Date.now()}.${ext}`,
+          { type: recordedBlob.type || "audio/webm" }
+        );
+        if (editOpen) {
+          setEditFiles((prev) => [...prev, file]);
+        } else {
+          setCreateFiles((prev) => [...prev, file]);
+        }
+        toast({ title: "Conversión a MP3 falló, adjuntado original" });
+      })
+      .finally(() => {
+        if (audioPreviewUrl) {
+          URL.revokeObjectURL(audioPreviewUrl);
+          setAudioPreviewUrl(null);
+        }
+        setRecordedBlob(null);
+      });
+  }
+
+  async function convertBlobToMp3(blob: Blob): Promise<File> {
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioCtx = new (window.AudioContext ||
+      (window as any).webkitAudioContext)();
+    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const numChannels = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    let pcm = audioBuffer.getChannelData(0);
+    if (numChannels > 1) {
+      const ch2 = audioBuffer.getChannelData(1);
+      const mixed = new Float32Array(pcm.length);
+      for (let i = 0; i < pcm.length; i++) mixed[i] = (pcm[i] + ch2[i]) / 2;
+      pcm = mixed;
+    }
+    const pcmInt16 = new Int16Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) {
+      let s = Math.max(-1, Math.min(1, pcm[i]));
+      pcmInt16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    const lameMod: any = await import("lamejs");
+    const Mp3Encoder =
+      (lameMod && (lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder)) || null;
+    if (!Mp3Encoder) throw new Error("Mp3Encoder no disponible en lamejs");
+    const channels = 1;
+    const kbps = 128;
+    const encoder = new Mp3Encoder(channels, sampleRate, kbps);
+    const samplesPerFrame = 1152;
+    let mp3Data: Uint8Array[] = [];
+    for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
+      const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
+      const mp3buf = encoder.encodeBuffer(chunk);
+      if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
+    }
+    const end = encoder.flush();
+    if (end && end.length > 0) mp3Data.push(end);
+    const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
+    const mp3File = new File([mp3Blob], `grabacion-${Date.now()}.mp3`, {
+      type: "audio/mpeg",
     });
-
-    if (editOpen) {
-      setEditFiles((prev) => [...prev, file]);
-    } else {
-      setCreateFiles((prev) => [...prev, file]);
-    }
-
-    // cleanup preview URL
-    if (audioPreviewUrl) {
-      URL.revokeObjectURL(audioPreviewUrl);
-      setAudioPreviewUrl(null);
-    }
-    setRecordedBlob(null);
-    toast({ title: "Grabación añadida a archivos" });
+    try {
+      audioCtx.close();
+    } catch {}
+    return mp3File;
   }
 
   useEffect(() => {

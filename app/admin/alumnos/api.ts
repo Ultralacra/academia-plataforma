@@ -370,6 +370,8 @@ export type TicketFile = {
   mime_type: string | null;
   tamano_bytes: number | null;
   created_at: string | null;
+  url?: string | null;
+  has_base64?: boolean | null;
 };
 
 export async function getTicketFiles(ticketId: string): Promise<TicketFile[]> {
@@ -382,6 +384,8 @@ export async function getTicketFiles(ticketId: string): Promise<TicketFile[]> {
     mime_type: r.mime_type ?? null,
     tamano_bytes: r.tamano_bytes ?? null,
     created_at: r.created_at ?? null,
+    url: r.url ?? null,
+    has_base64: r.has_base64 ?? null,
   }));
 }
 
