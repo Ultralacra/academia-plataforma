@@ -19,6 +19,7 @@ import {
   GraduationCap,
   BarChart3,
   CreditCard,
+  ThumbsUp,
 } from "lucide-react";
 
 function StaticCard({ title, href }: { title: string; href: string }) {
@@ -107,6 +108,13 @@ export default function StudentInicioPage() {
             description="Habla con Atención al Cliente"
             href={`/admin/alumnos/${code}/chat`}
             icon={MessageSquare}
+          />
+
+          <InternalCard
+            title="Feedback"
+            description="Ver tickets y estado"
+            href={`/admin/alumnos/${code}/feedback`}
+            icon={ThumbsUp}
           />
 
           {/* Ocultar Sesiones y Bonos para alumnos */}

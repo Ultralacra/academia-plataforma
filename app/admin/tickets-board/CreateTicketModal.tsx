@@ -26,12 +26,14 @@ import {
   X,
   Link as LinkIcon,
   Paperclip,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import {
   getAllStudents,
   getOpciones,
   createTicket,
+  uploadTicketFiles,
   type StudentRow,
 } from "@/app/admin/alumnos/api";
 
@@ -39,13 +41,18 @@ export function CreateTicketModal({
   open,
   onOpenChange,
   onSuccess,
+  defaultStudentCode,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  defaultStudentCode?: string;
 }) {
   const [loading, setLoading] = useState(false);
-  const [creating, setCreating] = useState(false);
+  // const [creating, setCreating] = useState(false); // Replaced by flowStage
+  const [flowStage, setFlowStage] = useState<
+    "form" | "creating" | "uploading" | "success"
+  >("form");
 
   // Form state
   const [studentQuery, setStudentQuery] = useState("");
@@ -56,6 +63,10 @@ export function CreateTicketModal({
   const [links, setLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [uploadProgress, setUploadProgress] = useState({
+    current: 0,
+    total: 0,
+  });
 
   // Data state
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -65,18 +76,19 @@ export function CreateTicketModal({
     if (open) {
       // Reset form
       setStudentQuery("");
-      setSelectedStudentId("");
+      setSelectedStudentId(defaultStudentCode || "");
       setTitle("");
       setType("");
       setDescription("");
       setLinks([]);
       setNewLink("");
       setFiles([]);
+      setFlowStage("form");
 
       // Load data
       loadData();
     }
-  }, [open]);
+  }, [open, defaultStudentCode]);
 
   async function loadData() {
     try {
@@ -124,27 +136,119 @@ export function CreateTicketModal({
     if (!selectedStudentId || !title.trim() || !type) return;
 
     try {
-      setCreating(true);
+      setFlowStage("creating");
 
-      await createTicket({
+      // 1. Crear ticket (sin archivos pesados aún)
+      const created = await createTicket({
         nombre: title,
         id_alumno: selectedStudentId,
         tipo: type,
         descripcion: description,
-        archivos: files,
+        archivos: [], // Se subirán en paso 2
         urls: links,
       });
 
-      toast({ title: "Ticket creado exitosamente" });
-      onOpenChange(false);
-      if (onSuccess) onSuccess();
+      const payload = created?.data ?? created;
+      // Intentar obtener el código (UUID) o ID del ticket
+      const ticketId = payload?.codigo ?? payload?.id;
+
+      if (!ticketId) {
+        throw new Error("No se pudo obtener el ID del ticket creado");
+      }
+
+      // 2. Subir archivos si existen
+      if (files.length > 0) {
+        setFlowStage("uploading");
+        setUploadProgress({ current: 0, total: files.length });
+
+        // Subir uno por uno
+        for (let i = 0; i < files.length; i++) {
+          setUploadProgress({ current: i + 1, total: files.length });
+          await uploadTicketFiles(String(ticketId), [files[i]]);
+        }
+      }
+
+      setFlowStage("success");
+
+      // Cerrar automáticamente después de un momento
+      setTimeout(() => {
+        onOpenChange(false);
+        if (onSuccess) onSuccess();
+      }, 1500);
     } catch (e: any) {
       console.error(e);
-      toast({ title: e.message || "Error al crear ticket" });
-    } finally {
-      setCreating(false);
+      toast({
+        title: e.message || "Error al crear ticket",
+        variant: "destructive",
+      });
+      setFlowStage("form");
     }
   };
+
+  // Renderizado de estados de carga/éxito
+  if (flowStage !== "form") {
+    return (
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          if (flowStage === "form") onOpenChange(v);
+        }}
+      >
+        <DialogContent className="sm:max-w-md p-8 border-none shadow-2xl bg-white dark:bg-zinc-900">
+          <div className="flex flex-col items-center gap-6 py-4 text-center">
+            {flowStage === "creating" && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-0 bg-violet-500 blur-xl opacity-20 animate-pulse" />
+                  <Loader2 className="h-12 w-12 text-violet-600 animate-spin relative z-10" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">Creando ticket...</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Registrando la solicitud en el sistema
+                  </p>
+                </div>
+              </>
+            )}
+
+            {flowStage === "uploading" && (
+              <>
+                <div className="relative">
+                  <div className="absolute inset-0 bg-blue-500 blur-xl opacity-20 animate-pulse" />
+                  <Loader2 className="h-12 w-12 text-blue-600 animate-spin relative z-10" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-lg">
+                    Subiendo archivos...
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    Procesando archivo {uploadProgress.current} de{" "}
+                    {uploadProgress.total}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {flowStage === "success" && (
+              <>
+                <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center mb-2 animate-in zoom-in duration-300">
+                  <CheckCircle2 className="h-8 w-8" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-bold text-xl text-zinc-900 dark:text-zinc-100">
+                    ¡Ticket Creado!
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    El ticket se ha registrado correctamente.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -337,9 +441,8 @@ export function CreateTicketModal({
           </Button>
           <Button
             onClick={handleCreate}
-            disabled={creating || !selectedStudentId || !title.trim()}
+            disabled={!selectedStudentId || !title.trim()}
           >
-            {creating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Crear Ticket
           </Button>
         </DialogFooter>

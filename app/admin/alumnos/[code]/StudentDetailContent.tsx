@@ -673,13 +673,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               statusHistory={statusHistory}
               tasksHistory={tasksHistory}
             />
-            {/* Mover tickets aquí para aprovechar el espacio disponible */}
-            <div id="tickets">
-              <TicketsPanel
-                student={student}
-                onChangedTickets={setTicketsCount}
-              />
-            </div>
+            {/* Tickets movidos a la sección Feedback */}
           </div>
           {/* Columna lateral: equipo y contrato (sticky) */}
           <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24 self-start">

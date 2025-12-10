@@ -270,7 +270,11 @@ function formatPlazo(hours: number) {
   return `${sign}${h}h ${m}m`;
 }
 
-export default function TicketsBoard() {
+export default function TicketsBoard({
+  studentCode,
+}: {
+  studentCode?: string;
+}) {
   const { user } = useAuth();
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
   const isStudent = (user?.role || "").toLowerCase() === "student";
@@ -492,6 +496,7 @@ export default function TicketsBoard() {
           fechaDesde,
           fechaHasta,
           coach: coachFiltro || undefined,
+          studentCode,
         });
         if (!mounted) return;
         // Filtrar explícitamente tickets eliminados por si la API los devuelve
@@ -516,7 +521,7 @@ export default function TicketsBoard() {
       mounted = false;
       clearTimeout(t);
     };
-  }, [search, fechaDesde, fechaHasta, coachFiltro]);
+  }, [search, fechaDesde, fechaHasta, coachFiltro, studentCode]);
 
   // Snackbar inicial avisando sobre tickets en PAUSADO
   const didShowPausedToast = useRef(false);
@@ -605,6 +610,8 @@ export default function TicketsBoard() {
             search,
             fechaDesde,
             fechaHasta,
+            coach: coachFiltro || undefined,
+            studentCode,
           });
           setTickets(res.items ?? []);
         } catch {}
@@ -1548,15 +1555,17 @@ export default function TicketsBoard() {
         </div>
 
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
-          <div className="relative w-full sm:w-auto">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-64"
-              placeholder="Buscar asunto, alumno..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+          {!isStudent && (
+            <div className="relative w-full sm:w-auto">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-64"
+                placeholder="Buscar asunto, alumno..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          )}
 
           {/* Filtro por fecha: Desde */}
           <div className="relative w-full sm:w-auto">
@@ -1610,41 +1619,47 @@ export default function TicketsBoard() {
             />
           </div>
 
-          <select
-            className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-auto sm:min-w-[180px]"
-            value={coachFiltro}
-            onChange={(e) => setCoachFiltro(e.target.value)}
-            title="Filtrar por coach/equipo"
-          >
-            <option value="">Todos los coaches</option>
-            {coaches.map((c) => (
-              <option key={c.codigo} value={c.codigo}>
-                {c.nombre}
-                {c.area ? ` · ${c.area}` : ""}
-              </option>
-            ))}
-          </select>
+          {!isStudent && (
+            <select
+              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-auto sm:min-w-[180px]"
+              value={coachFiltro}
+              onChange={(e) => setCoachFiltro(e.target.value)}
+              title="Filtrar por coach/equipo"
+            >
+              <option value="">Todos los coaches</option>
+              {coaches.map((c) => (
+                <option key={c.codigo} value={c.codigo}>
+                  {c.nombre}
+                  {c.area ? ` · ${c.area}` : ""}
+                </option>
+              ))}
+            </select>
+          )}
 
-          <Button
-            size="sm"
-            onClick={handleCreateTicket}
-            className="h-9 w-full gap-2 sm:w-auto"
-            title="Crear nuevo ticket"
-          >
-            <Plus className="h-4 w-4" />
-            Nuevo Ticket
-          </Button>
+          {!isStudent && (
+            <>
+              <Button
+                size="sm"
+                onClick={handleCreateTicket}
+                className="h-9 w-full gap-2 sm:w-auto"
+                title="Crear nuevo ticket"
+              >
+                <Plus className="h-4 w-4" />
+                Nuevo Ticket
+              </Button>
 
-          <Button
-            variant={onlyMyTickets ? "default" : "outline"}
-            size="sm"
-            onClick={() => setOnlyMyTickets(!onlyMyTickets)}
-            className="h-9 w-full gap-2 sm:w-auto"
-            title="Mostrar solo mis tickets creados"
-          >
-            <User className="h-4 w-4" />
-            Mis Tickets
-          </Button>
+              <Button
+                variant={onlyMyTickets ? "default" : "outline"}
+                size="sm"
+                onClick={() => setOnlyMyTickets(!onlyMyTickets)}
+                className="h-9 w-full gap-2 sm:w-auto"
+                title="Mostrar solo mis tickets creados"
+              >
+                <User className="h-4 w-4" />
+                Mis Tickets
+              </Button>
+            </>
+          )}
 
           <Button
             onClick={async () => {
@@ -1657,6 +1672,7 @@ export default function TicketsBoard() {
                   fechaDesde,
                   fechaHasta,
                   coach: coachFiltro || undefined,
+                  studentCode,
                 });
                 setTickets(res.items ?? []);
                 toast({ title: "Tickets recargados" });
@@ -3776,6 +3792,7 @@ export default function TicketsBoard() {
                       fechaDesde,
                       fechaHasta,
                       coach: coachFiltro || undefined,
+                      studentCode,
                     });
                     setTickets(res.items ?? []);
                   } catch (err) {
@@ -3867,6 +3884,7 @@ export default function TicketsBoard() {
       <CreateTicketModal
         open={createModalOpen}
         onOpenChange={setCreateModalOpen}
+        defaultStudentCode={studentCode}
         onSuccess={() => {
           // Recargar tickets
           setLoading(true);
@@ -3877,6 +3895,7 @@ export default function TicketsBoard() {
             fechaDesde,
             fechaHasta,
             coach: coachFiltro || undefined,
+            studentCode,
           })
             .then((res) => setTickets(res.items ?? []))
             .catch(() => {})

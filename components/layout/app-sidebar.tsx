@@ -14,6 +14,7 @@ import {
   Moon,
   Sun,
   CreditCard,
+  ThumbsUp,
 } from "lucide-react";
 import {
   Sidebar,
@@ -124,6 +125,16 @@ export function AppSidebar() {
                   icon: GraduationCap,
                 },
                 {
+                  title: "Chat soporte",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Feedback",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
+                  icon: ThumbsUp,
+                },
+                {
                   title: "Métricas ADS",
                   url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
                   icon: BarChart3,
@@ -139,20 +150,62 @@ export function AppSidebar() {
                   icon: Users,
                 },
                 {
-                  title: "Pagos",
+                  title: "Seguimiento de pagos",
                   url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
                   icon: CreditCard,
+                },
+              ]
+            : adminItems
+        ) as MenuItem[];
+      case "coach":
+        return (
+          alumnoCodeInPath
+            ? [
+                ...coachItems,
+                { title: "Vista Alumno", isSeparator: true },
+                {
+                  title: "Inicio",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/inicio`,
+                  icon: Home,
+                },
+                {
+                  title: "Mi perfil",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/perfil`,
+                  icon: GraduationCap,
                 },
                 {
                   title: "Chat soporte",
                   url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
                   icon: MessageSquare,
                 },
+                {
+                  title: "Feedback",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
+                  icon: ThumbsUp,
+                },
+                {
+                  title: "Métricas ADS",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
+                  icon: BarChart3,
+                },
+                {
+                  title: "Sesiones",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/sesiones`,
+                  icon: CalendarClock,
+                },
+                {
+                  title: "Bonos",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/bonos`,
+                  icon: Users,
+                },
+                {
+                  title: "Seguimiento de pagos",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
+                  icon: CreditCard,
+                },
               ]
-            : adminItems
+            : coachItems
         ) as MenuItem[];
-      case "coach":
-        return coachItems;
       case "equipo": {
         const code = (user as any)?.codigo || "";
         const base = code
@@ -251,6 +304,16 @@ export function AppSidebar() {
                   icon: GraduationCap,
                 },
                 {
+                  title: "Chat soporte",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
+                  icon: MessageSquare,
+                },
+                {
+                  title: "Feedback",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/feedback`,
+                  icon: ThumbsUp,
+                },
+                {
                   title: "Métricas ADS",
                   url: `/admin/alumnos/${alumnoCodeInPath}/ads`,
                   icon: BarChart3,
@@ -266,9 +329,9 @@ export function AppSidebar() {
                   icon: Users,
                 },
                 {
-                  title: "Chat soporte",
-                  url: `/admin/alumnos/${alumnoCodeInPath}/chat`,
-                  icon: MessageSquare,
+                  title: "Seguimiento de pagos",
+                  url: `/admin/alumnos/${alumnoCodeInPath}/pagos`,
+                  icon: CreditCard,
                 },
               ]
             : base
@@ -287,6 +350,11 @@ export function AppSidebar() {
             title: "Chat soporte",
             url: `/admin/alumnos/${code}/chat`,
             icon: MessageSquare,
+          },
+          {
+            title: "Feedback",
+            url: `/admin/alumnos/${code}/feedback`,
+            icon: ThumbsUp,
           },
         ] as MenuItem[];
       }

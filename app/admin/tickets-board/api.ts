@@ -76,7 +76,43 @@ export async function getTickets(opts: {
   estado?: string;
   tipo?: string;
   coach?: string; // código/id de coach para filtrar por equipo
+  studentCode?: string;
 }) {
+  if (opts.studentCode) {
+    const url = `/client/get/tickets/${encodeURIComponent(opts.studentCode)}`;
+    const json = await apiFetch<any>(url);
+    const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+
+    const items: TicketBoardItem[] = rows.map((r: any) => ({
+      id: Number(r.id),
+      codigo: r.codigo ?? null,
+      nombre: r.nombre ?? null,
+      id_alumno: r.id_alumno ?? null,
+      alumno_nombre: r.alumno_nombre ?? null,
+      created_at: r.creacion ?? r.created_at ?? r.createdAt,
+      deadline: r.deadline ?? null,
+      estado: r.estado ?? null,
+      tipo: r.tipo ?? null,
+      plazo: null,
+      coaches: [],
+      ultimo_estado: null,
+      resuelto_por: null,
+      resuelto_por_nombre: null,
+      informante: null,
+      informante_nombre: null,
+      plazo_info: null,
+      coaches_override: null,
+    }));
+
+    return {
+      items,
+      total: items.length,
+      page: 1,
+      pageSize: items.length,
+      totalPages: 1,
+    };
+  }
+
   const q = toQuery({
     page: opts.page ?? 1,
     pageSize: opts.pageSize ?? 500,
