@@ -572,29 +572,14 @@ export default function TicketsBoard() {
       // Si ya tenemos una URL directa del archivo, usarla sin pedir base64
       const local = files.find((f) => f.id === fileId);
 
-      // Detectar si es audio o imagen
-      const nameLower = (nombre || "").toLowerCase();
-      const isAudioName = nameLower.match(/\.(mp3|wav|ogg|m4a|aac)$/);
-      const isImageName = nameLower.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/);
-
-      const mime = local?.mime_type || "";
-      const isAudioMime = mime.startsWith("audio/");
-      const isImageMime = mime.startsWith("image/");
-
-      const shouldOpenInNewTabLocal =
-        isAudioName || isImageName || isAudioMime || isImageMime;
-
       if (local?.url) {
-        if (shouldOpenInNewTabLocal) {
-          window.open(local.url, "_blank");
-        } else {
-          const a = document.createElement("a");
-          a.href = local.url as string;
-          a.download = nombre || local.nombre_archivo || "archivo";
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-        }
+        const a = document.createElement("a");
+        a.href = local.url as string;
+        a.download = nombre || local.nombre_archivo || "archivo";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
         setDownloadModalOpen(false);
         setDownloadProgress(null);
         return;
@@ -608,29 +593,16 @@ export default function TicketsBoard() {
       });
       const url = URL.createObjectURL(blob);
 
-      const fetchedMime = f.mime_type || "";
-      const fetchedNameLower = (nombre || f.nombre_archivo || "").toLowerCase();
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = nombre || f.nombre_archivo || "archivo";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
 
-      const isAudioFetched =
-        fetchedMime.startsWith("audio/") ||
-        fetchedNameLower.match(/\.(mp3|wav|ogg|m4a|aac)$/);
-      const isImageFetched =
-        fetchedMime.startsWith("image/") ||
-        fetchedNameLower.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/);
-
-      if (isAudioFetched || isImageFetched) {
-        window.open(url, "_blank");
-        // Revocar URL después de un tiempo prudente para permitir que la nueva pestaña cargue
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
-      } else {
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = nombre || f.nombre_archivo || "archivo";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      }
+      setDownloadModalOpen(false);
+      setDownloadProgress(null);
     } catch (e) {
       console.error(e);
       toast({

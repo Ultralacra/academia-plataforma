@@ -29,7 +29,9 @@ import {
   RefreshCcw,
   CheckCircle2,
   Paperclip,
+  Copy,
 } from "lucide-react";
+import { toast } from "sonner";
 import { TicketData, Attachment } from "./chat-types";
 import {
   getAttachmentUrl,
@@ -147,9 +149,22 @@ export function TicketGenerationModal({
         readFieldFromContent(content, "Título") ||
         ""
     );
-    setDescripcion(
-      parsed.descripcion || readFieldFromContent(content, "Descripción") || ""
-    );
+    let desc =
+      parsed.descripcion || readFieldFromContent(content, "Descripción") || "";
+
+    // Append student messages to description
+    const arr = Array.isArray((data as any)?.messages)
+      ? (data as any).messages
+      : [];
+    if (arr.length > 0) {
+      const msgText = arr
+        .map((m: any) => `• ${m.mensaje || m.message}`)
+        .join("\n");
+
+      if (desc) desc += "\n\n";
+      desc += `--- Mensaje Original del Alumno ---\n${msgText}`;
+    }
+    setDescripcion(desc);
     setPrioridad(
       (
         parsed.prioridad ||
@@ -370,11 +385,23 @@ export function TicketGenerationModal({
                         readFieldFromContent(c, "Título (obligatorio)") ||
                         titulo
                     );
-                    setDescripcion(
+                    let desc =
                       p.descripcion ||
-                        readFieldFromContent(c, "Descripción") ||
-                        descripcion
-                    );
+                      readFieldFromContent(c, "Descripción") ||
+                      descripcion;
+
+                    const arr = Array.isArray((data as any)?.messages)
+                      ? (data as any).messages
+                      : [];
+                    if (arr.length > 0) {
+                      const msgText = arr
+                        .map((m: any) => `• ${m.mensaje || m.message}`)
+                        .join("\n");
+
+                      if (desc) desc += "\n\n";
+                      desc += `--- Mensaje Original del Alumno ---\n${msgText}`;
+                    }
+                    setDescripcion(desc);
                     setPrioridad(
                       (
                         p.prioridad ||
@@ -824,27 +851,6 @@ export function TicketGenerationModal({
                         </div>
                       </div>
 
-                      {/* Mensaje de alumno */}
-                      {studentMessages.length > 0 && (
-                        <div className="space-y-1.5">
-                          <Label className="text-xs font-medium text-zinc-500 uppercase">
-                            Mensaje de alumno
-                          </Label>
-                          <div className="p-3 rounded-lg bg-zinc-50 dark:bg-zinc-900/50 border border-zinc-200 dark:border-zinc-800 text-xs text-zinc-700 dark:text-zinc-300 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
-                            {studentMessages.map((m: any, idx: number) => (
-                              <div key={idx} className="mb-2 last:mb-0">
-                                {m.fecha && (
-                                  <div className="text-[10px] text-zinc-400 mb-1">
-                                    {new Date(m.fecha).toLocaleString()}
-                                  </div>
-                                )}
-                                <div>{m.mensaje}</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
                       {/* Descripción */}
                       <div className="space-y-1.5">
                         <Label
@@ -954,8 +960,8 @@ export function TicketGenerationModal({
                       const descParts: string[] = [];
                       if (selectedAreaLabel)
                         descParts.push(`Área: ${selectedAreaLabel}`);
-                      if (descripcion)
-                        descParts.push(`Sugerencia de Ticket: ${descripcion}`);
+
+                      if (descripcion) descParts.push(descripcion);
                       if (recomendacion)
                         descParts.push(
                           `Recomendación o siguiente paso: ${recomendacion}`
