@@ -228,7 +228,8 @@ export default function CoachDetailPage({
     return "";
   }
   function itemParticipants(it: any): any[] {
-    const parts = it?.participants || it?.participantes || [];
+    const parts =
+      it?.participants || it?.participantes || it?.otros_participantes || [];
     return Array.isArray(parts) ? parts : [];
   }
   function chatHasEquipoPair(it: any, a: string, b: string): boolean {

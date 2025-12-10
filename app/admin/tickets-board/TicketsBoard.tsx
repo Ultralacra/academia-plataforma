@@ -571,13 +571,30 @@ export default function TicketsBoard() {
       setDownloadModalOpen(true);
       // Si ya tenemos una URL directa del archivo, usarla sin pedir base64
       const local = files.find((f) => f.id === fileId);
+
+      // Detectar si es audio o imagen
+      const nameLower = (nombre || "").toLowerCase();
+      const isAudioName = nameLower.match(/\.(mp3|wav|ogg|m4a|aac)$/);
+      const isImageName = nameLower.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/);
+
+      const mime = local?.mime_type || "";
+      const isAudioMime = mime.startsWith("audio/");
+      const isImageMime = mime.startsWith("image/");
+
+      const shouldOpenInNewTabLocal =
+        isAudioName || isImageName || isAudioMime || isImageMime;
+
       if (local?.url) {
-        const a = document.createElement("a");
-        a.href = local.url as string;
-        a.download = nombre || local.nombre_archivo || "archivo";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        if (shouldOpenInNewTabLocal) {
+          window.open(local.url, "_blank");
+        } else {
+          const a = document.createElement("a");
+          a.href = local.url as string;
+          a.download = nombre || local.nombre_archivo || "archivo";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
         setDownloadModalOpen(false);
         setDownloadProgress(null);
         return;
@@ -590,13 +607,30 @@ export default function TicketsBoard() {
         type: f.mime_type || "application/octet-stream",
       });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = nombre || f.nombre_archivo || "archivo";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+
+      const fetchedMime = f.mime_type || "";
+      const fetchedNameLower = (nombre || f.nombre_archivo || "").toLowerCase();
+
+      const isAudioFetched =
+        fetchedMime.startsWith("audio/") ||
+        fetchedNameLower.match(/\.(mp3|wav|ogg|m4a|aac)$/);
+      const isImageFetched =
+        fetchedMime.startsWith("image/") ||
+        fetchedNameLower.match(/\.(jpg|jpeg|png|gif|webp|svg|bmp)$/);
+
+      if (isAudioFetched || isImageFetched) {
+        window.open(url, "_blank");
+        // Revocar URL después de un tiempo prudente para permitir que la nueva pestaña cargue
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = nombre || f.nombre_archivo || "archivo";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
     } catch (e) {
       console.error(e);
       toast({
@@ -805,29 +839,67 @@ export default function TicketsBoard() {
     }
 
     // 3) Usar lamejs para codificar a MP3
-    // Importación dinámica para evitar cargar la librería si no se usa
-    const lameMod: any = await import(
-      /* webpackChunkName: "lamejs" */ "lamejs"
-    );
-    const Mp3Encoder =
-      (lameMod && (lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder)) || null;
-    if (!Mp3Encoder) throw new Error("Mp3Encoder no disponible en lamejs");
+    // Intentar cargar desde window.lamejs (CDN) o importar dinámicamente
+    let Mp3Encoder: any = null;
+
+    // Helper para cargar script
+    const loadScript = (src: string) => {
+      return new Promise((resolve, reject) => {
+        if (document.querySelector(`script[src="${src}"]`)) {
+          resolve(true);
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = () => resolve(true);
+        script.onerror = () => reject(new Error(`Error loading ${src}`));
+        document.body.appendChild(script);
+      });
+    };
+
+    try {
+      // Primero intentamos usar la versión global si existe
+      if (typeof (window as any).lamejs !== "undefined") {
+        Mp3Encoder = (window as any).lamejs.Mp3Encoder;
+      } else {
+        // Si no, intentamos cargar desde CDN
+        await loadScript(
+          "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"
+        );
+        if (typeof (window as any).lamejs !== "undefined") {
+          Mp3Encoder = (window as any).lamejs.Mp3Encoder;
+        }
+      }
+    } catch (e) {
+      console.error("Error cargando lamejs:", e);
+    }
+
+    if (!Mp3Encoder) {
+      throw new Error("Mp3Encoder no disponible. No se pudo cargar lamejs.");
+    }
+
     const channels = 1;
     const kbps = 128; // bitrate estándar
     const encoder = new Mp3Encoder(channels, sampleRate, kbps);
 
     const samplesPerFrame = 1152;
     let mp3Data: Uint8Array[] = [];
-    for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
-      const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
-      const mp3buf = encoder.encodeBuffer(chunk);
-      if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
+
+    try {
+      for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
+        const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
+        const mp3buf = encoder.encodeBuffer(chunk);
+        if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
+      }
+      const end = encoder.flush();
+      if (end && end.length > 0) mp3Data.push(end);
+    } catch (err) {
+      console.error("Error durante la codificación MP3:", err);
+      throw err;
     }
-    const end = encoder.flush();
-    if (end && end.length > 0) mp3Data.push(end);
 
     // 4) Crear Blob/File MP3
-    const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
+    const mp3Blob = new Blob(mp3Data as any[], { type: "audio/mpeg" });
     const mp3File = new File([mp3Blob], `grabacion-${Date.now()}.mp3`, {
       type: "audio/mpeg",
     });
