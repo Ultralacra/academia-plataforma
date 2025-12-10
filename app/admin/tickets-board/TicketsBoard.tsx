@@ -102,6 +102,7 @@ import {
   deleteTicket,
 } from "@/app/admin/alumnos/api";
 import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
+import { CreateTicketModal } from "./CreateTicketModal";
 
 type StatusKey =
   | "EN_PROGRESO"
@@ -124,6 +125,56 @@ const STATUS_STYLE: Record<StatusKey, string> = {
   PAUSADO: "bg-purple-50 text-purple-700 border-purple-200",
   RESUELTO: "bg-emerald-50 text-emerald-700 border-emerald-200",
 };
+
+// Función para convertir audio a MP3 (copiada de CoachChatInline)
+async function convertBlobToMp3(blob: Blob): Promise<File> {
+  const arrayBuffer = await blob.arrayBuffer();
+  const AudioCtx: any =
+    (window as any).AudioContext || (window as any).webkitAudioContext;
+  const audioCtx = new AudioCtx();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  const numChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  let pcm = audioBuffer.getChannelData(0);
+  if (numChannels > 1) {
+    const ch2 = audioBuffer.getChannelData(1);
+    const mixed = new Float32Array(pcm.length);
+    for (let i = 0; i < pcm.length; i++) mixed[i] = (pcm[i] + ch2[i]) / 2;
+    pcm = mixed;
+  }
+  const pcmInt16 = new Int16Array(pcm.length);
+  for (let i = 0; i < pcm.length; i++) {
+    let s = Math.max(-1, Math.min(1, pcm[i]));
+    pcmInt16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  const lameMod: any = await import("lamejs");
+  const Mp3Encoder =
+    (lameMod && (lameMod.Mp3Encoder || lameMod.default?.Mp3Encoder)) || null;
+  if (!Mp3Encoder) throw new Error("Mp3Encoder no disponible en lamejs");
+  const channels = 1;
+  const kbps = 128;
+  const encoder = new Mp3Encoder(channels, sampleRate, kbps);
+  const samplesPerFrame = 1152;
+  let mp3Data: Uint8Array[] = [];
+  for (let i = 0; i < pcmInt16.length; i += samplesPerFrame) {
+    const chunk = pcmInt16.subarray(i, i + samplesPerFrame);
+    const mp3buf = encoder.encodeBuffer(chunk);
+    if (mp3buf && mp3buf.length > 0) mp3Data.push(mp3buf);
+  }
+  const end = encoder.flush();
+  if (end && end.length > 0) mp3Data.push(end);
+  const mp3Blob = new Blob(mp3Data, { type: "audio/mpeg" });
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const ts = new Date();
+  const fname = `grabacion-${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(
+    ts.getDate()
+  )}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}.mp3`;
+  const mp3File = new File([mp3Blob], fname, { type: "audio/mpeg" });
+  try {
+    audioCtx.close();
+  } catch {}
+  return mp3File;
+}
 
 function coerceStatus(raw?: string | null): StatusKey {
   const s = (raw ?? "").toUpperCase();
@@ -270,6 +321,13 @@ export default function TicketsBoard() {
     null
   );
 
+  // Estado para crear ticket manual
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+
+  function handleCreateTicket() {
+    setCreateModalOpen(true);
+  }
+
   // Helpers: URLs y formato
   const isLikelyUrl = (s: string) =>
     /^(https?:\/\/|www\.)\S+$/i.test(String(s || "").trim());
@@ -394,6 +452,16 @@ export default function TicketsBoard() {
 
   const [fechaDesde, setFechaDesde] = useState<string>(fourDaysAgoStr);
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
+
+  // Cargar filtros de fecha desde localStorage al montar
+  useEffect(() => {
+    try {
+      const savedDesde = localStorage.getItem("ticketsBoard_fechaDesde");
+      const savedHasta = localStorage.getItem("ticketsBoard_fechaHasta");
+      if (savedDesde) setFechaDesde(savedDesde);
+      if (savedHasta) setFechaHasta(savedHasta);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -569,50 +637,72 @@ export default function TicketsBoard() {
       setDownloadMessage("Descargando archivo...");
       setDownloadProgress(null);
       setDownloadModalOpen(true);
-      // Si ya tenemos una URL directa del archivo, usarla sin pedir base64
+
       const local = files.find((f) => f.id === fileId);
+      let blob: Blob | null = null;
+      let finalName = nombre || local?.nombre_archivo || "archivo";
+      let finalMime = local?.mime_type || "";
 
+      // 1. Intentar descargar desde URL directa si existe (evita base64 pesado)
       if (local?.url) {
-        const a = document.createElement("a");
-        a.href = local.url as string;
-        a.download = nombre || local.nombre_archivo || "archivo";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        setDownloadModalOpen(false);
-        setDownloadProgress(null);
-        return;
+        try {
+          const res = await fetch(local.url);
+          if (res.ok) {
+            blob = await res.blob();
+            finalMime = blob.type || finalMime;
+          }
+        } catch (err) {
+          console.warn("Fallo descarga directa, intentando vía API...", err);
+        }
       }
-      const f = await getTicketFile(fileId);
-      const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
-        c.charCodeAt(0)
-      );
-      const blob = new Blob([b], {
-        type: f.mime_type || "application/octet-stream",
-      });
-      const url = URL.createObjectURL(blob);
 
+      // 2. Si no hay URL o falló el fetch, usar endpoint de API (base64)
+      if (!blob) {
+        const f = await getTicketFile(fileId);
+        const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
+          c.charCodeAt(0)
+        );
+        blob = new Blob([b], {
+          type: f.mime_type || "application/octet-stream",
+        });
+        finalName = nombre || f.nombre_archivo || "archivo";
+        finalMime = f.mime_type || "";
+      }
+
+      if (!blob) throw new Error("No se pudo obtener el archivo");
+
+      // 3. Crear URL local y forzar descarga
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = nombre || f.nombre_archivo || "archivo";
+
+      // Asegurar extensión correcta para audios
+      if (finalMime.startsWith("audio/") && !/\.\w+$/.test(finalName)) {
+        if (finalMime.includes("mpeg") || finalMime.includes("mp3"))
+          finalName += ".mp3";
+        else if (finalMime.includes("wav")) finalName += ".wav";
+        else if (finalMime.includes("ogg")) finalName += ".ogg";
+        else if (finalMime.includes("webm")) finalName += ".webm";
+        else if (finalMime.includes("mp4") || finalMime.includes("aac"))
+          finalName += ".m4a";
+      }
+
+      a.download = finalName;
       document.body.appendChild(a);
       a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+
+      // Limpieza
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
 
       setDownloadModalOpen(false);
       setDownloadProgress(null);
     } catch (e) {
       console.error(e);
-      toast({
-        title: "Error al descargar",
-        description: "No se pudo descargar el archivo.",
-        variant: "destructive",
-      });
-    } finally {
       setDownloadModalOpen(false);
-      setDownloadProgress(null);
+      toast({ title: "Error al descargar archivo" });
     }
   }
 
@@ -1479,9 +1569,15 @@ export default function TicketsBoard() {
               onChange={(e) => {
                 const v = e.target.value;
                 setFechaDesde(v);
+                try {
+                  localStorage.setItem("ticketsBoard_fechaDesde", v);
+                } catch {}
                 // Si 'Desde' supera a 'Hasta', ajustamos 'Hasta'
                 if (fechaHasta && v && v > fechaHasta) {
                   setFechaHasta(v);
+                  try {
+                    localStorage.setItem("ticketsBoard_fechaHasta", v);
+                  } catch {}
                 }
               }}
               title="Fecha desde"
@@ -1499,9 +1595,15 @@ export default function TicketsBoard() {
               onChange={(e) => {
                 const v = e.target.value;
                 setFechaHasta(v);
+                try {
+                  localStorage.setItem("ticketsBoard_fechaHasta", v);
+                } catch {}
                 // Si 'Hasta' queda antes de 'Desde', ajustamos 'Desde'
                 if (fechaDesde && v && v < fechaDesde) {
                   setFechaDesde(v);
+                  try {
+                    localStorage.setItem("ticketsBoard_fechaDesde", v);
+                  } catch {}
                 }
               }}
               title="Fecha hasta"
@@ -1522,6 +1624,16 @@ export default function TicketsBoard() {
               </option>
             ))}
           </select>
+
+          <Button
+            size="sm"
+            onClick={handleCreateTicket}
+            className="h-9 w-full gap-2 sm:w-auto"
+            title="Crear nuevo ticket"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo Ticket
+          </Button>
 
           <Button
             variant={onlyMyTickets ? "default" : "outline"}
@@ -3751,6 +3863,26 @@ export default function TicketsBoard() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+      {/* Modal: Crear Ticket Manual */}
+      <CreateTicketModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+        onSuccess={() => {
+          // Recargar tickets
+          setLoading(true);
+          getTickets({
+            page: 1,
+            pageSize: 500,
+            search,
+            fechaDesde,
+            fechaHasta,
+            coach: coachFiltro || undefined,
+          })
+            .then((res) => setTickets(res.items ?? []))
+            .catch(() => {})
+            .finally(() => setLoading(false));
+        }}
+      />
     </div>
   );
 }
