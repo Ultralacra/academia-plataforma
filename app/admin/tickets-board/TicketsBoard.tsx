@@ -48,6 +48,7 @@ import {
   Link as LinkIcon,
   Plus,
   Maximize,
+  Tag,
 } from "lucide-react";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import {
@@ -269,9 +270,9 @@ export default function TicketsBoard({
     null
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState<"general" | "detalle" | "notas">(
-    "general"
-  );
+  const [detailTab, setDetailTab] = useState<
+    "general" | "respuesta" | "detalle" | "notas"
+  >("general");
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
   const [ticketDetailError, setTicketDetailError] = useState<string | null>(
@@ -335,8 +336,11 @@ export default function TicketsBoard({
   >({});
 
   const [editFiles, setEditFiles] = useState<File[]>([]);
+  const [generalFiles, setGeneralFiles] = useState<File[]>([]);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
+  const generalFileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
+  const [uploadingGeneralFiles, setUploadingGeneralFiles] = useState(false);
   // Audio recording and URL states
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -2439,15 +2443,15 @@ export default function TicketsBoard({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setDetailTab("detalle")}
+                      onClick={() => setDetailTab("respuesta")}
                       className={`px-3 py-1.5 text-xs border-l ${
-                        detailTab === "detalle"
+                        detailTab === "respuesta"
                           ? "bg-slate-900 text-white"
                           : "hover:bg-gray-50"
                       }`}
-                      title="Detalle del ticket (API)"
+                      title="Respuesta del Coach"
                     >
-                      Detalle
+                      Respuesta Coach
                     </button>
                     <button
                       type="button"
@@ -2490,6 +2494,49 @@ export default function TicketsBoard({
                       />
                     </div>
 
+                    {/* Coaches (Movido desde Detalle) */}
+                    {(() => {
+                      const overrides = (ticketDetail as any)?.coaches_override;
+                      const hasOverride =
+                        Array.isArray(overrides) && overrides.length > 0;
+                      const source = hasOverride
+                        ? overrides
+                        : ticketDetail?.coaches;
+
+                      if (!Array.isArray(source) || source.length === 0)
+                        return null;
+
+                      // Mostrar solo el primero si el usuario pide "el coach"
+                      const c = source[0];
+                      // Normalizar si es string o objeto
+                      const name =
+                        typeof c === "string" ? c : c.nombre ?? "Coach";
+                      const area = typeof c === "string" ? null : c.area;
+                      const puesto = typeof c === "string" ? null : c.puesto;
+
+                      return (
+                        <div className="flex flex-wrap gap-1.5">
+                          <span
+                            className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                            title={`${name}${area ? ` · ${area}` : ""}${
+                              puesto ? ` · ${puesto}` : ""
+                            }`}
+                          >
+                            {name.slice(0, 20)}
+                            {area ? ` · ${String(area).slice(0, 10)}` : ""}
+                          </span>
+                          {source.length > 1 && (
+                            <span
+                              className="text-xs text-slate-400 flex items-center"
+                              title="Más coaches asignados"
+                            >
+                              +{source.length - 1}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+
                     {/* Lista de Propiedades (Estilo Notion) */}
                     <div className="grid grid-cols-[140px_1fr] gap-y-3 text-sm items-start">
                       {/* Alumno */}
@@ -2498,6 +2545,16 @@ export default function TicketsBoard({
                       </div>
                       <div className="min-h-[24px] flex items-center font-medium">
                         {ticketDetail?.alumno_nombre || "—"}
+                      </div>
+
+                      {/* Tipo (Movido desde Detalle) */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <Tag className="h-4 w-4" /> <span>Tipo</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
+                          {ticketDetail?.tipo || "—"}
+                        </span>
                       </div>
 
                       {/* Tarea (Links) - Integrado aquí */}
@@ -2860,12 +2917,368 @@ export default function TicketsBoard({
 
                     <Separator />
 
-                    {/* Archivos (Compacto) */}
+                    {/* Descripción y tareas (Movido desde Detalle) */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium text-slate-900">
+                          Descripción
+                        </div>
+                        {!descEditing && canEdit && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              setDescDraft(
+                                String(ticketDetail?.descripcion || "")
+                              );
+                              setDescEditing(true);
+                            }}
+                          >
+                            Editar
+                          </Button>
+                        )}
+                      </div>
+                      {!descEditing ? (
+                        <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
+                          {ticketDetail?.descripcion || "—"}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Textarea
+                            rows={8}
+                            value={descDraft}
+                            onChange={(e) => setDescDraft(e.target.value)}
+                            placeholder="Escribe la descripción del ticket..."
+                          />
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setDescEditing(false);
+                                setDescDraft("");
+                              }}
+                              disabled={savingDesc}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={async () => {
+                                if (!selectedTicket?.codigo) return;
+                                setSavingDesc(true);
+                                try {
+                                  await updateTicket(selectedTicket.codigo, {
+                                    descripcion: (descDraft || "").trim(),
+                                  } as any);
+                                  await loadTicketDetail(selectedTicket.codigo);
+                                  setDescEditing(false);
+                                  toast({
+                                    title: "Descripción actualizada",
+                                  });
+                                } catch (e) {
+                                  console.error(e);
+                                  toast({
+                                    title: "Error al actualizar descripción",
+                                  });
+                                } finally {
+                                  setSavingDesc(false);
+                                }
+                              }}
+                              disabled={savingDesc}
+                            >
+                              {savingDesc ? "Guardando..." : "Guardar"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {(() => {
+                        const urlList: string[] = [
+                          ...extractUrlsFromDescription(
+                            ticketDetail?.descripcion
+                          ),
+                          ...(
+                            (Array.isArray((ticketDetail as any)?.links)
+                              ? (ticketDetail as any).links
+                              : []) as any[]
+                          )
+                            .map((it: any) =>
+                              typeof it === "string"
+                                ? it
+                                : it?.url || it?.link || it?.enlace || ""
+                            )
+                            .filter((s: string) => !!s),
+                        ];
+                        // Dedupe final
+                        const seen = new Set<string>();
+                        const links = urlList.filter((u) => {
+                          const k = String(u || "").toLowerCase();
+                          if (!k) return false;
+                          if (seen.has(k)) return false;
+                          seen.add(k);
+                          return true;
+                        });
+                        return links.length > 0 ? (
+                          <div className="pt-2">
+                            <div className="text-xs font-medium text-slate-500 mb-1">
+                              Enlaces detectados
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              {links.map((u, i) => (
+                                <a
+                                  key={i}
+                                  href={normalizeUrl(u)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sky-600 underline break-all text-sm"
+                                >
+                                  {u}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+
+                    <Separator />
+
+                    {/* Archivos Adjuntos (Contexto del Ticket) */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
                           <Paperclip className="h-4 w-4 text-slate-500" />{" "}
-                          Archivos
+                          Archivos Adjuntos
+                        </div>
+                        <div className="flex gap-2">
+                          <input
+                            ref={generalFileInputRef}
+                            type="file"
+                            className="hidden"
+                            multiple
+                            onChange={(e) => {
+                              const picked = Array.from(e.target.files ?? []);
+                              if (!picked.length) return;
+                              setGeneralFiles((prev) =>
+                                [...prev, ...picked].slice(0, 10)
+                              );
+                              e.currentTarget.value = "";
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs"
+                            onClick={() => generalFileInputRef.current?.click()}
+                          >
+                            + Agregar Archivo
+                          </Button>
+                        </div>
+                      </div>
+
+                      {files.length === 0 && generalFiles.length === 0 ? (
+                        <div className="text-xs text-slate-500 italic">
+                          No hay archivos adjuntos.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {files
+                            .filter((f) => {
+                              // Heurística: Archivos creados cerca de la creación del ticket (< 5 min)
+                              // se consideran "originales" del alumno.
+                              // O si tienen prefijo [CTX]
+                              const name = f.nombre_archivo || "";
+                              if (name.startsWith("[CTX]")) return true;
+                              if (name.startsWith("[RES]")) return false;
+
+                              if (!ticketDetail?.created_at || !f.created_at)
+                                return true; // Si no hay fecha, mostrar por defecto
+                              const ticketTime = new Date(
+                                ticketDetail.created_at
+                              ).getTime();
+                              const fileTime = new Date(f.created_at).getTime();
+                              const diffMinutes =
+                                (fileTime - ticketTime) / 1000 / 60;
+                              return diffMinutes < 5;
+                            })
+                            .map((f) => (
+                              <div
+                                key={f.id}
+                                className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs group"
+                              >
+                                <div className="shrink-0 text-slate-400">
+                                  {iconFor(f.mime_type, f.nombre_archivo)}
+                                </div>
+                                <div
+                                  className="flex-1 truncate"
+                                  title={f.nombre_archivo}
+                                >
+                                  {f.nombre_archivo.replace(/^\[CTX\]\s*/, "")}
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {!(
+                                    f.mime_type ||
+                                    mimeFromName(f.nombre_archivo)
+                                  )?.startsWith("audio/") && (
+                                    <button
+                                      onClick={() =>
+                                        downloadFile(f.id, f.nombre_archivo)
+                                      }
+                                      className="text-slate-400 hover:text-slate-700"
+                                      title="Descargar"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => openPreview(f)}
+                                    className="text-slate-400 hover:text-slate-700"
+                                    title="Ver"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                  </button>
+                                  {canEdit && (
+                                    <button
+                                      onClick={() =>
+                                        setFileToDelete({
+                                          id: f.id,
+                                          nombre_archivo: f.nombre_archivo,
+                                        })
+                                      }
+                                      className="text-slate-400 hover:text-red-600"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          {generalFiles.map((f, i) => (
+                            <div
+                              key={`new-gen-${i}`}
+                              className="flex items-center gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
+                            >
+                              <div className="shrink-0 text-blue-400">
+                                {iconFor(f.type, f.name)}
+                              </div>
+                              <div className="flex-1 truncate font-medium text-blue-700">
+                                {f.name}
+                              </div>
+                              <button
+                                onClick={() =>
+                                  setGeneralFiles((prev) =>
+                                    prev.filter((_, idx) => idx !== i)
+                                  )
+                                }
+                                className="text-blue-400 hover:text-blue-700"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {generalFiles.length > 0 && (
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            if (!selectedTicket?.codigo) return;
+                            setUploadingGeneralFiles(true);
+                            try {
+                              // Renombrar archivos con prefijo [CTX]
+                              const renamedFiles = generalFiles.map((f) => {
+                                return new File([f], `[CTX] ${f.name}`, {
+                                  type: f.type,
+                                });
+                              });
+
+                              await uploadTicketFiles(
+                                selectedTicket.codigo,
+                                renamedFiles
+                              );
+                              toast({ title: "Archivos subidos" });
+                              setGeneralFiles([]);
+                              await loadFilesForTicket(selectedTicket.codigo);
+                            } catch (e) {
+                              console.error(e);
+                              toast({ title: "Error al subir archivos" });
+                            } finally {
+                              setUploadingGeneralFiles(false);
+                            }
+                          }}
+                          disabled={uploadingGeneralFiles}
+                        >
+                          {uploadingGeneralFiles
+                            ? "Subiendo..."
+                            : "Subir archivos"}
+                        </Button>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    {/* Estados (Movido desde Detalle) */}
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-slate-900">
+                        Historial de Estados
+                      </div>
+                      {ticketDetail?.ultimo_estado?.estatus && (
+                        <div className="text-xs text-slate-600">
+                          Último:{" "}
+                          {
+                            STATUS_LABEL[
+                              coerceStatus(ticketDetail.ultimo_estado.estatus)
+                            ]
+                          }
+                          {ticketDetail?.ultimo_estado?.fecha && (
+                            <>
+                              {" · "}
+                              {new Date(
+                                ticketDetail.ultimo_estado.fecha
+                              ).toLocaleString("es-ES")}
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {Array.isArray(ticketDetail?.estados) &&
+                      ticketDetail.estados.length > 0 ? (
+                        <div className="mt-1 space-y-1">
+                          {ticketDetail.estados.map((e: any) => (
+                            <div
+                              key={e.id}
+                              className="flex items-center gap-2 text-xs text-slate-700"
+                            >
+                              <span
+                                className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
+                                  STATUS_STYLE[coerceStatus(e.estatus_id)]
+                                }`}
+                              >
+                                {STATUS_LABEL[coerceStatus(e.estatus_id)]}
+                              </span>
+                              <span>
+                                {new Date(e.created_at).toLocaleString("es-ES")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500">
+                          Sin historial
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={detailTab === "respuesta" ? "block" : "hidden"}>
+                  <div className="p-6 space-y-8">
+                    {/* Archivos y Herramientas de Respuesta */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                          <Paperclip className="h-4 w-4 text-slate-500" /> Tu
+                          Respuesta (Archivos y Evidencias)
                         </div>
                         <div className="flex gap-2">
                           <input
@@ -2888,62 +3301,81 @@ export default function TicketsBoard({
                             className="h-7 text-xs"
                             onClick={() => editFileInputRef.current?.click()}
                           >
-                            + Agregar
+                            + Agregar Archivo
                           </Button>
                         </div>
                       </div>
 
-                      {/* Lista de archivos existentes + nuevos */}
+                      {/* Lista de archivos existentes (Filtrados: Solo respuestas > 5 min) + nuevos */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {files.map((f) => (
-                          <div
-                            key={f.id}
-                            className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs group"
-                          >
-                            <div className="shrink-0 text-slate-400">
-                              {iconFor(f.mime_type, f.nombre_archivo)}
-                            </div>
+                        {files
+                          .filter((f) => {
+                            // Heurística inversa: Archivos creados > 5 min después del ticket
+                            // se consideran "respuestas" o evidencias del coach.
+                            // O si tienen prefijo [RES]
+                            const name = f.nombre_archivo || "";
+                            if (name.startsWith("[RES]")) return true;
+                            if (name.startsWith("[CTX]")) return false;
+
+                            if (!ticketDetail?.created_at || !f.created_at)
+                              return false; // Si no hay fecha, asumimos que es original (General)
+                            const ticketTime = new Date(
+                              ticketDetail.created_at
+                            ).getTime();
+                            const fileTime = new Date(f.created_at).getTime();
+                            const diffMinutes =
+                              (fileTime - ticketTime) / 1000 / 60;
+                            return diffMinutes >= 5;
+                          })
+                          .map((f) => (
                             <div
-                              className="flex-1 truncate"
-                              title={f.nombre_archivo}
+                              key={f.id}
+                              className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs group"
                             >
-                              {f.nombre_archivo}
-                            </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {!(
-                                f.mime_type || mimeFromName(f.nombre_archivo)
-                              )?.startsWith("audio/") && (
+                              <div className="shrink-0 text-slate-400">
+                                {iconFor(f.mime_type, f.nombre_archivo)}
+                              </div>
+                              <div
+                                className="flex-1 truncate"
+                                title={f.nombre_archivo}
+                              >
+                                {f.nombre_archivo.replace(/^\[RES\]\s*/, "")}
+                              </div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {!(
+                                  f.mime_type || mimeFromName(f.nombre_archivo)
+                                )?.startsWith("audio/") && (
+                                  <button
+                                    onClick={() =>
+                                      downloadFile(f.id, f.nombre_archivo)
+                                    }
+                                    className="text-slate-400 hover:text-slate-700"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() =>
-                                    downloadFile(f.id, f.nombre_archivo)
-                                  }
+                                  onClick={() => openPreview(f)}
                                   className="text-slate-400 hover:text-slate-700"
                                 >
-                                  <Download className="h-3 w-3" />
+                                  <Eye className="h-3 w-3" />
                                 </button>
-                              )}
-                              <button
-                                onClick={() => openPreview(f)}
-                                className="text-slate-400 hover:text-slate-700"
-                              >
-                                <Eye className="h-3 w-3" />
-                              </button>
-                              {canEdit && (
-                                <button
-                                  onClick={() =>
-                                    setFileToDelete({
-                                      id: f.id,
-                                      nombre_archivo: f.nombre_archivo,
-                                    })
-                                  }
-                                  className="text-slate-400 hover:text-red-600"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              )}
+                                {canEdit && (
+                                  <button
+                                    onClick={() =>
+                                      setFileToDelete({
+                                        id: f.id,
+                                        nombre_archivo: f.nombre_archivo,
+                                      })
+                                    }
+                                    className="text-slate-400 hover:text-red-600"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
                         {editFiles.map((f, i) => (
                           <div
                             key={`new-${i}`}
@@ -3024,9 +3456,16 @@ export default function TicketsBoard({
                                 filesToUpload = processed;
                               }
 
+                              // Renombrar con prefijo [RES]
+                              const renamedFiles = filesToUpload.map((f) => {
+                                return new File([f], `[RES] ${f.name}`, {
+                                  type: f.type,
+                                });
+                              });
+
                               await uploadTicketFiles(
                                 selectedTicket.codigo,
-                                filesToUpload
+                                renamedFiles
                               );
                               toast({ title: "Archivos subidos" });
                               setEditFiles([]);
@@ -3098,7 +3537,7 @@ export default function TicketsBoard({
                     {/* Observaciones */}
                     <div className="space-y-3">
                       <Label className="text-sm font-medium">
-                        Observaciones
+                        Observaciones y Chat
                       </Label>
                       <div className="space-y-3 max-h-[300px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
                         {commentsLoading ? (
@@ -3228,321 +3667,6 @@ export default function TicketsBoard({
                         </div>
                       )}
                     </div>
-                  </div>
-                </div>
-
-                <div className={detailTab === "detalle" ? "block" : "hidden"}>
-                  <div className="p-6 space-y-4">
-                    {ticketDetailLoading ? (
-                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
-                        Cargando detalle…
-                      </div>
-                    ) : ticketDetailError ? (
-                      <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                        {ticketDetailError}
-                      </div>
-                    ) : ticketDetail ? (
-                      <>
-                        {/* Resumen encabezado */}
-                        <div className="rounded-lg border border-slate-200 bg-white p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-base font-semibold text-slate-900">
-                                {ticketDetail?.nombre || "Ticket"}
-                              </div>
-                              {ticketDetail?.codigo && (
-                                <div className="text-xs text-slate-500 break-all">
-                                  Código: {ticketDetail.codigo}
-                                </div>
-                              )}
-                            </div>
-                            {ticketDetail?.estado && (
-                              <span
-                                className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-                                  STATUS_STYLE[
-                                    coerceStatus(ticketDetail.estado as any)
-                                  ]
-                                }`}
-                              >
-                                {
-                                  STATUS_LABEL[
-                                    coerceStatus(ticketDetail.estado as any)
-                                  ]
-                                }
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
-                            <div className="space-y-1">
-                              <div className="text-slate-500 text-xs">
-                                Alumno
-                              </div>
-                              <div className="font-medium break-all">
-                                {ticketDetail?.alumno_nombre || "—"}
-                              </div>
-                              {ticketDetail?.id_alumno && (
-                                <div className="text-xs text-slate-500 break-all">
-                                  ID: {ticketDetail.id_alumno}
-                                </div>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <div className="text-slate-500 text-xs">Tipo</div>
-                              <div className="font-medium">
-                                {ticketDetail?.tipo || "—"}
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <div className="text-slate-500 text-xs">
-                                Creado
-                              </div>
-                              <div>
-                                {ticketDetail?.created_at
-                                  ? new Date(
-                                      ticketDetail.created_at
-                                    ).toLocaleString("es-ES")
-                                  : "—"}
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <div className="text-slate-500 text-xs">
-                                Deadline
-                              </div>
-                              <div>
-                                {ticketDetail?.deadline
-                                  ? new Date(
-                                      ticketDetail.deadline
-                                    ).toLocaleString("es-ES")
-                                  : "—"}
-                              </div>
-                            </div>
-                            {ticketDetail?.plazo && (
-                              <div className="space-y-1">
-                                <div className="text-slate-500 text-xs">
-                                  Plazo
-                                </div>
-                                <div>{String(ticketDetail.plazo)}</div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Descripción y tareas */}
-                        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm font-medium">
-                              Descripción
-                            </div>
-                            {!descEditing && canEdit && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setDescDraft(
-                                    String(ticketDetail?.descripcion || "")
-                                  );
-                                  setDescEditing(true);
-                                }}
-                              >
-                                Editar
-                              </Button>
-                            )}
-                          </div>
-                          {!descEditing ? (
-                            <div className="whitespace-pre-wrap text-sm text-slate-800">
-                              {ticketDetail?.descripcion || "—"}
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              <Textarea
-                                rows={8}
-                                value={descDraft}
-                                onChange={(e) => setDescDraft(e.target.value)}
-                                placeholder="Escribe la descripción del ticket..."
-                              />
-                              <div className="flex items-center justify-end gap-2">
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setDescEditing(false);
-                                    setDescDraft("");
-                                  }}
-                                  disabled={savingDesc}
-                                >
-                                  Cancelar
-                                </Button>
-                                <Button
-                                  onClick={async () => {
-                                    if (!selectedTicket?.codigo) return;
-                                    setSavingDesc(true);
-                                    try {
-                                      await updateTicket(
-                                        selectedTicket.codigo,
-                                        {
-                                          descripcion: (descDraft || "").trim(),
-                                        } as any
-                                      );
-                                      await loadTicketDetail(
-                                        selectedTicket.codigo
-                                      );
-                                      setDescEditing(false);
-                                      toast({
-                                        title: "Descripción actualizada",
-                                      });
-                                    } catch (e) {
-                                      console.error(e);
-                                      toast({
-                                        title:
-                                          "Error al actualizar descripción",
-                                      });
-                                    } finally {
-                                      setSavingDesc(false);
-                                    }
-                                  }}
-                                  disabled={savingDesc}
-                                >
-                                  {savingDesc ? "Guardando..." : "Guardar"}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                          {(() => {
-                            const urlList: string[] = [
-                              ...extractUrlsFromDescription(
-                                ticketDetail?.descripcion
-                              ),
-                              ...(
-                                (Array.isArray((ticketDetail as any)?.links)
-                                  ? (ticketDetail as any).links
-                                  : []) as any[]
-                              )
-                                .map((it: any) =>
-                                  typeof it === "string"
-                                    ? it
-                                    : it?.url || it?.link || it?.enlace || ""
-                                )
-                                .filter((s: string) => !!s),
-                            ];
-                            // Dedupe final
-                            const seen = new Set<string>();
-                            const links = urlList.filter((u) => {
-                              const k = String(u || "").toLowerCase();
-                              if (!k) return false;
-                              if (seen.has(k)) return false;
-                              seen.add(k);
-                              return true;
-                            });
-                            return links.length > 0 ? (
-                              <div className="pt-1">
-                                <div className="text-sm font-medium">
-                                  Tareas
-                                </div>
-                                <div className="mt-1 flex flex-col gap-1">
-                                  {links.map((u, i) => (
-                                    <a
-                                      key={i}
-                                      href={normalizeUrl(u)}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-sky-600 underline break-all text-sm"
-                                    >
-                                      {u}
-                                    </a>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null;
-                          })()}
-                        </div>
-
-                        {/* Coaches */}
-                        {Array.isArray(ticketDetail?.coaches) &&
-                          ticketDetail.coaches.length > 0 && (
-                            <div className="rounded-lg border border-slate-200 bg-white p-4">
-                              <div className="text-sm font-medium mb-2">
-                                Coaches
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {ticketDetail.coaches.map(
-                                  (c: any, idx: number) => (
-                                    <span
-                                      key={`${
-                                        c.codigo_equipo ?? c.nombre ?? idx
-                                      }`}
-                                      className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                                      title={`${c.nombre ?? "Coach"}${
-                                        c.area ? ` · ${c.area}` : ""
-                                      }${c.puesto ? ` · ${c.puesto}` : ""}`}
-                                    >
-                                      {(c.nombre ?? "Coach").slice(0, 20)}
-                                      {c.area
-                                        ? ` · ${String(c.area).slice(0, 10)}`
-                                        : ""}
-                                    </span>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                        {/* Estados */}
-                        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
-                          <div className="text-sm font-medium">Estados</div>
-                          {ticketDetail?.ultimo_estado?.estatus && (
-                            <div className="text-xs text-slate-600">
-                              Último:{" "}
-                              {
-                                STATUS_LABEL[
-                                  coerceStatus(
-                                    ticketDetail.ultimo_estado.estatus
-                                  )
-                                ]
-                              }
-                              {ticketDetail?.ultimo_estado?.fecha && (
-                                <>
-                                  {" · "}
-                                  {new Date(
-                                    ticketDetail.ultimo_estado.fecha
-                                  ).toLocaleString("es-ES")}
-                                </>
-                              )}
-                            </div>
-                          )}
-                          {Array.isArray(ticketDetail?.estados) &&
-                          ticketDetail.estados.length > 0 ? (
-                            <div className="mt-1 space-y-1">
-                              {ticketDetail.estados.map((e: any) => (
-                                <div
-                                  key={e.id}
-                                  className="flex items-center gap-2 text-xs text-slate-700"
-                                >
-                                  <span
-                                    className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
-                                      STATUS_STYLE[coerceStatus(e.estatus_id)]
-                                    }`}
-                                  >
-                                    {STATUS_LABEL[coerceStatus(e.estatus_id)]}
-                                  </span>
-                                  <span>
-                                    {new Date(e.created_at).toLocaleString(
-                                      "es-ES"
-                                    )}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-slate-500">
-                              Sin historial
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
-                        Sin datos de detalle
-                      </div>
-                    )}
                   </div>
                 </div>
 
