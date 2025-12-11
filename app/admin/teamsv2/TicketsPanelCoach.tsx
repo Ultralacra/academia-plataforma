@@ -1182,18 +1182,18 @@ export default function TicketsPanelCoach({
   }, [localTickets, rows]);
 
   // Lista compacta de alumnos que sí tienen tickets en el rango actual
-  const studentsFromTickets = useMemo(
-    () => {
-      const map = new Map<string, string>();
-      rows.forEach((t) => {
-        const id = String(t.id_alumno || "");
-        if (!id) return;
-        if (!map.has(id)) map.set(id, t.alumno_nombre || id);
-      });
-      return Array.from(map.entries()).map(([alumno, nombre]) => ({ alumno, nombre }));
-    },
-    [rows]
-  );
+  const studentsFromTickets = useMemo(() => {
+    const map = new Map<string, string>();
+    rows.forEach((t) => {
+      const id = String(t.id_alumno || "");
+      if (!id) return;
+      if (!map.has(id)) map.set(id, t.alumno_nombre || id);
+    });
+    return Array.from(map.entries()).map(([alumno, nombre]) => ({
+      alumno,
+      nombre,
+    }));
+  }, [rows]);
 
   // Resolver nombre humano para códigos de personas (alumno/coach)
   function resolvePersonNameGlobal(code?: string | null): string {
@@ -1245,9 +1245,7 @@ export default function TicketsPanelCoach({
     // Filtro por estado
     if (statusFiltro && statusFiltro !== "__all__") {
       const sf = statusFiltro.toUpperCase();
-      list = list.filter(
-        (t) => String(t.estado || "").toUpperCase() === sf
-      );
+      list = list.filter((t) => String(t.estado || "").toUpperCase() === sf);
     }
     // Filtro por alumno (código)
     if (studentFiltro && studentFiltro !== "__all__") {
@@ -2051,7 +2049,7 @@ export default function TicketsPanelCoach({
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        
+
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-2">
           <div className="flex gap-2 items-center flex-wrap">
             {/* Filtro Estado */}
@@ -2061,11 +2059,19 @@ export default function TicketsPanelCoach({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">Todos</SelectItem>
-                <SelectItem value="PENDIENTE">{STATUS_LABEL.PENDIENTE}</SelectItem>
-                <SelectItem value="EN_PROGRESO">{STATUS_LABEL.EN_PROGRESO}</SelectItem>
+                <SelectItem value="PENDIENTE">
+                  {STATUS_LABEL.PENDIENTE}
+                </SelectItem>
+                <SelectItem value="EN_PROGRESO">
+                  {STATUS_LABEL.EN_PROGRESO}
+                </SelectItem>
                 <SelectItem value="PAUSADO">{STATUS_LABEL.PAUSADO}</SelectItem>
-                <SelectItem value="PENDIENTE_DE_ENVIO">{STATUS_LABEL.PENDIENTE_DE_ENVIO}</SelectItem>
-                <SelectItem value="RESUELTO">{STATUS_LABEL.RESUELTO}</SelectItem>
+                <SelectItem value="PENDIENTE_DE_ENVIO">
+                  {STATUS_LABEL.PENDIENTE_DE_ENVIO}
+                </SelectItem>
+                <SelectItem value="RESUELTO">
+                  {STATUS_LABEL.RESUELTO}
+                </SelectItem>
               </SelectContent>
             </Select>
 
@@ -2091,7 +2097,9 @@ export default function TicketsPanelCoach({
               type="button"
               onClick={() => setViewMode("kanban")}
               className={`px-3 py-1.5 text-xs ${
-                viewMode === "kanban" ? "bg-slate-900 text-white" : "hover:bg-gray-50"
+                viewMode === "kanban"
+                  ? "bg-slate-900 text-white"
+                  : "hover:bg-gray-50"
               }`}
               title="Vista Kanban"
             >
@@ -2101,7 +2109,9 @@ export default function TicketsPanelCoach({
               type="button"
               onClick={() => setViewMode("table")}
               className={`px-3 py-1.5 text-xs border-l ${
-                viewMode === "table" ? "bg-slate-900 text-white" : "hover:bg-gray-50"
+                viewMode === "table"
+                  ? "bg-slate-900 text-white"
+                  : "hover:bg-gray-50"
               }`}
               title="Vista Tabla"
             >
@@ -2132,10 +2142,8 @@ export default function TicketsPanelCoach({
               Crea un nuevo ticket para comenzar
             </p>
           </div>
-        ) : (
-          (
-            viewMode === "kanban" ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-2">
+        ) : viewMode === "kanban" ? (
+          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-2">
             {(
               [
                 "PENDIENTE",
@@ -2362,80 +2370,113 @@ export default function TicketsPanelCoach({
                 </div>
               );
             })}
-              </div>
-            ) : (
-              <div className="rounded-lg border border-slate-200 bg-white">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[32%]">Ticket</TableHead>
-                      <TableHead className="w-[20%]">Alumno</TableHead>
-                      <TableHead className="w-[18%]">Informante</TableHead>
-                      <TableHead className="w-[12%]">Estado</TableHead>
-                      <TableHead className="w-[12%]">Creación</TableHead>
-                      <TableHead className="w-[12%]">Deadline</TableHead>
-                      <TableHead className="text-right w-[80px]">Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((t) => (
-                      <TableRow key={t.id} className="hover:bg-slate-50">
-                        <TableCell className="align-top">
-                          <div className="text-sm font-medium text-slate-900 truncate" title={t.nombre ?? undefined}>
-                            {t.nombre ?? "—"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <div className="text-sm text-slate-800 truncate" title={t.alumno_nombre ?? undefined}>
-                            {t.alumno_nombre ?? "—"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <div className="text-sm text-slate-800 truncate" title={(t as any).informante_nombre || (t as any).informante || undefined}>
-                            {(t as any).informante_nombre || (t as any).informante || "—"}
-                          </div>
-                        </TableCell>
-                        <TableCell className="align-top">
-                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 border text-[10px] ${STATUS_STYLE[coerceStatus(t.estado as any)]}`}>
-                            {STATUS_LABEL[coerceStatus(t.estado as any)]}
-                          </span>
-                        </TableCell>
-                        <TableCell className="align-top text-sm text-slate-700">
-                          {t.created_at ? new Date(t.created_at).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
-                        </TableCell>
-                        <TableCell className="align-top text-sm text-slate-700">
-                          {t.deadline ? new Date(t.deadline).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
-                        </TableCell>
-                        <TableCell className="align-top text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditTicket(t);
-                              setEditForm((prev) => ({
-                                ...prev,
-                                nombre: t.nombre ?? "",
-                                estado: (t.estado as any) ?? "PENDIENTE",
-                                deadline: t.deadline ?? null,
-                              }));
-                              setEditFiles([]);
-                              setEditPreviews([]);
-                              setEditLinks([]);
-                              setEditLinkInput("");
-                              setEditOpen(true);
-                            }}
-                          >
-                            Abrir
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )
-          )
+          </div>
+        ) : (
+          <div className="rounded-lg border border-slate-200 bg-white">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[32%]">Ticket</TableHead>
+                  <TableHead className="w-[20%]">Alumno</TableHead>
+                  <TableHead className="w-[18%]">Informante</TableHead>
+                  <TableHead className="w-[12%]">Estado</TableHead>
+                  <TableHead className="w-[12%]">Creación</TableHead>
+                  <TableHead className="w-[12%]">Deadline</TableHead>
+                  <TableHead className="text-right w-[80px]">
+                    Acciones
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((t) => (
+                  <TableRow key={t.id} className="hover:bg-slate-50">
+                    <TableCell className="align-top">
+                      <div
+                        className="text-sm font-medium text-slate-900 truncate"
+                        title={t.nombre ?? undefined}
+                      >
+                        {t.nombre ?? "—"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div
+                        className="text-sm text-slate-800 truncate"
+                        title={t.alumno_nombre ?? undefined}
+                      >
+                        {t.alumno_nombre ?? "—"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <div
+                        className="text-sm text-slate-800 truncate"
+                        title={
+                          (t as any).informante_nombre ||
+                          (t as any).informante ||
+                          undefined
+                        }
+                      >
+                        {(t as any).informante_nombre ||
+                          (t as any).informante ||
+                          "—"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                      <span
+                        className={`inline-flex items-center rounded px-1.5 py-0.5 border text-[10px] ${
+                          STATUS_STYLE[coerceStatus(t.estado as any)]
+                        }`}
+                      >
+                        {STATUS_LABEL[coerceStatus(t.estado as any)]}
+                      </span>
+                    </TableCell>
+                    <TableCell className="align-top text-sm text-slate-700">
+                      {t.created_at
+                        ? new Date(t.created_at).toLocaleString("es-ES", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="align-top text-sm text-slate-700">
+                      {t.deadline
+                        ? new Date(t.deadline).toLocaleString("es-ES", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="align-top text-right">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditTicket(t);
+                          setEditForm((prev) => ({
+                            ...prev,
+                            nombre: t.nombre ?? "",
+                            estado: (t.estado as any) ?? "PENDIENTE",
+                            deadline: t.deadline ?? null,
+                          }));
+                          setEditFiles([]);
+                          setEditPreviews([]);
+                          setEditLinks([]);
+                          setEditLinkInput("");
+                          setEditOpen(true);
+                        }}
+                      >
+                        Abrir
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
 
         {/* Pagination moved out of scroll area */}
