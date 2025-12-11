@@ -4,8 +4,6 @@ import { useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
-import { useToast } from "@/hooks/use-toast";
-import { ToastAction } from "@/components/ui/toast";
 import { useAuth } from "@/hooks/use-auth";
 import { playNotificationSound } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
@@ -13,12 +11,98 @@ import { usePathname, useRouter } from "next/navigation";
 // Global set for deduplication across component instances/remounts
 const processedMessageIds = new Set<string>();
 
+function normalizeTipo(v: any): "cliente" | "equipo" | "admin" | "" {
+  const s = String(v || "")
+    .trim()
+    .toLowerCase();
+  if (["cliente", "alumno", "student"].includes(s)) return "cliente";
+  if (["equipo", "coach", "entrenador"].includes(s)) return "equipo";
+  if (["admin", "administrador", "usuario"].includes(s)) return "admin";
+  return "";
+}
+
+function getCachedContactName(chatId: any): string | null {
+  try {
+    const id = chatId == null ? "" : String(chatId);
+    if (!id) return null;
+    const v = localStorage.getItem(`chatContactName:${id}`);
+    return v && v.trim() ? v.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedContactName(chatId: any, name: any) {
+  try {
+    const id = chatId == null ? "" : String(chatId);
+    const n = String(name ?? "").trim();
+    if (!id || !n) return;
+    localStorage.setItem(`chatContactName:${id}`, n);
+  } catch {}
+}
+
+function extractAlumnoNameFromChat(chat: any): string | null {
+  try {
+    const arr = Array.isArray(chat?.otros_participantes)
+      ? chat.otros_participantes
+      : [];
+    const fromOtros = arr.find(
+      (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
+    );
+    const n1 =
+      fromOtros?.nombre_participante ||
+      fromOtros?.alumno?.nombre ||
+      fromOtros?.cliente?.nombre ||
+      fromOtros?.nombre ||
+      fromOtros?.name;
+    if (n1 && String(n1).trim()) return String(n1).trim();
+
+    const parts = Array.isArray(chat?.participants || chat?.participantes)
+      ? chat?.participants || chat?.participantes
+      : [];
+    const fromParts = parts.find(
+      (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
+    );
+    const n2 =
+      fromParts?.nombre_participante ||
+      fromParts?.alumno?.nombre ||
+      fromParts?.cliente?.nombre ||
+      fromParts?.nombre ||
+      fromParts?.name;
+    if (n2 && String(n2).trim()) return String(n2).trim();
+  } catch {}
+  return null;
+}
+
+function extractAlumnoNameFromMsg(msg: any): string | null {
+  try {
+    const rawType = normalizeTipo(msg?.participante_tipo);
+    // Si el mensaje viene de alumno/cliente, priorizar nombre del emisor.
+    const candidate =
+      msg?.nombre_emisor ||
+      msg?.nombre_alumno ||
+      msg?.alumno_nombre ||
+      msg?.nombre_cliente ||
+      msg?.cliente_nombre ||
+      msg?.nombre_participante ||
+      msg?.cliente?.nombre ||
+      msg?.alumno?.nombre ||
+      msg?.nombre ||
+      msg?.name;
+    if (rawType === "cliente" && candidate && String(candidate).trim()) {
+      return String(candidate).trim();
+    }
+    // Fallback: aunque el tipo no venga bien, usar el primer nombre disponible.
+    if (candidate && String(candidate).trim()) return String(candidate).trim();
+  } catch {}
+  return null;
+}
+
 export function CoachChatNotifier() {
   const { user } = useAuth();
   const router = useRouter();
   const socketRef = useRef<Socket | null>(null);
   const myParticipantIds = useRef<Record<string, string>>({});
-  const { toast } = useToast();
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
 
@@ -68,6 +152,10 @@ export function CoachChatNotifier() {
           ack.data.forEach((chat: any) => {
             const cid = chat.id_chat || chat.id;
             if (cid) {
+              try {
+                const name = extractAlumnoNameFromChat(chat);
+                if (name) setCachedContactName(cid, name);
+              } catch {}
               socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
                 if (
                   joinAck &&
@@ -75,6 +163,10 @@ export function CoachChatNotifier() {
                   joinAck.data?.my_participante
                 ) {
                   myParticipantIds.current[cid] = joinAck.data.my_participante;
+                  try {
+                    const name = extractAlumnoNameFromChat(joinAck.data);
+                    if (name) setCachedContactName(cid, name);
+                  } catch {}
                 }
               });
             }
@@ -90,6 +182,12 @@ export function CoachChatNotifier() {
         socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
           if (joinAck && joinAck.success && joinAck.data?.my_participante) {
             myParticipantIds.current[cid] = joinAck.data.my_participante;
+            try {
+              const name =
+                extractAlumnoNameFromChat(joinAck.data) ||
+                extractAlumnoNameFromChat(data);
+              if (name) setCachedContactName(cid, name);
+            } catch {}
             try {
               const evt = new CustomEvent("chat:list-refresh", {
                 detail: { reason: "chat-created", id_chat: cid },
@@ -175,13 +273,61 @@ export function CoachChatNotifier() {
           user.email
         );
 
-        // Reproducir sonido solo cuando no estamos en una vista de chat
+        // Reproducir sonido solo cuando no estamos en la ruta /chat
         // (las vistas de chat ya reproducen el sonido por su cuenta, y así evitamos dobles)
         const currentPath = pathnameRef.current;
-        const isChatView =
-          currentPath?.includes("/chat") || currentPath?.includes("/teamsv2");
-        if (!isChatView) {
+        const isChatRoute = currentPath?.includes("/chat");
+        if (!isChatRoute) {
           playNotificationSound();
+        }
+
+        // Snackbar custom (NO usar toast): se renderiza globalmente en CoachChatSnackbar
+        try {
+          const rawType = String(msg?.participante_tipo || "").toLowerCase();
+          const isAlumno = rawType === "cliente" || rawType === "alumno";
+          const cachedName = getCachedContactName(msg?.id_chat);
+          const msgName = extractAlumnoNameFromMsg(msg);
+          const senderName = msgName || cachedName || "";
+
+          const title = isAlumno
+            ? senderName || "Nuevo mensaje de alumno"
+            : senderName || "Nuevo mensaje";
+
+          const textRaw = String(
+            msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+          ).trim();
+          const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+
+          const myCode = (user as any)?.codigo;
+          const chatUrl = myCode
+            ? `/admin/teamsv2/${String(myCode)}/chat`
+            : "/admin/teamsv2";
+
+          window.dispatchEvent(
+            new CustomEvent("coach-chat:snackbar", {
+              detail: {
+                title,
+                preview,
+                chatUrl,
+                chatId: msg?.id_chat,
+              },
+            })
+          );
+        } catch {}
+
+        // Incrementar contador de no leídos global (para badges en listas)
+        if (msg?.id_chat) {
+          try {
+            const key = `chatUnreadById:coach:${String(msg.id_chat)}`;
+            const current = parseInt(localStorage.getItem(key) || "0", 10);
+            const next = (isNaN(current) ? 0 : current) + 1;
+            localStorage.setItem(key, String(next));
+            window.dispatchEvent(
+              new CustomEvent("chat:unread-count-updated", {
+                detail: { chatId: msg.id_chat, role: "coach", count: next },
+              })
+            );
+          } catch {}
         }
       }
     });
@@ -189,7 +335,7 @@ export function CoachChatNotifier() {
     return () => {
       socket.disconnect();
     };
-  }, [user, toast, router]);
+  }, [user, router]);
 
   return null;
 }

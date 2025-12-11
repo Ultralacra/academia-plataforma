@@ -7,6 +7,7 @@ import { Suspense } from "react";
 import { SseNotificationsProvider } from "@/components/hooks/useSseNotifications";
 import { GlobalChatNotifications } from "@/components/chat/GlobalChatNotifications";
 import { CoachChatNotifier } from "@/components/chat/CoachChatNotifier";
+import { CoachChatSnackbar } from "@/components/chat/CoachChatSnackbar";
 import { SseTicketSnackbar } from "@/components/hooks/SseTicketSnackbar";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -47,6 +48,7 @@ export default function RootLayout({
           <SseNotificationsProvider>
             <GlobalChatNotifications />
             <CoachChatNotifier />
+            <CoachChatSnackbar />
             <SseTicketSnackbar />
             <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
           </SseNotificationsProvider>
