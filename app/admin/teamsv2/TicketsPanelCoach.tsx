@@ -445,6 +445,11 @@ export default function TicketsPanelCoach({
   const [newAudioUrl, setNewAudioUrl] = useState<string>("");
   const [audioUrls, setAudioUrls] = useState<string[]>([]);
 
+  // General tab specific states
+  const [generalFiles, setGeneralFiles] = useState<File[]>([]);
+  const [generalUrls, setGeneralUrls] = useState<string[]>([]);
+  const [newGeneralUrl, setNewGeneralUrl] = useState("");
+
   useEffect(() => {
     if (!editOpen || !editTicket?.codigo) return;
     let alive = true;
@@ -1078,6 +1083,34 @@ export default function TicketsPanelCoach({
       });
   }
 
+  function addRecordedToGeneralFiles() {
+    if (!recordedBlob) return;
+    toast({ title: "Procesando audio...", description: "Convirtiendo a MP3" });
+    convertBlobToMp3(recordedBlob)
+      .then((mp3File) => {
+        setGeneralFiles((prev) => [...prev, mp3File]);
+        toast({ title: "Grabación convertida a MP3" });
+      })
+      .catch((err) => {
+        console.error(err);
+        const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
+        const file = new File(
+          [recordedBlob],
+          `grabacion-${Date.now()}.${ext}`,
+          { type: recordedBlob.type || "audio/webm" }
+        );
+        setGeneralFiles((prev) => [...prev, file]);
+        toast({ title: "Conversión a MP3 falló, adjuntado original" });
+      })
+      .finally(() => {
+        if (audioPreviewUrl) {
+          URL.revokeObjectURL(audioPreviewUrl);
+          setAudioPreviewUrl(null);
+        }
+        setRecordedBlob(null);
+      });
+  }
+
   useEffect(() => {
     if (!coachCode) return;
     const ctrl = new AbortController();
@@ -1364,6 +1397,52 @@ export default function TicketsPanelCoach({
   function clearPreviewCache() {
     Object.values(blobCache).forEach((u) => URL.revokeObjectURL(u));
     setBlobCache({});
+  }
+
+  // Comprimir imagen a WebP usando canvas en el navegador
+  async function compressImageToWebp(file: File, quality = 0.8): Promise<File> {
+    // Cargar imagen en un elemento Image
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = (e) => reject(e);
+      reader.readAsDataURL(file);
+    });
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = (e) => reject(e);
+      image.src = dataUrl;
+    });
+    // Dibujar en canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("No se pudo crear contexto de canvas");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Exportar a WebP
+    const blob: Blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => {
+          if (!b) return reject(new Error("Falló toBlob WebP"));
+          resolve(b);
+        },
+        "image/webp",
+        quality
+      );
+    });
+    const webpFile = new File([blob], renameToWebp(file.name), {
+      type: "image/webp",
+      lastModified: Date.now(),
+    });
+    return webpFile;
+  }
+
+  function renameToWebp(name: string) {
+    const dot = name.lastIndexOf(".");
+    const base = dot > -1 ? name.slice(0, dot) : name;
+    return `${base}.webp`;
   }
 
   async function confirmDeleteFile() {
@@ -2518,21 +2597,21 @@ export default function TicketsPanelCoach({
                           ? "bg-slate-900 text-white"
                           : "hover:bg-gray-50"
                       }`}
-                      title="Editar campos"
+                      title="Contexto del alumno"
                     >
                       General
                     </button>
                     <button
                       type="button"
-                      onClick={() => setEditActiveTab("detalle")}
+                      onClick={() => setEditActiveTab("respuesta")}
                       className={`px-3 py-1.5 text-xs border-l ${
-                        editActiveTab === "detalle"
+                        editActiveTab === "respuesta"
                           ? "bg-slate-900 text-white"
                           : "hover:bg-gray-50"
                       }`}
-                      title="Detalle del ticket (API)"
+                      title="Respuesta del coach"
                     >
-                      Detalle
+                      Respuesta Coach
                     </button>
                     <button
                       type="button"
@@ -2552,7 +2631,35 @@ export default function TicketsPanelCoach({
                 <div
                   className={editActiveTab === "general" ? "block" : "hidden"}
                 >
-                  <div className="p-6 space-y-8">
+                  <div className="p-6 space-y-6">
+                    {/* Coaches (Top) */}
+                    {Array.isArray(ticketDetail?.coaches) &&
+                      ticketDetail.coaches.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {ticketDetail.coaches
+                            .slice(0, 1)
+                            .map((c: any, idx: number) => (
+                              <span
+                                key={`${c.codigo_equipo ?? c.nombre ?? idx}`}
+                                className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                                title={`${c.nombre ?? "Coach"}${
+                                  c.area ? ` · ${c.area}` : ""
+                                }${c.puesto ? ` · ${c.puesto}` : ""}`}
+                              >
+                                {(c.nombre ?? "Coach").slice(0, 20)}
+                                {c.area
+                                  ? ` · ${String(c.area).slice(0, 10)}`
+                                  : ""}
+                              </span>
+                            ))}
+                          {ticketDetail.coaches.length > 1 && (
+                            <span className="text-xs text-slate-400 self-center">
+                              +{ticketDetail.coaches.length - 1}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
                     {/* Alerta de Pausado */}
                     {coerceStatus(editForm.estado as any) === "PAUSADO" && (
                       <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
@@ -2577,6 +2684,13 @@ export default function TicketsPanelCoach({
                       />
                     </div>
 
+                    {/* Tipo Chip */}
+                    <div>
+                      <Badge variant="secondary" className="font-normal">
+                        {ticketDetail?.tipo || "General"}
+                      </Badge>
+                    </div>
+
                     {/* Lista de Propiedades (Estilo Notion) */}
                     <div className="grid grid-cols-[140px_1fr] gap-y-3 text-sm items-start">
                       {/* Alumno */}
@@ -2587,7 +2701,7 @@ export default function TicketsPanelCoach({
                         {editTicket?.alumno_nombre || "—"}
                       </div>
 
-                      {/* Tarea (Links) - Integrado aquí */}
+                      {/* Tarea (Links) */}
                       <div className="flex items-center gap-2 text-slate-500 h-6 pt-1">
                         <LinkIcon className="h-4 w-4" /> <span>Tarea</span>
                       </div>
@@ -2950,12 +3064,430 @@ export default function TicketsPanelCoach({
 
                     <Separator />
 
-                    {/* Archivos (Compacto) */}
+                    {/* Descripción */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">Descripción</div>
+                        {!descEditing && canEdit && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setDescDraft(
+                                String(ticketDetail?.descripcion || "")
+                              );
+                              setDescEditing(true);
+                            }}
+                          >
+                            Editar
+                          </Button>
+                        )}
+                      </div>
+                      {!descEditing ? (
+                        <div className="whitespace-pre-wrap text-sm text-slate-800 rounded-md border border-slate-200 bg-slate-50 p-3">
+                          {ticketDetail?.descripcion || "—"}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <Textarea
+                            rows={8}
+                            value={descDraft}
+                            onChange={(e) => setDescDraft(e.target.value)}
+                            placeholder="Escribe la descripción del ticket..."
+                          />
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              onClick={() => {
+                                setDescEditing(false);
+                                setDescDraft("");
+                              }}
+                              disabled={savingDesc}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              onClick={async () => {
+                                if (!editTicket?.codigo) return;
+                                setSavingDesc(true);
+                                try {
+                                  await updateTicket(editTicket.codigo, {
+                                    descripcion: (descDraft || "").trim(),
+                                  } as any);
+                                  await loadTicketDetail(editTicket.codigo);
+                                  setDescEditing(false);
+                                  toast({
+                                    title: "Descripción actualizada",
+                                  });
+                                } catch (e) {
+                                  console.error(e);
+                                  toast({
+                                    title: "Error al actualizar descripción",
+                                  });
+                                } finally {
+                                  setSavingDesc(false);
+                                }
+                              }}
+                              disabled={savingDesc}
+                            >
+                              {savingDesc ? "Guardando..." : "Guardar"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    {/* Archivos (Contexto) */}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
                           <Paperclip className="h-4 w-4 text-slate-500" />{" "}
-                          Archivos
+                          Archivos (Contexto)
+                        </div>
+                      </div>
+
+                      {/* Lista de archivos [CTX] o < 5min */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {editExistingFiles
+                          .filter((f) => {
+                            const isRes = f.nombre_archivo.startsWith("[RES]");
+                            if (isRes) return false;
+                            const isCtx = f.nombre_archivo.startsWith("[CTX]");
+                            if (isCtx) return true;
+                            if (!ticketDetail?.created_at || !f.created_at)
+                              return true;
+                            const diff =
+                              new Date(f.created_at).getTime() -
+                              new Date(ticketDetail.created_at).getTime();
+                            return diff < 5 * 60 * 1000;
+                          })
+                          .map((f) => (
+                            <div
+                              key={f.id}
+                              className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs group"
+                            >
+                              <div className="shrink-0 text-slate-400">
+                                {iconFor(f.mime_type, f.nombre_archivo)}
+                              </div>
+                              <div
+                                className="flex-1 truncate"
+                                title={f.nombre_archivo}
+                              >
+                                {f.nombre_archivo.replace(/^\[CTX\]\s*/, "")}
+                              </div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {!(
+                                  f.mime_type || mimeFromName(f.nombre_archivo)
+                                )?.startsWith("video/") && (
+                                  <button
+                                    onClick={() =>
+                                      downloadFile(f.id, f.nombre_archivo)
+                                    }
+                                    className="text-slate-400 hover:text-slate-700"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => openPreview(f)}
+                                  className="text-slate-400 hover:text-slate-700"
+                                >
+                                  <Eye className="h-3 w-3" />
+                                </button>
+                                {canEdit && (
+                                  <button
+                                    onClick={() =>
+                                      setFileToDelete({
+                                        id: f.id,
+                                        nombre_archivo: f.nombre_archivo,
+                                      })
+                                    }
+                                    className="text-slate-400 hover:text-red-600"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        {/* New General Files */}
+                        {generalFiles.map((f, i) => (
+                          <div
+                            key={`new-gen-${i}`}
+                            className="flex items-center gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
+                          >
+                            <div className="shrink-0 text-blue-400">
+                              {iconFor(f.type, f.name)}
+                            </div>
+                            <div className="flex-1 truncate font-medium text-blue-700">
+                              {f.name}
+                            </div>
+                            <button
+                              onClick={() =>
+                                setGeneralFiles((prev) =>
+                                  prev.filter((_, idx) => idx !== i)
+                                )
+                              }
+                              className="text-blue-400 hover:text-blue-700"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Upload Controls for General */}
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        <input
+                          id="general-file-upload"
+                          type="file"
+                          className="hidden"
+                          multiple
+                          onChange={async (e) => {
+                            const picked = Array.from(e.target.files ?? []);
+                            if (!picked.length) return;
+
+                            const processed: File[] = [];
+                            for (const f of picked) {
+                              if (f.type.startsWith("audio/")) {
+                                toast({
+                                  title: "Procesando audio...",
+                                  description: `Convirtiendo ${f.name} a MP3`,
+                                });
+                                try {
+                                  const mp3 = await convertBlobToMp3(f);
+                                  processed.push(mp3);
+                                } catch (err) {
+                                  console.error(err);
+                                  processed.push(f);
+                                  toast({
+                                    title: "Error al convertir audio",
+                                    description: "Se usará el archivo original",
+                                    variant: "destructive",
+                                  });
+                                }
+                              } else {
+                                processed.push(f);
+                              }
+                            }
+
+                            setGeneralFiles((prev) =>
+                              [...prev, ...processed].slice(0, 10)
+                            );
+                            e.currentTarget.value = "";
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs gap-2"
+                          onClick={() =>
+                            document
+                              .getElementById("general-file-upload")
+                              ?.click()
+                          }
+                        >
+                          <Paperclip className="h-3 w-3" /> Adjuntar
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant={isRecording ? "destructive" : "outline"}
+                          className="h-7 text-xs gap-2"
+                          onClick={() => {
+                            if (isRecording) stopRecording();
+                            else startRecording();
+                          }}
+                        >
+                          <Mic className="h-3 w-3" />{" "}
+                          {isRecording ? "Detener" : "Audio"}
+                        </Button>
+
+                        {/* URL Input */}
+                        <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                          <Input
+                            className="h-7 text-xs"
+                            placeholder="https://..."
+                            value={newGeneralUrl}
+                            onChange={(e) => setNewGeneralUrl(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                if (newGeneralUrl.trim()) {
+                                  setGeneralUrls((prev) => [
+                                    ...prev,
+                                    newGeneralUrl.trim(),
+                                  ]);
+                                  setNewGeneralUrl("");
+                                }
+                              }
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0"
+                            onClick={() => {
+                              if (newGeneralUrl.trim()) {
+                                setGeneralUrls((prev) => [
+                                  ...prev,
+                                  newGeneralUrl.trim(),
+                                ]);
+                                setNewGeneralUrl("");
+                              }
+                            }}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* General URLs List */}
+                      {generalUrls.length > 0 && (
+                        <div className="space-y-1">
+                          {generalUrls.map((u, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center gap-2 text-xs bg-slate-50 px-2 py-1 rounded"
+                            >
+                              <LinkIcon className="h-3 w-3 text-slate-400" />
+                              <span className="flex-1 truncate">{u}</span>
+                              <button
+                                onClick={() =>
+                                  setGeneralUrls((prev) =>
+                                    prev.filter((_, idx) => idx !== i)
+                                  )
+                                }
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Audio Preview */}
+                      {audioPreviewUrl && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <audio
+                            src={audioPreviewUrl}
+                            controls
+                            className="h-6 w-24"
+                            controlsList="nodownload"
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0"
+                            onClick={() => {
+                              URL.revokeObjectURL(audioPreviewUrl!);
+                              setAudioPreviewUrl(null);
+                              audioChunksRef.current = [];
+                            }}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-6 text-xs"
+                            onClick={addRecordedToGeneralFiles}
+                          >
+                            Guardar
+                          </Button>
+                        </div>
+                      )}
+
+                      {(generalFiles.length > 0 || generalUrls.length > 0) && (
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            if (!editTicket?.codigo) return;
+                            setUploadingEditFiles(true);
+                            try {
+                              // Rename files with [CTX]
+                              const renamedFiles = generalFiles.map(
+                                (f) =>
+                                  new File([f], `[CTX] ${f.name}`, {
+                                    type: f.type,
+                                  })
+                              );
+                              await uploadTicketFiles(
+                                editTicket.codigo,
+                                renamedFiles,
+                                generalUrls
+                              );
+                              toast({ title: "Archivos subidos" });
+                              setGeneralFiles([]);
+                              setGeneralUrls([]);
+                              const list = await getTicketFiles(
+                                editTicket.codigo
+                              );
+                              setEditExistingFiles(list);
+                            } catch (e) {
+                              console.error(e);
+                              toast({ title: "Error" });
+                            } finally {
+                              setUploadingEditFiles(false);
+                            }
+                          }}
+                          disabled={uploadingEditFiles}
+                        >
+                          {uploadingEditFiles
+                            ? "Subiendo..."
+                            : "Subir archivos"}
+                        </Button>
+                      )}
+                    </div>
+
+                    <Separator />
+
+                    {/* Estados (History) */}
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">
+                        Historial de estados
+                      </div>
+                      {Array.isArray(ticketDetail?.estados) &&
+                      ticketDetail.estados.length > 0 ? (
+                        <div className="mt-1 space-y-1">
+                          {ticketDetail.estados.map((e: any) => (
+                            <div
+                              key={e.id}
+                              className="flex items-center gap-2 text-xs text-slate-700"
+                            >
+                              <span
+                                className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
+                                  STATUS_STYLE[coerceStatus(e.estatus_id)]
+                                }`}
+                              >
+                                {STATUS_LABEL[coerceStatus(e.estatus_id)]}
+                              </span>
+                              <span>
+                                {new Date(e.created_at).toLocaleString("es-ES")}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500">
+                          Sin historial
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  className={editActiveTab === "respuesta" ? "block" : "hidden"}
+                >
+                  <div className="p-6 space-y-6">
+                    {/* Archivos y Herramientas de Respuesta */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-sm font-medium text-slate-900">
+                          <Paperclip className="h-4 w-4 text-slate-500" /> Tu
+                          Respuesta (Archivos y Evidencias)
                         </div>
                         <div className="flex gap-2">
                           <input
@@ -2963,37 +3495,11 @@ export default function TicketsPanelCoach({
                             type="file"
                             className="hidden"
                             multiple
-                            onChange={async (e) => {
+                            onChange={(e) => {
                               const picked = Array.from(e.target.files ?? []);
                               if (!picked.length) return;
-
-                              const processed: File[] = [];
-                              for (const f of picked) {
-                                if (f.type.startsWith("audio/")) {
-                                  toast({
-                                    title: "Procesando audio...",
-                                    description: `Convirtiendo ${f.name} a MP3`,
-                                  });
-                                  try {
-                                    const mp3 = await convertBlobToMp3(f);
-                                    processed.push(mp3);
-                                  } catch (err) {
-                                    console.error(err);
-                                    processed.push(f);
-                                    toast({
-                                      title: "Error al convertir audio",
-                                      description:
-                                        "Se usará el archivo original",
-                                      variant: "destructive",
-                                    });
-                                  }
-                                } else {
-                                  processed.push(f);
-                                }
-                              }
-
                               setEditFiles((prev) =>
-                                [...prev, ...processed].slice(0, 10)
+                                [...prev, ...picked].slice(0, 10)
                               );
                               e.currentTarget.value = "";
                             }}
@@ -3004,62 +3510,81 @@ export default function TicketsPanelCoach({
                             className="h-7 text-xs"
                             onClick={() => editFileInputRef.current?.click()}
                           >
-                            + Agregar
+                            + Agregar Archivo
                           </Button>
                         </div>
                       </div>
 
-                      {/* Lista de archivos existentes + nuevos */}
+                      {/* Lista de archivos existentes (Filtrados: Solo respuestas > 5 min) + nuevos */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        {editExistingFiles.map((f) => (
-                          <div
-                            key={f.id}
-                            className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs group"
-                          >
-                            <div className="shrink-0 text-slate-400">
-                              {iconFor(f.mime_type, f.nombre_archivo)}
-                            </div>
+                        {editExistingFiles
+                          .filter((f) => {
+                            // Heurística inversa: Archivos creados > 5 min después del ticket
+                            // se consideran "respuestas" o evidencias del coach.
+                            // O si tienen prefijo [RES]
+                            const name = f.nombre_archivo || "";
+                            if (name.startsWith("[RES]")) return true;
+                            if (name.startsWith("[CTX]")) return false;
+
+                            if (!ticketDetail?.created_at || !f.created_at)
+                              return false; // Si no hay fecha, asumimos que es original (General)
+                            const ticketTime = new Date(
+                              ticketDetail.created_at
+                            ).getTime();
+                            const fileTime = new Date(f.created_at).getTime();
+                            const diffMinutes =
+                              (fileTime - ticketTime) / 1000 / 60;
+                            return diffMinutes >= 5;
+                          })
+                          .map((f) => (
                             <div
-                              className="flex-1 truncate"
-                              title={f.nombre_archivo}
+                              key={f.id}
+                              className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 p-2 text-xs group"
                             >
-                              {f.nombre_archivo}
-                            </div>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              {!(
-                                f.mime_type || mimeFromName(f.nombre_archivo)
-                              )?.startsWith("video/") && (
+                              <div className="shrink-0 text-slate-400">
+                                {iconFor(f.mime_type, f.nombre_archivo)}
+                              </div>
+                              <div
+                                className="flex-1 truncate"
+                                title={f.nombre_archivo}
+                              >
+                                {f.nombre_archivo.replace(/^\[RES\]\s*/, "")}
+                              </div>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                {!(
+                                  f.mime_type || mimeFromName(f.nombre_archivo)
+                                )?.startsWith("audio/") && (
+                                  <button
+                                    onClick={() =>
+                                      downloadFile(f.id, f.nombre_archivo)
+                                    }
+                                    className="text-slate-400 hover:text-slate-700"
+                                  >
+                                    <Download className="h-3 w-3" />
+                                  </button>
+                                )}
                                 <button
-                                  onClick={() =>
-                                    downloadFile(f.id, f.nombre_archivo)
-                                  }
+                                  onClick={() => openPreview(f)}
                                   className="text-slate-400 hover:text-slate-700"
                                 >
-                                  <Download className="h-3 w-3" />
+                                  <Eye className="h-3 w-3" />
                                 </button>
-                              )}
-                              <button
-                                onClick={() => openPreview(f)}
-                                className="text-slate-400 hover:text-slate-700"
-                              >
-                                <Eye className="h-3 w-3" />
-                              </button>
-                              {canEdit && (
-                                <button
-                                  onClick={() =>
-                                    setFileToDelete({
-                                      id: f.id,
-                                      nombre_archivo: f.nombre_archivo,
-                                    })
-                                  }
-                                  className="text-slate-400 hover:text-red-600"
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              )}
+                                {canEdit && (
+                                  <button
+                                    onClick={() =>
+                                      setFileToDelete({
+                                        id: f.id,
+                                        nombre_archivo: f.nombre_archivo,
+                                      })
+                                    }
+                                    className="text-slate-400 hover:text-red-600"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
                         {editFiles.map((f, i) => (
                           <div
                             key={`new-${i}`}
@@ -3091,9 +3616,46 @@ export default function TicketsPanelCoach({
                             if (!editTicket?.codigo) return;
                             setUploadingEditFiles(true);
                             try {
+                              // Procesar imágenes -> WebP con logs antes de subir desde el botón
+                              let filesToUpload: File[] = [...editFiles];
+                              if (filesToUpload.length > 0) {
+                                const processed: File[] = [];
+                                for (const f of filesToUpload) {
+                                  const type = (f.type || "").toLowerCase();
+                                  const isImage =
+                                    type.startsWith("image/") &&
+                                    type !== "image/svg+xml";
+                                  if (isImage) {
+                                    try {
+                                      const webp = await compressImageToWebp(
+                                        f,
+                                        0.8
+                                      );
+                                      processed.push(webp);
+                                    } catch (err) {
+                                      console.error(
+                                        "[UploadButton] Error convirtiendo a WebP, usando original",
+                                        err
+                                      );
+                                      processed.push(f);
+                                    }
+                                  } else {
+                                    processed.push(f);
+                                  }
+                                }
+                                filesToUpload = processed;
+                              }
+
+                              // Renombrar con prefijo [RES]
+                              const renamedFiles = filesToUpload.map((f) => {
+                                return new File([f], `[RES] ${f.name}`, {
+                                  type: f.type,
+                                });
+                              });
+
                               await uploadTicketFiles(
                                 editTicket.codigo,
-                                editFiles
+                                renamedFiles
                               );
                               toast({ title: "Archivos subidos" });
                               setEditFiles([]);
@@ -3171,7 +3733,7 @@ export default function TicketsPanelCoach({
                     {/* Observaciones */}
                     <div className="space-y-3">
                       <Label className="text-sm font-medium">
-                        Observaciones
+                        Observaciones y Chat
                       </Label>
                       <div className="space-y-3 max-h-[300px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-3">
                         {commentsLoading ? (
@@ -3301,318 +3863,6 @@ export default function TicketsPanelCoach({
                         </div>
                       )}
                     </div>
-                  </div>
-                </div>
-
-                <div
-                  className={editActiveTab === "detalle" ? "block" : "hidden"}
-                >
-                  <div className="p-6 space-y-4">
-                    {ticketDetailLoading ? (
-                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
-                        Cargando detalle…
-                      </div>
-                    ) : ticketDetailError ? (
-                      <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                        {ticketDetailError}
-                      </div>
-                    ) : ticketDetail ? (
-                      <>
-                        {/* Resumen encabezado */}
-                        <div className="rounded-lg border border-slate-200 bg-white p-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-base font-semibold text-slate-900">
-                                {ticketDetail?.nombre || "Ticket"}
-                              </div>
-                              {ticketDetail?.codigo && (
-                                <div className="text-xs text-slate-500 break-all">
-                                  Código: {ticketDetail.codigo}
-                                </div>
-                              )}
-                            </div>
-                            {ticketDetail?.estado && (
-                              <span
-                                className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
-                                  STATUS_STYLE[
-                                    coerceStatus(ticketDetail.estado as any)
-                                  ]
-                                }`}
-                              >
-                                {
-                                  STATUS_LABEL[
-                                    coerceStatus(ticketDetail.estado as any)
-                                  ]
-                                }
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-slate-700">
-                            <div className="space-y-1">
-                              <div className="text-slate-500 text-xs">
-                                Alumno
-                              </div>
-                              <div className="font-medium break-all">
-                                {ticketDetail?.alumno_nombre || "—"}
-                              </div>
-                              {ticketDetail?.id_alumno && (
-                                <div className="text-xs text-slate-500 break-all">
-                                  ID: {ticketDetail.id_alumno}
-                                </div>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <div className="text-slate-500 text-xs">Tipo</div>
-                              <div className="font-medium">
-                                {ticketDetail?.tipo || "—"}
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <div className="text-slate-500 text-xs">
-                                Creado
-                              </div>
-                              <div>
-                                {ticketDetail?.created_at
-                                  ? new Date(
-                                      ticketDetail.created_at
-                                    ).toLocaleString("es-ES")
-                                  : "—"}
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <div className="text-slate-500 text-xs">
-                                Deadline
-                              </div>
-                              <div>
-                                {ticketDetail?.deadline
-                                  ? new Date(
-                                      ticketDetail.deadline
-                                    ).toLocaleString("es-ES")
-                                  : "—"}
-                              </div>
-                            </div>
-                            {ticketDetail?.plazo && (
-                              <div className="space-y-1">
-                                <div className="text-slate-500 text-xs">
-                                  Plazo
-                                </div>
-                                <div>{String(ticketDetail.plazo)}</div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Descripción y tareas */}
-                        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm font-medium">
-                              Descripción
-                            </div>
-                            {!descEditing && canEdit && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setDescDraft(
-                                    String(ticketDetail?.descripcion || "")
-                                  );
-                                  setDescEditing(true);
-                                }}
-                              >
-                                Editar
-                              </Button>
-                            )}
-                          </div>
-                          {!descEditing ? (
-                            <div className="whitespace-pre-wrap text-sm text-slate-800">
-                              {ticketDetail?.descripcion || "—"}
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              <Textarea
-                                rows={8}
-                                value={descDraft}
-                                onChange={(e) => setDescDraft(e.target.value)}
-                                placeholder="Escribe la descripción del ticket..."
-                              />
-                              <div className="flex items-center justify-end gap-2">
-                                <Button
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setDescEditing(false);
-                                    setDescDraft("");
-                                  }}
-                                  disabled={savingDesc}
-                                >
-                                  Cancelar
-                                </Button>
-                                <Button
-                                  onClick={async () => {
-                                    if (!editTicket?.codigo) return;
-                                    setSavingDesc(true);
-                                    try {
-                                      await updateTicket(editTicket.codigo, {
-                                        descripcion: (descDraft || "").trim(),
-                                      } as any);
-                                      await loadTicketDetail(editTicket.codigo);
-                                      setDescEditing(false);
-                                      toast({
-                                        title: "Descripción actualizada",
-                                      });
-                                    } catch (e) {
-                                      console.error(e);
-                                      toast({
-                                        title:
-                                          "Error al actualizar descripción",
-                                      });
-                                    } finally {
-                                      setSavingDesc(false);
-                                    }
-                                  }}
-                                  disabled={savingDesc}
-                                >
-                                  {savingDesc ? "Guardando..." : "Guardar"}
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-                          {(() => {
-                            const urlList: string[] = [
-                              ...extractUrlsFromDescription(
-                                ticketDetail?.descripcion
-                              ),
-                              ...(
-                                (Array.isArray((ticketDetail as any)?.links)
-                                  ? (ticketDetail as any).links
-                                  : []) as any[]
-                              )
-                                .map((it: any) =>
-                                  typeof it === "string"
-                                    ? it
-                                    : it?.url || it?.link || it?.enlace || ""
-                                )
-                                .filter((s: string) => !!s),
-                            ];
-                            // Dedupe final
-                            const seen = new Set<string>();
-                            const links = urlList.filter((u) => {
-                              const k = String(u || "").toLowerCase();
-                              if (!k) return false;
-                              if (seen.has(k)) return false;
-                              seen.add(k);
-                              return true;
-                            });
-                            return links.length > 0 ? (
-                              <div className="pt-1">
-                                <div className="text-sm font-medium">
-                                  Tareas
-                                </div>
-                                <div className="mt-1 flex flex-col gap-1">
-                                  {links.map((u, i) => (
-                                    <a
-                                      key={i}
-                                      href={normalizeUrl(u)}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-sky-600 underline break-all text-sm"
-                                    >
-                                      {u}
-                                    </a>
-                                  ))}
-                                </div>
-                              </div>
-                            ) : null;
-                          })()}
-                        </div>
-
-                        {/* Coaches */}
-                        {Array.isArray(ticketDetail?.coaches) &&
-                          ticketDetail.coaches.length > 0 && (
-                            <div className="rounded-lg border border-slate-200 bg-white p-4">
-                              <div className="text-sm font-medium mb-2">
-                                Coaches
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                {ticketDetail.coaches.map(
-                                  (c: any, idx: number) => (
-                                    <span
-                                      key={`${
-                                        c.codigo_equipo ?? c.nombre ?? idx
-                                      }`}
-                                      className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                                      title={`${c.nombre ?? "Coach"}${
-                                        c.area ? ` · ${c.area}` : ""
-                                      }${c.puesto ? ` · ${c.puesto}` : ""}`}
-                                    >
-                                      {(c.nombre ?? "Coach").slice(0, 20)}
-                                      {c.area
-                                        ? ` · ${String(c.area).slice(0, 10)}`
-                                        : ""}
-                                    </span>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                        {/* Estados */}
-                        <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-2">
-                          <div className="text-sm font-medium">Estados</div>
-                          {ticketDetail?.ultimo_estado?.estatus && (
-                            <div className="text-xs text-slate-600">
-                              Último:{" "}
-                              {
-                                STATUS_LABEL[
-                                  coerceStatus(
-                                    ticketDetail.ultimo_estado.estatus
-                                  )
-                                ]
-                              }
-                              {ticketDetail?.ultimo_estado?.fecha && (
-                                <>
-                                  {" · "}
-                                  {new Date(
-                                    ticketDetail.ultimo_estado.fecha
-                                  ).toLocaleString("es-ES")}
-                                </>
-                              )}
-                            </div>
-                          )}
-                          {Array.isArray(ticketDetail?.estados) &&
-                          ticketDetail.estados.length > 0 ? (
-                            <div className="mt-1 space-y-1">
-                              {ticketDetail.estados.map((e: any) => (
-                                <div
-                                  key={e.id}
-                                  className="flex items-center gap-2 text-xs text-slate-700"
-                                >
-                                  <span
-                                    className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
-                                      STATUS_STYLE[coerceStatus(e.estatus_id)]
-                                    }`}
-                                  >
-                                    {STATUS_LABEL[coerceStatus(e.estatus_id)]}
-                                  </span>
-                                  <span>
-                                    {new Date(e.created_at).toLocaleString(
-                                      "es-ES"
-                                    )}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-slate-500">
-                              Sin historial
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex items-center justify-center py-12 text-sm text-slate-500">
-                        Sin datos de detalle
-                      </div>
-                    )}
                   </div>
                 </div>
 

@@ -337,6 +337,8 @@ export default function TicketsBoard({
 
   const [editFiles, setEditFiles] = useState<File[]>([]);
   const [generalFiles, setGeneralFiles] = useState<File[]>([]);
+  const [generalUrls, setGeneralUrls] = useState<string[]>([]);
+  const [newGeneralUrl, setNewGeneralUrl] = useState("");
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
   const generalFileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingFiles, setUploadingFiles] = useState(false);
@@ -910,6 +912,40 @@ export default function TicketsBoard({
         type: recordedBlob.type || "audio/webm",
       });
       setEditFiles((prev) => [...prev, file]);
+
+      toast({
+        title: "Advertencia",
+        description:
+          "No se pudo convertir a MP3. Se guardó en formato original.",
+        variant: "destructive",
+      });
+    } finally {
+      if (recordedUrl) {
+        URL.revokeObjectURL(recordedUrl);
+        setRecordedUrl(null);
+      }
+      setRecordedBlob(null);
+    }
+  }
+
+  async function addRecordedToGeneralFiles() {
+    if (!recordedBlob) return;
+    try {
+      const mp3File = await convertBlobToMp3(recordedBlob);
+      setGeneralFiles((prev) => [...prev, mp3File]);
+      toast({
+        title: "Audio agregado a General",
+        description: "Grabación guardada como MP3.",
+      });
+    } catch (err) {
+      console.error("Error converting recording to MP3:", err);
+
+      // Fallback
+      const ext = recordedBlob.type?.includes("audio/ogg") ? "ogg" : "webm";
+      const file = new File([recordedBlob], `grabacion-${Date.now()}.${ext}`, {
+        type: recordedBlob.type || "audio/webm",
+      });
+      setGeneralFiles((prev) => [...prev, file]);
 
       toast({
         title: "Advertencia",
@@ -3195,10 +3231,12 @@ export default function TicketsBoard({
 
                               await uploadTicketFiles(
                                 selectedTicket.codigo,
-                                renamedFiles
+                                renamedFiles,
+                                generalUrls
                               );
                               toast({ title: "Archivos subidos" });
                               setGeneralFiles([]);
+                              setGeneralUrls([]);
                               await loadFilesForTicket(selectedTicket.codigo);
                             } catch (e) {
                               console.error(e);
@@ -3213,6 +3251,110 @@ export default function TicketsBoard({
                             ? "Subiendo..."
                             : "Subir archivos"}
                         </Button>
+                      )}
+
+                      {/* Grabador de audio (General) */}
+                      <div className="flex items-center gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant={isRecording ? "destructive" : "outline"}
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            if (isRecording) stopRecording();
+                            else startRecording();
+                          }}
+                        >
+                          {isRecording ? "Detener" : "Grabar audio"}
+                        </Button>
+                        {isRecording && (
+                          <span className="text-xs text-red-500 animate-pulse">
+                            Grabando...
+                          </span>
+                        )}
+                        {recordedUrl && (
+                          <div className="flex items-center gap-2">
+                            <audio
+                              src={recordedUrl}
+                              controls
+                              className="h-6 w-24"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() => {
+                                URL.revokeObjectURL(recordedUrl!);
+                                setRecordedUrl(null);
+                                setRecordedBlob(null);
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="h-6 text-xs"
+                              onClick={addRecordedToGeneralFiles}
+                            >
+                              Guardar
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Agregar URL (General) */}
+                      <div className="flex items-center gap-2 pt-1">
+                        <Input
+                          placeholder="Agregar URL..."
+                          className="h-7 text-xs w-full max-w-[200px]"
+                          value={newGeneralUrl}
+                          onChange={(e) => setNewGeneralUrl(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              const v = (newGeneralUrl || "").trim();
+                              if (v) {
+                                setGeneralUrls((prev) => [...prev, v]);
+                                setNewGeneralUrl("");
+                              }
+                            }
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0"
+                          onClick={() => {
+                            const v = (newGeneralUrl || "").trim();
+                            if (v) {
+                              setGeneralUrls((prev) => [...prev, v]);
+                              setNewGeneralUrl("");
+                            }
+                          }}
+                        >
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      {generalUrls.length > 0 && (
+                        <div className="flex flex-col gap-1 pt-1">
+                          {generalUrls.map((u, i) => (
+                            <div
+                              key={i}
+                              className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-1 rounded border border-slate-100"
+                            >
+                              <LinkIcon className="h-3 w-3" />
+                              <span className="truncate flex-1">{u}</span>
+                              <button
+                                onClick={() =>
+                                  setGeneralUrls((prev) =>
+                                    prev.filter((_, idx) => idx !== i)
+                                  )
+                                }
+                                className="text-slate-400 hover:text-red-500"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       )}
                     </div>
 
