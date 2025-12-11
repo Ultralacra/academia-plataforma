@@ -3,6 +3,7 @@
 import React from "react";
 import { CheckCheck, Check, Loader2 } from "lucide-react";
 import VideoPlayer from "./VideoPlayer";
+import { formatBackendLocalLabel } from "@/app/admin/teamsv2/[code]/chat-core";
 
 export type ChatSender = "admin" | "alumno" | "coach";
 
@@ -187,14 +188,9 @@ export default function MessageBubble({
 
         <div className="mt-1 flex items-center gap-1 text-[11px] text-gray-500 select-none justify-end">
           <span>
-            {new Date(msg.at).toLocaleString("es-ES", {
-              timeZone: "UTC",
-              weekday: "short",
-              day: "2-digit",
-              month: "2-digit",
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: false,
+            {formatBackendLocalLabel(msg.at, {
+              showDate: true,
+              showTime: true,
             })}
           </span>
           {mine &&

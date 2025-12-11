@@ -22,7 +22,13 @@ import {
   hasRecentUploadMatch,
   hasRecentUploadLoose,
 } from "./chat-recent-upload";
-import { getEmitter, normalizeDateStr, normalizeTipo } from "./chat-core";
+import {
+  getEmitter,
+  normalizeDateStr,
+  normalizeTipo,
+  nowLocalIso,
+  formatBackendLocalLabel,
+} from "./chat-core";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST, apiFetch, buildUrl } from "@/lib/api-config";
@@ -130,7 +136,16 @@ export default function CoachChatInline({
     [room]
   );
   const mine = React.useCallback(
-    (s: Sender) => (s || "").toLowerCase() === role.toLowerCase(),
+    (s: Sender) => {
+      const sender = String(s || "").toLowerCase();
+      const r = String(role || "").toLowerCase();
+      // En backend suele venir como participante_tipo: cliente/equipo/admin,
+      // mientras la UI usa role: alumno/coach/admin.
+      if (r === "alumno") return sender === "alumno" || sender === "cliente";
+      if (r === "coach") return sender === "coach" || sender === "equipo";
+      if (r === "admin") return sender === "admin" || sender === "usuario";
+      return sender === r;
+    },
     [role]
   );
   // Límite de tamaño por archivo: 50MB
@@ -141,6 +156,7 @@ export default function CoachChatInline({
   const itemsRef = React.useRef<Message[]>([]);
   React.useEffect(() => {
     itemsRef.current = items;
+    if (!chatDebug()) return;
     if (items.length > 0) {
       console.log(
         "[CoachChatInline] Lista de horas:",
@@ -855,7 +871,7 @@ export default function CoachChatInline({
           room: normRoom,
           sender: role,
           text: "",
-          at: new Date().toISOString(),
+          at: nowLocalIso(),
           delivered: false,
           read: false,
           srcParticipantId: myParticipantIdRef.current ?? undefined,
@@ -1120,7 +1136,9 @@ export default function CoachChatInline({
         try {
           const txt = String(m?.contenido ?? m?.texto ?? "").trim();
           const tMsg = Date.parse(
-            String(normalizeDateStr(m?.fecha_envio) || "")
+            String(
+              normalizeDateStr(m?.fecha_envio_local ?? m?.fecha_envio) || ""
+            )
           );
           for (let i = outboxRef.current.length - 1; i >= 0; i--) {
             const ob = outboxRef.current[i];
@@ -1244,7 +1262,8 @@ export default function CoachChatInline({
           sender,
           text: txt,
           at: String(
-            normalizeDateStr(obj?.fecha_envio) || new Date().toISOString()
+            normalizeDateStr(obj?.fecha_envio_local ?? obj?.fecha_envio) ||
+              nowLocalIso()
           ),
           delivered: true,
           read: false,
@@ -1588,8 +1607,9 @@ export default function CoachChatInline({
                       m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
                     ).trim(),
                     at: String(
-                      normalizeDateStr(m?.fecha_envio) ||
-                        new Date().toISOString()
+                      normalizeDateStr(
+                        m?.fecha_envio_local ?? m?.fecha_envio
+                      ) || nowLocalIso()
                     ),
                     delivered: true,
                     read: !!m?.leido,
@@ -1846,7 +1866,11 @@ export default function CoachChatInline({
             try {
               const txt = String(msg?.contenido ?? msg?.texto ?? "").trim();
               const tMsg = Date.parse(
-                String(normalizeDateStr(msg?.fecha_envio) || "")
+                String(
+                  normalizeDateStr(
+                    msg?.fecha_envio_local ?? msg?.fecha_envio
+                  ) || ""
+                )
               );
               for (let i = outboxRef.current.length - 1; i >= 0; i--) {
                 const ob = outboxRef.current[i];
@@ -1894,7 +1918,8 @@ export default function CoachChatInline({
               !senderIsMeBySession &&
               !senderIsMeByOutbox &&
               !senderIsMeByRecent &&
-              !senderIsMeByTipo
+              !senderIsMeByTipo &&
+              !mine(tipoNorm as unknown as Sender)
             ) {
               console.log(
                 "[CoachChatInline] Playing sound for incoming message"
@@ -1914,7 +1939,8 @@ export default function CoachChatInline({
               sender,
               text: String(msg?.contenido ?? msg?.texto ?? "").trim(),
               at: String(
-                normalizeDateStr(msg?.fecha_envio) || new Date().toISOString()
+                normalizeDateStr(msg?.fecha_envio_local ?? msg?.fecha_envio) ||
+                  nowLocalIso()
               ),
               delivered: true,
               read: false,
@@ -2149,7 +2175,8 @@ export default function CoachChatInline({
                   m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
                 ).trim(),
                 at: String(
-                  normalizeDateStr(m?.fecha_envio) || new Date().toISOString()
+                  normalizeDateStr(m?.fecha_envio_local ?? m?.fecha_envio) ||
+                    nowLocalIso()
                 ),
                 delivered: true,
                 read: !!m?.leido,
@@ -2362,7 +2389,8 @@ export default function CoachChatInline({
                 m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
               ).trim(),
               at: String(
-                normalizeDateStr(m?.fecha_envio) || new Date().toISOString()
+                normalizeDateStr(m?.fecha_envio_local ?? m?.fecha_envio) ||
+                  nowLocalIso()
               ),
               delivered: true,
               read: !!m?.leido,
@@ -2972,8 +3000,9 @@ export default function CoachChatInline({
                           m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
                         ).trim(),
                         at: String(
-                          normalizeDateStr(m?.fecha_envio) ||
-                            new Date().toISOString()
+                          normalizeDateStr(
+                            m?.fecha_envio_local ?? m?.fecha_envio
+                          ) || nowLocalIso()
                         ),
                         delivered: true,
                         read: !!m?.leido,
@@ -3233,7 +3262,7 @@ export default function CoachChatInline({
           room: normRoom,
           sender: role,
           text: val,
-          at: new Date().toISOString(),
+          at: nowLocalIso(),
           delivered: false,
           read: false,
           srcParticipantId: effectivePid ?? undefined,
@@ -3365,8 +3394,9 @@ export default function CoachChatInline({
                         m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
                       ).trim(),
                       at: String(
-                        normalizeDateStr(m?.fecha_envio) ||
-                          new Date().toISOString()
+                        normalizeDateStr(
+                          m?.fecha_envio_local ?? m?.fecha_envio
+                        ) || nowLocalIso()
                       ),
                       delivered: true,
                       read: !!m?.leido,
@@ -3431,22 +3461,8 @@ export default function CoachChatInline({
 
   // mine definition moved to top
   const formatTime = React.useCallback((iso: string | undefined) => {
-    try {
-      if (!iso) return "";
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return "";
-      return d.toLocaleString("es-ES", {
-        timeZone: "UTC",
-        weekday: "short",
-        day: "2-digit",
-        month: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-    } catch {
-      return "";
-    }
+    // Mostrar solo día + hora (sin conversiones de zona horaria)
+    return formatBackendLocalLabel(iso, { showDate: true, showTime: true });
   }, []);
 
   async function handleDeleteChat() {

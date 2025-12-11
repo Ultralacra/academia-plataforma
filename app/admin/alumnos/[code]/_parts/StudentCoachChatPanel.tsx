@@ -438,14 +438,20 @@ export default function StudentCoachChatPanel({
     return t ? t.slice(0, 1).toUpperCase() : "?";
   }
 
-  const formatListTime = (ms: number): string => {
-    if (!ms || isNaN(ms)) return "";
-    const d = new Date(ms);
-    if (isNaN(d.getTime())) return "";
-    return d.toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  const formatLocalTimeLabel = (v: any): string => {
+    const raw = String(v ?? "").trim();
+    if (!raw) return "";
+    const normalized =
+      raw.includes(" ") && !raw.includes("T") ? raw.replace(" ", "T") : raw;
+    const m = normalized.match(
+      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/
+    );
+    if (!m) return raw;
+    const dd = m[3];
+    const mm = m[2];
+    const hh = m[4];
+    const min = m[5];
+    return `${dd}/${mm} ${hh}:${min}`;
   };
   const getItemTimestamp = (it: any): number => {
     try {
@@ -675,6 +681,15 @@ export default function StudentCoachChatPanel({
                       id != null &&
                       String(currentOpenChatId ?? "") === String(id);
                     const lastAt = getItemTimestamp(it);
+                    const lastAtLabel = formatLocalTimeLabel(
+                      lastObj?.fecha_envio_local ??
+                        lastObj?.fecha_envio ??
+                        it?.last_message_at ??
+                        it?.fecha_ultimo_mensaje ??
+                        it?.updated_at ??
+                        it?.fecha_actualizacion ??
+                        ""
+                    );
                     const brandAvatarSrc =
                       "https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg";
                     return (
@@ -729,7 +744,7 @@ export default function StudentCoachChatPanel({
                                   {title}
                                 </span>
                                 <span className="text-[11px] text-muted-foreground flex-shrink-0">
-                                  {formatListTime(lastAt)}
+                                  {lastAtLabel}
                                 </span>
                               </div>
                               {(areaPuesto || last) && (

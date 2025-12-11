@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ import {
 import Link from "next/link";
 import TicketsPanelCoach from "../TicketsPanelCoach";
 import CoachChatInline from "./CoachChatInline";
+import { formatBackendLocalLabel } from "./chat-core";
 import {
   getCoaches,
   type CoachItem as CoachMini,
@@ -73,6 +74,8 @@ export default function CoachDetailPage({
 }) {
   const code = params.code;
   const router = useRouter();
+  const pathname = usePathname();
+  const isStandaloneChatRoute = (pathname || "").endsWith("/chat");
   const chatServerUrl = (CHAT_HOST || "").replace(/\/$/, "");
   // Modo mantenimiento para chat: cuando NEXT_PUBLIC_CHAT_MAINTENANCE=1
   const chatMaintenance =
@@ -134,11 +137,20 @@ export default function CoachDetailPage({
   const [mobileChatOpen, setMobileChatOpen] = useState(false);
 
   // Tabs control + sessions prefill
-  const [activeTab, setActiveTab] = useState<string>("tickets");
+  const [activeTab, setActiveTab] = useState<string>(
+    isStandaloneChatRoute ? "chat" : "tickets"
+  );
   const [sessionsPrefillAlumno, setSessionsPrefillAlumno] = useState<
     string | null
   >(null);
   const [sessionsOfferSignal, setSessionsOfferSignal] = useState<number>(0);
+
+  useEffect(() => {
+    if (isStandaloneChatRoute && activeTab !== "chat") {
+      setActiveTab("chat");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isStandaloneChatRoute]);
 
   const [puestoOptionsApi, setPuestoOptionsApi] = useState<OpcionItem[]>([]);
   const [areaOptionsApi, setAreaOptionsApi] = useState<OpcionItem[]>([]);
@@ -317,6 +329,23 @@ export default function CoachDetailPage({
     const idNum = Number(it?.id_chat ?? it?.id ?? 0);
     return isNaN(idNum) ? 0 : idNum;
   }
+  function getChatLastAtLabel(it: any): string {
+    try {
+      const m = it?.last_message || {};
+      const raw =
+        m?.fecha_envio_local ??
+        m?.created_at_local ??
+        m?.fecha_envio ??
+        it?.last_message_at ??
+        it?.fecha_ultimo_mensaje ??
+        it?.updated_at ??
+        it?.fecha_actualizacion ??
+        "";
+      return formatBackendLocalLabel(raw, { showDate: true, showTime: true });
+    } catch {
+      return "";
+    }
+  }
   function getChatLastMessage(it: any): { text: string; at: number } {
     try {
       const m = it?.last_message || {};
@@ -325,6 +354,8 @@ export default function CoachDetailPage({
           m?.contenido ?? m?.Contenido ?? m?.text ?? it?.last_message_text ?? ""
         ) || "";
       const atFields = [
+        m?.fecha_envio_local,
+        m?.created_at_local,
         m?.fecha_envio,
         it?.last_message_at,
         it?.fecha_ultimo_mensaje,
@@ -477,6 +508,7 @@ export default function CoachDetailPage({
       const top = chats[0];
       const topChatId = top?.id_chat ?? top?.id ?? null;
       const lastAt = getChatTimestamp(top);
+      const lastAtLabel = getChatLastAtLabel(top);
       const last = getChatLastMessage(top);
       const lastRead = topChatId != null ? getLastReadByChatId(topChatId) : 0;
       const hasUnread = lastAt > (lastRead || 0);
@@ -487,6 +519,7 @@ export default function CoachDetailPage({
         chats,
         topChatId,
         lastAt,
+        lastAtLabel,
         lastText: (last.text || "").trim(),
         hasUnread,
       };
@@ -558,6 +591,7 @@ export default function CoachDetailPage({
 
       const topChatId = top?.id_chat ?? top?.id ?? null;
       const lastAt = getChatTimestamp(top);
+      const lastAtLabel = getChatLastAtLabel(top);
       const last = getChatLastMessage(top);
       const lastRead = topChatId != null ? getLastReadByChatId(topChatId) : 0;
       const hasUnread = lastAt > (lastRead || 0);
@@ -568,6 +602,7 @@ export default function CoachDetailPage({
         chats,
         topChatId,
         lastAt,
+        lastAtLabel,
         lastText: (last.text || "").trim(),
         hasUnread,
       };
@@ -691,6 +726,7 @@ export default function CoachDetailPage({
       const top = group.chats[0];
       const topChatId = top?.id_chat ?? top?.id ?? null;
       const lastAt = getChatTimestamp(top);
+      const lastAtLabel = getChatLastAtLabel(top);
       const last = getChatLastMessage(top);
 
       const unreadCount = group.chats.reduce((acc: number, it: any) => {
@@ -709,6 +745,7 @@ export default function CoachDetailPage({
         ...group,
         topChatId,
         lastAt,
+        lastAtLabel,
         lastText: (last.text || "").trim(),
         hasUnread,
         unreadCount,
@@ -1107,13 +1144,15 @@ export default function CoachDetailPage({
             onValueChange={setActiveTab}
             className="mt-2 flex flex-col flex-1 min-h-0"
           >
-            <TabsList>
-              <TabsTrigger value="tickets">Tickets</TabsTrigger>
-              <TabsTrigger value="metricas">Métricas</TabsTrigger>
-              <TabsTrigger value="alumnos">Alumnos</TabsTrigger>
-              <TabsTrigger value="chat">Chat</TabsTrigger>
-              <TabsTrigger value="sesiones">Sesiones</TabsTrigger>
-            </TabsList>
+            {!isStandaloneChatRoute && (
+              <TabsList>
+                <TabsTrigger value="tickets">Tickets</TabsTrigger>
+                <TabsTrigger value="metricas">Métricas</TabsTrigger>
+                <TabsTrigger value="alumnos">Alumnos</TabsTrigger>
+                <TabsTrigger value="chat">Chat</TabsTrigger>
+                <TabsTrigger value="sesiones">Sesiones</TabsTrigger>
+              </TabsList>
+            )}
 
             {/* Pestaña Tickets: scroll interno, pantalla completa */}
             <TabsContent value="tickets" className="mt-0 flex-1 min-h-0">
@@ -1340,9 +1379,7 @@ export default function CoachDetailPage({
                                             : "text-slate-400"
                                         }`}
                                       >
-                                        {item.lastAt
-                                          ? formatTime(item.lastAt)
-                                          : ""}
+                                        {item.lastAtLabel || ""}
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-2 mt-0.5">

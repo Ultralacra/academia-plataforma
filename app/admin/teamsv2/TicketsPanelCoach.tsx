@@ -58,6 +58,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import VideoPlayer from "@/components/chat/VideoPlayer";
 import {
   getCoachTickets,
@@ -281,6 +289,9 @@ export default function TicketsPanelCoach({
   };
 
   const [query, setQuery] = useState("");
+  const [statusFiltro, setStatusFiltro] = useState<string>("");
+  const [studentFiltro, setStudentFiltro] = useState<string>("");
+  const [viewMode, setViewMode] = useState<"kanban" | "table">("kanban");
   const [openCreate, setOpenCreate] = useState(false);
   const [createNombre, setCreateNombre] = useState("");
   const [createTipo, setCreateTipo] = useState("");
@@ -332,7 +343,7 @@ export default function TicketsPanelCoach({
       mime_type: string | null;
       tamano_bytes: number | null;
       created_at: string | null;
-      url?: string;
+      url?: string | null;
     }[]
   >([]);
   const [fileToDelete, setFileToDelete] = useState<null | {
@@ -1170,16 +1181,80 @@ export default function TicketsPanelCoach({
     return [...locals, ...rows];
   }, [localTickets, rows]);
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return combined;
-    const q = query.toLowerCase().trim();
-    return combined.filter(
-      (t) =>
-        (t.nombre || "").toLowerCase().includes(q) ||
-        (t.alumno_nombre || "").toLowerCase().includes(q) ||
-        (t.codigo || "").toLowerCase().includes(q)
+  // Lista compacta de alumnos que sí tienen tickets en el rango actual
+  const studentsFromTickets = useMemo(
+    () => {
+      const map = new Map<string, string>();
+      rows.forEach((t) => {
+        const id = String(t.id_alumno || "");
+        if (!id) return;
+        if (!map.has(id)) map.set(id, t.alumno_nombre || id);
+      });
+      return Array.from(map.entries()).map(([alumno, nombre]) => ({ alumno, nombre }));
+    },
+    [rows]
+  );
+
+  // Resolver nombre humano para códigos de personas (alumno/coach)
+  function resolvePersonNameGlobal(code?: string | null): string {
+    const c = String(code || "").trim();
+    if (!c) return "";
+    // Si coincide con el alumno de este ticket abierto, usar su nombre
+    if (editTicket && c === String(editTicket.id_alumno || "")) {
+      return editTicket.alumno_nombre || c;
+    }
+    // Buscar en alumnos de este coach
+    const s = coachStudents.find(
+      (st) => String(st.alumno || "").toLowerCase() === c.toLowerCase()
     );
-  }, [combined, query]);
+    if (s) return s.nombre || c;
+    // Buscar en lista de coaches globales
+    const coach = allCoaches.find(
+      (co) => String((co as any).codigo || "").toLowerCase() === c.toLowerCase()
+    );
+    if (coach) return (coach as any).nombre || c;
+    return c;
+  }
+
+  // Cuando cargamos el detalle, completar informante/resuelto_por con nombres
+  useEffect(() => {
+    if (!ticketDetail) return;
+    setEditForm((prev) => ({
+      ...prev,
+      informante:
+        (ticketDetail as any).informante_nombre ||
+        resolvePersonNameGlobal((ticketDetail as any).informante),
+      resuelto_por:
+        (ticketDetail as any).resuelto_por_nombre ||
+        resolvePersonNameGlobal((ticketDetail as any).resuelto_por),
+    }));
+  }, [ticketDetail]);
+
+  const filtered = useMemo(() => {
+    let list = combined;
+    // Texto libre
+    if (query.trim()) {
+      const q = query.toLowerCase().trim();
+      list = list.filter(
+        (t) =>
+          (t.nombre || "").toLowerCase().includes(q) ||
+          (t.alumno_nombre || "").toLowerCase().includes(q) ||
+          (t.codigo || "").toLowerCase().includes(q)
+      );
+    }
+    // Filtro por estado
+    if (statusFiltro && statusFiltro !== "__all__") {
+      const sf = statusFiltro.toUpperCase();
+      list = list.filter(
+        (t) => String(t.estado || "").toUpperCase() === sf
+      );
+    }
+    // Filtro por alumno (código)
+    if (studentFiltro && studentFiltro !== "__all__") {
+      list = list.filter((t) => (t.id_alumno || "") === studentFiltro);
+    }
+    return list;
+  }, [combined, query, statusFiltro, studentFiltro]);
 
   async function handleChangeEstado(
     ticketCodigo: string,
@@ -1976,6 +2051,64 @@ export default function TicketsPanelCoach({
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
+        
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mt-2">
+          <div className="flex gap-2 items-center flex-wrap">
+            {/* Filtro Estado */}
+            <Select value={statusFiltro} onValueChange={setStatusFiltro}>
+              <SelectTrigger className="h-9 w-[180px]">
+                <SelectValue placeholder="Todos los estados" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos</SelectItem>
+                <SelectItem value="PENDIENTE">{STATUS_LABEL.PENDIENTE}</SelectItem>
+                <SelectItem value="EN_PROGRESO">{STATUS_LABEL.EN_PROGRESO}</SelectItem>
+                <SelectItem value="PAUSADO">{STATUS_LABEL.PAUSADO}</SelectItem>
+                <SelectItem value="PENDIENTE_DE_ENVIO">{STATUS_LABEL.PENDIENTE_DE_ENVIO}</SelectItem>
+                <SelectItem value="RESUELTO">{STATUS_LABEL.RESUELTO}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Filtro Alumno (solo alumnos con tickets en el rango) */}
+            <Select value={studentFiltro} onValueChange={setStudentFiltro}>
+              <SelectTrigger className="h-9 w-[240px]">
+                <SelectValue placeholder="Todos los alumnos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">Todos</SelectItem>
+                {studentsFromTickets.map((s) => (
+                  <SelectItem key={s.alumno} value={s.alumno}>
+                    {s.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Toggle de Vista */}
+          <div className="inline-flex items-center rounded-md border bg-white overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setViewMode("kanban")}
+              className={`px-3 py-1.5 text-xs ${
+                viewMode === "kanban" ? "bg-slate-900 text-white" : "hover:bg-gray-50"
+              }`}
+              title="Vista Kanban"
+            >
+              Kanban
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={`px-3 py-1.5 text-xs border-l ${
+                viewMode === "table" ? "bg-slate-900 text-white" : "hover:bg-gray-50"
+              }`}
+              title="Vista Tabla"
+            >
+              Tabla
+            </button>
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto p-6 bg-slate-50">
@@ -2000,7 +2133,9 @@ export default function TicketsPanelCoach({
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-2">
+          (
+            viewMode === "kanban" ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-2">
             {(
               [
                 "PENDIENTE",
@@ -2227,7 +2362,80 @@ export default function TicketsPanelCoach({
                 </div>
               );
             })}
-          </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-slate-200 bg-white">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[32%]">Ticket</TableHead>
+                      <TableHead className="w-[20%]">Alumno</TableHead>
+                      <TableHead className="w-[18%]">Informante</TableHead>
+                      <TableHead className="w-[12%]">Estado</TableHead>
+                      <TableHead className="w-[12%]">Creación</TableHead>
+                      <TableHead className="w-[12%]">Deadline</TableHead>
+                      <TableHead className="text-right w-[80px]">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((t) => (
+                      <TableRow key={t.id} className="hover:bg-slate-50">
+                        <TableCell className="align-top">
+                          <div className="text-sm font-medium text-slate-900 truncate" title={t.nombre ?? undefined}>
+                            {t.nombre ?? "—"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <div className="text-sm text-slate-800 truncate" title={t.alumno_nombre ?? undefined}>
+                            {t.alumno_nombre ?? "—"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <div className="text-sm text-slate-800 truncate" title={(t as any).informante_nombre || (t as any).informante || undefined}>
+                            {(t as any).informante_nombre || (t as any).informante || "—"}
+                          </div>
+                        </TableCell>
+                        <TableCell className="align-top">
+                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 border text-[10px] ${STATUS_STYLE[coerceStatus(t.estado as any)]}`}>
+                            {STATUS_LABEL[coerceStatus(t.estado as any)]}
+                          </span>
+                        </TableCell>
+                        <TableCell className="align-top text-sm text-slate-700">
+                          {t.created_at ? new Date(t.created_at).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                        </TableCell>
+                        <TableCell className="align-top text-sm text-slate-700">
+                          {t.deadline ? new Date(t.deadline).toLocaleString("es-ES", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                        </TableCell>
+                        <TableCell className="align-top text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setEditTicket(t);
+                              setEditForm((prev) => ({
+                                ...prev,
+                                nombre: t.nombre ?? "",
+                                estado: (t.estado as any) ?? "PENDIENTE",
+                                deadline: t.deadline ?? null,
+                              }));
+                              setEditFiles([]);
+                              setEditPreviews([]);
+                              setEditLinks([]);
+                              setEditLinkInput("");
+                              setEditOpen(true);
+                            }}
+                          >
+                            Abrir
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )
+          )
         )}
 
         {/* Pagination moved out of scroll area */}

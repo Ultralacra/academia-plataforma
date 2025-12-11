@@ -5,6 +5,7 @@ import { getAuthToken } from "@/lib/auth";
 import Spinner from "@/components/ui/spinner";
 import MessageBubble from "@/components/chat/MessageBubble";
 import VideoPlayer from "@/components/chat/VideoPlayer";
+import { nowLocalIso } from "@/app/admin/teamsv2/[code]/chat-core";
 // chat: disable snackbars in-chat — use console.debug for non-intrusive messages
 import {
   Smile,
@@ -832,7 +833,9 @@ export default function ChatRealtime({
               room: normRoom,
               sender,
               text: String(msg?.contenido ?? ""),
-              at: String(msg?.fecha_envio || new Date().toISOString()),
+              at: String(
+                msg?.fecha_envio_local ?? (msg?.fecha_envio || nowLocalIso())
+              ),
               delivered: true,
               read: false,
               srcParticipantId: msg?.id_chat_participante_emisor,
@@ -859,13 +862,15 @@ export default function ChatRealtime({
                     textMatch &&
                     (isMyEcho || mm.sender === currentRole)
                   ) {
+                    const serverAt =
+                      msg?.fecha_envio_local ?? msg?.fecha_envio ?? null;
                     // Preserve the local timestamp to prevent the message from jumping up/down
                     // due to server clock skew, which makes it look like it "disappeared".
                     // Also preserve 'read' status and sender (to avoid flipping sides if sender calc failed).
                     next[i] = {
                       ...newMsg,
                       sender: mm.sender, // Keep local sender
-                      at: mm.at, // Keep local time
+                      at: serverAt ? String(serverAt) : mm.at, // Prefer backend local time if provided
                       read: mm.read || false,
                     };
                     return next;
@@ -1575,7 +1580,7 @@ export default function ChatRealtime({
                 room: normRoom,
                 sender,
                 text: String(m?.Contenido ?? m?.contenido ?? ""),
-                at: String(m?.fecha_envio || new Date().toISOString()),
+                at: String(m?.fecha_envio || nowLocalIso()),
                 delivered: true,
                 read: !!m?.leido,
                 srcParticipantId: m?.id_chat_participante_emisor,
@@ -1672,7 +1677,7 @@ export default function ChatRealtime({
                     room: normRoom,
                     sender,
                     text: String(m?.Contenido ?? m?.contenido ?? ""),
-                    at: String(m?.fecha_envio || new Date().toISOString()),
+                    at: String(m?.fecha_envio || nowLocalIso()),
                     delivered: true,
                     read: !!m?.leido,
                     srcParticipantId: m?.id_chat_participante_emisor,
@@ -1829,7 +1834,7 @@ export default function ChatRealtime({
                 room: normRoom,
                 sender,
                 text: String(m?.Contenido ?? m?.contenido ?? ""),
-                at: String(m?.fecha_envio || new Date().toISOString()),
+                at: String(m?.fecha_envio || nowLocalIso()),
                 delivered: true,
                 read: !!m?.leido,
                 srcParticipantId: m?.id_chat_participante_emisor,
@@ -2276,7 +2281,7 @@ export default function ChatRealtime({
         room: normRoom,
         sender: currentRole,
         text: val,
-        at: new Date().toISOString(),
+        at: nowLocalIso(),
         attachments: tempAttachments,
         delivered: false,
       };
@@ -2521,6 +2526,8 @@ export default function ChatRealtime({
               id_chat_participante_emisor: effectiveMyParticipantId,
               contenido: val,
               client_session: clientSessionRef.current,
+              // Hora local del cliente para persistir y mantener al recargar
+              fecha_envio_local: localMsg.at,
               attachments: payloadAttachments,
             };
             try {
@@ -2826,7 +2833,7 @@ export default function ChatRealtime({
                   room: normRoom,
                   sender,
                   text: String(m?.Contenido ?? m?.contenido ?? ""),
-                  at: String(m?.fecha_envio || new Date().toISOString()),
+                  at: String(m?.fecha_envio || nowLocalIso()),
                   delivered: true,
                   read: !!m?.leido,
                   srcParticipantId: m?.id_chat_participante_emisor,
@@ -2924,7 +2931,7 @@ export default function ChatRealtime({
                       room: normRoom,
                       sender,
                       text: String(m?.Contenido ?? m?.contenido ?? ""),
-                      at: String(m?.fecha_envio || new Date().toISOString()),
+                      at: String(m?.fecha_envio || nowLocalIso()),
                       delivered: true,
                       read: !!m?.leido,
                       srcParticipantId: m?.id_chat_participante_emisor,
@@ -3263,7 +3270,7 @@ export default function ChatRealtime({
       messages: ticketSelectedMessages,
       attachments: ticketAttachments,
       autoGenerated: ticketAutoGenerated,
-      createdAt: new Date().toISOString(),
+      createdAt: nowLocalIso(),
     };
 
     console.debug("Ticket creado:", ticketData);

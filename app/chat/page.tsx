@@ -865,7 +865,6 @@ export default function ChatHubPage() {
                         </span>
                         <span className="text-[11px]">
                           {new Date(m.at).toLocaleString("es-ES", {
-                            timeZone: "UTC",
                             weekday: "short",
                             day: "2-digit",
                             month: "2-digit",

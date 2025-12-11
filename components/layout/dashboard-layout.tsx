@@ -5,7 +5,7 @@ import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Menu, Bell } from "lucide-react";
+import { LogOut, User, Menu, Bell, Plus, RefreshCw } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -42,10 +42,14 @@ function NotificationsBadge() {
     items: sseItems,
     unread: sseUnread,
     markAllRead: sseMarkAll,
+    refresh: sseRefresh,
+    loadMore: sseLoadMore,
+    hasMore: sseHasMore,
     connected: sseConnected,
     disabled: sseDisabled,
   } = useSseNotifications();
   const [open, setOpen] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(20);
   // Fusionar notificaciones: primero las SSE (más recientes directas), luego tickets por orden de fecha
   const merged = useMemo(() => {
     const parseAt = (x: any) => {
@@ -63,8 +67,10 @@ function NotificationsBadge() {
       _kind: "sse",
       _t: parseAt(it),
     }));
-    return [...normSse, ...normTicket].sort((a, b) => b._t - a._t).slice(0, 20);
-  }, [ticketItems, sseItems]);
+    return [...normSse, ...normTicket]
+      .sort((a, b) => b._t - a._t)
+      .slice(0, visibleLimit);
+  }, [ticketItems, sseItems, visibleLimit]);
   const totalUnread = ticketUnread + sseUnread;
 
   return (
@@ -72,6 +78,11 @@ function NotificationsBadge() {
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
+        // Al abrir, refrescar la lista del usuario (REST)
+        if (v) {
+          sseRefresh();
+          setVisibleLimit(20);
+        }
         // Al cerrar, marcar todas como leídas
         if (!v) {
           ticketsMarkAll();
@@ -110,9 +121,9 @@ function NotificationsBadge() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-2">
-        <div className="text-sm font-semibold px-2 py-1">Notificaciones</div>
-        <div className="max-h-56 overflow-y-auto">
+      <PopoverContent className="w-96 p-3">
+        <div className="text-base font-semibold px-2 py-1">Notificaciones</div>
+        <div className="max-h-80 overflow-y-auto">
           {merged.length === 0 ? (
             <div className="p-3 text-xs text-muted-foreground">
               {sseDisabled || !sseConnected
@@ -121,62 +132,97 @@ function NotificationsBadge() {
             </div>
           ) : (
             merged.map((n: any) => (
-              <div key={n.id} className="p-2 border-b last:border-b-0">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-sm font-medium leading-snug min-w-0">
-                    <div className="truncate" title={n.title}>
-                      {n.title}
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      {n.at ? new Date(n.at).toLocaleString() : ""}
-                      {n._kind === "sse" && (
-                        <span className="inline-flex items-center rounded bg-emerald-50 text-emerald-700 px-1 py-[2px] border border-emerald-200 text-[10px]">
-                          SSE
-                        </span>
-                      )}
-                      {n._kind === "ticket" && (
-                        <span className="inline-flex items-center rounded bg-sky-50 text-sky-700 px-1 py-[2px] border border-sky-200 text-[10px]">
-                          Ticket
-                        </span>
-                      )}
-                    </div>
-                  </div>
+              <div
+                key={n.id}
+                className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
+              >
+                <div className="flex items-start gap-3">
                   {(() => {
-                    const s = String(n.current || "").toUpperCase();
-                    const style =
-                      s === "PENDIENTE"
-                        ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                        : s === "EN_PROGRESO"
-                        ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                        : s === "PENDIENTE_DE_ENVIO"
-                        ? "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800"
-                        : s === "PAUSADO"
-                        ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
-                        : s === "RESUELTO"
-                        ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                        : s === "CREADO"
-                        ? "bg-muted text-muted-foreground border-border"
-                        : s === "ELIMINADO"
-                        ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
-                        : "hidden";
-                    const labelMap: Record<string, string> = {
-                      EN_PROGRESO: "En progreso",
-                      PENDIENTE: "Pendiente",
-                      PENDIENTE_DE_ENVIO: "Pendiente de envío",
-                      PAUSADO: "Pausado",
-                      RESUELTO: "Resuelto",
-                      CREADO: "Creado",
-                      ELIMINADO: "Eliminado",
-                    };
-                    const lab = labelMap[s] || "";
+                    const t = String(n.type || "");
+                    const base =
+                      "w-9 h-9 rounded-full border flex items-center justify-center shrink-0";
+                    if (t === "ticket.updated") {
+                      return (
+                        <div className={`${base} bg-amber-50 border-amber-200`}>
+                          <RefreshCw className="h-4 w-4 text-amber-700" />
+                        </div>
+                      );
+                    }
+                    if (t === "ticket.created") {
+                      return (
+                        <div
+                          className={`${base} bg-emerald-50 border-emerald-200`}
+                        >
+                          <Plus className="h-4 w-4 text-emerald-700" />
+                        </div>
+                      );
+                    }
                     return (
-                      <span
-                        className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${style}`}
-                      >
-                        {lab}
-                      </span>
+                      <div className={`${base} bg-muted border-border`}>
+                        <Bell className="h-4 w-4 text-muted-foreground" />
+                      </div>
                     );
                   })()}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div
+                          className="text-sm font-medium leading-snug truncate"
+                          title={n.title}
+                        >
+                          {n.title}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {n.at ? new Date(n.at).toLocaleString() : ""}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {n.unread && (
+                          <span
+                            className="w-2 h-2 rounded-full bg-sky-500"
+                            title="No leído"
+                          />
+                        )}
+                        {(() => {
+                          const s = String(n.current || "").toUpperCase();
+                          const style =
+                            s === "PENDIENTE"
+                              ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                              : s === "EN_PROGRESO"
+                              ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                              : s === "PENDIENTE_DE_ENVIO"
+                              ? "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800"
+                              : s === "PAUSADO"
+                              ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                              : s === "RESUELTO"
+                              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                              : s === "CREADO"
+                              ? "bg-muted text-muted-foreground border-border"
+                              : s === "ELIMINADO"
+                              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
+                              : "hidden";
+                          const labelMap: Record<string, string> = {
+                            EN_PROGRESO: "En progreso",
+                            PENDIENTE: "Pendiente",
+                            PENDIENTE_DE_ENVIO: "Pendiente de envío",
+                            PAUSADO: "Pausado",
+                            RESUELTO: "Resuelto",
+                            CREADO: "Creado",
+                            ELIMINADO: "Eliminado",
+                          };
+                          const lab = labelMap[s] || "";
+                          return (
+                            <span
+                              className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-medium ${style}`}
+                            >
+                              {lab}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))
@@ -195,6 +241,21 @@ function NotificationsBadge() {
           <div className="text-xs text-muted-foreground">
             {ticketItems.length + sseItems.length} total
           </div>
+        </div>
+
+        <div className="mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={!sseHasMore}
+            onClick={async () => {
+              await sseLoadMore();
+              setVisibleLimit((v) => v + 15);
+            }}
+          >
+            Ver más
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

@@ -204,7 +204,27 @@ export function AppSidebar() {
                   icon: CreditCard,
                 },
               ]
-            : coachItems
+            : (() => {
+                const code = (user as any)?.codigo || "";
+                const chatUrl = code
+                  ? `/admin/teamsv2/${code}/chat`
+                  : "/admin/teamsv2";
+                // Chat debe ir justo arriba de Tickets
+                return [
+                  { title: "Dashboard", url: "/coach", icon: Home },
+                  {
+                    title: "Alumnos",
+                    url: "/coach/students",
+                    icon: GraduationCap,
+                  },
+                  { title: "Chat", url: chatUrl, icon: MessageSquare },
+                  {
+                    title: "Tickets",
+                    url: "/coach/tickets",
+                    icon: MessageSquare,
+                  },
+                ] as MenuItem[];
+              })()
         ) as MenuItem[];
       case "equipo": {
         const code = (user as any)?.codigo || "";
@@ -243,6 +263,11 @@ export function AppSidebar() {
                 ],
               },
               {
+                title: "Chat",
+                url: `/admin/teamsv2/${code}/chat`,
+                icon: MessageSquare,
+              },
+              {
                 title: "Tickets",
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
@@ -258,11 +283,6 @@ export function AppSidebar() {
                 title: "Alumnos",
                 url: "/admin/alumnos",
                 icon: GraduationCap,
-              },
-              {
-                title: "Equipos",
-                url: `/admin/teamsv2`,
-                icon: Users,
               },
               {
                 title: "Métricas",
@@ -450,6 +470,36 @@ export function AppSidebar() {
     if (pathname.startsWith("/admin/metrics")) setMetricsOpen(true);
   }, [pathname]);
 
+  const bestActiveUrl = useMemo(() => {
+    try {
+      const p = String(pathname || "");
+      const matches = (url?: string) => {
+        if (!url) return false;
+        if (url === "/") return p === "/";
+        if (p === url) return true;
+        return p.startsWith(url.endsWith("/") ? url : `${url}/`);
+      };
+
+      const urls: string[] = [];
+      for (const it of menuItems) {
+        if (it?.url && !it.children?.length) urls.push(it.url);
+        if (Array.isArray(it.children)) {
+          for (const ch of it.children) {
+            if (ch?.url) urls.push(ch.url);
+          }
+        }
+      }
+      let best: string | null = null;
+      for (const u of urls) {
+        if (!matches(u)) continue;
+        if (!best || u.length > best.length) best = u;
+      }
+      return best;
+    } catch {
+      return null;
+    }
+  }, [menuItems, pathname]);
+
   return (
     <Sidebar className="border-r bg-sidebar backdrop-blur supports-[backdrop-filter]:bg-sidebar/70">
       <SidebarContent className="flex h-full flex-col overflow-x-hidden">
@@ -533,11 +583,7 @@ export function AppSidebar() {
 
                     // Enlace simple
                     if (!item.children?.length) {
-                      const active =
-                        pathname === item.url ||
-                        (!!item.url &&
-                          item.url !== "/" &&
-                          pathname?.startsWith(item.url));
+                      const active = !!item.url && bestActiveUrl === item.url;
 
                       return (
                         <SidebarMenuItem key={item.title}>
@@ -594,8 +640,8 @@ export function AppSidebar() {
                     }
 
                     // Grupo “Métricas”
-                    const isAnyChildActive = item.children?.some((c) =>
-                      pathname?.startsWith(c.url ?? "")
+                    const isAnyChildActive = item.children?.some(
+                      (c) => !!c.url && bestActiveUrl === c.url
                     );
 
                     return (
@@ -642,10 +688,7 @@ export function AppSidebar() {
                               {item.children?.map((child) => {
                                 const CIcon = child.icon;
                                 const active =
-                                  pathname === child.url ||
-                                  (!!child.url &&
-                                    child.url !== "/" &&
-                                    pathname?.startsWith(child.url));
+                                  !!child.url && bestActiveUrl === child.url;
                                 return (
                                   <li key={child.title} className="relative">
                                     <Link

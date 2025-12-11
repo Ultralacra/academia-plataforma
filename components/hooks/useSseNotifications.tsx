@@ -7,12 +7,11 @@ import {
   createContext,
   useContext,
 } from "react";
-import { usePathname } from "next/navigation";
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
 
 // Kill switch temporal para desactivar SSE por completo
-const SSE_TEMP_DISABLED = true;
+const SSE_TEMP_DISABLED = false;
 
 export interface SseNotificationItem {
   id: string;
@@ -20,6 +19,7 @@ export interface SseNotificationItem {
   at?: string;
   unread?: boolean;
   raw?: any;
+  type?: string;
 }
 
 interface SseNotificationsContextValue {
@@ -27,7 +27,11 @@ interface SseNotificationsContextValue {
   unread: number;
   connected: boolean; // estado actual de la conexión SSE
   disabled: boolean; // si está deshabilitado (ej. en /login)
+  lastReceived: SseNotificationItem | null;
   markAllRead: () => void;
+  refresh: () => Promise<void>;
+  loadMore: () => Promise<void>;
+  hasMore: boolean;
   clear: () => void;
 }
 
@@ -57,13 +61,147 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
   const [items, setItems] = useState<SseNotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [connected, setConnected] = useState(false);
+  const [lastReceived, setLastReceived] = useState<SseNotificationItem | null>(
+    null
+  );
+  const [hasMore, setHasMore] = useState(true);
   const controllerRef = useRef<AbortController | null>(null);
   const retryRef = useRef<number>(0);
   const connectedRef = useRef<boolean>(false);
   const bufferRef = useRef<string>("");
-  const pathname = usePathname();
-  const disabled = SSE_TEMP_DISABLED || !!pathname?.startsWith("/login");
+  const startedRef = useRef<boolean>(false);
+  // Permitir conexión también en /login según nuevo requerimiento
+  const disabled = SSE_TEMP_DISABLED;
   const bootstrappedRef = useRef<boolean>(false);
+  const refreshInFlightRef = useRef<boolean>(false);
+  const pagingOffsetRef = useRef<number>(0);
+
+  const mapNotif = useCallback((src: any): SseNotificationItem => {
+    const id = String(src?.id ?? src?.uuid ?? src?.code ?? Math.random());
+    const type = String(src?.type ?? src?.event ?? "notification");
+    const nombre = src?.payload?.ticket?.nombre ?? src?.ticket?.nombre;
+    const action = src?.payload?.action ?? src?.action;
+    const title =
+      type === "ticket.updated"
+        ? "Ticket actualizado"
+        : type === "ticket.created" && nombre
+        ? `Ticket creado · ${nombre}`
+        : type === "ticket.created"
+        ? "Ticket creado"
+        : action
+        ? String(type)
+        : String(
+            src?.title ?? src?.message ?? src?.descripcion ?? "Notificación"
+          );
+    const at =
+      src?.at ||
+      src?.created_at ||
+      src?.fecha ||
+      src?.timestamp ||
+      new Date().toISOString();
+    const isReadRaw =
+      src?.is_read ?? src?.read ?? src?.readed ?? src?.leida ?? src?.visto;
+    const isRead = Boolean(isReadRaw);
+    return { id, title, at, unread: !isRead, raw: src, type };
+  }, []);
+
+  const refresh = useCallback(async () => {
+    if (disabled) return;
+    const token = getAuthToken();
+    if (!token) return;
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    try {
+      const limit = 10;
+      const offset = 0;
+      const url = buildUrl(`/notifications?limit=${limit}&offset=${offset}`);
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json().catch(() => ({}));
+      const arr: any[] = Array.isArray((json as any)?.data)
+        ? (json as any).data
+        : Array.isArray(json)
+        ? (json as any)
+        : [];
+      const mapped: SseNotificationItem[] = arr.map(mapNotif);
+      pagingOffsetRef.current = mapped.length;
+      setHasMore(mapped.length === limit);
+      setItems((prev) => {
+        const byId = new Map(prev.map((x) => [x.id, x] as const));
+        mapped.forEach((m) => byId.set(m.id, m));
+        const list = Array.from(byId.values()).sort((a, b) => {
+          const ta = Date.parse(String(a.at || "")) || 0;
+          const tb = Date.parse(String(b.at || "")) || 0;
+          return tb - ta;
+        });
+        return list.slice(0, 200);
+      });
+      setUnread(mapped.reduce((acc, it) => acc + (it.unread ? 1 : 0), 0));
+    } catch (e) {
+      try {
+        console.warn("[SSE] fallo al refrescar notificaciones REST", e);
+      } catch {}
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [disabled, mapNotif]);
+
+  const loadMore = useCallback(async () => {
+    if (disabled) return;
+    if (!hasMore) return;
+    const token = getAuthToken();
+    if (!token) return;
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    try {
+      const limit = 15;
+      const offset = pagingOffsetRef.current || 0;
+      const url = buildUrl(`/notifications?limit=${limit}&offset=${offset}`);
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json().catch(() => ({}));
+      const arr: any[] = Array.isArray((json as any)?.data)
+        ? (json as any).data
+        : Array.isArray(json)
+        ? (json as any)
+        : [];
+      const mapped: SseNotificationItem[] = arr.map(mapNotif);
+      pagingOffsetRef.current = offset + mapped.length;
+      setHasMore(mapped.length === limit);
+
+      setItems((prev) => {
+        const byId = new Map(prev.map((x) => [x.id, x] as const));
+        mapped.forEach((m) => byId.set(m.id, m));
+        const list = Array.from(byId.values()).sort((a, b) => {
+          const ta = Date.parse(String(a.at || "")) || 0;
+          const tb = Date.parse(String(b.at || "")) || 0;
+          return tb - ta;
+        });
+        return list.slice(0, 200);
+      });
+      setUnread((prevUnread) => {
+        const addedUnread = mapped.reduce(
+          (acc, it) => acc + (it.unread ? 1 : 0),
+          0
+        );
+        return Math.max(0, prevUnread + addedUnread);
+      });
+    } catch (e) {
+      try {
+        console.warn("[SSE] fallo al cargar más notificaciones", e);
+      } catch {}
+    } finally {
+      refreshInFlightRef.current = false;
+    }
+  }, [disabled, hasMore, mapNotif]);
 
   const parseEventBlocks = useCallback((chunk: string) => {
     bufferRef.current += chunk;
@@ -82,30 +220,26 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       const dataStr = dataLines.join("\n");
       try {
         const json = JSON.parse(dataStr);
+        const base = mapNotif(json);
         const id = String(
-          json.id ??
-            json.uuid ??
-            json.code ??
+          base.id ||
+            json.id ||
             Date.now() + "-" + Math.random().toString(36).slice(2, 8)
         );
-        const title = String(
-          json.title ??
-            json.message ??
-            json.descripcion ??
-            json.event ??
-            "Notificación"
-        );
-        const at =
-          json.at || json.fecha || json.timestamp || new Date().toISOString();
+        const title = base.title;
+        const at = base.at;
+        const type = base.type;
         setItems((prev) => {
           if (prev.some((it) => it.id === id)) return prev; // evitar duplicados
           const next = [
-            { id, title, at, unread: true, raw: json },
+            { id, title, at, unread: true, raw: json, type },
             ...prev,
           ].slice(0, 200);
           return next;
         });
         setUnread((u) => u + 1);
+        // Exponer el último evento recibido vía SSE (para snacks/toasts)
+        setLastReceived({ id, title, at, unread: true, raw: json, type });
         try {
           console.log("[SSE] evento recibido", { id, title, at, raw: json });
         } catch {}
@@ -118,6 +252,8 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
   }, []);
 
   const start = useCallback(() => {
+    // Evitar múltiples inicios: solo una conexión activa
+    if (startedRef.current && connectedRef.current) return;
     if (disabled) {
       // Si está deshabilitado (login), aseguramos desconexión
       try {
@@ -135,13 +271,15 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     } catch {}
     controllerRef.current = new AbortController();
     const signal = controllerRef.current.signal;
+    // buildUrl ya aplica el prefijo /v1; aquí va la ruta sin duplicarlo
     const url = buildUrl("/notifications/sse");
     connectedRef.current = false;
+    startedRef.current = true;
     retryRef.current += 1;
     const attempt = retryRef.current;
-    /* try {
+    try {
       console.log("[SSE] iniciando conexión", { attempt, url });
-    } catch {} */
+    } catch {}
 
     (async () => {
       try {
@@ -195,93 +333,14 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     const token = getAuthToken();
     if (!token) return;
     bootstrappedRef.current = true;
-    (async () => {
-      try {
-        const url = buildUrl(`/notifications?limit=50&offset=0`);
-        const res = await fetch(url, {
-          method: "GET",
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json().catch(() => ({}));
-        const arr: any[] = Array.isArray((json as any)?.data)
-          ? (json as any).data
-          : Array.isArray(json)
-          ? (json as any)
-          : [];
-        const mapped: SseNotificationItem[] = arr.map((r: any) => {
-          const id = String(r.id ?? r.uuid ?? r.code ?? Math.random());
-          const title = String(
-            r.title ?? r.message ?? r.descripcion ?? r.subject ?? "Notificación"
-          );
-          const at =
-            r.at ||
-            r.created_at ||
-            r.fecha ||
-            r.timestamp ||
-            new Date().toISOString();
-          const read = Boolean(r.read ?? r.readed ?? r.leida ?? r.visto);
-          return {
-            id,
-            title,
-            at,
-            unread: !read,
-            raw: r,
-          } as SseNotificationItem;
-        });
-        setItems((prev) => {
-          const byId = new Map(prev.map((x) => [x.id, x] as const));
-          mapped.forEach((m) => {
-            if (!byId.has(m.id)) byId.set(m.id, m);
-          });
-          // Ordenar por fecha desc, limitar a 200
-          const list = Array.from(byId.values()).sort((a, b) => {
-            const ta = Date.parse(String(a.at || "")) || 0;
-            const tb = Date.parse(String(b.at || "")) || 0;
-            return tb - ta;
-          });
-          return list.slice(0, 200);
-        });
-        setUnread((prev) => {
-          const extra = mapped.reduce(
-            (acc, it) => acc + (it.unread ? 1 : 0),
-            0
-          );
-          return Math.max(0, prev + extra);
-        });
-      } catch (e) {
-        try {
-          console.warn("[SSE] fallo al cargar notificaciones REST", e);
-        } catch {}
-      }
-    })();
+    refresh();
   }, [disabled]);
 
-  // Auto iniciar cuando hay token y aún no estamos conectados
+  // Auto iniciar una sola vez cuando hay token
   useEffect(() => {
-    if (disabled) return; // no conectar en login
+    if (disabled) return;
     const token = getAuthToken();
     if (token && !connectedRef.current) start();
-  }, [start, disabled]);
-
-  // Reintentar cuando token cambie (login/logout)
-  useEffect(() => {
-    const iv = setInterval(() => {
-      if (disabled) return; // ignora reconexión periódica en login
-      const token = getAuthToken();
-      if (token && !connectedRef.current) start();
-      if (!token && connectedRef.current) {
-        try {
-          controllerRef.current?.abort();
-        } catch {}
-        connectedRef.current = false;
-        setConnected(false);
-        setItems([]);
-        setUnread(0);
-      }
-    }, 3000);
-    return () => clearInterval(iv);
   }, [start, disabled]);
 
   const markAllRead = useCallback(() => {
@@ -290,6 +349,11 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       try {
         const token = getAuthToken();
         if (token) {
+          const ids = items
+            .filter((it) => it.unread)
+            .map((it) => Number.parseInt(String(it.id), 10))
+            .filter((n) => Number.isFinite(n));
+          if (!ids.length) return;
           const url = buildUrl(`/notifications/mark-read`);
           await fetch(url, {
             method: "POST",
@@ -297,19 +361,33 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
               Authorization: `Bearer ${token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ all: true }),
+            body: JSON.stringify({ ids }),
           }).catch(() => undefined);
         }
       } catch {}
     })();
     setItems((prev) => prev.map((it) => ({ ...it, unread: false })));
     setUnread(0);
-  }, []);
+  }, [items]);
 
   const clear = useCallback(() => {
     setItems([]);
     setUnread(0);
+    setLastReceived(null);
+    setHasMore(true);
+    pagingOffsetRef.current = 0;
   }, []);
 
-  return { items, unread, connected, disabled: !!disabled, markAllRead, clear };
+  return {
+    items,
+    unread,
+    connected,
+    disabled: !!disabled,
+    lastReceived,
+    markAllRead,
+    refresh,
+    loadMore,
+    hasMore,
+    clear,
+  };
 }
