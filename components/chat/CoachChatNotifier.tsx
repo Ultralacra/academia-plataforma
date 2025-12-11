@@ -281,39 +281,41 @@ export function CoachChatNotifier() {
           playNotificationSound();
         }
 
-        // Snackbar custom (NO usar toast): se renderiza globalmente en CoachChatSnackbar
-        try {
-          const rawType = String(msg?.participante_tipo || "").toLowerCase();
-          const isAlumno = rawType === "cliente" || rawType === "alumno";
-          const cachedName = getCachedContactName(msg?.id_chat);
-          const msgName = extractAlumnoNameFromMsg(msg);
-          const senderName = msgName || cachedName || "";
+        // Snackbar custom (NO usar toast): mostrar solo fuera de la vista /chat
+        if (!isChatRoute) {
+          try {
+            const rawType = String(msg?.participante_tipo || "").toLowerCase();
+            const isAlumno = rawType === "cliente" || rawType === "alumno";
+            const cachedName = getCachedContactName(msg?.id_chat);
+            const msgName = extractAlumnoNameFromMsg(msg);
+            const senderName = msgName || cachedName || "";
 
-          const title = isAlumno
-            ? senderName || "Nuevo mensaje de alumno"
-            : senderName || "Nuevo mensaje";
+            const title = isAlumno
+              ? senderName || "Nuevo mensaje de alumno"
+              : senderName || "Nuevo mensaje";
 
-          const textRaw = String(
-            msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
-          ).trim();
-          const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+            const textRaw = String(
+              msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+            ).trim();
+            const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
 
-          const myCode = (user as any)?.codigo;
-          const chatUrl = myCode
-            ? `/admin/teamsv2/${String(myCode)}/chat`
-            : "/admin/teamsv2";
+            const myCode = (user as any)?.codigo;
+            const chatUrl = myCode
+              ? `/admin/teamsv2/${String(myCode)}/chat`
+              : "/admin/teamsv2";
 
-          window.dispatchEvent(
-            new CustomEvent("coach-chat:snackbar", {
-              detail: {
-                title,
-                preview,
-                chatUrl,
-                chatId: msg?.id_chat,
-              },
-            })
-          );
-        } catch {}
+            window.dispatchEvent(
+              new CustomEvent("coach-chat:snackbar", {
+                detail: {
+                  title,
+                  preview,
+                  chatUrl,
+                  chatId: msg?.id_chat,
+                },
+              })
+            );
+          } catch {}
+        }
 
         // Incrementar contador de no leídos global (para badges en listas)
         if (msg?.id_chat) {
