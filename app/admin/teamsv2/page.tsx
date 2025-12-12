@@ -75,22 +75,23 @@ function formatDate(d?: string) {
 }
 
 function getPuestoColorClass(puesto?: string | null) {
-  if (!puesto) return "bg-gray-400";
+  if (!puesto) return "bg-muted text-muted-foreground";
   const key = String(puesto).toLowerCase();
   if (key.includes("coach") || key.includes("trainer"))
-    return "bg-sky-100 text-sky-800";
+    return "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200";
   if (key.includes("soporte") || key.includes("support"))
-    return "bg-emerald-100 text-emerald-800";
-  if (key.includes("admin")) return "bg-violet-100 text-violet-800";
+    return "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200";
+  if (key.includes("admin"))
+    return "bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-200";
   if (key.includes("ventas") || key.includes("sales"))
-    return "bg-rose-100 text-rose-800";
+    return "bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200";
   // fallback: light palette
   const colors = [
-    "bg-indigo-100 text-indigo-800",
-    "bg-amber-100 text-amber-800",
-    "bg-sky-100 text-sky-800",
-    "bg-emerald-100 text-emerald-800",
-    "bg-rose-100 text-rose-800",
+    "bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-200",
+    "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200",
+    "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200",
+    "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200",
+    "bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200",
   ];
   let h = 0;
   for (let i = 0; i < puesto.length; i++)
@@ -447,7 +448,7 @@ export default function TeamsPage() {
 
               <div className="flex items-center gap-2">
                 <select
-                  className="h-9 rounded-md border px-2 text-sm"
+                  className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
                   value={pageSize}
                   onChange={(e) => {
                     setPageSize(Number(e.target.value));
@@ -466,7 +467,7 @@ export default function TeamsPage() {
         </Card>
 
         {/* Tabla */}
-        <div className="mt-4 rounded-sm border-2 bg-white">
+        <div className="mt-4 rounded-sm border border-border bg-card">
           <div className="max-h-[60vh] overflow-y-auto">
             <Table>
               <TableHeader>

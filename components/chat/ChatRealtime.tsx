@@ -62,6 +62,8 @@ type Message = {
   sender: Sender;
   text: string;
   at: string;
+  edited?: boolean;
+  editedAt?: string;
   attachments?: Attachment[];
   status?: string;
   phase?: string;
@@ -678,6 +680,16 @@ export default function ChatRealtime({
               timeout: 20000,
             });
         sioRef.current = sio;
+        try {
+          if (
+            typeof window !== "undefined" &&
+            process.env.NODE_ENV !== "production"
+          ) {
+            const w = window as any;
+            w.__academiaChatSockets = w.__academiaChatSockets || {};
+            w.__academiaChatSockets[String(currentRole || "unknown")] = sio;
+          }
+        } catch {}
         sio.on("connect", () => {
           if (!alive) return;
           setConnected(true);
@@ -931,6 +943,61 @@ export default function ChatRealtime({
             );
           } catch {}
         });
+
+        const applyMessageEdit = (data: any) => {
+          try {
+            const idChat = data?.id_chat ?? data?.chatId ?? null;
+            if (
+              idChat != null &&
+              chatId != null &&
+              String(idChat) !== String(chatId)
+            ) {
+              // Edit de otro chat: refrescar bandejas
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("chat:list-refresh", {
+                    detail: {
+                      reason: "message-edit-other-chat",
+                      id_chat: idChat,
+                    },
+                  })
+                );
+              } catch {}
+              return;
+            }
+            const idMsg = data?.id_mensaje ?? data?.id ?? null;
+            if (!idMsg) return;
+            const nuevo = String(
+              data?.nuevo_contenido ?? data?.contenido ?? data?.texto ?? ""
+            );
+            const editedAt = String(
+              data?.fecha_edicion_local ?? data?.fecha_edicion ?? nowLocalIso()
+            );
+            setItems((prev) =>
+              prev.map((m) =>
+                String(m.id) === String(idMsg)
+                  ? ({
+                      ...m,
+                      text: nuevo,
+                      edited: true,
+                      editedAt,
+                    } as any)
+                  : m
+              )
+            );
+            try {
+              window.dispatchEvent(
+                new CustomEvent("chat:list-refresh", {
+                  detail: { reason: "message-edited", id_chat: chatId },
+                })
+              );
+            } catch {}
+          } catch {}
+        };
+        try {
+          sio.on("chat.message.edit", applyMessageEdit);
+          sio.on("chat.message.edited", applyMessageEdit);
+        } catch {}
         sio.on("chat.read.all", (_: any) => {
           try {
             // Marcar todos mis mensajes como leídos

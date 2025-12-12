@@ -38,74 +38,287 @@
   --sidebar-accent-foreground: 240 5.9% 10%;
   --sidebar-border: 220 13% 91%;
   --sidebar-ring: 217.2 91.2% 59.8%;
+
+  color-scheme: light;
 }
 
 .dark {
-  /* Zinc Palette (Dark - Lighter/Softer) */
-  --background: 240 5% 12%;     /* Slightly lighter background */
-  --foreground: 240 5% 96%;
-  --card: 240 5% 15%;           /* Lighter card background */
-  --card-foreground: 240 5% 96%;
-  --popover: 240 5% 15%;
-  --popover-foreground: 240 5% 96%;
+  /* Dark suave y prolijo (inspiración Next.js): buen contraste sin negro puro */
+  --background: 240 6% 10%;
+  --foreground: 0 0% 98%;
+  --card: 240 6% 14%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 6% 14%;
+  --popover-foreground: 0 0% 98%;
   --primary: 240 5.9% 90%;
   --primary-foreground: 240 5.9% 10%;
-  --secondary: 240 4% 20%;      /* Lighter secondary */
-  --secondary-foreground: 240 5% 96%;
-  --muted: 240 4% 20%;
-  --muted-foreground: 240 5% 65%;
-  --accent: 240 4% 20%;
-  --accent-foreground: 240 5% 96%;
+  --secondary: 240 6% 18%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 6% 18%;
+  --muted-foreground: 240 6% 75%;
+  --accent: 240 6% 18%;
+  --accent-foreground: 0 0% 98%;
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 5% 25%;         /* Lighter borders */
-  --input: 240 5% 25%;
-  --ring: 240 5% 84%;
+  --border: 240 6% 24%;
+  --input: 240 6% 24%;
+  --ring: 240 6% 84%;
   --chart-1: 220 70% 50%;
   --chart-2: 160 60% 45%;
   --chart-3: 30 80% 55%;
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
   --sidebar: 240 5% 13%;        /* Match background or slightly different */
-  --sidebar-foreground: 240 5% 96%;
+  --sidebar-foreground: 0 0% 98%;
   --sidebar-primary: 224.3 76.3% 48%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 4% 20%;
-  --sidebar-accent-foreground: 240 5% 96%;
-  --sidebar-border: 240 5% 25%;
+  --sidebar-accent: 240 6% 18%;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 240 6% 24%;
   --sidebar-ring: 217.2 91.2% 59.8%;
+
+  color-scheme: dark;
 }
 
-/* Force light mode variables for chat components even in dark mode */
-.dark .chat-root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
-  --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 240 5.9% 10%;
-  --primary-foreground: 0 0% 98%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 240 4.8% 95.9%;
-  --accent-foreground: 240 5.9% 10%;
-  --destructive: 0 84.2% 60.2%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 240 10% 3.9%;
-  
-  /* Ensure text and background colors are applied */
-  background-color: hsl(var(--background));
-  color: hsl(var(--foreground));
-}
+/*
+  Capa de compatibilidad para dark mode:
+  Mucha UI usa utilidades Tailwind con colores "fijos" (bg-white, bg-gray-100, etc).
+  En dark, las mapeamos a tokens del tema para que toda la app se vea coherente.
+  (Esto evita tener que tocar decenas de pantallas a mano.)
+*/
+@layer base {
+  .dark .bg-white {
+    background-color: hsl(var(--card)) !important;
+  }
+  .dark .bg-white\/95 {
+    background-color: hsl(var(--card) / 0.95) !important;
+  }
+  .dark .bg-white\/90 {
+    background-color: hsl(var(--card) / 0.9) !important;
+  }
+  .dark .bg-white\/80 {
+    background-color: hsl(var(--card) / 0.8) !important;
+  }
+  .dark .bg-white\/60 {
+    background-color: hsl(var(--card) / 0.6) !important;
+  }
+  .dark .bg-white\/50 {
+    background-color: hsl(var(--card) / 0.5) !important;
+  }
 
-/* Ensure chat internal elements use these variables */
-.dark .chat-root * {
-  border-color: hsl(var(--border));
+  .dark .bg-gray-50,
+  .dark .bg-gray-100 {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .dark .bg-gray-200,
+  .dark .bg-gray-300 {
+    background-color: hsl(var(--secondary)) !important;
+  }
+
+  /* Neutral palette (commonly used in admin tables/filters) */
+  .dark .bg-neutral-50,
+  .dark .bg-neutral-100 {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .dark .bg-neutral-200,
+  .dark .bg-neutral-300 {
+    background-color: hsl(var(--secondary)) !important;
+  }
+
+  /* Slate palette (commonly used in admin panels) */
+  .dark .bg-slate-50,
+  .dark .bg-slate-100 {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .dark .bg-slate-200,
+  .dark .bg-slate-300 {
+    background-color: hsl(var(--secondary)) !important;
+  }
+
+  .dark .hover\:bg-gray-50:hover,
+  .dark .hover\:bg-gray-100:hover {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .dark .hover\:bg-gray-200:hover,
+  .dark .hover\:bg-gray-300:hover {
+    background-color: hsl(var(--secondary)) !important;
+  }
+
+  .dark .hover\:bg-neutral-50:hover,
+  .dark .hover\:bg-neutral-100:hover,
+  .dark .hover\:bg-neutral-50\/60:hover {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .dark .hover\:bg-neutral-200:hover,
+  .dark .hover\:bg-neutral-300:hover {
+    background-color: hsl(var(--secondary)) !important;
+  }
+
+  .dark .hover\:bg-slate-50:hover,
+  .dark .hover\:bg-slate-100:hover,
+  .dark .hover\:bg-slate-50\/60:hover {
+    background-color: hsl(var(--muted)) !important;
+  }
+  .dark .hover\:bg-slate-200:hover,
+  .dark .hover\:bg-slate-300:hover {
+    background-color: hsl(var(--secondary)) !important;
+  }
+  .dark .focus\:bg-white:focus,
+  .dark .focus\:bg-white\/95:focus,
+  .dark .focus\:bg-white\/90:focus {
+    background-color: hsl(var(--card)) !important;
+  }
+
+  .dark .text-black,
+  .dark .text-gray-900,
+  .dark .text-gray-800 {
+    color: hsl(var(--foreground)) !important;
+  }
+  .dark .text-gray-700 {
+    color: hsl(var(--foreground) / 0.88) !important;
+  }
+  .dark .text-gray-600 {
+    color: hsl(var(--foreground) / 0.78) !important;
+  }
+  .dark .text-gray-500 {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+  .dark .text-gray-400 {
+    color: hsl(var(--muted-foreground) / 0.9) !important;
+  }
+
+  .dark .text-neutral-900,
+  .dark .text-neutral-800,
+  .dark .text-slate-900,
+  .dark .text-slate-800 {
+    color: hsl(var(--foreground)) !important;
+  }
+  .dark .text-neutral-700,
+  .dark .text-slate-700 {
+    color: hsl(var(--foreground) / 0.88) !important;
+  }
+  .dark .text-neutral-600,
+  .dark .text-slate-600 {
+    color: hsl(var(--foreground) / 0.78) !important;
+  }
+  .dark .text-neutral-500,
+  .dark .text-slate-500 {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+  .dark .text-neutral-400,
+  .dark .text-slate-400 {
+    color: hsl(var(--muted-foreground) / 0.9) !important;
+  }
+
+  .dark .hover\:text-gray-900:hover,
+  .dark .hover\:text-gray-800:hover {
+    color: hsl(var(--foreground)) !important;
+  }
+  .dark .hover\:text-gray-700:hover {
+    color: hsl(var(--foreground) / 0.88) !important;
+  }
+  .dark .hover\:text-gray-600:hover {
+    color: hsl(var(--foreground) / 0.78) !important;
+  }
+  .dark .hover\:text-gray-500:hover,
+  .dark .hover\:text-gray-400:hover {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .dark .hover\:text-neutral-900:hover,
+  .dark .hover\:text-neutral-800:hover,
+  .dark .hover\:text-slate-900:hover,
+  .dark .hover\:text-slate-800:hover {
+    color: hsl(var(--foreground)) !important;
+  }
+  .dark .hover\:text-neutral-700:hover,
+  .dark .hover\:text-slate-700:hover {
+    color: hsl(var(--foreground) / 0.88) !important;
+  }
+  .dark .hover\:text-neutral-600:hover,
+  .dark .hover\:text-slate-600:hover {
+    color: hsl(var(--foreground) / 0.78) !important;
+  }
+  .dark .hover\:text-neutral-500:hover,
+  .dark .hover\:text-neutral-400:hover,
+  .dark .hover\:text-slate-500:hover,
+  .dark .hover\:text-slate-400:hover {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+
+  .dark .border-gray-50,
+  .dark .border-gray-100,
+  .dark .border-gray-200,
+  .dark .border-gray-300 {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  .dark .border-neutral-50,
+  .dark .border-neutral-100,
+  .dark .border-neutral-200,
+  .dark .border-neutral-300,
+  .dark .border-neutral-200\/70 {
+    border-color: hsl(var(--border)) !important;
+  }
+  .dark .border-slate-50,
+  .dark .border-slate-100,
+  .dark .border-slate-200,
+  .dark .border-slate-300 {
+    border-color: hsl(var(--border)) !important;
+  }
+
+  /* Ajustes puntuales para clases con hex usadas en los chats (WhatsApp-like) */
+  .dark .bg-\[\#F0F0F0\],
+  .dark .bg-\[\#F0F2F5\],
+  .dark .bg-\[\#f0f0f0\],
+  .dark .bg-\[\#f0f2f5\] {
+    background-color: hsl(var(--card)) !important;
+  }
+  .dark .bg-\[\#EFEAE2\],
+  .dark .bg-\[\#efeae2\],
+  .dark .bg-\[\#ECE5DD\],
+  .dark .bg-\[\#ECE5DD\] {
+    background-color: hsl(var(--background)) !important;
+  }
+  .dark .bg-\[\#DCF8C6\],
+  .dark .bg-\[\#d9fdd3\],
+  .dark .bg-\[\#cfe9ba\] {
+    background-color: hsl(var(--secondary)) !important;
+  }
+  .dark .text-\[\#111b21\],
+  .dark .text-\[\#075e54\],
+  .dark .text-\[\#111B21\] {
+    color: hsl(var(--foreground)) !important;
+  }
+  .dark .text-\[\#667781\],
+  .dark .text-\[\#54656f\],
+  .dark .text-\[\#8696a0\] {
+    color: hsl(var(--muted-foreground)) !important;
+  }
+  .dark .placeholder\:text-gray-400::placeholder,
+  .dark .placeholder\:text-gray-500::placeholder,
+  .dark .placeholder\:text-gray-600::placeholder {
+    color: hsl(var(--muted-foreground)) !important;
+    opacity: 1;
+  }
+  .dark .placeholder\:text-neutral-400::placeholder,
+  .dark .placeholder\:text-neutral-500::placeholder,
+  .dark .placeholder\:text-neutral-600::placeholder,
+  .dark .placeholder\:text-slate-400::placeholder,
+  .dark .placeholder\:text-slate-500::placeholder,
+  .dark .placeholder\:text-slate-600::placeholder {
+    color: hsl(var(--muted-foreground)) !important;
+    opacity: 1;
+  }
+  .dark .placeholder\:text-\[\#8696a0\]::placeholder,
+  .dark .placeholder\:text-\[\#667781\]::placeholder,
+  .dark .placeholder\:text-\[\#54656f\]::placeholder {
+    color: hsl(var(--muted-foreground)) !important;
+    opacity: 1;
+  }
+  .dark .border-\[\#d1d7db\] {
+    border-color: hsl(var(--border)) !important;
+  }
 }
 
 @theme inline {

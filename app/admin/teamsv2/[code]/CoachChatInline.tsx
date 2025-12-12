@@ -259,6 +259,11 @@ export default function CoachChatInline({
   }, []);
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editingMsg, setEditingMsg] = React.useState<Message | null>(null);
+  const [editText, setEditText] = React.useState<string>("");
+  const [editSaving, setEditSaving] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
@@ -322,6 +327,189 @@ export default function CoachChatInline({
     }
     return parts;
   }, []);
+
+  const applyEditToItems = React.useCallback(
+    (idMsg: any, nuevo: string, editedAt?: string) => {
+      try {
+        if (!idMsg) return;
+        const idStr = String(idMsg);
+        const at = String(editedAt || nowLocalIso());
+        setItems((prev) =>
+          prev.map((m) =>
+            String(m.id) === idStr
+              ? ({
+                  ...m,
+                  text: String(nuevo ?? ""),
+                  edited: true,
+                  editedAt: at,
+                } as Message)
+              : m
+          )
+        );
+      } catch {}
+    },
+    []
+  );
+
+  const openEditForMessage = React.useCallback((m: Message) => {
+    try {
+      setEditingMsg(m);
+      setEditText(String(m?.text ?? ""));
+      setEditError(null);
+      setEditOpen(true);
+    } catch {}
+  }, []);
+
+  const submitEdit = React.useCallback(async () => {
+    if (!editingMsg) return;
+    const nuevo = String(editText ?? "").trim();
+    if (!nuevo) return;
+    try {
+      setEditError(null);
+      const sio = sioRef.current;
+      let cid = chatIdRef.current;
+      dbg("edit:submit", {
+        role,
+        connected,
+        hasSocket: !!sio,
+        socketConnected: !!sio?.connected,
+        chatId: cid,
+        id_mensaje: editingMsg?.id,
+      });
+
+      if (!sio) {
+        setEditError("No hay conexión con el chat (socket no inicializado).");
+        dbg("edit:abort:no-socket");
+        return;
+      }
+      if (!connected || !sio.connected) {
+        setEditError(
+          "No estás conectado al chat todavía. Intenta nuevamente en unos segundos."
+        );
+        dbg("edit:abort:not-connected", {
+          connectedState: connected,
+          socketConnected: !!sio?.connected,
+        });
+        return;
+      }
+      if (cid == null) {
+        dbg("edit:no chatId, ensuring…", {
+          participants: Array.isArray(participantsRef.current)
+            ? participantsRef.current.length
+            : 0,
+        });
+        try {
+          await ensureChatReadyForSend({ onlyFind: true });
+        } catch {}
+        cid = chatIdRef.current;
+        if (cid == null) {
+          setEditError(
+            "No se pudo resolver el chat (id_chat vacío). Abre el chat y vuelve a intentar."
+          );
+          dbg("edit:abort:still-no-chatId");
+          return;
+        }
+      }
+
+      const oldText = String(editingMsg.text ?? "");
+      const oldEditedAt = (editingMsg as any).editedAt as string | undefined;
+
+      setEditSaving(true);
+      applyEditToItems(editingMsg.id, nuevo, nowLocalIso());
+
+      const pid = (() => {
+        const direct = myParticipantIdRef.current;
+        if (direct != null) return direct;
+        if (editingMsg.srcParticipantId != null)
+          return editingMsg.srcParticipantId;
+        try {
+          const parts = Array.isArray(joinedParticipantsRef.current)
+            ? joinedParticipantsRef.current
+            : [];
+          if (role === "coach") {
+            const mine = parts.find(
+              (p: any) =>
+                normalizeTipo(p?.participante_tipo) === "equipo" &&
+                (!socketio?.idEquipo ||
+                  String(p?.id_equipo) === String(socketio?.idEquipo))
+            );
+            if (mine?.id_chat_participante != null)
+              return mine.id_chat_participante;
+          } else if (role === "alumno") {
+            const mineCli = parts.find(
+              (p: any) =>
+                normalizeTipo(p?.participante_tipo) === "cliente" &&
+                (!socketio?.idCliente ||
+                  String(p?.id_cliente) === String(socketio?.idCliente))
+            );
+            if (mineCli?.id_chat_participante != null)
+              return mineCli.id_chat_participante;
+          } else if (role === "admin") {
+            const mineAdm = parts.find(
+              (p: any) =>
+                normalizeTipo(p?.participante_tipo) === "admin" &&
+                (!socketio?.idAdmin ||
+                  String(p?.id_admin) === String(socketio?.idAdmin))
+            );
+            if (mineAdm?.id_chat_participante != null)
+              return mineAdm.id_chat_participante;
+          }
+        } catch {}
+        return undefined;
+      })();
+
+      sio.emit(
+        "chat.message.edit",
+        {
+          id_mensaje: editingMsg.id,
+          id_chat: cid,
+          nuevo_contenido: nuevo,
+          id_chat_participante_emisor: pid,
+          client_session: clientSessionRef.current,
+        },
+        (ack: any) => {
+          try {
+            dbg("edit:ack", ack);
+            if (!ack || ack.success === false) {
+              applyEditToItems(editingMsg.id, oldText, oldEditedAt);
+              const msg =
+                String(ack?.message || ack?.error || "") ||
+                "El servidor rechazó la edición.";
+              setEditError(msg);
+              return;
+            }
+            const data = ack.data || {};
+            const serverId = data?.id_mensaje ?? data?.id ?? editingMsg.id;
+            const serverText =
+              data?.nuevo_contenido ?? data?.contenido ?? data?.texto ?? nuevo;
+            const serverEditedAt =
+              normalizeDateStr(
+                data?.fecha_edicion_local ?? data?.fecha_edicion
+              ) || nowLocalIso();
+            applyEditToItems(
+              serverId,
+              String(serverText),
+              String(serverEditedAt)
+            );
+            try {
+              window.dispatchEvent(
+                new CustomEvent("chat:list-refresh", {
+                  detail: { reason: "message-edited", id_chat: cid },
+                })
+              );
+            } catch {}
+          } catch {}
+        }
+      );
+
+      setEditOpen(false);
+      setEditingMsg(null);
+    } catch {
+      // best-effort
+    } finally {
+      setEditSaving(false);
+    }
+  }, [editingMsg, editText, applyEditToItems]);
 
   const sioRef = React.useRef<any>(null);
   const chatIdRef = React.useRef<string | number | null>(
@@ -1113,6 +1301,17 @@ export default function CoachChatInline({
   // Solo usar heurísticas (tipo de participante o pistas recientes de subida) si faltan IDs.
   type SenderEval = { sender: Sender; byId: boolean; reason: string };
 
+  const senderReasonRank = React.useCallback((reason: any): number => {
+    const r = String(reason || "");
+    if (r === "byId") return 5;
+    if (r === "bySession") return 4;
+    if (r === "byOutbox") return 4;
+    if (r === "byParticipantType") return 3;
+    if (r === "byRecentUpload") return 2;
+    if (r.startsWith("fallback")) return 1;
+    return 0;
+  }, []);
+
   const evalSenderForMapping = React.useCallback(
     (
       m: any,
@@ -1122,15 +1321,18 @@ export default function CoachChatInline({
       try {
         const myPid = myParticipantIdRef.current;
         const emitter = getEmitter(m);
+
         const senderIsById =
           myPid != null && emitter != null && String(emitter) === String(myPid);
         const senderIsBySession =
           !!m?.client_session &&
           String(m.client_session) === String(clientSessionRef.current);
+
         const atts = mapArchivoToAttachments(m);
         const senderIsByRecent =
           hasRecentUploadMatch(role, cid, atts) ||
           hasRecentUploadLoose(role, cid, atts);
+
         // Outbox heuristic: el texto + timestamp comparable con envíos locales
         let senderIsByOutbox = false;
         try {
@@ -1154,39 +1356,36 @@ export default function CoachChatInline({
 
         // Tipo de participante cuando aplique
         const tipoNorm = normalizeTipo(
-          m?.participante_tipo ||
-            getTipoByParticipantId(m?.id_chat_participante_emisor)
+          m?.participante_tipo || getTipoByParticipantId(emitter)
         );
         const senderIsByTipoKnown =
           tipoNorm === "cliente" ||
           tipoNorm === "equipo" ||
           tipoNorm === "admin";
+        const senderIsByTipo = senderIsByTipoKnown;
 
-        // Priorizar identificación por id (emitter) cuando esté disponible.
         let final: Sender;
         let reason = "unknown";
+
         if (senderIsById) {
           reason = "byId";
-          const isMine = true;
-          if (role === "alumno") final = isMine ? "alumno" : "coach";
-          else if (role === "coach") final = isMine ? "coach" : "alumno";
-          else final = isMine ? role : "alumno";
+          final = role;
         } else {
-          // Usar heurísticas ordenadas: session -> outbox -> recent -> tipo
+          // Usar heurísticas ordenadas: session -> outbox -> tipo -> recent
           if (senderIsBySession) {
             reason = "bySession";
             final = role;
           } else if (senderIsByOutbox) {
             reason = "byOutbox";
             final = role;
-          } else if (senderIsByRecent) {
-            reason = "byRecentUpload";
-            final = role;
           } else if (senderIsByTipoKnown) {
             reason = "byParticipantType";
             if (tipoNorm === "cliente") final = "alumno";
             else if (tipoNorm === "equipo") final = "coach";
-            else final = role; // admin u otros
+            else final = role;
+          } else if (senderIsByRecent) {
+            reason = "byRecentUpload";
+            final = role;
           } else {
             reason = "fallback-other";
             const hasAtts = Array.isArray(atts) && atts.length > 0;
@@ -1209,6 +1408,7 @@ export default function CoachChatInline({
             }
           }
         }
+
         if (chatDebug() && (ctx === "realtime" || ctx === "user")) {
           // dbg("[CoachChat] evalSenderForMapping", {
           //   cid,
@@ -1232,7 +1432,7 @@ export default function CoachChatInline({
         return { sender: fallback, byId: false, reason: "error-fallback" };
       }
     },
-    [role]
+    [role, getTipoByParticipantId]
   );
 
   // Construir un mensaje desde un payload genérico (incluyendo eventos de archivo)
@@ -1330,7 +1530,12 @@ export default function CoachChatInline({
         if (sessionMatch || (near && sameSender && sameText && sameAtts)) {
           // fusionar como delivered
           const byId = (msg as any).__senderById === true;
-          const preserveSender = !byId && m.sender && m.sender !== msg.sender;
+          const preserveSender =
+            !byId &&
+            m.sender &&
+            m.sender !== msg.sender &&
+            senderReasonRank((m as any).__senderReason) >
+              senderReasonRank((msg as any).__senderReason);
           next[i] = {
             ...msg,
             sender: preserveSender ? m.sender : msg.sender,
@@ -1342,7 +1547,12 @@ export default function CoachChatInline({
         // Fallback para multimedia renombrado por el servidor (nombre distinto):
         if (near && sameSender && sameText && softAtts) {
           const byId = (msg as any).__senderById === true;
-          const preserveSender = !byId && m.sender && m.sender !== msg.sender;
+          const preserveSender =
+            !byId &&
+            m.sender &&
+            m.sender !== msg.sender &&
+            senderReasonRank((m as any).__senderReason) >
+              senderReasonRank((msg as any).__senderReason);
           next[i] = {
             ...msg,
             sender: preserveSender ? m.sender : msg.sender,
@@ -1374,7 +1584,10 @@ export default function CoachChatInline({
           if (old && old.sender !== m.sender) {
             const byId = (m as any).__senderById === true;
             if (!byId) {
-              return { ...m, sender: old.sender } as Message;
+              const keepOld =
+                senderReasonRank((old as any).__senderReason) >
+                senderReasonRank((m as any).__senderReason);
+              if (keepOld) return { ...m, sender: old.sender } as Message;
             }
           }
           return m;
@@ -1577,6 +1790,16 @@ export default function CoachChatInline({
               timeout: 20000,
             });
         sioRef.current = sio;
+        try {
+          if (
+            typeof window !== "undefined" &&
+            process.env.NODE_ENV !== "production"
+          ) {
+            const w = window as any;
+            w.__academiaChatSockets = w.__academiaChatSockets || {};
+            w.__academiaChatSockets[String(role || "unknown")] = sio;
+          }
+        } catch {}
         // Utilidad: recargar mensajes del chat actual desde el servidor (sin resetear estado ni flicker)
         const refreshMessagesFromServer = (cid: any) => {
           try {
@@ -2060,6 +2283,58 @@ export default function CoachChatInline({
             );
           } catch {}
         });
+
+        const applyMessageEdit = (data: any) => {
+          try {
+            const currentChatId = chatIdRef.current;
+            const idChat = data?.id_chat ?? data?.chatId ?? null;
+            if (
+              idChat != null &&
+              currentChatId != null &&
+              String(idChat) !== String(currentChatId)
+            ) {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("chat:list-refresh", {
+                    detail: {
+                      reason: "message-edit-other-chat",
+                      id_chat: idChat,
+                    },
+                  })
+                );
+              } catch {}
+              return;
+            }
+
+            const idMsg = data?.id_mensaje ?? data?.id ?? null;
+            if (!idMsg) return;
+            const nuevo = String(
+              data?.nuevo_contenido ?? data?.contenido ?? data?.texto ?? ""
+            );
+            const editedAt = String(
+              normalizeDateStr(
+                data?.fecha_edicion_local ?? data?.fecha_edicion
+              ) || nowLocalIso()
+            );
+
+            applyEditToItems(idMsg, nuevo, editedAt);
+
+            try {
+              window.dispatchEvent(
+                new CustomEvent("chat:list-refresh", {
+                  detail: {
+                    reason: "message-edited",
+                    id_chat: currentChatId,
+                  },
+                })
+              );
+            } catch {}
+          } catch {}
+        };
+        try {
+          sio.on("chat.message.edit", applyMessageEdit);
+          sio.on("chat.message.edited", applyMessageEdit);
+        } catch {}
         sio.on("chat.read.all", () => {
           try {
             setItems((prev) =>
@@ -3776,6 +4051,35 @@ export default function CoachChatInline({
                       isSelected ? "ring-2 ring-[#00a884] bg-[#d9fdd3]/80" : ""
                     }`}
                   >
+                    {!selectionMode &&
+                      isMine &&
+                      !hasAudioOnly &&
+                      !isAttachmentOnly &&
+                      !!m.text?.trim() && (
+                        <div className="absolute right-1 top-1 z-30 opacity-0 group-hover/msg:opacity-100 transition-opacity">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-full hover:bg-black/5"
+                                title="Opciones"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-4 w-4 text-gray-700" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  openEditForMessage(m);
+                                }}
+                              >
+                                Editar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      )}
                     {!hasAudioOnly &&
                       newGroup &&
                       (isMine ? (
@@ -4086,6 +4390,62 @@ export default function CoachChatInline({
               </div>
             </div>
           </div>
+
+          <Dialog
+            open={editOpen}
+            onOpenChange={(v) => {
+              setEditOpen(v);
+              if (!v) {
+                setEditingMsg(null);
+                setEditText("");
+                setEditSaving(false);
+                setEditError(null);
+              }
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Editar mensaje</DialogTitle>
+                <DialogDescription>
+                  Solo puedes editar tus mensajes.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <textarea
+                  className="w-full min-h-[96px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  placeholder="Escribe el nuevo contenido…"
+                />
+                {!!editError && (
+                  <div className="text-sm text-destructive">{editError}</div>
+                )}
+                {!connected && !editError && (
+                  <div className="text-sm text-muted-foreground">
+                    Conectando al chat…
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm hover:bg-accent"
+                  onClick={() => setEditOpen(false)}
+                  disabled={editSaving}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+                  onClick={submitEdit}
+                  disabled={editSaving || !editText.trim() || !connected}
+                >
+                  Guardar
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           {/* Indicador de nuevos mensajes (flotante) */}
           {newMessagesCount > 0 && (
             <button

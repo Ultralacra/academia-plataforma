@@ -114,13 +114,13 @@ export default function CoachStudentsDistributionChart({
   const renderLabel = () => null;
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white relative">
-      <div className="px-5 py-4 border-b border-gray-100 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <div className="rounded-2xl border border-border bg-card text-card-foreground relative">
+      <div className="px-5 py-4 border-b border-border/60 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <h3 className="text-base font-bold text-gray-900 uppercase">
+          <h3 className="text-base font-bold text-foreground uppercase">
             Distribución de alumnos de {coachName}
           </h3>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Vista por {{ estado: "estatus", fase: "fase" }[mode]}
           </p>
         </div>
@@ -130,8 +130,8 @@ export default function CoachStudentsDistributionChart({
               onClick={() => onModeChange?.("estado")}
               className={`px-3 py-1 rounded-md border text-xs font-medium transition ${
                 mode === "estado"
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white hover:bg-gray-50 border-gray-300 text-gray-700"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background hover:bg-muted border-border text-foreground"
               }`}
             >
               Estatus
@@ -140,8 +140,8 @@ export default function CoachStudentsDistributionChart({
               onClick={() => onModeChange?.("fase")}
               className={`px-3 py-1 rounded-md border text-xs font-medium transition ${
                 mode === "fase"
-                  ? "bg-blue-600 text-white border-blue-600"
-                  : "bg-white hover:bg-gray-50 border-gray-300 text-gray-700"
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background hover:bg-muted border-border text-foreground"
               }`}
             >
               Fase
@@ -176,10 +176,10 @@ export default function CoachStudentsDistributionChart({
                     key={`${seg.name}-${i}`}
                     fill={
                       seg.name === "Otros"
-                        ? "#cbd5e1"
+                        ? "hsl(var(--muted))"
                         : COLORS[i % COLORS.length]
                     }
-                    stroke="rgba(255,255,255,0.9)"
+                    stroke="hsl(var(--background))"
                     strokeWidth={isActive ? 3 : 2}
                     onMouseEnter={() => setHoverIndex(i)}
                     onMouseLeave={() =>
@@ -203,10 +203,10 @@ export default function CoachStudentsDistributionChart({
         {/* Overlay de Total centrado (no bloquea interacciones) */}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <div className="text-2xl font-extrabold text-gray-900">
+            <div className="text-2xl font-extrabold text-foreground">
               {fmt.format(total)}
             </div>
-            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
               Total
             </div>
           </div>
@@ -233,14 +233,14 @@ export default function CoachStudentsDistributionChart({
                         style={{ background: color }}
                       />
                       <span
-                        className="font-medium text-gray-700 truncate"
+                        className="font-medium text-foreground/80 truncate"
                         title={seg.name}
                       >
                         {seg.name}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-gray-500">
-                      <span className="font-semibold text-gray-900">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span className="font-semibold text-foreground">
                         {fmt.format(seg.value)}
                       </span>
                       <span>({pct}%)</span>
@@ -249,13 +249,13 @@ export default function CoachStudentsDistributionChart({
                 </AccordionTrigger>
                 <AccordionContent>
                   {studentsList.length > 0 ? (
-                    <ul className="ml-6 list-disc space-y-1 text-sm text-gray-700">
+                    <ul className="ml-6 list-disc space-y-1 text-sm text-foreground/80">
                       {studentsList.map((s, idx) => (
                         <li key={idx}>{s}</li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-500 px-3">
+                    <p className="text-sm text-muted-foreground px-3">
                       Sin alumnos listados.
                     </p>
                   )}

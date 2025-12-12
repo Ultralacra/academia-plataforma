@@ -26,6 +26,132 @@ export type CoachTeam = {
   codigo?: string | null;
 };
 
+/* =======================
+   Bonos
+======================= */
+
+export type BonoMetadata = {
+  tipo?: string | null;
+  max_usos?: number | null;
+  [k: string]: any;
+};
+
+export type Bono = {
+  id: number;
+  codigo: string;
+  nombre: string;
+  descripcion?: string | null;
+  valor?: string | number | null;
+  metadata?: BonoMetadata | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  inactivado?: number | boolean | null;
+};
+
+export type BonoAssignment = Bono & {
+  bono_codigo: string;
+  alumno_codigo: string;
+  cantidad: number;
+  fecha_asignacion?: string | null;
+  fecha_vencimiento?: string | null;
+  usado?: number | boolean | null;
+  notas?: string | null;
+};
+
+export async function getAllBonos(params?: {
+  page?: number;
+  pageSize?: number;
+  includeInactivos?: boolean;
+}): Promise<Bono[]> {
+  // OJO: buildUrl() ya agrega /v1. Aquí usamos paths sin el prefijo /v1.
+  // Backend: listar todos los bonos => GET /v1/bonos/get/bono (sin params)
+  // (Los params se mantienen por compatibilidad, pero este endpoint no los usa.)
+  void params;
+  const json = await fetchJson<any>(`/bonos/get/bono`);
+  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+  return rows as Bono[];
+}
+
+export async function getBonoByCodigo(codigo: string): Promise<Bono | null> {
+  if (!codigo) return null;
+  const json = await fetchJson<any>(
+    `/bonos/get/bono/${encodeURIComponent(codigo)}`
+  );
+  return (json?.data ?? null) as Bono | null;
+}
+
+export async function createBono(payload: {
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  valor?: number;
+  metadata?: BonoMetadata;
+}): Promise<{ id: number; codigo: string } | null> {
+  const json = await fetchJson<any>(`/bonos/create/bono`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return (json?.data ?? null) as { id: number; codigo: string } | null;
+}
+
+export async function updateBono(
+  codigo: string,
+  payload: Partial<{
+    nombre: string;
+    valor: number;
+    descripcion: string;
+    metadata: BonoMetadata;
+    inactivado: number | boolean;
+  }>
+): Promise<Bono | null> {
+  if (!codigo) return null;
+  const json = await fetchJson<any>(
+    `/bonos/update/bono/${encodeURIComponent(codigo)}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }
+  );
+  return (json?.data ?? null) as Bono | null;
+}
+
+export async function deleteBono(codigo: string): Promise<boolean> {
+  if (!codigo) return false;
+  await fetchJson<any>(`/bonos/delete/bono/${encodeURIComponent(codigo)}`,
+    { method: "DELETE" }
+  );
+  return true;
+}
+
+export async function assignBonoToAlumno(payload: {
+  bono_codigo: string;
+  alumno_codigo: string;
+  cantidad: number;
+  fecha_vencimiento: string;
+  notas: string;
+}): Promise<any> {
+  const json = await fetchJson<any>(`/bonos/assign/bono`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return json;
+}
+
+export async function getBonoAssignmentsByAlumnoCodigo(
+  alumnoCodigo: string,
+  params?: { page?: number; pageSize?: number }
+): Promise<BonoAssignment[]> {
+  if (!alumnoCodigo) return [];
+  const page = params?.page ?? 1;
+  const pageSize = params?.pageSize ?? 1000;
+  const qs = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  const json = await fetchJson<any>(
+    `/bonos/get/assignments/${encodeURIComponent(alumnoCodigo)}?${qs.toString()}`
+  );
+  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+  return rows as BonoAssignment[];
+}
+
 async function fetchJson<T>(pathOrUrl: string, init?: RequestInit, timeoutMs = 12000): Promise<T> {
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : buildUrl(pathOrUrl);
   const token = typeof window !== 'undefined' ? getAuthToken() : null;

@@ -52,15 +52,16 @@ export default function TicketsByPeriodBar({
   };
 
   return (
-    <div className="w-full rounded-2xl border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-5 py-4">
+    <div className="w-full rounded-2xl border border-border bg-card text-card-foreground">
+      <div className="border-b border-border/60 px-5 py-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-gray-900">{title}</h3>
-          <div className="text-sm text-gray-600">
-            Total: <span className="font-semibold text-gray-900">{total}</span>
+          <h3 className="text-base font-bold text-foreground">{title}</h3>
+          <div className="text-sm text-muted-foreground">
+            Total:{" "}
+            <span className="font-semibold text-foreground">{total}</span>
           </div>
         </div>
-        <p className="text-sm text-gray-500">Evolución diaria</p>
+        <p className="text-sm text-muted-foreground">Evolución diaria</p>
       </div>
       <div className="p-5">
         <ChartContainer

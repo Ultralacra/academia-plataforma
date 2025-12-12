@@ -84,16 +84,18 @@ export default function TicketsByStudentBar({
   ];
 
   return (
-    <div className="w-full rounded-2xl border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-5 py-4">
+    <div className="w-full rounded-2xl border border-border bg-card text-card-foreground">
+      <div className="border-b border-border/60 px-5 py-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-bold text-gray-900">{title}</h3>
-            <p className="text-sm text-gray-500">Ordenado de mayor a menor</p>
+            <h3 className="text-base font-bold text-foreground">{title}</h3>
+            <p className="text-sm text-muted-foreground">
+              Ordenado de mayor a menor
+            </p>
           </div>
           {showLimiter && rowsAll.length > (initialLimit || 0) && (
             <button
-              className="text-xs rounded-md border px-2 py-1 bg-white hover:bg-gray-50"
+              className="text-xs rounded-md border border-border px-2 py-1 bg-background hover:bg-muted text-foreground"
               onClick={() => setLimit((v) => (v ? null : initialLimit || 25))}
             >
               {limit
@@ -103,7 +105,7 @@ export default function TicketsByStudentBar({
           )}
         </div>
         {avgResolution && avgResolution.size > 0 && (
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Incluye tiempo promedio de resolución por alumno (horas) en el
             tooltip.
           </p>
@@ -131,7 +133,7 @@ export default function TicketsByStudentBar({
               <CartesianGrid
                 horizontal={false}
                 strokeDasharray="3 3"
-                stroke="#e5e7eb"
+                stroke="hsl(var(--border))"
               />
               <YAxis
                 dataKey="name"
@@ -148,17 +150,15 @@ export default function TicketsByStudentBar({
                   if (!active || !payload || !payload.length) return null;
                   const metrics = avgResolution?.get(String(label)) ?? null;
                   return (
-                    <div className="border border-gray-200 bg-white rounded-md shadow-sm px-2.5 py-1.5 text-xs">
-                      <div className="font-semibold text-gray-900">
-                        {String(label)}
-                      </div>
-                      <div className="text-gray-700">
+                    <div className="border border-border bg-popover text-popover-foreground rounded-md shadow-sm px-2.5 py-1.5 text-xs">
+                      <div className="font-semibold">{String(label)}</div>
+                      <div className="text-foreground/80">
                         Tickets: {Number(payload[0]?.value ?? 0)}
                       </div>
                       {metrics &&
                         metrics.hours != null &&
                         !isNaN(Number(metrics.hours)) && (
-                          <div className="text-gray-700">
+                          <div className="text-foreground/80">
                             Horas: {Number(metrics.hours).toFixed(2)} h
                           </div>
                         )}

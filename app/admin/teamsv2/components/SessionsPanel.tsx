@@ -223,44 +223,48 @@ export default function SessionsPanel({
     const map: Record<string, { label: string; className: string }> = {
       offered: {
         label: "Ofrecida",
-        className: "rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs",
+        className:
+          "rounded-md bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200 px-2 py-0.5 text-xs",
       },
       approved: {
         label: "Aprobada",
         className:
-          "rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs",
+          "rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200 px-2 py-0.5 text-xs",
       },
       canceled: {
         label: "Cancelada",
-        className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
+        className:
+          "rounded-md bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200 px-2 py-0.5 text-xs",
       },
       failed: {
         label: "Fallida",
-        className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
+        className:
+          "rounded-md bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200 px-2 py-0.5 text-xs",
       },
       done: {
         label: "Realizada",
-        className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
+        className:
+          "rounded-md bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200 px-2 py-0.5 text-xs",
       },
       pending: {
         label: "Pendiente",
-        className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+        className: "rounded-md bg-muted text-foreground/80 px-2 py-0.5 text-xs",
       },
       requested: {
         label: "Solicitada",
         className:
-          "rounded-md bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs",
+          "rounded-md bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-200 px-2 py-0.5 text-xs",
       },
       solicitada: {
         label: "Solicitada",
         className:
-          "rounded-md bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs",
+          "rounded-md bg-yellow-100 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-200 px-2 py-0.5 text-xs",
       },
     };
     return (
       map[v] || {
         label: estado || "—",
-        className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+        className: "rounded-md bg-muted text-foreground/80 px-2 py-0.5 text-xs",
       }
     );
   }
@@ -298,44 +302,48 @@ export default function SessionsPanel({
       .trim();
     if (!v)
       return {
-        className: "rounded-md bg-gray-100 text-gray-500 px-2 py-0.5 text-xs",
+        className:
+          "rounded-md bg-muted text-muted-foreground px-2 py-0.5 text-xs",
         label: "—",
       } as const;
     if (v.includes("ONBOARD"))
       return {
         className:
-          "rounded-md bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs",
+          "rounded-md bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-200 px-2 py-0.5 text-xs",
         label: raw,
       } as const;
     if (v.startsWith("F1"))
       return {
         className:
-          "rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs",
+          "rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200 px-2 py-0.5 text-xs",
         label: raw,
       } as const;
     if (v.startsWith("F2"))
       return {
-        className: "rounded-md bg-lime-100 text-lime-800 px-2 py-0.5 text-xs",
+        className:
+          "rounded-md bg-lime-100 text-lime-800 dark:bg-lime-500/15 dark:text-lime-200 px-2 py-0.5 text-xs",
         label: raw,
       } as const;
     if (v.startsWith("F3"))
       return {
-        className: "rounded-md bg-cyan-100 text-cyan-800 px-2 py-0.5 text-xs",
+        className:
+          "rounded-md bg-cyan-100 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-200 px-2 py-0.5 text-xs",
         label: raw,
       } as const;
     if (v.startsWith("F4"))
       return {
-        className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
+        className:
+          "rounded-md bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200 px-2 py-0.5 text-xs",
         label: raw,
       } as const;
     if (v.startsWith("F5"))
       return {
         className:
-          "rounded-md bg-purple-100 text-purple-800 px-2 py-0.5 text-xs",
+          "rounded-md bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-200 px-2 py-0.5 text-xs",
         label: raw,
       } as const;
     return {
-      className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+      className: "rounded-md bg-muted text-foreground/80 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   }
@@ -358,7 +366,7 @@ export default function SessionsPanel({
         </div>
       </div>
 
-      <Card className="border-neutral-200/70">
+      <Card className="border-border/60">
         <CardContent className="pt-4">
           <div className="max-h-[60vh] overflow-y-auto">
             <Table>
@@ -378,7 +386,7 @@ export default function SessionsPanel({
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={`sk-${i}`}>
                       <TableCell colSpan={7}>
-                        <div className="h-6 animate-pulse rounded bg-neutral-100" />
+                        <div className="h-6 animate-pulse rounded bg-muted" />
                       </TableCell>
                     </TableRow>
                   ))
@@ -390,7 +398,10 @@ export default function SessionsPanel({
                   </TableRow>
                 ) : items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-sm text-neutral-500">
+                    <TableCell
+                      colSpan={7}
+                      className="text-sm text-muted-foreground"
+                    >
                       Sin sesiones.
                     </TableCell>
                   </TableRow>
@@ -664,23 +675,23 @@ export default function SessionsPanel({
 
             {/* Historial del alumno seleccionado */}
             {formAlumno && (
-              <div className="mt-1 rounded-md border bg-neutral-50">
-                <div className="px-3 py-2 text-xs font-medium text-neutral-700 flex items-center justify-between">
+              <div className="mt-1 rounded-md border border-border bg-muted/30">
+                <div className="px-3 py-2 text-xs font-medium text-foreground/80 flex items-center justify-between">
                   <span>Historial del alumno</span>
                   {historyLoading && (
-                    <span className="text-[10px] text-neutral-500">
+                    <span className="text-[10px] text-muted-foreground">
                       Cargando…
                     </span>
                   )}
                 </div>
                 <div className="px-3 pb-2">
                   {alumnoHistory.length === 0 ? (
-                    <div className="text-xs text-neutral-500">
+                    <div className="text-xs text-muted-foreground">
                       Sin historial disponible.
                     </div>
                   ) : (
                     <>
-                      <div className="mb-2 grid grid-cols-2 gap-2 text-[11px] text-neutral-700">
+                      <div className="mb-2 grid grid-cols-2 gap-2 text-[11px] text-foreground/80">
                         {(() => {
                           const counts = alumnoHistory.reduce((acc, it) => {
                             const k = String(it.estado || "").toLowerCase();
@@ -715,7 +726,7 @@ export default function SessionsPanel({
                           );
                         })()}
                       </div>
-                      <div className="max-h-32 overflow-y-auto rounded border bg-white">
+                      <div className="max-h-32 overflow-y-auto rounded border border-border bg-background">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -835,36 +846,36 @@ export default function SessionsPanel({
           {selected ? (
             <div className="grid gap-2 py-1 text-sm">
               <div>
-                <span className="text-neutral-500">ID:</span>{" "}
+                <span className="text-muted-foreground">ID:</span>{" "}
                 <span className="font-mono">{String(selected.id)}</span>
               </div>
               <div>
-                <span className="text-neutral-500">Alumno:</span>{" "}
+                <span className="text-muted-foreground">Alumno:</span>{" "}
                 {selected.alumno_nombre || selected.codigo_alumno}
               </div>
               <div>
-                <span className="text-neutral-500">Etapa:</span>{" "}
+                <span className="text-muted-foreground">Etapa:</span>{" "}
                 {selected.etapa || "—"}
               </div>
               <div>
-                <span className="text-neutral-500">Fecha:</span>{" "}
+                <span className="text-muted-foreground">Fecha:</span>{" "}
                 {formatDateTime(selected.fecha_programada)}
               </div>
               <div>
-                <span className="text-neutral-500">Duración:</span>{" "}
+                <span className="text-muted-foreground">Duración:</span>{" "}
                 {selected.duracion ?? 45} min
               </div>
               <div>
-                <span className="text-neutral-500">Estado:</span>{" "}
+                <span className="text-muted-foreground">Estado:</span>{" "}
                 {translateEstado(selected.estado).label}
               </div>
               <div>
-                <span className="text-neutral-500">Notas:</span>{" "}
+                <span className="text-muted-foreground">Notas:</span>{" "}
                 {selected.notas || "—"}
               </div>
             </div>
           ) : (
-            <div className="text-sm text-neutral-500">
+            <div className="text-sm text-muted-foreground">
               Selecciona una sesión…
             </div>
           )}
@@ -906,7 +917,7 @@ export default function SessionsPanel({
           <DialogHeader>
             <DialogTitle>Confirmar eliminación</DialogTitle>
           </DialogHeader>
-          <div className="text-sm text-neutral-700">
+          <div className="text-sm text-foreground/80">
             {(() => {
               const nombre =
                 selected?.alumno_nombre ||
@@ -929,7 +940,6 @@ export default function SessionsPanel({
               </Button>
               <Button
                 variant="destructive"
-                className="bg-rose-100 text-rose-800 hover:bg-rose-200"
                 onClick={async () => {
                   if (!selected) return;
                   try {
@@ -958,7 +968,7 @@ export default function SessionsPanel({
           </DialogHeader>
           <div className="grid gap-3 py-2">
             {selected && (
-              <div className="text-sm text-neutral-600">
+              <div className="text-sm text-muted-foreground">
                 Alumno:{" "}
                 <strong>
                   {selected.alumno_nombre ||

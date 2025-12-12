@@ -127,10 +127,12 @@ export default memo(function SessionsMetrics({
   const yAxisWidth = 80;
 
   return (
-    <div className="w-full rounded-2xl border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-5 py-4">
-        <div className="text-base font-bold text-gray-900">{titleText}</div>
-        <div className="text-sm text-gray-500">Resumen y tendencias</div>
+    <div className="w-full rounded-2xl border border-border bg-card text-card-foreground">
+      <div className="border-b border-border/60 px-5 py-4">
+        <div className="text-base font-bold text-foreground">{titleText}</div>
+        <div className="text-sm text-muted-foreground">
+          Resumen y tendencias
+        </div>
       </div>
       <div className="p-5 space-y-6">
         {/* KPIs resumen */}
@@ -151,21 +153,21 @@ export default memo(function SessionsMetrics({
         </div>
 
         {/* Distribución por estado */}
-        <Card className="border-neutral-200/70">
+        <Card className="border-border/60">
           <CardContent className="pt-4">
             <div className="text-sm font-medium mb-2">
               Distribución por estado
             </div>
             {ov.length === 0 ? (
-              <div className="text-sm text-neutral-500">Sin datos.</div>
+              <div className="text-sm text-muted-foreground">Sin datos.</div>
             ) : (
               <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 {ov.map((s, i) => (
                   <li
                     key={`ov-${i}`}
-                    className="flex items-center justify-between rounded-md border px-3 py-2 bg-white"
+                    className="flex items-center justify-between rounded-md border border-border px-3 py-2 bg-background"
                   >
-                    <span className="text-sm text-neutral-700">
+                    <span className="text-sm text-foreground/80">
                       {title(String(s.estado || "")).replace(/_/g, " ")}
                     </span>
                     <span className="font-mono text-sm">{k(s.count)}</span>
@@ -177,11 +179,11 @@ export default memo(function SessionsMetrics({
         </Card>
 
         {/* Tendencia por día */}
-        <Card className="border-neutral-200/70">
+        <Card className="border-border/60">
           <CardContent className="pt-4">
             <div className="text-sm font-medium mb-2">Tendencia por día</div>
             {trendData.length === 0 ? (
-              <div className="text-sm text-neutral-500">Sin datos.</div>
+              <div className="text-sm text-muted-foreground">Sin datos.</div>
             ) : (
               <ChartContainer
                 config={chartCfg}
@@ -205,7 +207,10 @@ export default memo(function SessionsMetrics({
                     axisLine={false}
                     width={yAxisWidth}
                     interval={0}
-                    tick={{ fontSize: 12, fill: "#374151" }}
+                    tick={{
+                      fontSize: 12,
+                      fill: "hsl(var(--muted-foreground))",
+                    }}
                   />
                   <ChartTooltip
                     cursor={false}
@@ -256,11 +261,11 @@ export default memo(function SessionsMetrics({
         </div>
 
         {/* Top coaches */}
-        <Card className="border-neutral-200/70">
+        <Card className="border-border/60">
           <CardContent className="pt-4">
             <div className="text-sm font-medium mb-2">Mejores coaches</div>
             {top.length === 0 ? (
-              <div className="text-sm text-neutral-500">Sin datos.</div>
+              <div className="text-sm text-muted-foreground">Sin datos.</div>
             ) : (
               <ul className="divide-y">
                 {top.map((t, i) => (
@@ -272,7 +277,7 @@ export default memo(function SessionsMetrics({
                       <div className="text-sm font-medium truncate">
                         {t.coach_nombre || t.coach_codigo}
                       </div>
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-muted-foreground">
                         aceptadas: {t.accepted} • completadas: {t.completed}
                       </div>
                     </div>
@@ -298,11 +303,11 @@ function Kpi({
   subtitle?: string;
 }) {
   return (
-    <div className="rounded-lg border bg-white p-3">
-      <div className="text-xs text-neutral-500">{label}</div>
+    <div className="rounded-lg border border-border bg-background p-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div className="text-xl font-semibold">{value}</div>
       {subtitle ? (
-        <div className="text-[11px] text-neutral-500">{subtitle}</div>
+        <div className="text-[11px] text-muted-foreground">{subtitle}</div>
       ) : null}
     </div>
   );
@@ -316,11 +321,11 @@ function MiniTable({
   rows: Array<{ left: string; right: string; sub?: string }>;
 }) {
   return (
-    <Card className="border-neutral-200/70">
+    <Card className="border-border/60">
       <CardContent className="pt-4">
         <div className="text-sm font-medium mb-2">{title}</div>
         {rows.length === 0 ? (
-          <div className="text-sm text-neutral-500">Sin datos.</div>
+          <div className="text-sm text-muted-foreground">Sin datos.</div>
         ) : (
           <ul className="divide-y">
             {rows.map((r, i) => (
@@ -331,7 +336,7 @@ function MiniTable({
                 <div className="min-w-0">
                   <div className="text-sm font-medium truncate">{r.left}</div>
                   {r.sub ? (
-                    <div className="text-xs text-neutral-500">{r.sub}</div>
+                    <div className="text-xs text-muted-foreground">{r.sub}</div>
                   ) : null}
                 </div>
                 <div className="font-mono text-sm">{r.right}</div>

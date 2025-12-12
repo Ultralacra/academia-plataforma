@@ -16,6 +16,8 @@ export type Message = {
   sender: Sender;
   text: string;
   at: string; // ISO
+  edited?: boolean;
+  editedAt?: string; // ISO/local
   delivered?: boolean;
   read?: boolean;
   srcParticipantId?: string | number | null;

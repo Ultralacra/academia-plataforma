@@ -25,37 +25,43 @@ function badgeForState(value?: string | null) {
     .trim();
   if (!v)
     return {
-      className: "rounded-md bg-gray-100 text-gray-500 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-muted text-muted-foreground px-2 py-0.5 text-xs",
       label: "—",
     } as const;
   // Map similar a ResultsTable (students)
   if (v.includes("INACTIVO POR PAGO"))
     return {
-      className: "rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.includes("INACTIVO"))
     return {
-      className: "rounded-md bg-rose-100 text-rose-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.includes("PAUS"))
     return {
-      className: "rounded-md bg-amber-100 text-amber-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.includes("PROGRESO"))
     return {
-      className: "rounded-md bg-violet-100 text-violet-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-violet-100 text-violet-800 dark:bg-violet-500/15 dark:text-violet-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.includes("ACTIVO"))
     return {
-      className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   return {
-    className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+    className: "rounded-md bg-muted text-foreground/80 px-2 py-0.5 text-xs",
     label: raw,
   } as const;
 }
@@ -69,42 +75,48 @@ function badgeForStage(value?: string | null) {
     .trim();
   if (!v)
     return {
-      className: "rounded-md bg-gray-100 text-gray-500 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-muted text-muted-foreground px-2 py-0.5 text-xs",
       label: "—",
     } as const;
   if (v.includes("ONBOARD"))
     return {
-      className: "rounded-md bg-indigo-100 text-indigo-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-indigo-100 text-indigo-800 dark:bg-indigo-500/15 dark:text-indigo-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F1"))
     return {
       className:
-        "rounded-md bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs",
+        "rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F2"))
     return {
-      className: "rounded-md bg-lime-100 text-lime-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-lime-100 text-lime-800 dark:bg-lime-500/15 dark:text-lime-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F3"))
     return {
-      className: "rounded-md bg-cyan-100 text-cyan-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-cyan-100 text-cyan-800 dark:bg-cyan-500/15 dark:text-cyan-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F4"))
     return {
-      className: "rounded-md bg-sky-100 text-sky-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   if (v.startsWith("F5"))
     return {
-      className: "rounded-md bg-purple-100 text-purple-800 px-2 py-0.5 text-xs",
+      className:
+        "rounded-md bg-purple-100 text-purple-800 dark:bg-purple-500/15 dark:text-purple-200 px-2 py-0.5 text-xs",
       label: raw,
     } as const;
   return {
-    className: "rounded-md bg-gray-100 text-gray-700 px-2 py-0.5 text-xs",
+    className: "rounded-md bg-muted text-foreground/80 px-2 py-0.5 text-xs",
     label: raw,
   } as const;
 }
@@ -133,17 +145,17 @@ export default function CoachStudentsTable({
   const pageRows = data.slice(start, end);
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden">
-      <div className="border-b border-gray-100 px-5 py-4">
-        <h3 className="text-base font-bold text-gray-900">{title}</h3>
-        <p className="text-sm text-gray-500">
+    <div className="rounded-2xl border border-border bg-card text-card-foreground overflow-hidden">
+      <div className="border-b border-border/60 px-5 py-4">
+        <h3 className="text-base font-bold text-foreground">{title}</h3>
+        <p className="text-sm text-muted-foreground">
           Listado compacto · {total.toLocaleString("es-ES")} alumnos
         </p>
       </div>
       <div className="overflow-x-auto pb-4">
         <table className="min-w-full text-sm">
           <thead>
-            <tr className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide">
+            <tr className="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
               <th className="px-3 py-2 text-left">Alumno</th>
               <th className="px-3 py-2 text-left">Estado</th>
               <th className="px-3 py-2 text-left">Fase</th>
@@ -165,7 +177,7 @@ export default function CoachStudentsTable({
                     if (onOffer) cols += 1;
                     return cols;
                   })()}
-                  className="px-3 py-4 text-sm text-neutral-500 text-center"
+                  className="px-3 py-4 text-sm text-muted-foreground text-center"
                 >
                   Sin alumnos
                 </td>
@@ -177,9 +189,9 @@ export default function CoachStudentsTable({
                 return (
                   <tr
                     key={`${r.id}`}
-                    className="border-t border-gray-100 hover:bg-gray-50"
+                    className="border-t border-border/60 hover:bg-muted/40"
                   >
-                    <td className="px-3 py-2 text-gray-900 truncate">
+                    <td className="px-3 py-2 text-foreground truncate">
                       {r.code ? (
                         <Link
                           href={`/admin/alumnos/${encodeURIComponent(
@@ -199,10 +211,10 @@ export default function CoachStudentsTable({
                     <td className="px-3 py-2">
                       <span className={ph.className}>{ph.label}</span>
                     </td>
-                    <td className="px-3 py-2 text-neutral-700">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {r.ingreso ? fmt.format(new Date(r.ingreso)) : "—"}
                     </td>
-                    <td className="px-3 py-2 text-neutral-700">
+                    <td className="px-3 py-2 text-muted-foreground">
                       {r.lastActivity
                         ? fmt.format(new Date(r.lastActivity))
                         : "—"}
@@ -221,7 +233,7 @@ export default function CoachStudentsTable({
                       <td className="px-3 py-2 text-right">
                         <button
                           type="button"
-                          className="inline-flex items-center px-2 py-1 rounded-md text-xs border hover:bg-gray-100"
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs border border-border hover:bg-muted"
                           title="Ver sesiones del alumno"
                           onClick={() => onView(r)}
                         >
@@ -233,7 +245,7 @@ export default function CoachStudentsTable({
                       <td className="px-3 py-2 text-right">
                         <button
                           type="button"
-                          className="inline-flex items-center px-2 py-1 rounded-md text-xs border hover:bg-gray-100"
+                          className="inline-flex items-center px-2 py-1 rounded-md text-xs border border-border hover:bg-muted"
                           title="Ofrecer sesión"
                           onClick={() => onOffer(r)}
                         >
@@ -249,7 +261,7 @@ export default function CoachStudentsTable({
         </table>
       </div>
       {total > pageSize && (
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 text-xs text-gray-600">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-border/60 text-xs text-muted-foreground">
           <span>
             Mostrando {start + 1}–{Math.min(end, total)} de{" "}
             {total.toLocaleString("es-ES")} alumnos
@@ -257,7 +269,7 @@ export default function CoachStudentsTable({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="px-2 py-1 rounded border text-xs disabled:opacity-40"
+              className="px-2 py-1 rounded border border-border text-xs disabled:opacity-40"
               disabled={currentPage <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
             >
@@ -268,7 +280,7 @@ export default function CoachStudentsTable({
             </span>
             <button
               type="button"
-              className="px-2 py-1 rounded border text-xs disabled:opacity-40"
+              className="px-2 py-1 rounded border border-border text-xs disabled:opacity-40"
               disabled={currentPage >= totalPages}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             >

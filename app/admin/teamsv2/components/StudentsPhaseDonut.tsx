@@ -94,11 +94,13 @@ export default function StudentsPhaseDonut({
   const norm = (s: string) => (s ?? "").toString().trim().toLowerCase();
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white relative">
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+    <div className="rounded-2xl border border-border bg-card text-card-foreground relative">
+      <div className="px-5 py-4 border-b border-border/60 flex items-center justify-between">
         <div>
-          <h3 className="text-base font-bold text-gray-900">{title}</h3>
-          <p className="text-sm text-gray-500">Alumnos de {coachName}</p>
+          <h3 className="text-base font-bold text-foreground">{title}</h3>
+          <p className="text-sm text-muted-foreground">
+            Alumnos de {coachName}
+          </p>
         </div>
       </div>
 
@@ -125,9 +127,11 @@ export default function StudentsPhaseDonut({
                 <Cell
                   key={`${seg.name}-${i}`}
                   fill={
-                    seg.name === "Otros" ? "#cbd5e1" : COLORS[i % COLORS.length]
+                    seg.name === "Otros"
+                      ? "hsl(var(--muted))"
+                      : COLORS[i % COLORS.length]
                   }
-                  stroke="rgba(255,255,255,0.9)"
+                  stroke="hsl(var(--background))"
                   strokeWidth={activeIndex === i ? 3 : 2}
                   onMouseEnter={() => setHoverIndex(i)}
                   onMouseLeave={() =>
@@ -147,10 +151,10 @@ export default function StudentsPhaseDonut({
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <div className="text-2xl font-extrabold text-gray-900">
+            <div className="text-2xl font-extrabold text-foreground">
               {fmt.format(total)}
             </div>
-            <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">
+            <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
               Total
             </div>
           </div>
@@ -176,14 +180,14 @@ export default function StudentsPhaseDonut({
                         style={{ background: color }}
                       />
                       <span
-                        className="font-medium text-gray-700 truncate"
+                        className="font-medium text-foreground/80 truncate"
                         title={seg.name}
                       >
                         {seg.name}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-gray-500">
-                      <span className="font-semibold text-gray-900">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <span className="font-semibold text-foreground">
                         {fmt.format(seg.value)}
                       </span>
                       <span>({pct}%)</span>
@@ -192,13 +196,13 @@ export default function StudentsPhaseDonut({
                 </AccordionTrigger>
                 <AccordionContent>
                   {studentsList.length > 0 ? (
-                    <ul className="ml-6 list-disc space-y-1 text-sm text-gray-700">
+                    <ul className="ml-6 list-disc space-y-1 text-sm text-foreground/80">
                       {studentsList.map((s, idx) => (
                         <li key={idx}>{s}</li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-500 px-3">
+                    <p className="text-sm text-muted-foreground px-3">
                       Sin alumnos listados.
                     </p>
                   )}
