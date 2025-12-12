@@ -122,12 +122,29 @@ const STATUS_LABEL: Record<StatusKey, string> = {
 };
 
 const STATUS_STYLE: Record<StatusKey, string> = {
-  PENDIENTE: "bg-blue-50 text-blue-700 border-blue-200",
-  EN_PROGRESO: "bg-amber-50 text-amber-700 border-amber-200",
-  PENDIENTE_DE_ENVIO: "bg-sky-50 text-sky-700 border-sky-200",
-  PAUSADO: "bg-purple-50 text-purple-700 border-purple-200",
-  RESUELTO: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  PENDIENTE:
+    "border bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/35 dark:text-blue-200 dark:border-blue-900/60",
+  EN_PROGRESO:
+    "border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-900/60",
+  PENDIENTE_DE_ENVIO:
+    "border bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/35 dark:text-sky-200 dark:border-sky-900/60",
+  PAUSADO:
+    "border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/35 dark:text-purple-200 dark:border-purple-900/60",
+  RESUELTO:
+    "border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60",
 };
+
+const COACH_CHIP_STYLES = [
+  "border bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 dark:bg-sky-950/35 dark:text-sky-200 dark:border-sky-900/60 dark:hover:bg-sky-950/55",
+  "border bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60 dark:hover:bg-emerald-950/55",
+  "border bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/35 dark:text-purple-200 dark:border-purple-900/60 dark:hover:bg-purple-950/55",
+  "border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-900/60 dark:hover:bg-amber-950/55",
+  "border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/35 dark:text-blue-200 dark:border-blue-900/60 dark:hover:bg-blue-950/55",
+];
+
+function coachChipClass(idx: number) {
+  return COACH_CHIP_STYLES[idx % COACH_CHIP_STYLES.length];
+}
 
 function coerceStatus(raw?: string | null): StatusKey {
   const s = (raw ?? "").toUpperCase();
@@ -805,7 +822,7 @@ export default function TicketsBoard({
       setPreviewOpen(true);
     } catch (e) {
       console.error(e);
-      setPreviewFile({ ...f });
+      setPreviewFile({ ...f, url: f.url ?? undefined });
       setPreviewOpen(true);
     } finally {
       setPreviewLoading(false);
@@ -1547,10 +1564,10 @@ export default function TicketsBoard({
       </Dialog>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-1">
-          <h1 className="text-lg font-semibold tracking-tight text-slate-900">
+          <h1 className="text-lg font-semibold tracking-tight text-foreground">
             Tablero de Tickets
           </h1>
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-muted-foreground">
             Arrastra y suelta tickets entre columnas para cambiar su estado
           </p>
         </div>
@@ -1560,7 +1577,7 @@ export default function TicketsBoard({
             <div className="relative w-full sm:w-auto">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm placeholder:text-slate-400 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-64"
+                className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all sm:w-64"
                 placeholder="Buscar asunto, alumno..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -1573,7 +1590,7 @@ export default function TicketsBoard({
             <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="date"
-              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-auto sm:min-w-[160px]"
+              className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all sm:w-auto sm:min-w-[160px]"
               value={fechaDesde}
               max={fechaHasta || undefined}
               onChange={(e) => {
@@ -1599,7 +1616,7 @@ export default function TicketsBoard({
             <CalendarIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="date"
-              className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-auto sm:min-w-[160px]"
+              className="h-9 w-full rounded-lg border border-border bg-background pl-9 pr-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all sm:w-auto sm:min-w-[160px]"
               value={fechaHasta}
               min={fechaDesde || undefined}
               onChange={(e) => {
@@ -1622,7 +1639,7 @@ export default function TicketsBoard({
 
           {!isStudent && (
             <select
-              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-100 transition-all sm:w-auto sm:min-w-[180px]"
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all sm:w-auto sm:min-w-[180px]"
               value={coachFiltro}
               onChange={(e) => setCoachFiltro(e.target.value)}
               title="Filtrar por coach/equipo"
@@ -1653,7 +1670,7 @@ export default function TicketsBoard({
                 variant={onlyMyTickets ? "default" : "outline"}
                 size="sm"
                 onClick={() => setOnlyMyTickets(!onlyMyTickets)}
-                className="h-9 w-full gap-2 sm:w-auto"
+                className="h-9 w-full gap-2 sm:w-auto dark:bg-primary dark:text-primary-foreground dark:border-primary/50 dark:hover:bg-primary/90"
                 title="Mostrar solo mis tickets creados"
               >
                 <User className="h-4 w-4" />
@@ -1685,7 +1702,7 @@ export default function TicketsBoard({
             }}
             variant="outline"
             size="sm"
-            className="h-9 w-full gap-2 sm:w-auto"
+            className="h-9 w-full gap-2 sm:w-auto dark:bg-primary dark:text-primary-foreground dark:border-primary/50 dark:hover:bg-primary/90"
           >
             <RefreshCw className="h-4 w-4" />
             Recargar
@@ -1694,7 +1711,7 @@ export default function TicketsBoard({
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-12 text-sm text-slate-500">
+        <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
           Cargando tickets...
         </div>
       ) : (
@@ -1787,7 +1804,7 @@ export default function TicketsBoard({
             return (
               <div
                 key={estado}
-                className="flex min-h-[400px] flex-col rounded-xl border border-slate-200 bg-slate-50/50 p-4"
+                className="flex min-h-[400px] flex-col rounded-xl border border-border bg-muted/30 p-4"
               >
                 <div className="mb-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1798,7 +1815,7 @@ export default function TicketsBoard({
                     >
                       {STATUS_LABEL[estado as StatusKey]}
                     </span>
-                    <span className="text-xs font-medium text-slate-500">
+                    <span className="text-xs font-medium text-muted-foreground">
                       {itemsForCol.length}
                     </span>
                   </div>
@@ -1810,18 +1827,18 @@ export default function TicketsBoard({
                   className="flex-1 space-y-3"
                 >
                   {itemsForCol.length === 0 ? (
-                    <div className="flex h-36 items-center justify-center rounded-lg border-2 border-dashed border-slate-200 text-sm text-slate-400">
+                    <div className="flex h-36 items-center justify-center rounded-lg border-2 border-dashed border-border bg-background/40 text-sm text-muted-foreground">
                       Sin tickets
                     </div>
                   ) : (
                     groupByDate(itemsForCol).map((group) => (
                       <div key={group.date} className="space-y-3">
                         <div className="flex items-center gap-2 py-2">
-                          <div className="h-px flex-1 bg-slate-200"></div>
-                          <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                          <div className="h-px flex-1 bg-border"></div>
+                          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                             {group.date}
                           </span>
-                          <div className="h-px flex-1 bg-slate-200"></div>
+                          <div className="h-px flex-1 bg-border"></div>
                         </div>
                         {group.items.map((t) => (
                           <div
@@ -1832,15 +1849,15 @@ export default function TicketsBoard({
                             }
                             onClick={() => openTicketDetail(t)}
                             className={
-                              "group rounded-lg border bg-white p-4 shadow-sm transition-all hover:border-slate-300 hover:shadow-md cursor-pointer " +
+                              "group rounded-lg border border-border bg-card p-4 shadow-sm transition-all hover:shadow-md cursor-pointer " +
                               (coerceStatus(t.estado) === "PAUSADO"
-                                ? "border-amber-300 ring-1 ring-amber-200"
-                                : "border-slate-200")
+                                ? "border-amber-400/60 ring-1 ring-amber-400/20"
+                                : "")
                             }
                           >
                             <div className="space-y-3">
                               <div className="flex items-start justify-between gap-3">
-                                <h3 className="flex-1 text-sm font-medium leading-snug text-slate-900">
+                                <h3 className="flex-1 text-sm font-medium leading-snug text-foreground">
                                   {t.nombre ?? "Ticket"}
                                 </h3>
                                 <span
@@ -1853,17 +1870,17 @@ export default function TicketsBoard({
                               </div>
 
                               {coerceStatus(t.estado) === "PAUSADO" && (
-                                <div className="flex items-center gap-1.5 text-amber-700">
-                                  <span className="inline-block h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                                <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-200">
+                                  <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
                                   <span className="text-[11px] font-medium">
                                     Requiere atención
                                   </span>
                                 </div>
                               )}
 
-                              <div className="space-y-1.5 text-xs text-slate-600">
+                              <div className="space-y-1.5 text-xs text-muted-foreground">
                                 <div className="flex items-center gap-1.5">
-                                  <CalendarIcon className="h-3.5 w-3.5 text-slate-400" />
+                                  <CalendarIcon className="h-3.5 w-3.5 text-muted-foreground" />
                                   <span>
                                     {t.created_at
                                       ? new Date(
@@ -1878,13 +1895,13 @@ export default function TicketsBoard({
                                 </div>
                                 {t.tipo && (
                                   <div className="flex items-center gap-1.5">
-                                    <div className="h-1 w-1 rounded-full bg-slate-400" />
+                                    <div className="h-1 w-1 rounded-full bg-muted-foreground/70" />
                                     <span>{t.tipo}</span>
                                   </div>
                                 )}
                                 {t.deadline && (
                                   <div className="flex items-center gap-1.5">
-                                    <div className="h-1 w-1 rounded-full bg-slate-400" />
+                                    <div className="h-1 w-1 rounded-full bg-muted-foreground/70" />
                                     <span>
                                       Vence:{" "}
                                       {new Date(t.deadline).toLocaleDateString(
@@ -1938,9 +1955,9 @@ export default function TicketsBoard({
 
                               {/* Informante */}
                               {(t.informante_nombre || t.informante) && (
-                                <div className="flex items-center gap-1.5 text-xs text-slate-600">
-                                  <User className="h-3.5 w-3.5 text-slate-400" />
-                                  <span className="font-medium text-slate-700">
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span className="font-medium text-foreground/90">
                                     {t.informante_nombre || t.informante}
                                   </span>
                                 </div>
@@ -2066,7 +2083,9 @@ export default function TicketsBoard({
                                         key={`${
                                           c.codigo_equipo ?? c.nombre ?? idx
                                         }`}
-                                        className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700 transition-colors hover:bg-slate-200"
+                                        className={`inline-flex items-center rounded-md px-2 py-1 text-xs transition-colors ${coachChipClass(
+                                          idx
+                                        )}`}
                                         title={`${c.nombre ?? "Coach"}${
                                           c.area ? ` · ${c.area}` : ""
                                         }${c.puesto ? ` · ${c.puesto}` : ""}`}
@@ -2078,7 +2097,7 @@ export default function TicketsBoard({
                                       </span>
                                     ))}
                                     {result.length > 3 && (
-                                      <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700">
+                                      <span className="inline-flex items-center rounded-md border border-border bg-muted px-2 py-1 text-xs text-foreground/90">
                                         +{result.length - 3}
                                       </span>
                                     )}
@@ -2087,7 +2106,7 @@ export default function TicketsBoard({
                               })()}
 
                               {(t as any).ultimo_estado?.estatus && (
-                                <div className="border-t border-slate-100 pt-2 text-xs text-slate-500">
+                                <div className="border-t border-border pt-2 text-xs text-muted-foreground">
                                   Último:{" "}
                                   {
                                     STATUS_LABEL[
