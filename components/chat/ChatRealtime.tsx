@@ -5,7 +5,6 @@ import { getAuthToken } from "@/lib/auth";
 import Spinner from "@/components/ui/spinner";
 import MessageBubble from "@/components/chat/MessageBubble";
 import VideoPlayer from "@/components/chat/VideoPlayer";
-import { nowLocalIso } from "@/app/admin/teamsv2/[code]/chat-core";
 // chat: disable snackbars in-chat — use console.debug for non-intrusive messages
 import {
   Smile,
@@ -62,8 +61,6 @@ type Message = {
   sender: Sender;
   text: string;
   at: string;
-  edited?: boolean;
-  editedAt?: string;
   attachments?: Attachment[];
   status?: string;
   phase?: string;
@@ -680,16 +677,6 @@ export default function ChatRealtime({
               timeout: 20000,
             });
         sioRef.current = sio;
-        try {
-          if (
-            typeof window !== "undefined" &&
-            process.env.NODE_ENV !== "production"
-          ) {
-            const w = window as any;
-            w.__academiaChatSockets = w.__academiaChatSockets || {};
-            w.__academiaChatSockets[String(currentRole || "unknown")] = sio;
-          }
-        } catch {}
         sio.on("connect", () => {
           if (!alive) return;
           setConnected(true);
@@ -845,9 +832,7 @@ export default function ChatRealtime({
               room: normRoom,
               sender,
               text: String(msg?.contenido ?? ""),
-              at: String(
-                msg?.fecha_envio_local ?? (msg?.fecha_envio || nowLocalIso())
-              ),
+              at: String(msg?.fecha_envio || new Date().toISOString()),
               delivered: true,
               read: false,
               srcParticipantId: msg?.id_chat_participante_emisor,
@@ -874,15 +859,13 @@ export default function ChatRealtime({
                     textMatch &&
                     (isMyEcho || mm.sender === currentRole)
                   ) {
-                    const serverAt =
-                      msg?.fecha_envio_local ?? msg?.fecha_envio ?? null;
                     // Preserve the local timestamp to prevent the message from jumping up/down
                     // due to server clock skew, which makes it look like it "disappeared".
                     // Also preserve 'read' status and sender (to avoid flipping sides if sender calc failed).
                     next[i] = {
                       ...newMsg,
                       sender: mm.sender, // Keep local sender
-                      at: serverAt ? String(serverAt) : mm.at, // Prefer backend local time if provided
+                      at: mm.at, // Keep local time
                       read: mm.read || false,
                     };
                     return next;
@@ -943,61 +926,6 @@ export default function ChatRealtime({
             );
           } catch {}
         });
-
-        const applyMessageEdit = (data: any) => {
-          try {
-            const idChat = data?.id_chat ?? data?.chatId ?? null;
-            if (
-              idChat != null &&
-              chatId != null &&
-              String(idChat) !== String(chatId)
-            ) {
-              // Edit de otro chat: refrescar bandejas
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("chat:list-refresh", {
-                    detail: {
-                      reason: "message-edit-other-chat",
-                      id_chat: idChat,
-                    },
-                  })
-                );
-              } catch {}
-              return;
-            }
-            const idMsg = data?.id_mensaje ?? data?.id ?? null;
-            if (!idMsg) return;
-            const nuevo = String(
-              data?.nuevo_contenido ?? data?.contenido ?? data?.texto ?? ""
-            );
-            const editedAt = String(
-              data?.fecha_edicion_local ?? data?.fecha_edicion ?? nowLocalIso()
-            );
-            setItems((prev) =>
-              prev.map((m) =>
-                String(m.id) === String(idMsg)
-                  ? ({
-                      ...m,
-                      text: nuevo,
-                      edited: true,
-                      editedAt,
-                    } as any)
-                  : m
-              )
-            );
-            try {
-              window.dispatchEvent(
-                new CustomEvent("chat:list-refresh", {
-                  detail: { reason: "message-edited", id_chat: chatId },
-                })
-              );
-            } catch {}
-          } catch {}
-        };
-        try {
-          sio.on("chat.message.edit", applyMessageEdit);
-          sio.on("chat.message.edited", applyMessageEdit);
-        } catch {}
         sio.on("chat.read.all", (_: any) => {
           try {
             // Marcar todos mis mensajes como leídos
@@ -1647,7 +1575,7 @@ export default function ChatRealtime({
                 room: normRoom,
                 sender,
                 text: String(m?.Contenido ?? m?.contenido ?? ""),
-                at: String(m?.fecha_envio || nowLocalIso()),
+                at: String(m?.fecha_envio || new Date().toISOString()),
                 delivered: true,
                 read: !!m?.leido,
                 srcParticipantId: m?.id_chat_participante_emisor,
@@ -1744,7 +1672,7 @@ export default function ChatRealtime({
                     room: normRoom,
                     sender,
                     text: String(m?.Contenido ?? m?.contenido ?? ""),
-                    at: String(m?.fecha_envio || nowLocalIso()),
+                    at: String(m?.fecha_envio || new Date().toISOString()),
                     delivered: true,
                     read: !!m?.leido,
                     srcParticipantId: m?.id_chat_participante_emisor,
@@ -1901,7 +1829,7 @@ export default function ChatRealtime({
                 room: normRoom,
                 sender,
                 text: String(m?.Contenido ?? m?.contenido ?? ""),
-                at: String(m?.fecha_envio || nowLocalIso()),
+                at: String(m?.fecha_envio || new Date().toISOString()),
                 delivered: true,
                 read: !!m?.leido,
                 srcParticipantId: m?.id_chat_participante_emisor,
@@ -2348,7 +2276,7 @@ export default function ChatRealtime({
         room: normRoom,
         sender: currentRole,
         text: val,
-        at: nowLocalIso(),
+        at: new Date().toISOString(),
         attachments: tempAttachments,
         delivered: false,
       };
@@ -2593,8 +2521,6 @@ export default function ChatRealtime({
               id_chat_participante_emisor: effectiveMyParticipantId,
               contenido: val,
               client_session: clientSessionRef.current,
-              // Hora local del cliente para persistir y mantener al recargar
-              fecha_envio_local: localMsg.at,
               attachments: payloadAttachments,
             };
             try {
@@ -2900,7 +2826,7 @@ export default function ChatRealtime({
                   room: normRoom,
                   sender,
                   text: String(m?.Contenido ?? m?.contenido ?? ""),
-                  at: String(m?.fecha_envio || nowLocalIso()),
+                  at: String(m?.fecha_envio || new Date().toISOString()),
                   delivered: true,
                   read: !!m?.leido,
                   srcParticipantId: m?.id_chat_participante_emisor,
@@ -2998,7 +2924,7 @@ export default function ChatRealtime({
                       room: normRoom,
                       sender,
                       text: String(m?.Contenido ?? m?.contenido ?? ""),
-                      at: String(m?.fecha_envio || nowLocalIso()),
+                      at: String(m?.fecha_envio || new Date().toISOString()),
                       delivered: true,
                       read: !!m?.leido,
                       srcParticipantId: m?.id_chat_participante_emisor,
@@ -3337,7 +3263,7 @@ export default function ChatRealtime({
       messages: ticketSelectedMessages,
       attachments: ticketAttachments,
       autoGenerated: ticketAutoGenerated,
-      createdAt: nowLocalIso(),
+      createdAt: new Date().toISOString(),
     };
 
     console.debug("Ticket creado:", ticketData);

@@ -2219,19 +2219,36 @@ export default function TicketsBoard({
                         <div className="flex gap-2">
                           {!(
                             f.mime_type || mimeFromName(f.nombre_archivo)
-                          )?.startsWith("audio/") && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0"
-                              onClick={() =>
-                                downloadFile(f.id, f.nombre_archivo)
-                              }
-                              aria-label={`Descargar ${f.nombre_archivo}`}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          )}
+                          )?.startsWith("audio/") &&
+                            (f.url ? (
+                              <Button
+                                asChild
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                              >
+                                <a
+                                  href={f.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  aria-label={`Abrir ${f.nombre_archivo} en una pestaña nueva`}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 w-8 p-0"
+                                onClick={() =>
+                                  downloadFile(f.id, f.nombre_archivo)
+                                }
+                                aria-label={`Descargar ${f.nombre_archivo}`}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            ))}
                           <Button
                             size="sm"
                             variant="ghost"
@@ -3153,17 +3170,28 @@ export default function TicketsBoard({
                                   {!(
                                     f.mime_type ||
                                     mimeFromName(f.nombre_archivo)
-                                  )?.startsWith("audio/") && (
-                                    <button
-                                      onClick={() =>
-                                        downloadFile(f.id, f.nombre_archivo)
-                                      }
-                                      className="text-slate-400 hover:text-slate-700"
-                                      title="Descargar"
-                                    >
-                                      <Download className="h-3 w-3" />
-                                    </button>
-                                  )}
+                                  )?.startsWith("audio/") &&
+                                    (f.url ? (
+                                      <a
+                                        href={f.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-slate-400 hover:text-slate-700"
+                                        title="Abrir en nueva pestaña"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                      </a>
+                                    ) : (
+                                      <button
+                                        onClick={() =>
+                                          downloadFile(f.id, f.nombre_archivo)
+                                        }
+                                        className="text-slate-400 hover:text-slate-700"
+                                        title="Descargar"
+                                      >
+                                        <Download className="h-3 w-3" />
+                                      </button>
+                                    ))}
                                   <button
                                     onClick={() => openPreview(f)}
                                     className="text-slate-400 hover:text-slate-700"
