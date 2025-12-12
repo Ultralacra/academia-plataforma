@@ -1733,14 +1733,8 @@ export default function TicketsBoard({
                   informanteStr === myCode ||
                   (!!myId && informanteStr === myId);
 
-                // Asignados a mí: revisar coaches del ticket, overrides y fallback global técnicos
-                const normalize = (s: any) =>
-                  String(s || "")
-                    .normalize("NFD")
-                    .replace(/[\u0300-\u036f]/g, "")
-                    .toUpperCase()
-                    .trim();
-
+                // Asignados a mí: revisar coaches del ticket y overrides.
+                // Importante: NO hacer fallback por "ser técnico" porque eso muestra tickets de otros técnicos.
                 let assignedToMe = false;
                 try {
                   const coachesArr = Array.isArray((t as any)?.coaches)
@@ -1752,7 +1746,11 @@ export default function TicketsBoard({
 
                   // a) coaches del ticket
                   assignedToMe = coachesArr.some((co: any) => {
-                    const code = String(co?.codigo_equipo || "").trim();
+                    const code = String(
+                      (co && typeof co === "object"
+                        ? co?.codigo_equipo ?? co?.codigo ?? co?.id
+                        : co) ?? ""
+                    ).trim();
                     return code === myCode || (!!myId && code === myId);
                   });
 
@@ -1772,26 +1770,6 @@ export default function TicketsBoard({
                       assignedToMe = overrides.some((o: any) => {
                         const code = String(o || "").trim();
                         return code === myCode || (!!myId && code === myId);
-                      });
-                    }
-                  }
-
-                  // c) fallback: si es técnico y coaches vacío, usar lista global de técnicos
-                  if (!assignedToMe) {
-                    const tipo = normalize((t as any)?.tipo);
-                    if (
-                      tipo.includes("TECNIC") &&
-                      (!Array.isArray(coachesArr) || coachesArr.length === 0)
-                    ) {
-                      assignedToMe = (coaches || []).some((gc: any) => {
-                        const code = String(gc?.codigo || "").trim();
-                        const isTech =
-                          normalize(gc?.area).includes("TECNIC") ||
-                          normalize(gc?.puesto).includes("TECNIC");
-                        return (
-                          isTech &&
-                          (code === myCode || (!!myId && code === myId))
-                        );
                       });
                     }
                   }

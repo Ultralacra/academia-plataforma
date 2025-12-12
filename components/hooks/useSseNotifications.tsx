@@ -67,6 +67,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
   const [hasMore, setHasMore] = useState(true);
   const controllerRef = useRef<AbortController | null>(null);
   const retryRef = useRef<number>(0);
+  const failuresRef = useRef<number>(0); // fallos consecutivos (para backoff)
   const connectedRef = useRef<boolean>(false);
   const bufferRef = useRef<string>("");
   const startedRef = useRef<boolean>(false);
@@ -293,6 +294,8 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         }
         connectedRef.current = true;
         setConnected(true);
+        // Conexión exitosa: resetear fallos consecutivos para evitar backoff largo tras un corte aislado.
+        failuresRef.current = 0;
         try {
           console.log("[SSE] conectado", { attempt });
         } catch {}
@@ -317,7 +320,15 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         if (signal.aborted) return; // cerrado manual
         connectedRef.current = false;
         setConnected(false);
-        const backoff = Math.min(30000, attempt * 1500);
+        // Backoff basado en fallos consecutivos (no en el total histórico de intentos)
+        failuresRef.current += 1;
+        const consecutive = failuresRef.current;
+        const msg = String(e?.message || e || "");
+        // Si es auth, no reintentar agresivamente
+        const isAuth = msg.includes("HTTP 401") || msg.includes("HTTP 403");
+        const backoff = isAuth
+          ? 15000
+          : Math.min(8000, 500 + consecutive * 750);
         try {
           console.warn("[SSE] error de conexión", e?.message || e);
         } catch {}
