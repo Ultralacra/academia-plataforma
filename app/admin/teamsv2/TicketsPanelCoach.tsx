@@ -2612,8 +2612,8 @@ export default function TicketsPanelCoach({
                     <div className="flex gap-2 items-center">
                       {!(
                         f.mime_type || mimeFromName(f.nombre_archivo)
-                      )?.startsWith("video/") && (
-                        f.url ? (
+                      )?.startsWith("video/") &&
+                        (f.url ? (
                           <Button
                             asChild
                             size="sm"
@@ -2634,15 +2634,12 @@ export default function TicketsPanelCoach({
                             size="sm"
                             variant="ghost"
                             className="h-8 w-8 p-0"
-                            onClick={() =>
-                              downloadFile(f.id, f.nombre_archivo)
-                            }
+                            onClick={() => downloadFile(f.id, f.nombre_archivo)}
                             aria-label={`Descargar ${f.nombre_archivo}`}
                           >
                             <Download className="h-4 w-4" />
                           </Button>
-                        )
-                      )}
+                        ))}
                       <Button
                         size="sm"
                         variant="ghost"
@@ -3509,8 +3506,8 @@ export default function TicketsPanelCoach({
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {!(
                                   f.mime_type || mimeFromName(f.nombre_archivo)
-                                )?.startsWith("video/") && (
-                                  f.url ? (
+                                )?.startsWith("video/") &&
+                                  (f.url ? (
                                     <a
                                       href={f.url}
                                       target="_blank"
@@ -3530,8 +3527,7 @@ export default function TicketsPanelCoach({
                                     >
                                       <Download className="h-3 w-3" />
                                     </button>
-                                  )
-                                )}
+                                  ))}
                                 <button
                                   onClick={() => openPreview(f)}
                                   className="text-slate-400 hover:text-slate-700"
@@ -3895,8 +3891,8 @@ export default function TicketsPanelCoach({
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 {!(
                                   f.mime_type || mimeFromName(f.nombre_archivo)
-                                )?.startsWith("audio/") && (
-                                  f.url ? (
+                                )?.startsWith("audio/") &&
+                                  (f.url ? (
                                     <a
                                       href={f.url}
                                       target="_blank"
@@ -3916,8 +3912,7 @@ export default function TicketsPanelCoach({
                                     >
                                       <Download className="h-3 w-3" />
                                     </button>
-                                  )
-                                )}
+                                  ))}
                                 <button
                                   onClick={() => openPreview(f)}
                                   className="text-slate-400 hover:text-slate-700"
