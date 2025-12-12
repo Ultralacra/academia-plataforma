@@ -410,6 +410,7 @@ export default function TicketsPanelCoach({
       mime_type: string | null;
       tamano_bytes: number | null;
       created_at: string | null;
+      url?: string | null;
     }[]
   >([]);
   // Edición de descripción
@@ -1440,6 +1441,7 @@ export default function TicketsPanelCoach({
     id: string;
     nombre_archivo: string;
     mime_type: string | null;
+    url?: string | null;
   }) {
     try {
       setPreviewOpen(true);
@@ -1447,6 +1449,11 @@ export default function TicketsPanelCoach({
       const cached = blobCache[f.id];
       if (cached) {
         setPreviewFile({ ...f, url: cached });
+        return;
+      }
+      // Si el backend ya provee una URL pública, úsala directamente
+      if (f.url) {
+        setPreviewFile({ ...f, url: f.url });
         return;
       }
       const res = await getTicketFile(f.id);
@@ -1461,7 +1468,7 @@ export default function TicketsPanelCoach({
       setPreviewFile({ ...f, url });
     } catch (e) {
       console.error(e);
-      setPreviewFile({ ...f });
+      setPreviewFile({ ...f, url: f.url ?? undefined });
     } finally {
       setPreviewLoading(false);
     }
@@ -2566,7 +2573,7 @@ export default function TicketsPanelCoach({
                       {(() => {
                         const m = f.mime_type || mimeFromName(f.nombre_archivo);
                         if (m?.startsWith("image/")) {
-                          const thumb = blobCache[f.id];
+                          const thumb = blobCache[f.id] || f.url;
                           return thumb ? (
                             <img
                               src={thumb || "/placeholder.svg"}
@@ -2606,15 +2613,35 @@ export default function TicketsPanelCoach({
                       {!(
                         f.mime_type || mimeFromName(f.nombre_archivo)
                       )?.startsWith("video/") && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 w-8 p-0"
-                          onClick={() => downloadFile(f.id, f.nombre_archivo)}
-                          aria-label={`Descargar ${f.nombre_archivo}`}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
+                        f.url ? (
+                          <Button
+                            asChild
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0"
+                          >
+                            <a
+                              href={f.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Abrir ${f.nombre_archivo} en una pestaña nueva`}
+                            >
+                              <Download className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0"
+                            onClick={() =>
+                              downloadFile(f.id, f.nombre_archivo)
+                            }
+                            aria-label={`Descargar ${f.nombre_archivo}`}
+                          >
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        )
                       )}
                       <Button
                         size="sm"
@@ -3316,11 +3343,14 @@ export default function TicketsPanelCoach({
                     {/* Descripción */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium">Descripción</div>
+                        <div className="text-sm font-medium text-slate-900">
+                          Descripción
+                        </div>
                         {!descEditing && canEdit && (
                           <Button
                             variant="outline"
                             size="sm"
+                            className="h-7 text-xs"
                             onClick={() => {
                               setDescDraft(
                                 String(ticketDetail?.descripcion || "")
@@ -3333,7 +3363,7 @@ export default function TicketsPanelCoach({
                         )}
                       </div>
                       {!descEditing ? (
-                        <div className="whitespace-pre-wrap text-sm text-slate-800 rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
                           {ticketDetail?.descripcion || "—"}
                         </div>
                       ) : (
@@ -3347,6 +3377,7 @@ export default function TicketsPanelCoach({
                           <div className="flex items-center justify-end gap-2">
                             <Button
                               variant="ghost"
+                              size="sm"
                               onClick={() => {
                                 setDescEditing(false);
                                 setDescDraft("");
@@ -3356,6 +3387,7 @@ export default function TicketsPanelCoach({
                               Cancelar
                             </Button>
                             <Button
+                              size="sm"
                               onClick={async () => {
                                 if (!editTicket?.codigo) return;
                                 setSavingDesc(true);
@@ -3384,6 +3416,54 @@ export default function TicketsPanelCoach({
                           </div>
                         </div>
                       )}
+                      {(() => {
+                        const urlList: string[] = [
+                          ...extractUrlsFromDescription(
+                            ticketDetail?.descripcion
+                          ),
+                          ...(
+                            (Array.isArray((ticketDetail as any)?.links)
+                              ? (ticketDetail as any).links
+                              : []) as any[]
+                          )
+                            .map((it: any) =>
+                              typeof it === "string"
+                                ? it
+                                : it?.url || it?.link || it?.enlace || ""
+                            )
+                            .filter((s: string) => !!s),
+                        ];
+
+                        const seen = new Set<string>();
+                        const links = urlList.filter((u) => {
+                          const k = String(u || "").toLowerCase();
+                          if (!k) return false;
+                          if (seen.has(k)) return false;
+                          seen.add(k);
+                          return true;
+                        });
+
+                        return links.length > 0 ? (
+                          <div className="pt-2">
+                            <div className="text-xs font-medium text-slate-500 mb-1">
+                              Enlaces detectados
+                            </div>
+                            <div className="flex flex-col gap-1">
+                              {links.map((u, i) => (
+                                <a
+                                  key={i}
+                                  href={normalizeUrl(u)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-sky-600 underline break-all text-sm"
+                                >
+                                  {u}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
 
                     <Separator />
@@ -3430,14 +3510,27 @@ export default function TicketsPanelCoach({
                                 {!(
                                   f.mime_type || mimeFromName(f.nombre_archivo)
                                 )?.startsWith("video/") && (
-                                  <button
-                                    onClick={() =>
-                                      downloadFile(f.id, f.nombre_archivo)
-                                    }
-                                    className="text-slate-400 hover:text-slate-700"
-                                  >
-                                    <Download className="h-3 w-3" />
-                                  </button>
+                                  f.url ? (
+                                    <a
+                                      href={f.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-slate-400 hover:text-slate-700"
+                                      title="Abrir en nueva pestaña"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                    </a>
+                                  ) : (
+                                    <button
+                                      onClick={() =>
+                                        downloadFile(f.id, f.nombre_archivo)
+                                      }
+                                      className="text-slate-400 hover:text-slate-700"
+                                      title="Descargar"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                    </button>
+                                  )
                                 )}
                                 <button
                                   onClick={() => openPreview(f)}
@@ -3803,14 +3896,27 @@ export default function TicketsPanelCoach({
                                 {!(
                                   f.mime_type || mimeFromName(f.nombre_archivo)
                                 )?.startsWith("audio/") && (
-                                  <button
-                                    onClick={() =>
-                                      downloadFile(f.id, f.nombre_archivo)
-                                    }
-                                    className="text-slate-400 hover:text-slate-700"
-                                  >
-                                    <Download className="h-3 w-3" />
-                                  </button>
+                                  f.url ? (
+                                    <a
+                                      href={f.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-slate-400 hover:text-slate-700"
+                                      title="Abrir en nueva pestaña"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                    </a>
+                                  ) : (
+                                    <button
+                                      onClick={() =>
+                                        downloadFile(f.id, f.nombre_archivo)
+                                      }
+                                      className="text-slate-400 hover:text-slate-700"
+                                      title="Descargar"
+                                    >
+                                      <Download className="h-3 w-3" />
+                                    </button>
+                                  )
                                 )}
                                 <button
                                   onClick={() => openPreview(f)}
