@@ -123,6 +123,17 @@ export async function deleteBono(codigo: string): Promise<boolean> {
   return true;
 }
 
+// Desasignar un bono de un alumno.
+// Nota: el backend expuso esta operación en DELETE /v1/bonos/delete/bono/:codigo
+// (buildUrl() ya agrega /v1, por eso aquí no se incluye).
+export async function unassignBonoFromAlumno(codigo: string): Promise<boolean> {
+  if (!codigo) return false;
+  await fetchJson<any>(`/bonos/delete/bono/${encodeURIComponent(codigo)}`,
+    { method: "DELETE" }
+  );
+  return true;
+}
+
 export async function assignBonoToAlumno(payload: {
   bono_codigo: string;
   alumno_codigo: string;

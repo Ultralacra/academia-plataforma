@@ -12,7 +12,6 @@ import { SseTicketSnackbar } from "@/components/hooks/SseTicketSnackbar";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
-// import { ThemeToggle } from "@/components/theme-toggle";
 
 export const metadata: Metadata = {
   title: "Academia X",
@@ -46,7 +45,6 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {/* <ThemeToggle className="fixed top-3 right-3 z-50" /> */}
           <SseNotificationsProvider>
             <GlobalChatNotifications />
             <CoachChatNotifier />

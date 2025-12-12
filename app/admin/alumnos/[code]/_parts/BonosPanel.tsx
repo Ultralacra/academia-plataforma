@@ -5,6 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -42,6 +52,11 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
   const [selectedToAssign, setSelectedToAssign] = useState<Set<string>>(
     () => new Set()
   );
+
+  const [unassignOpen, setUnassignOpen] = useState(false);
+  const [unassignCodigo, setUnassignCodigo] = useState<string | null>(null);
+  const [unassignNombre, setUnassignNombre] = useState<string | null>(null);
+  const [unassigning, setUnassigning] = useState(false);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailCodigo, setDetailCodigo] = useState<string | null>(null);
@@ -199,6 +214,28 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
     }
   }
 
+  async function unassignOne(codigo: string) {
+    if (!codigo) return;
+    setUnassigning(true);
+    try {
+      await alumnosApi.unassignBonoFromAlumno(codigo);
+      toast({
+        title: "Bono desasignado",
+        description: "Se desasignó correctamente.",
+      });
+      await refreshAssigned();
+    } catch (e: any) {
+      console.error(e);
+      toast({
+        title: "No se pudo desasignar",
+        description: e?.message ?? "Error desconocido",
+        variant: "destructive",
+      });
+    } finally {
+      setUnassigning(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -240,18 +277,32 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                       </div>
                     ) : null}
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="shrink-0"
-                    onClick={() => {
-                      setDetailCodigo(b.bono_codigo);
-                      setDetailOpen(true);
-                    }}
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    Detalle
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {!isStudent ? (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          setUnassignCodigo(String(b.bono_codigo));
+                          setUnassignNombre(String(b.nombre ?? ""));
+                          setUnassignOpen(true);
+                        }}
+                      >
+                        Desasignar
+                      </Button>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setDetailCodigo(b.bono_codigo);
+                        setDetailOpen(true);
+                      }}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Detalle
+                    </Button>
+                  </div>
                 </div>
               </div>
             );
@@ -394,6 +445,49 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal: Confirmar desasignación */}
+      <AlertDialog
+        open={unassignOpen}
+        onOpenChange={(v) => {
+          if (unassigning) return;
+          setUnassignOpen(v);
+          if (!v) {
+            setUnassignCodigo(null);
+            setUnassignNombre(null);
+          }
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-sm p-4">
+          <AlertDialogHeader className="text-center">
+            <AlertDialogTitle className="text-base">
+              Desasignar bono
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm">
+              ¿Seguro que quieres desasignar este bono
+              {unassignNombre ? `: ${unassignNombre}` : ""}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unassigning}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={unassigning || !unassignCodigo}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                const codigo = unassignCodigo;
+                setUnassignOpen(false);
+                setUnassignCodigo(null);
+                setUnassignNombre(null);
+                await unassignOne(String(codigo || ""));
+              }}
+            >
+              {unassigning ? "Desasignando..." : "Confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
