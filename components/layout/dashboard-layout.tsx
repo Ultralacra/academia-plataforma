@@ -43,7 +43,6 @@ function NotificationsBadge() {
     items: sseItems,
     unread: sseUnread,
     markAllRead: sseMarkAll,
-    refresh: sseRefresh,
     loadMore: sseLoadMore,
     hasMore: sseHasMore,
     connected: sseConnected,
@@ -79,11 +78,8 @@ function NotificationsBadge() {
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        // Al abrir, refrescar la lista del usuario (REST)
-        if (v) {
-          sseRefresh();
-          setVisibleLimit(20);
-        }
+        // No consultar REST al abrir: solo mostrar lo ya recibido
+        if (v) setVisibleLimit(20);
         // Al cerrar, marcar todas como leídas
         if (!v) {
           ticketsMarkAll();

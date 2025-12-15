@@ -50,6 +50,8 @@ let globalAudio: HTMLAudioElement | null = null;
 let audioUnlocked = false;
 let audioUnlockAttached = false;
 
+const NOTIFICATION_SOUND_SRC = "/new-notification-022-370046.mp3";
+
 function ensureAudioUnlocked() {
   if (typeof window === "undefined") return;
   if (audioUnlocked) return;
@@ -60,7 +62,7 @@ function ensureAudioUnlocked() {
       if (!globalAudio) {
         // Prefer user-provided MP3 in /public; fallback to embedded WAV if it fails
         const el = document.createElement("audio");
-        el.src = "/new-notification-022-370046.mp3";
+        el.src = NOTIFICATION_SOUND_SRC;
         el.preload = "auto";
         el.volume = 0.0;
         document.body.appendChild(el);
@@ -86,6 +88,14 @@ function ensureAudioUnlocked() {
   } catch {}
 }
 
+// Llamar esto al montar la app (antes del login/click) para que el primer click
+// ya sirva para desbloquear el audio y luego suene en la primera notificación.
+export function initNotificationSound() {
+  try {
+    ensureAudioUnlocked();
+  } catch {}
+}
+
 export function playNotificationSound() {
   try {
     ensureAudioUnlocked();
@@ -95,19 +105,20 @@ export function playNotificationSound() {
       const p = globalAudio.play();
       if (p && typeof p.catch === "function") {
         p.catch((e: any) => {
-          console.error("Error playing sound (autoplay blocked?):", e);
+          // Autoplay puede estar bloqueado hasta interacción del usuario
+          console.debug("Error playing sound (autoplay blocked?):", e);
         });
       }
       return;
     }
     // Fallback: create local audio and try to play (may fail pre-unlock)
     const local = new Audio();
-    local.src = "/new-notification-022-370046.mp3";
+    local.src = NOTIFICATION_SOUND_SRC;
     local.volume = 1.0;
     const pr = local.play();
     if (pr && typeof pr.catch === "function") {
       pr.catch((e: any) => {
-        console.error("Error playing sound (autoplay blocked?):", e);
+        console.debug("Error playing sound (autoplay blocked?):", e);
         try {
           local.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YYQAAACAgICAgICAgP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA";
           local.play().catch(() => {});

@@ -90,6 +90,9 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
       const myPid = myParticipantIds.current[cid];
       const senderPid = msg.id_chat_participante_emisor;
 
+      // Privacy: si no estoy unido a este chat, ignoro el mensaje.
+      if (!myPid) return;
+
       let esMio = false;
       if (myPid && senderPid && String(myPid) === String(senderPid)) {
         esMio = true;

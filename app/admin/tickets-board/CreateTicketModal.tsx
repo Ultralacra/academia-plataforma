@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -64,6 +64,8 @@ export function CreateTicketModal({
   const [links, setLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({
     current: 0,
     total: 0,
@@ -127,9 +129,74 @@ export function CreateTicketModal({
     setNewLink("");
   };
 
+  const MAX_FILES = 10;
+  const addFiles = (incoming: File[]) => {
+    if (!incoming?.length) return;
+    setFiles((prev) => {
+      const seen = new Set(
+        prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`)
+      );
+      const next = [...prev];
+      for (const f of incoming) {
+        const key = `${f.name}|${f.size}|${f.lastModified}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        next.push(f);
+        if (next.length >= MAX_FILES) break;
+      }
+      return next.slice(0, MAX_FILES);
+    });
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFiles([...files, ...Array.from(e.target.files)]);
+    const picked = Array.from(e.target.files ?? []);
+    addFiles(picked);
+    // Permite seleccionar el mismo archivo de nuevo
+    e.currentTarget.value = "";
+  };
+
+  const handleFilesDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingFiles(false);
+    const picked = Array.from(e.dataTransfer?.files ?? []);
+    addFiles(picked);
+  };
+
+  const handlePasteIntoDropzone = (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData?.items ?? []);
+    if (!items.length) return;
+
+    const pastedFiles: File[] = [];
+    for (const it of items) {
+      if (it.kind !== "file") continue;
+      const file = it.getAsFile();
+      if (!file) continue;
+      // Si viene sin nombre útil, generamos uno
+      if (!file.name || file.name === "image.png") {
+        const ext = (file.type || "").includes("png")
+          ? "png"
+          : (file.type || "").includes("jpeg")
+          ? "jpg"
+          : (file.type || "").includes("webp")
+          ? "webp"
+          : "bin";
+        const ts = new Date()
+          .toISOString()
+          .replace(/[:.]/g, "-")
+          .replace("T", "_")
+          .slice(0, 19);
+        pastedFiles.push(
+          new File([file], `pasted-${ts}.${ext}`, { type: file.type })
+        );
+      } else {
+        pastedFiles.push(file);
+      }
+    }
+
+    if (pastedFiles.length > 0) {
+      e.preventDefault();
+      addFiles(pastedFiles);
     }
   };
 
@@ -426,13 +493,60 @@ export function CreateTicketModal({
           {/* Files */}
           <div className="space-y-2">
             <Label>Adjuntos</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="file"
-                multiple
-                onChange={handleFileChange}
-                className="cursor-pointer"
-              />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  fileInputRef.current?.click();
+                }
+              }}
+              onPaste={handlePasteIntoDropzone}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDraggingFiles(true);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDraggingFiles(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDraggingFiles(false);
+              }}
+              onDrop={handleFilesDrop}
+              className={
+                "rounded-md border-2 border-dashed bg-slate-50 p-6 text-center text-sm text-slate-600 transition-colors outline-none focus:ring-2 focus:ring-slate-200 " +
+                (isDraggingFiles
+                  ? "border-slate-400"
+                  : "border-slate-200 hover:border-slate-300")
+              }
+            >
+              <div className="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-white border border-slate-200">
+                <Paperclip className="h-5 w-5 text-slate-500" />
+              </div>
+              <div className="font-medium text-slate-800">
+                Arrastra y suelta archivos aquí
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                o haz clic para seleccionarlos · también puedes pegar una imagen
+                (Ctrl+V)
+              </div>
+              <div className="mt-2 text-xs text-slate-500">
+                Máximo {MAX_FILES} archivos
+              </div>
             </div>
             {files.length > 0 && (
               <div className="space-y-1 mt-2">

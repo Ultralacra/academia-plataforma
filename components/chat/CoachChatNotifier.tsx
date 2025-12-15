@@ -216,6 +216,11 @@ export function CoachChatNotifier() {
       const myPid = myParticipantIds.current[cid];
       const senderPid = msg.id_chat_participante_emisor;
 
+      // Privacy: si no estoy unido a este chat, no debo notificar nada.
+      if (!myPid) {
+        return;
+      }
+
       let isMe = false;
 
       // 1. Check by participant ID (most reliable if we have it)

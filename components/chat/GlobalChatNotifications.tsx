@@ -144,10 +144,10 @@ export function GlobalChatNotifications() {
       const myPid = myParticipantIds.current[cid];
       const senderPid = msg.id_chat_participante_emisor;
 
-      // Security/Privacy check: If I am not in this chat, ignore it.
-      // if (!myPid) {
-      //   return;
-      // }
+      // Security/Privacy check: si NO soy participante de este chat, ignorar.
+      if (!myPid) {
+        return;
+      }
 
       let isMe = false;
       if (myPid && senderPid && String(myPid) === String(senderPid)) {

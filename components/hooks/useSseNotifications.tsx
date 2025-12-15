@@ -69,6 +69,8 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
   const retryRef = useRef<number>(0);
   const failuresRef = useRef<number>(0); // fallos consecutivos (para backoff)
   const connectedRef = useRef<boolean>(false);
+  const connectedAtRef = useRef<number | null>(null);
+  const connectedHeartbeatRef = useRef<number | null>(null);
   const bufferRef = useRef<string>("");
   const startedRef = useRef<boolean>(false);
   // Permitir conexión también en /login según nuevo requerimiento
@@ -213,9 +215,13 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       bufferRef.current = bufferRef.current.slice(sepIndex + 2);
       if (!block) continue;
       let dataLines: string[] = [];
+      let eventName: string | null = null;
+      let sseId: string | null = null;
       const lines = block.split(/\n/);
       for (const ln of lines) {
         if (ln.startsWith("data:")) dataLines.push(ln.slice(5).trim());
+        if (ln.startsWith("event:")) eventName = ln.slice(6).trim() || null;
+        if (ln.startsWith("id:")) sseId = ln.slice(3).trim() || null;
       }
       if (!dataLines.length) continue;
       const dataStr = dataLines.join("\n");
@@ -242,15 +248,60 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         // Exponer el último evento recibido vía SSE (para snacks/toasts)
         setLastReceived({ id, title, at, unread: true, raw: json, type });
         try {
-          console.log("[SSE] evento recibido", { id, title, at, raw: json });
+          const startedAt = connectedAtRef.current;
+          const elapsedMs = startedAt ? Date.now() - startedAt : 0;
+          const elapsedMin = Math.floor(elapsedMs / 60000);
+          const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
+          console.log("[SSE] evento recibido", {
+            event: eventName,
+            sseId,
+            id,
+            type,
+            title,
+            at,
+            connectedFor: startedAt ? `${elapsedMin}m ${elapsedSec}s` : null,
+            raw: json,
+          });
         } catch {}
       } catch (e) {
         try {
-          console.warn("[SSE] error parseando evento", e, dataStr);
+          console.warn("[SSE] error parseando evento", {
+            event: eventName,
+            sseId,
+            error: e,
+            dataStr,
+          });
         } catch {}
       }
     }
   }, []);
+
+  const stopConnectedTimer = useCallback(() => {
+    if (connectedHeartbeatRef.current != null) {
+      try {
+        window.clearInterval(connectedHeartbeatRef.current);
+      } catch {}
+      connectedHeartbeatRef.current = null;
+    }
+    connectedAtRef.current = null;
+  }, []);
+
+  const startConnectedTimer = useCallback(() => {
+    stopConnectedTimer();
+    connectedAtRef.current = Date.now();
+    connectedHeartbeatRef.current = window.setInterval(() => {
+      if (!connectedRef.current) return;
+      const startedAt = connectedAtRef.current;
+      const elapsedMs = startedAt ? Date.now() - startedAt : 0;
+      const elapsedMin = Math.floor(elapsedMs / 60000);
+      const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
+      try {
+        console.log("[SSE] tiempo conectado", {
+          elapsed: `${elapsedMin}m ${elapsedSec}s`,
+        });
+      } catch {}
+    }, 60000);
+  }, [stopConnectedTimer]);
 
   const start = useCallback(() => {
     // Evitar múltiples inicios: solo una conexión activa
@@ -262,6 +313,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       } catch {}
       connectedRef.current = false;
       setConnected(false);
+      stopConnectedTimer();
       return;
     }
     const token = getAuthToken();
@@ -270,6 +322,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     try {
       controllerRef.current?.abort();
     } catch {}
+    stopConnectedTimer();
     controllerRef.current = new AbortController();
     const signal = controllerRef.current.signal;
     // buildUrl ya aplica el prefijo /v1; aquí va la ruta sin duplicarlo
@@ -294,6 +347,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         }
         connectedRef.current = true;
         setConnected(true);
+        startConnectedTimer();
         // Conexión exitosa: resetear fallos consecutivos para evitar backoff largo tras un corte aislado.
         failuresRef.current = 0;
         try {
@@ -311,6 +365,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         if (!signal.aborted) {
           connectedRef.current = false;
           setConnected(false);
+          stopConnectedTimer();
           try {
             console.log("[SSE] stream finalizado, reconectando...");
           } catch {}
@@ -320,6 +375,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         if (signal.aborted) return; // cerrado manual
         connectedRef.current = false;
         setConnected(false);
+        stopConnectedTimer();
         // Backoff basado en fallos consecutivos (no en el total histórico de intentos)
         failuresRef.current += 1;
         const consecutive = failuresRef.current;
@@ -335,7 +391,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         setTimeout(() => start(), backoff);
       }
     })();
-  }, [parseEventBlocks, disabled]);
+  }, [parseEventBlocks, disabled, startConnectedTimer, stopConnectedTimer]);
 
   // Cargar notificaciones iniciales del usuario (REST) una sola vez
   useEffect(() => {
@@ -353,6 +409,76 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     const token = getAuthToken();
     if (token && !connectedRef.current) start();
   }, [start, disabled]);
+
+  // Si el usuario hace login sin recargar, el token puede aparecer después de montar el Provider.
+  // Como getAuthToken() no es state, hacemos un chequeo ligero hasta que haya token y se inicie.
+  useEffect(() => {
+    if (disabled) return;
+    if (startedRef.current) return;
+    let cancelled = false;
+
+    const tick = () => {
+      if (cancelled) return;
+      if (startedRef.current) return;
+      const token = getAuthToken();
+      if (token && !connectedRef.current) {
+        start();
+      }
+    };
+
+    // Primer intento inmediato y luego sondeo corto (se detiene al iniciar)
+    tick();
+    const id = window.setInterval(() => {
+      if (cancelled) return;
+      if (startedRef.current) {
+        try {
+          window.clearInterval(id);
+        } catch {}
+        return;
+      }
+      tick();
+    }, 1000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [start, disabled]);
+
+  // Trigger inmediato al logear/deslogear (sin depender de polling)
+  useEffect(() => {
+    if (disabled) return;
+    if (typeof window === "undefined") return;
+
+    const handler = (ev: Event) => {
+      try {
+        const anyEv = ev as CustomEvent<any>;
+        const token = anyEv?.detail?.token ?? getAuthToken();
+        if (token) {
+          if (!connectedRef.current) {
+            try {
+              console.log("[SSE] auth: token detectado, iniciando conexión");
+            } catch {}
+            start();
+          }
+        } else {
+          // Logout: cortar stream
+          try {
+            controllerRef.current?.abort();
+          } catch {}
+          connectedRef.current = false;
+          setConnected(false);
+          stopConnectedTimer();
+          startedRef.current = false;
+          try {
+            console.log("[SSE] auth: sin token, conexión cerrada");
+          } catch {}
+        }
+      } catch {}
+    };
+
+    window.addEventListener("auth:changed", handler as any);
+    return () => window.removeEventListener("auth:changed", handler as any);
+  }, [start, disabled, stopConnectedTimer]);
 
   const markAllRead = useCallback(() => {
     // Disparar petición al backend y actualizar localmente

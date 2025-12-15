@@ -37,7 +37,6 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
-import { useChatNotifications } from "@/components/hooks/useChatNotifications";
 import { toast } from "@/components/ui/use-toast";
 import { useTheme } from "next-themes";
 
@@ -402,10 +401,6 @@ export function AppSidebar() {
       ? "coach"
       : "admin"
   ) as "admin" | "alumno" | "coach";
-  const { unreadTotal, lastEvent } = useChatNotifications({
-    role: roleKey as any,
-    enableToast: true,
-  });
 
   // Sumar contadores persistentes por chatId (Socket.IO) guardados en localStorage
   const [unreadByIdSum, setUnreadByIdSum] = useState<number>(0);
@@ -444,25 +439,7 @@ export function AppSidebar() {
       window.removeEventListener("storage", onStorage);
     };
   }, [roleKey]);
-  const unreadGrandTotal = (unreadTotal || 0) + (unreadByIdSum || 0);
-
-  // Toast cuando hay mensaje nuevo y estamos visibles pero fuera de /chat
-  useEffect(() => {
-    if (!lastEvent) return;
-    if (typeof document === "undefined") return;
-    const visible = document.visibilityState === "visible";
-    const onChatPage = pathname?.startsWith("/chat");
-    if (visible && !onChatPage) {
-      try {
-        toast({
-          title: "Nuevo mensaje en chat",
-          description: `${lastEvent.sender}: ${
-            lastEvent.text?.slice(0, 80) || "(adjunto)"
-          }`,
-        });
-      } catch {}
-    }
-  }, [lastEvent, pathname]);
+  const unreadGrandTotal = unreadByIdSum || 0;
 
   useEffect(() => {
     if (!pathname) return;

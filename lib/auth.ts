@@ -67,6 +67,13 @@ class AuthService {
 
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(authState));
+      try {
+        window.dispatchEvent(
+          new CustomEvent("auth:changed", {
+            detail: { token: authState.token ?? null, user: authState.user },
+          })
+        );
+      } catch {}
     } catch (error) {
       console.error("Error saving auth state:", error);
     }
@@ -164,6 +171,13 @@ class AuthService {
     if (typeof window !== "undefined") {
       try {
         localStorage.removeItem(this.storageKey);
+        try {
+          window.dispatchEvent(
+            new CustomEvent("auth:changed", {
+              detail: { token: null, user: null },
+            })
+          );
+        } catch {}
       } catch (error) {
         console.error("Error removing auth state:", error);
       }
