@@ -78,10 +78,23 @@ export async function getTickets(opts: {
   coach?: string; // código/id de coach para filtrar por equipo
   studentCode?: string;
 }) {
+  // Ocultar tickets eliminados aunque el backend los devuelva
+  const isDeleted = (r: any): boolean => {
+    try {
+      const estado = String(r?.estado ?? r?.status ?? r?.estatus ?? "").toUpperCase();
+      if (/(ELIMINAD|BORRADO|DELETED)/.test(estado)) return true;
+      if (r?.eliminado === true || r?.deleted === true) return true;
+      if (r?.deleted_at || r?.eliminado_at) return true;
+      if (typeof r?.activo !== "undefined" && r?.activo === false) return true;
+    } catch {}
+    return false;
+  };
+
   if (opts.studentCode) {
     const url = `/client/get/tickets/${encodeURIComponent(opts.studentCode)}`;
     const json = await apiFetch<any>(url);
-    const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+    let rows: any[] = Array.isArray(json?.data) ? json.data : [];
+    rows = rows.filter((r) => !isDeleted(r));
 
     const items: TicketBoardItem[] = rows.map((r: any) => ({
       id: Number(r.id),
@@ -127,17 +140,6 @@ export async function getTickets(opts: {
   const json = (await apiFetch<TicketBoardResponse>(url)) as TicketBoardResponse;
   let rows = Array.isArray(json?.data) ? json.data : [];
 
-  // Ocultar tickets eliminados a nivel de API (no se devuelven al tablero)
-  const isDeleted = (r: any): boolean => {
-    try {
-      const estado = String(r?.estado ?? r?.status ?? r?.estatus ?? "").toUpperCase();
-      if (/(ELIMINAD|BORRADO|DELETED)/.test(estado)) return true;
-      if (r?.eliminado === true || r?.deleted === true) return true;
-      if (r?.deleted_at || r?.eliminado_at) return true;
-      if (typeof r?.activo !== "undefined" && r?.activo === false) return true;
-    } catch {}
-    return false;
-  };
   rows = rows.filter((r) => !isDeleted(r));
 
   const items: TicketBoardItem[] = rows.map((r: any) => ({
