@@ -249,6 +249,15 @@ export default function TicketsBoard({
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
   const isStudent = (user?.role || "").toLowerCase() === "student";
   const canEdit = !isStudent; // admins and team members can edit; students only view
+
+  // Permisos especiales: además de admin, permitir reasignar/eliminar a usuarios puntuales
+  const privilegedTicketManagerCodes = new Set<string>([
+    "PKBT2jVtzKzN7TpnLZkPj", // Katherine
+    "mQ2dwRX3xMzV99e3nh9eb", // Pedro
+  ]);
+  const currentUserCodigo = String((user as any)?.codigo || "");
+  const canManageTickets =
+    isAdmin || privilegedTicketManagerCodes.has(currentUserCodigo);
   const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
@@ -2452,20 +2461,22 @@ export default function TicketsBoard({
                 </SheetDescription>
               </div>
               <div className="shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!selectedTicket?.codigo) return;
-                    setReassignCoach("");
-                    setReassignOpen(true);
-                  }}
-                  disabled={!selectedTicket?.codigo || !canEdit}
-                  className="relative z-10 mt-1"
-                >
-                  Reasignar ticket
-                </Button>
+                {canManageTickets && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!selectedTicket?.codigo) return;
+                      setReassignCoach("");
+                      setReassignOpen(true);
+                    }}
+                    disabled={!selectedTicket?.codigo}
+                    className="relative z-10 mt-1"
+                  >
+                    Reasignar ticket
+                  </Button>
+                )}
               </div>
             </div>
           </SheetHeader>
@@ -3980,7 +3991,7 @@ export default function TicketsBoard({
 
           <SheetFooter className="border-t pt-4">
             <div className="flex items-center justify-end gap-2">
-              {selectedTicket?.codigo && isAdmin && (
+              {selectedTicket?.codigo && canManageTickets && (
                 <Button
                   variant="destructive"
                   onClick={() => setDeleteConfirmOpen(true)}
@@ -4107,8 +4118,8 @@ export default function TicketsBoard({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Confirmación: eliminar ticket (sólo admin) */}
-      {isAdmin && (
+      {/* Confirmación: eliminar ticket */}
+      {canManageTickets && (
         <AlertDialog
           open={deleteConfirmOpen}
           onOpenChange={setDeleteConfirmOpen}
