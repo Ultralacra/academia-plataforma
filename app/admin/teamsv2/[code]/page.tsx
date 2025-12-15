@@ -630,6 +630,7 @@ export default function CoachDetailPage({
 
   const unifiedChatList = useMemo(() => {
     const q = (contactQuery || "").trim().toLowerCase();
+
     const list = Array.isArray(chatList) ? chatList : [];
 
     const grouped = new Map<string, any>();
@@ -810,11 +811,13 @@ export default function CoachDetailPage({
     // 4. Filter by query
     let finalResult = result;
     if (q) {
-      finalResult = finalResult.filter(
-        (item) =>
+      finalResult = finalResult.filter((item) => {
+        return (
           (item.name || "").toLowerCase().includes(q) ||
-          (item.code || "").toLowerCase().includes(q)
-      );
+          (item.code || "").toLowerCase().includes(q) ||
+          (item.lastText || "").toLowerCase().includes(q)
+        );
+      });
     }
 
     return finalResult;
