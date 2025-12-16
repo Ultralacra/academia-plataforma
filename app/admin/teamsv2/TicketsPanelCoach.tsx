@@ -428,6 +428,23 @@ export default function TicketsPanelCoach({
   const isStudent = (user?.role || "").toLowerCase() === "student";
   const canEdit = !isStudent;
 
+  // Permisos especiales: además de admin, permitir pausar a usuarios puntuales
+  // (mismos códigos que tienen permiso de eliminar/reasignar en el tablero admin)
+  const privilegedTicketManagerCodes = new Set<string>([
+    "PKBT2jVtzKzN7TpnLZkPj", // Katherine
+    "mQ2dwRX3xMzV99e3nh9eb", // Pedro
+  ]);
+  const currentUserCodigo = String((user as any)?.codigo || "");
+  const canPauseTickets =
+    isAdmin || privilegedTicketManagerCodes.has(currentUserCodigo);
+
+  // Evitar que el filtro quede en un estado no permitido (ej. si se comparte URL/estado previo)
+  useEffect(() => {
+    if (!canPauseTickets && String(statusFiltro || "").toUpperCase() === "PAUSADO") {
+      setStatusFiltro("__all__");
+    }
+  }, [canPauseTickets, statusFiltro]);
+
   // Comentarios (Observaciones)
   const [comments, setComments] = useState<TicketComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
@@ -1259,6 +1276,9 @@ export default function TicketsPanelCoach({
     ticketCodigo: string,
     newEstado: StatusKey
   ) {
+    if (newEstado === "PAUSADO" && !canPauseTickets) {
+      return;
+    }
     try {
       await updateTicket(ticketCodigo, { estado: newEstado });
       // Notificación local: cambio de estado
@@ -2072,7 +2092,9 @@ export default function TicketsPanelCoach({
                 <SelectItem value="EN_PROGRESO">
                   {STATUS_LABEL.EN_PROGRESO}
                 </SelectItem>
-                <SelectItem value="PAUSADO">{STATUS_LABEL.PAUSADO}</SelectItem>
+                {canPauseTickets && (
+                  <SelectItem value="PAUSADO">{STATUS_LABEL.PAUSADO}</SelectItem>
+                )}
                 <SelectItem value="PENDIENTE_DE_ENVIO">
                   {STATUS_LABEL.PENDIENTE_DE_ENVIO}
                 </SelectItem>
@@ -2172,6 +2194,11 @@ export default function TicketsPanelCoach({
                     e.preventDefault();
                     const codigo = e.dataTransfer.getData("text/plain");
                     if (!codigo) return;
+
+                    if (col === "PAUSADO" && !canPauseTickets) {
+                      return;
+                    }
+
                     setRows((prev) =>
                       prev.map((t) =>
                         t.codigo === codigo ? { ...t, estado: col } : t
@@ -3266,72 +3293,76 @@ export default function TicketsPanelCoach({
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start">
-                            {estados.map((st) => (
-                              <DropdownMenuItem
-                                key={st}
-                                onClick={async () => {
-                                  const newStatus = st as StatusKey;
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    estado: newStatus,
-                                  }));
+                            {estados
+                              .filter(
+                                (st) => st !== "PAUSADO" || canPauseTickets
+                              )
+                              .map((st) => (
+                                <DropdownMenuItem
+                                  key={st}
+                                  onClick={async () => {
+                                    const newStatus = st as StatusKey;
+                                    setEditForm((prev) => ({
+                                      ...prev,
+                                      estado: newStatus,
+                                    }));
 
-                                  if (editTicket?.codigo) {
-                                    try {
-                                      await updateTicket(editTicket.codigo, {
-                                        estado: newStatus,
-                                      });
-
-                                      // Update local state
-                                      setRows((prev) =>
-                                        prev.map((t) =>
-                                          t.id === editTicket.id
-                                            ? { ...t, estado: newStatus }
-                                            : t
-                                        )
-                                      );
-                                      setLocalTickets((prev) =>
-                                        prev.map((t) =>
-                                          t.id === editTicket.id
-                                            ? { ...t, estado: newStatus }
-                                            : t
-                                        )
-                                      );
-
-                                      if (ticketDetail) {
-                                        setTicketDetail((prev: any) => ({
-                                          ...prev,
+                                    if (editTicket?.codigo) {
+                                      try {
+                                        await updateTicket(editTicket.codigo, {
                                           estado: newStatus,
-                                        }));
+                                        });
+
+                                        // Update local state
+                                        setRows((prev) =>
+                                          prev.map((t) =>
+                                            t.id === editTicket.id
+                                              ? { ...t, estado: newStatus }
+                                              : t
+                                          )
+                                        );
+                                        setLocalTickets((prev) =>
+                                          prev.map((t) =>
+                                            t.id === editTicket.id
+                                              ? { ...t, estado: newStatus }
+                                              : t
+                                          )
+                                        );
+
+                                        if (ticketDetail) {
+                                          setTicketDetail((prev: any) => ({
+                                            ...prev,
+                                            estado: newStatus,
+                                          }));
+                                        }
+
+                                        setEditTicket((prev) =>
+                                          prev
+                                            ? { ...prev, estado: newStatus }
+                                            : null
+                                        );
+
+                                        toast({ title: "Estado actualizado" });
+                                      } catch (e) {
+                                        console.error(e);
+                                        toast({
+                                          title: "Error al actualizar estado",
+                                          variant: "destructive",
+                                        });
                                       }
-
-                                      setEditTicket((prev) =>
-                                        prev
-                                          ? { ...prev, estado: newStatus }
-                                          : null
-                                      );
-
-                                      toast({ title: "Estado actualizado" });
-                                    } catch (e) {
-                                      console.error(e);
-                                      toast({
-                                        title: "Error al actualizar estado",
-                                        variant: "destructive",
-                                      });
                                     }
-                                  }
-                                }}
-                                className="text-xs"
-                              >
-                                <div
-                                  className={`inline-flex items-center rounded-md px-2 py-0.5 border ${
-                                    STATUS_STYLE[st as StatusKey]
-                                  }`}
+                                  }}
+                                  className="text-xs"
                                 >
-                                  {STATUS_LABEL[st as StatusKey]}
-                                </div>
-                              </DropdownMenuItem>
-                            ))}
+                                  <div
+                                    className={`inline-flex items-center rounded-md px-2 py-0.5 border ${
+                                      STATUS_STYLE[st as StatusKey]
+                                    }`}
+                                  >
+                                    {STATUS_LABEL[st as StatusKey]}
+                                  </div>
+                                </DropdownMenuItem>
+                              ))}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
