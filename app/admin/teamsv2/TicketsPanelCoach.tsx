@@ -440,7 +440,10 @@ export default function TicketsPanelCoach({
 
   // Evitar que el filtro quede en un estado no permitido (ej. si se comparte URL/estado previo)
   useEffect(() => {
-    if (!canPauseTickets && String(statusFiltro || "").toUpperCase() === "PAUSADO") {
+    if (
+      !canPauseTickets &&
+      String(statusFiltro || "").toUpperCase() === "PAUSADO"
+    ) {
       setStatusFiltro("__all__");
     }
   }, [canPauseTickets, statusFiltro]);
@@ -2093,7 +2096,9 @@ export default function TicketsPanelCoach({
                   {STATUS_LABEL.EN_PROGRESO}
                 </SelectItem>
                 {canPauseTickets && (
-                  <SelectItem value="PAUSADO">{STATUS_LABEL.PAUSADO}</SelectItem>
+                  <SelectItem value="PAUSADO">
+                    {STATUS_LABEL.PAUSADO}
+                  </SelectItem>
                 )}
                 <SelectItem value="PENDIENTE_DE_ENVIO">
                   {STATUS_LABEL.PENDIENTE_DE_ENVIO}
