@@ -12,6 +12,45 @@ export function SseTicketSnackbar() {
   const lastToastIdRef = useRef<string | null>(null);
   const bootstrappedRef = useRef(false);
 
+  function parsePayload(raw: any): any | null {
+    try {
+      const p = raw?.payload ?? raw?.raw?.payload;
+      if (!p) return null;
+      if (typeof p === "string") {
+        const s = p.trim();
+        if (!s) return null;
+        return JSON.parse(s);
+      }
+      if (typeof p === "object") return p;
+    } catch {}
+    return null;
+  }
+
+  function titleForType(type: string): string {
+    if (type === "ticket.created") return "Ticket creado";
+    if (type === "ticket.updated") return "Ticket actualizado";
+    if (type === "ticket.reassigned") return "Ticket reasignado";
+    if (type === "ticket.files.added") return "Archivos agregados";
+    return "Notificación";
+  }
+
+  function normalizeAssignedTo(v: any): string[] {
+    try {
+      const arr = Array.isArray(v) ? v : v ? [v] : [];
+      return arr
+        .map((x) => {
+          if (x == null) return "";
+          if (typeof x === "string") return x.trim();
+          // por si el backend entrega objetos en el futuro
+          const maybeCode = (x as any)?.codigo_equipo ?? (x as any)?.codigo;
+          return String(maybeCode ?? "").trim();
+        })
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
   // Preparar el unlock de audio lo antes posible (antes del click de login)
   useEffect(() => {
     try {
@@ -60,28 +99,96 @@ export function SseTicketSnackbar() {
     }
 
     const type = String(lastReceived.type || "");
-    const title = String(lastReceived.title || "Notificación");
+    const titleRaw = String(lastReceived.title || "").trim();
 
-    const raw = lastReceived.raw as any;
-    const ticket = raw?.payload?.ticket ?? raw?.ticket ?? {};
+    const rawEnvelope = lastReceived.raw as any;
+    const rawInner = (rawEnvelope?.raw ?? rawEnvelope) as any;
+    const payloadObj = parsePayload(rawInner) ?? parsePayload(rawEnvelope);
+    const ticket =
+      payloadObj?.ticket ?? rawInner?.ticket ?? rawEnvelope?.ticket ?? {};
     const nombre = ticket?.nombre ? String(ticket.nombre) : "";
-    const codigo = ticket?.codigo ? String(ticket.codigo) : "";
+    const codigo = (() => {
+      const v =
+        ticket?.codigo ??
+        payloadObj?.codigo ??
+        payloadObj?.ticket?.codigo ??
+        rawInner?.codigo ??
+        rawEnvelope?.codigo;
+      const s = String(v ?? "").trim();
+      return s || "";
+    })();
+
+    const assignedTo = normalizeAssignedTo(payloadObj?.assigned_to);
+
+    const actorName = (() => {
+      const v =
+        payloadObj?.actor_name ??
+        payloadObj?.actorName ??
+        rawInner?.actor_name ??
+        rawInner?.actorName ??
+        rawEnvelope?.actor_name ??
+        rawEnvelope?.actorName;
+      const s = String(v ?? "").trim();
+      return s || "";
+    })();
+
+    const title =
+      titleRaw && titleRaw.toLowerCase() !== "notificación"
+        ? titleRaw
+        : titleForType(type);
 
     // Sonido por cada evento nuevo (si el navegador lo permite)
     try {
       playNotificationSound();
     } catch {}
 
-    const description =
-      type === "ticket.created"
-        ? nombre
+    const baseDescription = (() => {
+      if (type === "ticket.created") {
+        return nombre ? nombre : "Se creó un nuevo ticket";
+      }
+      if (type === "ticket.files.added") {
+        const nRaw = payloadObj?.archivosRegistrados;
+        const n = Number(nRaw);
+        const nLabel = Number.isFinite(n) && n > 0 ? n : 0;
+        const filesText =
+          nLabel === 1
+            ? "1 archivo agregado"
+            : nLabel > 1
+            ? `${nLabel} archivos agregados`
+            : "Archivos agregados";
+        const ticketLabel = nombre
           ? nombre
-          : "Se creó un nuevo ticket"
-        : nombre
-        ? nombre
-        : codigo
-        ? `Ticket ${codigo}`
-        : "";
+          : codigo
+          ? `Ticket ${codigo}`
+          : "Ticket";
+        return `${ticketLabel} · ${filesText}`;
+      }
+      if (type === "ticket.reassigned") {
+        const who =
+          assignedTo.length > 0
+            ? assignedTo.length === 1
+              ? `Asignado a: ${assignedTo[0]}`
+              : `Asignado a: ${assignedTo.join(", ")}`
+            : "Reasignado";
+        const ticketLabel = nombre
+          ? nombre
+          : codigo
+          ? `Ticket ${codigo}`
+          : "Ticket";
+        return `${ticketLabel} · ${who}`;
+      }
+      // updated y otros
+      if (nombre) return nombre;
+      if (codigo) return `Ticket ${codigo}`;
+      return "";
+    })();
+
+    const description = (() => {
+      const parts: string[] = [];
+      if (baseDescription) parts.push(baseDescription);
+      if (actorName) parts.push(`Por: ${actorName}`);
+      return parts.join(" · ");
+    })();
 
     toast({
       title,
