@@ -87,12 +87,16 @@ export function StudentChatSnackbar() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <div className="text-sm font-semibold truncate">{item.title}</div>
+                  <div className="text-sm font-semibold truncate">
+                    {item.title}
+                  </div>
                   <Badge variant="muted" className="text-[10px] px-1.5">
                     Chat
                   </Badge>
                 </div>
-                <div className="mt-1 text-sm opacity-90 line-clamp-2">{item.preview}</div>
+                <div className="mt-1 text-sm opacity-90 line-clamp-2">
+                  {item.preview}
+                </div>
               </div>
             </div>
             <Button

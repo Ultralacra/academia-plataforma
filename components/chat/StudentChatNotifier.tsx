@@ -111,7 +111,9 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
 
         // Snackbar/Toast para mensajes entrantes
         try {
-          const textRaw = String(msg?.contenido ?? msg?.texto ?? msg?.text ?? "").trim();
+          const textRaw = String(
+            msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+          ).trim();
           const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
           toast({
             title: "Nuevo mensaje",

@@ -2107,11 +2107,12 @@ export default function TicketsBoard({
                                       {" · "}
                                       {new Date(
                                         (t as any).ultimo_estado.fecha
-                                      ).toLocaleDateString("es-ES", {
+                                      ).toLocaleString("es-ES", {
                                         day: "numeric",
                                         month: "short",
                                         hour: "2-digit",
                                         minute: "2-digit",
+                                        timeZone: "UTC",
                                       })}
                                     </>
                                   )}
@@ -3414,7 +3415,14 @@ export default function TicketsBoard({
                               {" · "}
                               {new Date(
                                 ticketDetail.ultimo_estado.fecha
-                              ).toLocaleString("es-ES")}
+                              ).toLocaleString("es-ES", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                timeZone: "UTC",
+                              })}
                             </>
                           )}
                         </div>
@@ -3435,7 +3443,17 @@ export default function TicketsBoard({
                                 {STATUS_LABEL[coerceStatus(e.estatus_id)]}
                               </span>
                               <span>
-                                {new Date(e.created_at).toLocaleString("es-ES")}
+                                {new Date(e.created_at).toLocaleString(
+                                  "es-ES",
+                                  {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    timeZone: "UTC",
+                                  }
+                                )}
                               </span>
                             </div>
                           ))}

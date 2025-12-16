@@ -3148,6 +3148,7 @@ export default function TicketsPanelCoach({
                                 month: "short",
                                 hour: "2-digit",
                                 minute: "2-digit",
+                                timeZone: "UTC",
                               }
                             )
                           : "—"}
@@ -3168,6 +3169,7 @@ export default function TicketsPanelCoach({
                               month: "short",
                               hour: "2-digit",
                               minute: "2-digit",
+                              timeZone: "UTC",
                             })
                           : "—"}
                       </div>
@@ -3802,7 +3804,17 @@ export default function TicketsPanelCoach({
                                 {STATUS_LABEL[coerceStatus(e.estatus_id)]}
                               </span>
                               <span>
-                                {new Date(e.created_at).toLocaleString("es-ES")}
+                                {new Date(e.created_at).toLocaleString(
+                                  "es-ES",
+                                  {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    timeZone: "UTC",
+                                  }
+                                )}
                               </span>
                             </div>
                           ))}

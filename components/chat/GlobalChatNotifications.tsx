@@ -204,7 +204,10 @@ export function GlobalChatNotifications() {
 
         // If I am a student, and the message is from a student, it's me (or another student, but usually me in 1:1)
         const myRole = String(user.role || "").toLowerCase();
-        if (["student", "cliente", "alumno"].includes(myRole) && msgRole === "student") {
+        if (
+          ["student", "cliente", "alumno"].includes(myRole) &&
+          msgRole === "student"
+        ) {
           isMe = true;
         }
 
@@ -239,7 +242,9 @@ export function GlobalChatNotifications() {
 
           try {
             toast({
-              title: senderName ? `Nuevo mensaje: ${senderName}` : "Nuevo mensaje",
+              title: senderName
+                ? `Nuevo mensaje: ${senderName}`
+                : "Nuevo mensaje",
               description: preview,
             });
           } catch {}
@@ -249,7 +254,9 @@ export function GlobalChatNotifications() {
             const myRole = String(user.role || "").toLowerCase();
             if (["student", "alumno", "cliente"].includes(myRole)) {
               const myCode = String((user as any)?.codigo ?? "").trim();
-              const chatUrl = myCode ? `/chat/${encodeURIComponent(myCode)}` : "/chat";
+              const chatUrl = myCode
+                ? `/chat/${encodeURIComponent(myCode)}`
+                : "/chat";
               window.dispatchEvent(
                 new CustomEvent("student-chat:snackbar", {
                   detail: {
