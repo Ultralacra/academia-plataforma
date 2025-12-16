@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { io, Socket } from "socket.io-client";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
 import { useAuth } from "@/hooks/use-auth";
-import { playNotificationSound } from "@/lib/utils";
+import { initNotificationSound, playNotificationSound } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
 
 // Global set for deduplication across component instances/remounts
 const processedMessageIds = new Set<string>();
+
+function toChatId(v: any): string {
+  const s = v == null ? "" : String(v);
+  return s.trim();
+}
 
 function normalizeTipo(v: any): "cliente" | "equipo" | "admin" | "" {
   const s = String(v || "")
@@ -103,6 +108,8 @@ export function CoachChatNotifier() {
   const router = useRouter();
   const socketRef = useRef<Socket | null>(null);
   const myParticipantIds = useRef<Record<string, string>>({});
+  const joinedChatIds = useRef<Set<string>>(new Set());
+  const [authBump, setAuthBump] = useState(0);
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
 
@@ -112,14 +119,46 @@ export function CoachChatNotifier() {
 
   // Removed unused audioRef preload since we use globalAudio in utils now
 
+  // Reintentar conexión cuando cambie el auth/token (login/logout)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onAuthChanged = () => {
+      setAuthBump((n) => n + 1);
+    };
+    try {
+      window.addEventListener("auth:changed", onAuthChanged as any);
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener("auth:changed", onAuthChanged as any);
+      } catch {}
+    };
+  }, []);
+
   useEffect(() => {
     if (!user) return;
     // Only for coaches or team members
     const role = (user.role || "").toLowerCase();
     if (role !== "coach" && role !== "equipo") return;
 
+    // Preparar unlock de audio temprano
+    try {
+      initNotificationSound();
+    } catch {}
+
     const token = getAuthToken();
-    if (!token) return;
+    if (!token) {
+      try {
+        console.debug("[CoachChatNotifier] Token aún no disponible; esperando auth:changed");
+      } catch {}
+      return;
+    }
+
+    // Evitar sockets duplicados si el effect se re-ejecuta
+    try {
+      socketRef.current?.disconnect();
+    } catch {}
+    socketRef.current = null;
 
     console.log("[CoachChatNotifier] Initializing for:", user.email);
 
@@ -132,6 +171,10 @@ export function CoachChatNotifier() {
 
     socket.on("connect", () => {
       console.log("[CoachChatNotifier] Connected");
+
+      // Reset local membership caches on each fresh connection
+      joinedChatIds.current = new Set();
+      myParticipantIds.current = {};
 
       const payload: any = {};
       const code = (user as any).codigo;
@@ -150,8 +193,9 @@ export function CoachChatNotifier() {
         if (ack && ack.success && Array.isArray(ack.data)) {
           console.log("[CoachChatNotifier] Joining chats:", ack.data.length);
           ack.data.forEach((chat: any) => {
-            const cid = chat.id_chat || chat.id;
+            const cid = toChatId(chat?.id_chat ?? chat?.id);
             if (cid) {
+              joinedChatIds.current.add(cid);
               try {
                 const name = extractAlumnoNameFromChat(chat);
                 if (name) setCachedContactName(cid, name);
@@ -162,7 +206,9 @@ export function CoachChatNotifier() {
                   joinAck.success &&
                   joinAck.data?.my_participante
                 ) {
-                  myParticipantIds.current[cid] = joinAck.data.my_participante;
+                  myParticipantIds.current[cid] = String(
+                    joinAck.data.my_participante
+                  );
                   try {
                     const name = extractAlumnoNameFromChat(joinAck.data);
                     if (name) setCachedContactName(cid, name);
@@ -177,11 +223,12 @@ export function CoachChatNotifier() {
 
     // Listen for new chats
     socket.on("chat.created", (data: any) => {
-      const cid = data?.id_chat || data?.id;
+      const cid = toChatId(data?.id_chat ?? data?.id);
       if (cid) {
+        joinedChatIds.current.add(cid);
         socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
           if (joinAck && joinAck.success && joinAck.data?.my_participante) {
-            myParticipantIds.current[cid] = joinAck.data.my_participante;
+            myParticipantIds.current[cid] = String(joinAck.data.my_participante);
             try {
               const name =
                 extractAlumnoNameFromChat(joinAck.data) ||
@@ -212,14 +259,16 @@ export function CoachChatNotifier() {
         processedMessageIds.delete(msgId);
       }, 10000);
 
-      const cid = msg.id_chat;
-      const myPid = myParticipantIds.current[cid];
-      const senderPid = msg.id_chat_participante_emisor;
+      const cid = toChatId(msg?.id_chat);
+      if (!cid) return;
 
-      // Privacy: si no estoy unido a este chat, no debo notificar nada.
-      if (!myPid) {
+      // Privacy: si NO es uno de mis chats (según chat.list), ignorar.
+      if (!joinedChatIds.current.has(cid)) {
         return;
       }
+
+      const myPid = myParticipantIds.current[cid];
+      const senderPid = msg.id_chat_participante_emisor;
 
       let isMe = false;
 
@@ -246,6 +295,28 @@ export function CoachChatNotifier() {
         msg.nombre_emisor === user.name
       ) {
         isMe = true;
+      }
+
+      // 4. Fallback por tipo/id (cuando el backend no manda senderPid)
+      if (!isMe) {
+        try {
+          const myRole = String(user.role || "").toLowerCase();
+          const myCode = String((user as any)?.codigo ?? "").trim();
+          const rawType = String(msg?.participante_tipo || "").toLowerCase();
+          const msgTeamId = String(msg?.id_equipo ?? "").trim();
+          const msgUserId = String(msg?.id_usuario ?? "").trim();
+
+          const msgIsTeam = rawType === "equipo" || rawType === "coach";
+          const msgIsUser = rawType === "usuario" || rawType === "admin";
+
+          if ((myRole === "coach" || myRole === "equipo") && msgIsTeam) {
+            // Si tengo código de equipo y el mensaje viene del mismo equipo, soy yo
+            if (myCode && msgTeamId && myCode === msgTeamId) isMe = true;
+          }
+          if (!isMe && msgIsUser) {
+            if (msgUserId && String(user.id) === msgUserId) isMe = true;
+          }
+        } catch {}
       }
 
       if (!isMe) {
@@ -278,16 +349,18 @@ export function CoachChatNotifier() {
           user.email
         );
 
-        // Reproducir sonido solo cuando no estamos en la ruta /chat
-        // (las vistas de chat ya reproducen el sonido por su cuenta, y así evitamos dobles)
         const currentPath = pathnameRef.current;
-        const isChatRoute = currentPath?.includes("/chat");
-        if (!isChatRoute) {
-          playNotificationSound();
-        }
+        const isCoachChatView =
+          !!currentPath &&
+          currentPath.includes("/admin/teamsv2/") &&
+          currentPath.includes("/chat");
 
-        // Snackbar custom (NO usar toast): mostrar solo fuera de la vista /chat
-        if (!isChatRoute) {
+        // Sonido + snackbar solo fuera del chat del coach (evita dobles con la UI)
+        if (!isCoachChatView) {
+          try {
+            playNotificationSound();
+          } catch {}
+
           try {
             const rawType = String(msg?.participante_tipo || "").toLowerCase();
             const isAlumno = rawType === "cliente" || rawType === "alumno";
@@ -302,7 +375,13 @@ export function CoachChatNotifier() {
             const textRaw = String(
               msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
             ).trim();
-            const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+            const preview = (() => {
+              const collapsed = textRaw.replace(/\s+/g, " ").trim();
+              if (!collapsed) return "(Adjunto)";
+              const max = 110;
+              if (collapsed.length <= max) return collapsed;
+              return collapsed.slice(0, max - 1).trimEnd() + "…";
+            })();
 
             const myCode = (user as any)?.codigo;
             const chatUrl = myCode
@@ -313,6 +392,7 @@ export function CoachChatNotifier() {
               new CustomEvent("coach-chat:snackbar", {
                 detail: {
                   title,
+                  studentName: isAlumno ? senderName || undefined : undefined,
                   preview,
                   chatUrl,
                   chatId: msg?.id_chat,
@@ -340,9 +420,12 @@ export function CoachChatNotifier() {
     });
 
     return () => {
-      socket.disconnect();
+      try {
+        socket.disconnect();
+      } catch {}
+      if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [user, router]);
+  }, [user, router, authBump]);
 
   return null;
 }

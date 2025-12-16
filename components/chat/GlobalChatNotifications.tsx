@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
 import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
 import { usePathname } from "next/navigation";
-import { playNotificationSound } from "@/lib/utils";
+import { initNotificationSound, playNotificationSound } from "@/lib/utils";
 
 // Global set for deduplication across component instances/remounts
 const processedMessageIds = new Set<string>();
@@ -16,6 +16,8 @@ export function GlobalChatNotifications() {
   const { user } = useAuth();
   const socketRef = useRef<Socket | null>(null);
   const myParticipantIds = useRef<Record<string, string>>({});
+  const joinedChatIds = useRef<Set<string>>(new Set());
+  const [authBump, setAuthBump] = useState(0);
   const { toast } = useToast();
   const pathname = usePathname();
   const pathnameRef = useRef(pathname);
@@ -26,15 +28,49 @@ export function GlobalChatNotifications() {
 
   // Removed unused audioRef preload since we use globalAudio in utils now
 
+  // Reintentar conexión cuando cambie el auth/token (login/logout)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onAuthChanged = () => setAuthBump((n) => n + 1);
+    try {
+      window.addEventListener("auth:changed", onAuthChanged as any);
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener("auth:changed", onAuthChanged as any);
+      } catch {}
+    };
+  }, []);
+
   useEffect(() => {
     if (!user) return;
+
+    // Preparar unlock de audio temprano
+    try {
+      initNotificationSound();
+    } catch {}
 
     // If user is coach/equipo, we use the dedicated CoachChatNotifier component
     const role = (user.role || "").toLowerCase();
     if (role === "coach" || role === "equipo") return;
 
     const token = getAuthToken();
-    if (!token) return;
+    if (!token) {
+      try {
+        console.debug(
+          "[GlobalChatNotifications] Token aún no disponible; esperando auth:changed"
+        );
+      } catch {}
+      return;
+    }
+
+    // Evitar sockets duplicados si el effect se re-ejecuta
+    try {
+      socketRef.current?.disconnect();
+    } catch {}
+    socketRef.current = null;
+    joinedChatIds.current = new Set();
+    myParticipantIds.current = {};
 
     console.log(
       "[GlobalChatNotifications] Connecting for user:",
@@ -96,6 +132,9 @@ export function GlobalChatNotifications() {
             ack.data.forEach((chat: any) => {
               const cid = chat.id_chat || chat.id;
               if (cid) {
+                try {
+                  joinedChatIds.current.add(String(cid));
+                } catch {}
                 socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
                   if (
                     joinAck &&
@@ -117,6 +156,9 @@ export function GlobalChatNotifications() {
     socket.on("chat.created", (data: any) => {
       const cid = data?.id_chat || data?.id;
       if (cid) {
+        try {
+          joinedChatIds.current.add(String(cid));
+        } catch {}
         // Check if this chat belongs to me (simple heuristic or just try to join)
         // We just try to join. If not allowed, backend will reject.
         socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
@@ -144,10 +186,9 @@ export function GlobalChatNotifications() {
       const myPid = myParticipantIds.current[cid];
       const senderPid = msg.id_chat_participante_emisor;
 
-      // Security/Privacy check: si NO soy participante de este chat, ignorar.
-      if (!myPid) {
-        return;
-      }
+      // Security/Privacy check: si NO es uno de mis chats (según chat.list), ignorar.
+      // Nota: no dependemos de my_participante porque a veces el ack no lo devuelve.
+      if (!cid || !joinedChatIds.current.has(String(cid))) return;
 
       let isMe = false;
       if (myPid && senderPid && String(myPid) === String(senderPid)) {
@@ -162,11 +203,10 @@ export function GlobalChatNotifications() {
           msgRole = "admin";
 
         // If I am a student, and the message is from a student, it's me (or another student, but usually me in 1:1)
-        if (
-          (user.role === "student" || user.role === "cliente") &&
-          msgRole === "student"
-        )
+        const myRole = String(user.role || "").toLowerCase();
+        if (["student", "cliente", "alumno"].includes(myRole) && msgRole === "student") {
           isMe = true;
+        }
 
         // If I am admin, and message is from admin, it's me
         if (user.role === "admin" && msgRole === "admin") isMe = true;
@@ -188,7 +228,41 @@ export function GlobalChatNotifications() {
         if (!isChatView) {
           playNotificationSound();
         }
-        // Snackbar deshabilitado globalmente para evitar notificaciones visuales
+
+        // Snackbar/Toast para mensajes entrantes cuando no estás en una vista de chat
+        if (!isChatView) {
+          const textRaw = String(
+            msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+          ).trim();
+          const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+          const senderName = String(msg?.nombre_emisor ?? "").trim();
+
+          try {
+            toast({
+              title: senderName ? `Nuevo mensaje: ${senderName}` : "Nuevo mensaje",
+              description: preview,
+            });
+          } catch {}
+
+          // Si es alumno, emitir snackbar "bonito" con botón (misma UX que coach)
+          try {
+            const myRole = String(user.role || "").toLowerCase();
+            if (["student", "alumno", "cliente"].includes(myRole)) {
+              const myCode = String((user as any)?.codigo ?? "").trim();
+              const chatUrl = myCode ? `/chat/${encodeURIComponent(myCode)}` : "/chat";
+              window.dispatchEvent(
+                new CustomEvent("student-chat:snackbar", {
+                  detail: {
+                    title: senderName || "Nuevo mensaje",
+                    preview,
+                    chatUrl,
+                    chatId: cid,
+                  },
+                })
+              );
+            }
+          } catch {}
+        }
 
         // Update unread count in localStorage
         if (msg.id_chat) {
@@ -214,9 +288,12 @@ export function GlobalChatNotifications() {
     });
 
     return () => {
-      socket.disconnect();
+      try {
+        socket.disconnect();
+      } catch {}
+      if (socketRef.current === socket) socketRef.current = null;
     };
-  }, [user, toast]);
+  }, [user, toast, authBump]);
 
   return null;
 }

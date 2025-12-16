@@ -5,7 +5,7 @@ import { io, Socket } from "socket.io-client";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
+import { initNotificationSound, playNotificationSound } from "@/lib/utils";
 
 interface StudentChatNotifierProps {
   studentCode: string;
@@ -13,15 +13,14 @@ interface StudentChatNotifierProps {
 
 export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
   const socketRef = useRef<Socket | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const myParticipantIds = useRef<Record<string, string>>({});
   const { toast } = useToast();
 
   useEffect(() => {
-    // Sonido de notificación suave
-    audioRef.current = new Audio(
-      "https://res.cloudinary.com/dzkq67qmu/video/upload/v1733326786/notification_sound_y8j3s9.mp3"
-    );
+    // Preparar unlock de audio
+    try {
+      initNotificationSound();
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -105,18 +104,20 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
       console.log("[Notifier] Message received:", { msg, esMio });
 
       if (!esMio) {
-        // Reproducir sonido si está en otra pestaña o minimizado (o siempre, según preferencia)
-        // El usuario pidió: "por si no esta en la aplicacion o sea si esta en otra pesñaa"
-        // Lo reproducimos siempre para asegurar feedback, o chequeamos visibilityState
-        if (document.hidden) {
-          audioRef.current?.play().catch(() => {});
-        } else {
-          // Opcional: reproducir también si está visible pero queremos feedback sonoro
-          audioRef.current?.play().catch(() => {});
-        }
+        // Sonido de notificación (maneja unlock/autoplay internamente)
+        try {
+          playNotificationSound();
+        } catch {}
 
-        // Snackbar deshabilitado temporalmente para el alumno al recibir/enviar
-        // Si deseas mostrarlo solo fuera de la vista de chat, podemos condicionarlo por pathname.
+        // Snackbar/Toast para mensajes entrantes
+        try {
+          const textRaw = String(msg?.contenido ?? msg?.texto ?? msg?.text ?? "").trim();
+          const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+          toast({
+            title: "Nuevo mensaje",
+            description: preview,
+          });
+        } catch {}
       }
     });
 

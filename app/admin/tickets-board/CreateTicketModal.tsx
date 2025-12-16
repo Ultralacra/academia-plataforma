@@ -36,7 +36,7 @@ import {
   uploadTicketFiles,
   type StudentRow,
 } from "@/app/admin/alumnos/api";
-import { convertBlobToMp3 } from "./TicketsBoard";
+import { convertBlobToMp3 } from "@/lib/audio-converter";
 
 export function CreateTicketModal({
   open,
@@ -283,7 +283,10 @@ export function CreateTicketModal({
       <Dialog
         open={open}
         onOpenChange={(v) => {
-          if (flowStage === "form") onOpenChange(v);
+          // Evitar que el usuario cierre el modal mientras se crea/sube.
+          // Permitir cerrar una vez en success.
+          if (!v && flowStage !== "success") return;
+          onOpenChange(v);
         }}
       >
         <DialogContent className="sm:max-w-md p-8 border-none shadow-2xl bg-white dark:bg-zinc-900">

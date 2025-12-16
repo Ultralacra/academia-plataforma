@@ -50,7 +50,14 @@ let globalAudio: HTMLAudioElement | null = null;
 let audioUnlocked = false;
 let audioUnlockAttached = false;
 
+let globalAudioCtx: AudioContext | null = null;
+let audioCtxUnlocked = false;
+
 const NOTIFICATION_SOUND_SRC = "/new-notification-022-370046.mp3";
+
+// Evitar dobles disparos (varios listeners a la vez) que suenan "erráticos"
+let lastSoundAtMs = 0;
+const MIN_SOUND_INTERVAL_MS = 450;
 
 function ensureAudioUnlocked() {
   if (typeof window === "undefined") return;
@@ -59,6 +66,18 @@ function ensureAudioUnlocked() {
   audioUnlockAttached = true;
   const unlock = () => {
     try {
+      // WebAudio unlock/resume (fallback when HTMLAudio is flaky)
+      try {
+        const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (Ctx && !globalAudioCtx) globalAudioCtx = new Ctx();
+        if (globalAudioCtx && globalAudioCtx.state === "suspended") {
+          globalAudioCtx.resume().catch(() => {});
+        }
+        if (globalAudioCtx && globalAudioCtx.state === "running") {
+          audioCtxUnlocked = true;
+        }
+      } catch {}
+
       if (!globalAudio) {
         // Prefer user-provided MP3 in /public; fallback to embedded WAV if it fails
         const el = document.createElement("audio");
@@ -88,6 +107,39 @@ function ensureAudioUnlocked() {
   } catch {}
 }
 
+function playBeepFallback() {
+  try {
+    if (typeof window === "undefined") return;
+    const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
+    if (!globalAudioCtx) globalAudioCtx = new Ctx();
+    const ctx = globalAudioCtx;
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      // Si todavía está bloqueado, no forzamos: depende de gesto del usuario
+      ctx.resume().catch(() => {});
+    }
+    if (ctx.state !== "running") return;
+    audioCtxUnlocked = true;
+
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.value = 880;
+    g.gain.value = 0.0001;
+    o.connect(g);
+    g.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    // Envelope corto para que sea suave
+    g.gain.setValueAtTime(0.0001, now);
+    g.gain.exponentialRampToValueAtTime(0.08, now + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    o.start(now);
+    o.stop(now + 0.2);
+  } catch {}
+}
+
 // Llamar esto al montar la app (antes del login/click) para que el primer click
 // ya sirva para desbloquear el audio y luego suene en la primera notificación.
 export function initNotificationSound() {
@@ -98,6 +150,10 @@ export function initNotificationSound() {
 
 export function playNotificationSound() {
   try {
+    const nowMs = Date.now();
+    if (nowMs - lastSoundAtMs < MIN_SOUND_INTERVAL_MS) return;
+    lastSoundAtMs = nowMs;
+
     ensureAudioUnlocked();
     if (globalAudio) {
       globalAudio.currentTime = 0;
@@ -107,6 +163,8 @@ export function playNotificationSound() {
         p.catch((e: any) => {
           // Autoplay puede estar bloqueado hasta interacción del usuario
           console.debug("Error playing sound (autoplay blocked?):", e);
+          // Fallback a beep WebAudio si está disponible
+          if (audioCtxUnlocked) playBeepFallback();
         });
       }
       return;
@@ -123,9 +181,17 @@ export function playNotificationSound() {
           local.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YYQAAACAgICAgICAgP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA/wAAAP8AAP8A/wD/AP8A/wAA";
           local.play().catch(() => {});
         } catch {}
+        // Fallback a beep WebAudio
+        if (audioCtxUnlocked) playBeepFallback();
       });
     }
   } catch (e) {
     console.error("Audio error", e);
   }
 }
+
+// Enganchar el unlock lo antes posible, para no perder el primer click.
+// (Este módulo se importa en muchos componentes client, así que suele ejecutarse temprano.)
+try {
+  if (typeof window !== "undefined") ensureAudioUnlocked();
+} catch {}

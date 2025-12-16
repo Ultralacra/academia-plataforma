@@ -85,7 +85,7 @@ export function useChatNotifications(opts?: {
               playNotificationSound();
             }
 
-            if (enableToast && document.visibilityState !== "visible") {
+            if (enableToast && !isChatView) {
               try {
                 toast({
                   title: "Nuevo mensaje en chat",

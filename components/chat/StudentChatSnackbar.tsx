@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-type CoachChatSnackbarDetail = {
+type StudentChatSnackbarDetail = {
   title?: string;
-  studentName?: string;
   preview?: string;
   chatUrl?: string;
   chatId?: string | number;
@@ -16,7 +15,6 @@ type CoachChatSnackbarDetail = {
 type SnackbarItem = {
   id: string;
   title: string;
-  studentName?: string;
   preview: string;
   chatUrl?: string;
   chatId?: string | number;
@@ -26,15 +24,6 @@ function safeText(v: any): string {
   return String(v ?? "").trim();
 }
 
-function formatPreview(v: any): string {
-  const raw = String(v ?? "");
-  const collapsed = raw.replace(/\s+/g, " ").trim();
-  if (!collapsed) return "(Adjunto)";
-  const max = 110;
-  if (collapsed.length <= max) return collapsed;
-  return collapsed.slice(0, max - 1).trimEnd() + "…";
-}
-
 function getInitials(name: string): string {
   const parts = (name || "").trim().split(/\s+/).filter(Boolean);
   const a = parts[0]?.[0] ?? "?";
@@ -42,18 +31,7 @@ function getInitials(name: string): string {
   return (a + b).toUpperCase();
 }
 
-function getCachedContactName(chatId: any): string | null {
-  try {
-    const id = chatId == null ? "" : String(chatId);
-    if (!id) return null;
-    const v = localStorage.getItem(`chatContactName:${id}`);
-    return v && v.trim() ? v.trim() : null;
-  } catch {
-    return null;
-  }
-}
-
-export function CoachChatSnackbar() {
+export function StudentChatSnackbar() {
   const router = useRouter();
   const [item, setItem] = useState<SnackbarItem | null>(null);
   const timeoutRef = useRef<number | null>(null);
@@ -76,38 +54,27 @@ export function CoachChatSnackbar() {
     }
 
     function onEvent(ev: Event) {
-      const e = ev as CustomEvent<CoachChatSnackbarDetail>;
+      const e = ev as CustomEvent<StudentChatSnackbarDetail>;
       const d = e?.detail || {};
-      const cached = d.chatId != null ? getCachedContactName(d.chatId) : null;
-      const studentName =
-        safeText(d.studentName) || safeText(d.title) || cached;
-      const title = studentName || "Nuevo mensaje";
-      const preview = formatPreview(d.preview);
+      const title = safeText(d.title) || "Nuevo mensaje";
+      const preview = safeText(d.preview) || "(Adjunto)";
       const chatUrl = safeText(d.chatUrl) || undefined;
       const chatId = d.chatId;
 
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      show({
-        id,
-        title,
-        studentName: studentName || undefined,
-        preview,
-        chatUrl,
-        chatId,
-      });
+      show({ id, title, preview, chatUrl, chatId });
     }
 
-    window.addEventListener("coach-chat:snackbar", onEvent);
+    window.addEventListener("student-chat:snackbar", onEvent);
     return () => {
       clearTimer();
-      window.removeEventListener("coach-chat:snackbar", onEvent);
+      window.removeEventListener("student-chat:snackbar", onEvent);
     };
   }, []);
 
   if (!item) return null;
 
-  const displayName = item.studentName || item.title;
-  const initials = getInitials(displayName);
+  const initials = getInitials(item.title);
 
   return (
     <div className="fixed bottom-4 right-4 z-[9999] w-[320px] max-w-[calc(100vw-2rem)]">
@@ -120,16 +87,12 @@ export function CoachChatSnackbar() {
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <div className="text-sm font-semibold truncate">
-                    {displayName}
-                  </div>
+                  <div className="text-sm font-semibold truncate">{item.title}</div>
                   <Badge variant="muted" className="text-[10px] px-1.5">
                     Chat
                   </Badge>
                 </div>
-                <div className="mt-1 text-sm opacity-90 line-clamp-2">
-                  {item.preview}
-                </div>
+                <div className="mt-1 text-sm opacity-90 line-clamp-2">{item.preview}</div>
               </div>
             </div>
             <Button
@@ -156,7 +119,7 @@ export function CoachChatSnackbar() {
             }}
             disabled={!item.chatUrl}
           >
-            Ver chat
+            Ver mensaje
           </Button>
         </div>
       </div>
