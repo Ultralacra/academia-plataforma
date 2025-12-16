@@ -149,7 +149,9 @@ export function CoachChatNotifier() {
     const token = getAuthToken();
     if (!token) {
       try {
-        console.debug("[CoachChatNotifier] Token aún no disponible; esperando auth:changed");
+        console.debug(
+          "[CoachChatNotifier] Token aún no disponible; esperando auth:changed"
+        );
       } catch {}
       return;
     }
@@ -228,7 +230,9 @@ export function CoachChatNotifier() {
         joinedChatIds.current.add(cid);
         socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
           if (joinAck && joinAck.success && joinAck.data?.my_participante) {
-            myParticipantIds.current[cid] = String(joinAck.data.my_participante);
+            myParticipantIds.current[cid] = String(
+              joinAck.data.my_participante
+            );
             try {
               const name =
                 extractAlumnoNameFromChat(joinAck.data) ||
