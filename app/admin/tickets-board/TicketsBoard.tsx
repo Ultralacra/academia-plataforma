@@ -1940,6 +1940,21 @@ export default function TicketsBoard({
                                 )}
                               </div>
 
+                              {/* Alumno */}
+                              {(((t as any).alumno_nombre ||
+                                (t as any).id_alumno) as any) && (
+                                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span className="text-foreground/70">
+                                    Alumno:
+                                  </span>
+                                  <span className="font-medium text-foreground/90">
+                                    {(t as any).alumno_nombre ||
+                                      (t as any).id_alumno}
+                                  </span>
+                                </div>
+                              )}
+
                               {/* Informante */}
                               {(t.informante_nombre || t.informante) && (
                                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

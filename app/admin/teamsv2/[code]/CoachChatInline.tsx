@@ -2787,6 +2787,11 @@ export default function CoachChatInline({
     const payload = {
       ...roleFilter,
       ...base,
+      // Algunos backends limitan chat.list por defecto (ej. 50). Forzamos un tamaño alto.
+      limit: base?.limit ?? 5000,
+      pageSize: base?.pageSize ?? 5000,
+      page: base?.page ?? 1,
+      offset: base?.offset ?? 0,
       include_participants: true,
       with_participants: true,
       includeParticipants: true,
@@ -2991,6 +2996,11 @@ export default function CoachChatInline({
       const payload = {
         ...roleFilter,
         ...base,
+        // Algunos backends limitan chat.list por defecto (ej. 50). Forzamos un tamaño alto.
+        limit: base?.limit ?? 5000,
+        pageSize: base?.pageSize ?? 5000,
+        page: base?.page ?? 1,
+        offset: base?.offset ?? 0,
         include_participants: true,
         with_participants: true,
         includeParticipants: true,
@@ -3164,6 +3174,10 @@ export default function CoachChatInline({
             "chat.list",
             {
               ...listPayload,
+              limit: (listPayload as any)?.limit ?? 5000,
+              pageSize: (listPayload as any)?.pageSize ?? 5000,
+              page: (listPayload as any)?.page ?? 1,
+              offset: (listPayload as any)?.offset ?? 0,
               include_participants: true,
               with_participants: true,
               includeParticipants: true,

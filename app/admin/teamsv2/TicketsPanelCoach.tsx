@@ -2308,7 +2308,7 @@ export default function TicketsPanelCoach({
                             >
                               <User className="h-3 w-3 text-slate-400" />
                               <span className="truncate">
-                                {t.alumno_nombre}
+                                Alumno: {t.alumno_nombre}
                               </span>
                             </div>
                           )}
