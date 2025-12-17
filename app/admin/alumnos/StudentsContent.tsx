@@ -112,7 +112,9 @@ function stageRank(stage?: string | null) {
 }
 
 function normalizeStageLabel(stage?: string | null) {
-  return String(stage ?? "").trim().toUpperCase();
+  return String(stage ?? "")
+    .trim()
+    .toUpperCase();
 }
 
 export default function StudentsContent() {
