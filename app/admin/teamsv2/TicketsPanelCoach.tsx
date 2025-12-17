@@ -1204,6 +1204,27 @@ export default function TicketsPanelCoach({
     return () => ctrl.abort();
   }, [coachCode, page, pageSize, fechaDesde, fechaHasta]);
 
+  async function reloadTickets() {
+    if (!coachCode) return;
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await getCoachTickets({
+        coach: coachCode,
+        page,
+        pageSize,
+        fechaDesde,
+        fechaHasta,
+      });
+      setRows(res.data);
+      setTotal(res.total);
+    } catch (e: any) {
+      setError(e?.message ?? "Error al cargar tickets");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // Snackbar inicial avisando sobre tickets en PAUSADO
   const didShowPausedToast = useRef(false);
   useEffect(() => {
@@ -1775,6 +1796,18 @@ export default function TicketsPanelCoach({
             >
               Hoy
             </Button>
+
+            {viewMode === "kanban" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9 bg-transparent"
+                onClick={reloadTickets}
+                disabled={loading}
+              >
+                Recargar
+              </Button>
+            )}
             <Dialog open={openCreate} onOpenChange={setOpenCreate}>
               <DialogTrigger asChild>
                 <Button size="sm" className="h-9 gap-2">
@@ -2068,7 +2101,9 @@ export default function TicketsPanelCoach({
                   studentState={selectedAlumnoRow?.estatus}
                   studentStage={selectedAlumnoRow?.fase}
                   getEstadoBadgeClassName={(estadoRaw) => {
-                    const e = String(estadoRaw ?? "").trim().toUpperCase();
+                    const e = String(estadoRaw ?? "")
+                      .trim()
+                      .toUpperCase();
                     if (!e) return "";
                     if (e.includes("PAGO")) {
                       return "border-orange-200 bg-orange-100 text-orange-900 dark:border-orange-900/40 dark:bg-orange-900/20 dark:text-orange-200";
