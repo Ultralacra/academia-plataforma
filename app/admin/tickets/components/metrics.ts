@@ -25,6 +25,8 @@ export type TicketsMetrics = {
   resueltos: number;
   enProgreso: number;
   pendientes: number;
+  pendientesDeEnvio: number;
+  pausados: number;
 
   avgPerDay: number;   // promedio por día en el rango [from..to]
   days: number;        // tamaño del rango en días (incluyente)
@@ -39,6 +41,18 @@ export type TicketsMetrics = {
   busiestDay: { date: string; count: number } | null;
   quietDays: number;   // días con 0 dentro del rango [from..to]
 };
+
+function normalizeEstadoKey(estado: string | null | undefined) {
+  return String(estado ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ");
+}
+
+function isPausadoKey(k: string) {
+  return k === "PAUSADO" || k === "PAUSA" || k === "EN PAUSA";
+}
 
 /** Agrupa por día (iso) los tickets */
 export function ticketsByDayLocal(tickets: Ticket[]) {
@@ -55,13 +69,19 @@ export function ticketsByDayLocal(tickets: Ticket[]) {
 export function computeTicketMetrics(tickets: Ticket[]): TicketsMetrics {
   const total = tickets.length;
   const resueltos = tickets.filter(
-    (t) => (t.estado ?? "").toLowerCase() === "resuelto"
+    (t) => normalizeEstadoKey(t.estado) === "RESUELTO"
   ).length;
   const enProgreso = tickets.filter(
-    (t) => (t.estado ?? "").toLowerCase() === "en progreso"
+    (t) => normalizeEstadoKey(t.estado) === "EN PROGRESO"
   ).length;
   const pendientes = tickets.filter(
-    (t) => (t.estado ?? "").toLowerCase() === "pendiente"
+    (t) => normalizeEstadoKey(t.estado) === "PENDIENTE"
+  ).length;
+  const pendientesDeEnvio = tickets.filter(
+    (t) => normalizeEstadoKey(t.estado) === "PENDIENTE DE ENVIO"
+  ).length;
+  const pausados = tickets.filter((t) =>
+    isPausadoKey(normalizeEstadoKey(t.estado))
   ).length;
 
   const perDay = ticketsByDayLocal(tickets);
@@ -117,6 +137,8 @@ export function computeTicketMetrics(tickets: Ticket[]): TicketsMetrics {
     resueltos,
     enProgreso,
     pendientes,
+    pendientesDeEnvio,
+    pausados,
     avgPerDay,
     days,
     from,

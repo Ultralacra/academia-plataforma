@@ -95,13 +95,23 @@ export function Charts({
   const counts = (() => {
     const m = new Map<string, number>();
     (tickets ?? []).forEach((t) => {
-      const k = (t.estado ?? "SIN ESTADO").toUpperCase();
+      const k = String(t.estado ?? "SIN ESTADO")
+        .trim()
+        .toUpperCase()
+        .replace(/_/g, " ")
+        .replace(/\s+/g, " ");
       m.set(k, (m.get(k) ?? 0) + 1);
     });
     return m;
   })();
   const total = Array.from(counts.values()).reduce((a, b) => a + b, 0);
-  const preferred = ["EN PROGRESO", "PENDIENTE", "RESUELTO"];
+  const preferred = [
+    "EN PROGRESO",
+    "PENDIENTE",
+    "PENDIENTE DE ENVIO",
+    "PAUSADO",
+    "RESUELTO",
+  ];
   const estadosOrdenados = [
     ...preferred.filter((k) => counts.has(k)),
     ...Array.from(counts.keys())

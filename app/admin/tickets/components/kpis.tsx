@@ -7,6 +7,7 @@ import {
   Clock,
   CalendarDays,
   Flame,
+  PauseCircle,
 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import type { TicketsMetrics } from "./metrics";
@@ -65,7 +66,7 @@ export default function KPIs({
           Rango considerado: {range}
         </p>
       </CardHeader>
-      <CardContent className="grid grid-cols-1 gap-3 pt-3 md:grid-cols-5">
+      <CardContent className="grid grid-cols-1 gap-3 pt-3 md:grid-cols-7">
         <Kpi
           icon={<FileText className="h-4 w-4 text-sky-600" />}
           label="Total"
@@ -96,6 +97,17 @@ export default function KPIs({
           color="amber"
         />
         <Kpi
+          icon={<AlertTriangle className="h-4 w-4 text-sky-600" />}
+          label="Pendiente de envío"
+          value={loading ? "…" : metrics.pendientesDeEnvio}
+          hint={`${
+            metrics.total
+              ? Math.round((metrics.pendientesDeEnvio / metrics.total) * 100)
+              : 0
+          }% del total`}
+          color="blue"
+        />
+        <Kpi
           icon={<Clock className="h-4 w-4 text-violet-600" />}
           label="En progreso"
           value={loading ? "…" : metrics.enProgreso}
@@ -105,6 +117,16 @@ export default function KPIs({
               : 0
           }% del total`}
           color="violet"
+        />
+        <Kpi
+          icon={<PauseCircle className="h-4 w-4 text-gray-600" />}
+          label="Pausados"
+          value={loading ? "…" : metrics.pausados}
+          hint={`${
+            metrics.total
+              ? Math.round((metrics.pausados / metrics.total) * 100)
+              : 0
+          }% del total`}
         />
         <Kpi
           icon={<CalendarDays className="h-4 w-4 text-sky-600" />}

@@ -25,7 +25,10 @@ export default function TeamsTable({
       const pendientes =
         g.countByEstado["PENDIENTE"] ?? g.countByEstado["pendiente"] ?? 0;
       const enProgreso =
-        g.countByEstado["EN PROGRESO"] ?? g.countByEstado["en progreso"] ?? 0;
+        g.countByEstado["EN PROGRESO"] ??
+        g.countByEstado["EN_PROGRESO"] ??
+        g.countByEstado["en progreso"] ??
+        0;
       const resueltos =
         g.countByEstado["RESUELTO"] ?? g.countByEstado["resuelto"] ?? 0;
       return {
