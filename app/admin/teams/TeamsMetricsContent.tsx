@@ -77,6 +77,24 @@ export default function TeamsMetricsContent() {
   const [hasta, setHasta] = useState(persistedHasta || initialRange.today);
   // Eliminado applySeq: las consultas se disparan automáticamente al cambiar fechas/coach
 
+  // Guard: si el localStorage dejó un rango invertido, volvemos al mes actual
+  useEffect(() => {
+    if (!desde || !hasta) return;
+    if (desde <= hasta) return;
+    const { first, today } = currentMonthRange();
+    setDesde(first);
+    setHasta(today);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Guard: si el usuario deja el rango invertido manualmente, lo corregimos (swap)
+  useEffect(() => {
+    if (!desde || !hasta) return;
+    if (desde <= hasta) return;
+    setDesde(hasta);
+    setHasta(desde);
+  }, [desde, hasta]);
+
   // Persistencia de fechas cuando cambian
   useEffect(() => {
     try {

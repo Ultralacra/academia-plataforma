@@ -54,11 +54,23 @@ function firstArrayAt(obj: any, paths: string[]): any[] {
   return [];
 }
 const toNumber = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
+
+const INFORMANTE_ID_TO_NAME: Record<string, string> = {
+  // mapeo operativo (IDs → nombres)
+  mQ2dwRX3xMzV99e3nh9eb: "Pedro",
+  PKBT2jVtzKzN7TpnLZkPj: "Katherine",
+};
+
+function mapInformanteLabel(raw: any) {
+  const trimmed =
+    raw == null || String(raw).trim() === "" ? "" : String(raw).trim();
+  if (!trimmed) return "";
+  return INFORMANTE_ID_TO_NAME[trimmed] ?? trimmed;
+}
+
 const normName = (raw: any) => {
-  const str =
-    raw == null || String(raw).trim() === ""
-      ? "Sin informante"
-      : String(raw).trim();
+  const mapped = mapInformanteLabel(raw);
+  const str = !mapped ? "Sin informante" : mapped;
   return str;
 };
 const normISODate = (d: any) => {
@@ -194,7 +206,7 @@ export default function TicketsByInformanteBar({
     const genMap: Record<string, number> = {};
     for (const d of generalSource || []) {
       const name = normName(
-        d?.informante ?? d?.name ?? d?.informante_nombre ?? d?.nombre ?? null
+        d?.informante_nombre ?? d?.nombre ?? d?.name ?? d?.informante ?? null
       );
       const cnt = toNumber(
         d?.cantidad ?? d?.cantidad_tickets ?? d?.tickets ?? d?.count ?? 0
@@ -220,7 +232,7 @@ export default function TicketsByInformanteBar({
     if (hasDaySource) {
       for (const d of daySource) {
         const name = normName(
-          d?.informante ?? d?.name ?? d?.informante_nombre ?? d?.nombre ?? null
+          d?.informante_nombre ?? d?.nombre ?? d?.name ?? d?.informante ?? null
         );
         const dayKey = normISODate(
           d?.created_at ?? d?.createdAt ?? d?.day ?? d?.date ?? d?.fecha ?? null

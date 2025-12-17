@@ -41,10 +41,6 @@ export default function ChartsSection({
     }>
   ) => void;
 }) {
-  // Fecha de corte específica solicitada para "Sin enviar tareas": 26 oct 2025
-  // Formato ISO YYYY-MM-DD
-  const NO_TASKS_TO_DATE = "2025-10-26";
-
   return (
     <>
       {loading ? (
@@ -76,7 +72,6 @@ export default function ChartsSection({
         <NoTasksKPIs
           items={lifecycleItems ?? []}
           students={students} // <-- IMPORTANTE
-          toDateISO={NO_TASKS_TO_DATE}
           onOpenList={onOpenList}
         />
       </div>

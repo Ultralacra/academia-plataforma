@@ -90,6 +90,12 @@ export async function fetchMetrics(
   fechaHasta?: string,
   coachCode?: string
 ) {
+  // Guard: evitar rangos invertidos (ISO YYYY-MM-DD permite comparación lexicográfica)
+  if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+    const tmp = fechaDesde;
+    fechaDesde = fechaHasta;
+    fechaHasta = tmp;
+  }
   const params = new URLSearchParams();
   if (fechaDesde) params.set("fechaDesde", fechaDesde);
   if (fechaHasta) params.set("fechaHasta", fechaHasta);

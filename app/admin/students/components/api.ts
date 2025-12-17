@@ -38,8 +38,18 @@ export async function fetchMetricsV2(params?: {
 	coach?: string;
 }): Promise<MetricsV2Envelope> {
 	const defaults = getDefaultRange();
-	const fechaDesde = normalizeInputDate(params?.fechaDesde) ?? defaults.fechaDesde;
-	const fechaHasta = normalizeInputDate(params?.fechaHasta) ?? defaults.fechaHasta;
+	let fechaDesde = normalizeInputDate(params?.fechaDesde) ?? defaults.fechaDesde;
+	let fechaHasta = normalizeInputDate(params?.fechaHasta) ?? defaults.fechaHasta;
+
+	// Guard: evitar rangos invertidos (ej. fechaDesde=2025-12-01, fechaHasta=2025-10-26)
+	// ISO YYYY-MM-DD permite comparación lexicográfica.
+	if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+		const tmp = fechaDesde;
+		fechaDesde = fechaHasta;
+		fechaHasta = tmp;
+		// eslint-disable-next-line no-console
+		console.warn("[metrics-v2] rango invertido; se intercambió", { fechaDesde, fechaHasta });
+	}
 	const coach = params?.coach;
 
 	const qs = new URLSearchParams();

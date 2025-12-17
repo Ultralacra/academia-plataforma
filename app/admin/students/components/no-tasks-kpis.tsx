@@ -14,7 +14,6 @@ import type { LifecycleItem } from "./phase-faker";
 import type { ClientItem } from "@/lib/data-service";
 import {
   fetchNoTasksMetricsV2,
-  getDefaultRange,
   type NoTasksDetailItem,
   type NoTasksSummary,
 } from "./api";
@@ -25,6 +24,9 @@ function isoDay(d: Date) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${dd}`;
+}
+function firstDayOfMonthISO(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 function parseMaybe(s?: string | null) {
   if (!s) return null;
@@ -99,8 +101,9 @@ export default function NoTasksKPIs({
   const [apiError, setApiError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Rango por defecto: primer día del mes hasta toDateISO (si viene) o hoy
-    const { fechaDesde } = getDefaultRange();
+    // Rango: primer día del mes (según "today") hasta "today"
+    // Esto evita rangos inválidos cuando toDateISO es de un mes/año distinto.
+    const fechaDesde = firstDayOfMonthISO(today);
     const fechaHasta = isoDay(today);
     let ignore = false;
     (async () => {

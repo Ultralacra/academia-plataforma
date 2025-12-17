@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   fetchStageTransitionsV2,
+  getDefaultRange,
   type StageItemsById,
   type StageCounts,
   type StageId,
@@ -58,18 +59,17 @@ export default function TransitionsPanel({
 
   // Cargar datos una sola vez (ventana grande) y derivar 7d/30d en cliente
   useEffect(() => {
-    const now = new Date();
-    const toISO = (d: Date) => d.toISOString().slice(0, 10);
     (async () => {
       try {
-        const to = new Date(now);
-        const from120 = new Date(now);
-        from120.setDate(from120.getDate() - (120 - 1)); // últimos 120 días
+        // Requerimiento: consultar el mes actual desde el primer día hasta hoy
+        const { fechaDesde, fechaHasta } = getDefaultRange();
 
         const { items: items120, labels } = await fetchStageTransitionsV2({
-          fechaDesde: toISO(from120),
-          fechaHasta: toISO(to),
+          fechaDesde,
+          fechaHasta,
         });
+
+        const to = new Date(fechaHasta);
 
         // Derivar conteos/items para 7d / 30d filtrando por fecha
         const filterByDays = (items: StageItemsById, days: number) => {
