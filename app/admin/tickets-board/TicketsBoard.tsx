@@ -196,49 +196,7 @@ function mimeFromName(name?: string | null): string | null {
   return map[ext] ?? null;
 }
 
-function TicketTimer({ hours }: { hours: number }) {
-  // Convert initial hours to milliseconds
-  const initialMs = hours * 3600 * 1000;
-  const [timeLeft, setTimeLeft] = useState(initialMs);
-
-  useEffect(() => {
-    setTimeLeft(hours * 3600 * 1000);
-  }, [hours]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => prev - 1000);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // Si el tiempo se agotó, mostrar 0 en lugar de números negativos
-  if (timeLeft <= 0) {
-    return <span>0h 0m 0s</span>;
-  }
-
-  const totalSeconds = Math.floor(timeLeft / 1000);
-  const absSeconds = Math.abs(totalSeconds);
-
-  const h = Math.floor(absSeconds / 3600);
-  const m = Math.floor((absSeconds % 3600) / 60);
-  const s = absSeconds % 60;
-
-  return (
-    <span>
-      {h}h {m}m {s}s
-    </span>
-  );
-}
-
-function formatPlazo(hours: number) {
-  // Deprecated in favor of TicketTimer for real-time, but kept for fallback
-  const sign = hours < 0 ? "-" : "";
-  const abs = Math.abs(hours);
-  const h = Math.floor(abs);
-  const m = Math.round((abs - h) * 60);
-  return `${sign}${h}h ${m}m`;
-}
+// Cronómetro (SLA) oculto por requerimiento.
 
 export default function TicketsBoard({
   studentCode,
@@ -1904,31 +1862,7 @@ export default function TicketsBoard({
                                     </span>
                                   </div>
                                 )}
-                                {t.plazo_info &&
-                                  !t.plazo_info.fue_respondido &&
-                                  coerceStatus(t.estado) !== "RESUELTO" && (
-                                    <div className="flex flex-col gap-0.5">
-                                      <div
-                                        className={`flex items-center gap-1.5 font-medium ${
-                                          t.plazo_info.horas_restantes <= 0
-                                            ? "text-red-600"
-                                            : t.plazo_info.horas_restantes < 4
-                                            ? "text-amber-600"
-                                            : "text-emerald-600"
-                                        }`}
-                                      >
-                                        <Clock className="h-3.5 w-3.5" />
-                                        <TicketTimer
-                                          hours={t.plazo_info.horas_restantes}
-                                        />
-                                      </div>
-                                      {t.plazo_info.horas_restantes <= 0 && (
-                                        <span className="text-[10px] font-semibold text-red-600 animate-pulse">
-                                          Requiere atención
-                                        </span>
-                                      )}
-                                    </div>
-                                  )}
+                                {/* Cronómetro (SLA) oculto */}
                                 {t.codigo && (
                                   <button
                                     className="flex items-center gap-1.5 text-slate-600 hover:text-slate-900 transition-colors"
@@ -2867,50 +2801,7 @@ export default function TicketsBoard({
                         />
                       </div>
 
-                      {/* Tiempo restante (SLA) */}
-                      {(ticketDetail?.plazo_info ||
-                        selectedTicket?.plazo_info) &&
-                        !(
-                          ticketDetail?.plazo_info || selectedTicket?.plazo_info
-                        )?.fue_respondido &&
-                        coerceStatus(editForm.estado as any) !== "RESUELTO" && (
-                          <>
-                            <div className="flex items-center gap-2 text-slate-500 h-6">
-                              <Clock className="h-4 w-4" />{" "}
-                              <span>Tiempo restante</span>
-                            </div>
-                            <div className="min-h-[24px] flex flex-col justify-center">
-                              <div
-                                className={`flex items-center gap-2 font-medium ${
-                                  (ticketDetail?.plazo_info ||
-                                    selectedTicket?.plazo_info)!
-                                    .horas_restantes <= 0
-                                    ? "text-red-600"
-                                    : (ticketDetail?.plazo_info ||
-                                        selectedTicket?.plazo_info)!
-                                        .horas_restantes < 4
-                                    ? "text-amber-600"
-                                    : "text-emerald-600"
-                                }`}
-                              >
-                                <TicketTimer
-                                  hours={
-                                    (ticketDetail?.plazo_info ||
-                                      selectedTicket?.plazo_info)!
-                                      .horas_restantes
-                                  }
-                                />
-                                {(ticketDetail?.plazo_info ||
-                                  selectedTicket?.plazo_info)!
-                                  .horas_restantes <= 0 && (
-                                  <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-                                    Requiere atención
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </>
-                        )}
+                      {/* Cronómetro (SLA) oculto */}
 
                       {/* Estado */}
                       <div className="flex items-center gap-2 text-slate-500 h-6">

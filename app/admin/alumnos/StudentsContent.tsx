@@ -96,6 +96,25 @@ function fmtDateSmart(value?: string | null) {
   return value;
 }
 
+function stageRank(stage?: string | null) {
+  const s = String(stage ?? "")
+    .trim()
+    .toUpperCase();
+  if (!s) return 999;
+  if (s.includes("F1")) return 10;
+  if (s.includes("F2")) return 20;
+  if (s.includes("F3")) return 30;
+  if (s.includes("F4")) return 40;
+  if (s.includes("F5")) return 50;
+  if (s.includes("COPY")) return 60;
+  if (s.includes("ONBOARD")) return 70;
+  return 100;
+}
+
+function normalizeStageLabel(stage?: string | null) {
+  return String(stage ?? "").trim().toUpperCase();
+}
+
 export default function StudentsContent() {
   const [coach, setCoach] = useState<string>("todos"); // formato: "todos" | `id:${id}` | `name:${name}`
   const [loading, setLoading] = useState(true);
@@ -299,7 +318,7 @@ export default function StudentsContent() {
   const finalRows = useMemo(() => {
     const NO_STAGE = "Sin fase";
     const NO_STATE = "Sin estado";
-    return filtered.filter((s) => {
+    const base = filtered.filter((s) => {
       // estado
       if (filterState) {
         if (filterState === NO_STATE) {
@@ -313,6 +332,21 @@ export default function StudentsContent() {
         } else if (s.stage !== filterStage) return false;
       }
       return true;
+    });
+
+    // Orden por fase (y por nombre dentro de cada fase)
+    return [...base].sort((a, b) => {
+      const ra = stageRank(a.stage);
+      const rb = stageRank(b.stage);
+      if (ra !== rb) return ra - rb;
+
+      const sa = normalizeStageLabel(a.stage);
+      const sb = normalizeStageLabel(b.stage);
+      if (sa !== sb) return sa.localeCompare(sb, "es", { sensitivity: "base" });
+
+      return (a.name ?? "").localeCompare(b.name ?? "", "es", {
+        sensitivity: "base",
+      });
     });
   }, [filtered, filterStage, filterState]);
 
@@ -737,8 +771,8 @@ export default function StudentsContent() {
             <thead className="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Nombre</th>
+                <th className="px-3 py-2 text-left font-medium">Fase</th>
                 <th className="px-3 py-2 text-left font-medium">Estado</th>
-                <th className="px-3 py-2 text-left font-medium">Etapa</th>
                 <th className="px-3 py-2 text-left font-medium">Ingreso</th>
                 <th className="px-3 py-2 text-left font-medium">
                   <div className="flex items-center gap-1.5">
@@ -792,27 +826,6 @@ export default function StudentsContent() {
                     </td>
                     <td className="px-3 py-2">
                       {(() => {
-                        const v = (student.state || "").toUpperCase();
-                        const classes = v.includes("INACTIVO")
-                          ? "bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300"
-                          : v.includes("ACTIVO")
-                          ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
-                          : v.includes("PROCESO")
-                          ? "bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-300"
-                          : v
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-muted text-muted-foreground";
-                        return (
-                          <span
-                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
-                          >
-                            {student.state || "—"}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-2">
-                      {(() => {
                         const v = (student.stage || "").toUpperCase();
                         const classes = v.includes("COPY")
                           ? "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300"
@@ -836,6 +849,27 @@ export default function StudentsContent() {
                             className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
                           >
                             {student.stage || "—"}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-3 py-2">
+                      {(() => {
+                        const v = (student.state || "").toUpperCase();
+                        const classes = v.includes("INACTIVO")
+                          ? "bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300"
+                          : v.includes("ACTIVO")
+                          ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
+                          : v.includes("PROCESO")
+                          ? "bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-300"
+                          : v
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-muted text-muted-foreground";
+                        return (
+                          <span
+                            className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
+                          >
+                            {student.state || "—"}
                           </span>
                         );
                       })()}
