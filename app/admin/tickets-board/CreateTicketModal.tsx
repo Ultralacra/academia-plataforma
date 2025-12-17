@@ -37,6 +37,8 @@ import {
   type StudentRow,
 } from "@/app/admin/alumnos/api";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
+import { Badge } from "@/components/ui/badge";
+import { InactivePorPagoConfirmDialog } from "@/components/tickets/InactivePorPagoConfirmDialog";
 
 export function CreateTicketModal({
   open,
@@ -58,6 +60,11 @@ export function CreateTicketModal({
   // Form state
   const [studentQuery, setStudentQuery] = useState("");
   const [selectedStudentId, setSelectedStudentId] = useState<string>("");
+  const [selectedStudentMeta, setSelectedStudentMeta] = useState<{
+    name: string;
+    state?: string | null;
+    stage?: string | null;
+  } | null>(null);
   const [title, setTitle] = useState("");
   const [type, setType] = useState("");
   const [description, setDescription] = useState("");
@@ -74,12 +81,73 @@ export function CreateTicketModal({
   // Data state
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [types, setTypes] = useState<{ key: string; value: string }[]>([]);
+  const [inactivePaymentConfirmOpen, setInactivePaymentConfirmOpen] =
+    useState(false);
+
+  const getEstadoBadgeClassName = (estadoRaw?: string | null) => {
+    const estado = String(estadoRaw ?? "")
+      .trim()
+      .toUpperCase();
+    if (!estado) return "";
+
+    if (estado === "ACTIVO") {
+      return "border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-200";
+    }
+    if (estado === "PAUSADO") {
+      return "border-amber-200 bg-amber-100 text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200";
+    }
+    if (estado === "MEMBRESÍA" || estado === "MEMBRESIA") {
+      return "border-violet-200 bg-violet-100 text-violet-900 dark:border-violet-900/40 dark:bg-violet-900/20 dark:text-violet-200";
+    }
+    if (estado.includes("PAGO")) {
+      return "border-orange-200 bg-orange-100 text-orange-900 dark:border-orange-900/40 dark:bg-orange-900/20 dark:text-orange-200";
+    }
+    if (estado.includes("INACTIVO")) {
+      return "border-rose-200 bg-rose-100 text-rose-900 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-200";
+    }
+
+    return "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-800 dark:bg-slate-900/20 dark:text-slate-200";
+  };
+
+  const selectedStudent = useMemo(() => {
+    if (!selectedStudentId) return null;
+    const wanted = String(selectedStudentId);
+    return students.find((s) => String((s.code as any) ?? s.id) === wanted) ?? null;
+  }, [students, selectedStudentId]);
+
+  const normalizeEstado = (value?: string | null) => {
+    const raw = String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return raw.trim().toUpperCase().replace(/\s+/g, " ");
+  };
+
+  const selected = selectedStudent ?? selectedStudentMeta;
+
+  const isInactivePorPago = useMemo(() => {
+    const estado = normalizeEstado(selected?.state);
+    return estado.includes("INACTIVO") && estado.includes("PAGO");
+  }, [selected]);
+
+  const isInactive = useMemo(() => {
+    const estado = normalizeEstado(selected?.state);
+    return estado.includes("INACTIVO");
+  }, [selected]);
+
+  const confirmTitle = isInactivePorPago
+    ? "Alumno inactivo por pago"
+    : "Alumno inactivo";
+
+  const confirmDescription = isInactivePorPago
+    ? "Este alumno está marcado como INACTIVO POR PAGO. ¿Seguro que quieres crear el ticket de todas formas?"
+    : "Este alumno está marcado como INACTIVO. ¿Seguro que quieres crear el ticket de todas formas?";
 
   useEffect(() => {
     if (open) {
       // Reset form
       setStudentQuery("");
       setSelectedStudentId(defaultStudentCode || "");
+      setSelectedStudentMeta(null);
       setTitle("");
       setType("");
       setDescription("");
@@ -103,6 +171,22 @@ export function CreateTicketModal({
       setStudents(studentsData);
       setTypes(typesData);
       if (typesData.length > 0) setType(typesData[0].key);
+
+      if (defaultStudentCode) {
+        const wanted = String(defaultStudentCode);
+        const found =
+          studentsData.find((s) => String((s.code as any) ?? s.id) === wanted) ??
+          null;
+        if (found) {
+          setSelectedStudentId(String((found.code as any) ?? found.id));
+          setSelectedStudentMeta({
+            name: found.name,
+            state: found.state,
+            stage: found.stage,
+          });
+          setStudentQuery(found.name);
+        }
+      }
     } catch (e) {
       console.error(e);
       toast({ title: "Error cargando datos iniciales" });
@@ -118,7 +202,7 @@ export function CreateTicketModal({
       .filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
-          (s.code && s.code.toLowerCase().includes(q))
+          (s.code && String(s.code).toLowerCase().includes(q))
       )
       .slice(0, 10);
   }, [students, studentQuery]);
@@ -277,6 +361,22 @@ export function CreateTicketModal({
     }
   };
 
+  const handleCreateClick = () => {
+    if (!selectedStudentId || !title.trim()) return;
+    if (!type) {
+      toast({
+        title: "Selecciona el tipo de ticket",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isInactive) {
+      setInactivePaymentConfirmOpen(true);
+      return;
+    }
+    void handleCreate();
+  };
+
   // Renderizado de estados de carga/éxito
   if (flowStage !== "form") {
     return (
@@ -359,7 +459,7 @@ export function CreateTicketModal({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <Input
-                placeholder="Buscar por nombre o código..."
+                placeholder="Buscar por nombre..."
                 value={studentQuery}
                 onChange={(e) => setStudentQuery(e.target.value)}
                 className="pl-9"
@@ -378,12 +478,34 @@ export function CreateTicketModal({
                       key={s.id}
                       className="text-sm px-2 py-1.5 hover:bg-slate-200 cursor-pointer rounded"
                       onClick={() => {
-                        setSelectedStudentId(s.code || String(s.id));
+                        setSelectedStudentId(String((s.code as any) ?? s.id));
+                        setSelectedStudentMeta({
+                          name: s.name,
+                          state: s.state,
+                          stage: s.stage,
+                        });
                         setStudentQuery(s.name);
                       }}
                     >
-                      {s.name}{" "}
-                      <span className="text-slate-400 text-xs">({s.code})</span>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium truncate">
+                              {s.name}
+                            </span>
+                            {s.state ? (
+                              <Badge
+                                className={getEstadoBadgeClassName(s.state)}
+                              >
+                                {s.state}
+                              </Badge>
+                            ) : null}
+                            {s.stage ? (
+                              <Badge variant="muted">{s.stage}</Badge>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))
                 )}
@@ -391,14 +513,26 @@ export function CreateTicketModal({
             )}
             {selectedStudentId && (
               <div className="flex items-center justify-between bg-violet-50 text-violet-700 px-3 py-2 rounded-md text-sm border border-violet-200 mt-1">
-                <span>
-                  Alumno seleccionado:{" "}
-                  <strong>
-                    {students.find(
-                      (s) => (s.code || String(s.id)) === selectedStudentId
-                    )?.name || selectedStudentId}
-                  </strong>
-                </span>
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span>
+                      Alumno seleccionado:{" "}
+                      <strong>
+                        {selected?.name || studentQuery || "—"}
+                      </strong>
+                    </span>
+                    {selected?.state ? (
+                      <Badge
+                        className={getEstadoBadgeClassName(selected.state)}
+                      >
+                        {selected.state}
+                      </Badge>
+                    ) : null}
+                    {selected?.stage ? (
+                      <Badge variant="muted">{selected.stage}</Badge>
+                    ) : null}
+                  </div>
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -406,6 +540,7 @@ export function CreateTicketModal({
                   onClick={() => {
                     setSelectedStudentId("");
                     setStudentQuery("");
+                    setSelectedStudentMeta(null);
                   }}
                 >
                   <X className="h-3 w-3" />
@@ -577,13 +712,25 @@ export function CreateTicketModal({
           </div>
         </div>
 
+        <InactivePorPagoConfirmDialog
+          open={inactivePaymentConfirmOpen}
+          onOpenChange={setInactivePaymentConfirmOpen}
+          title={confirmTitle}
+          description={confirmDescription}
+          studentName={selected?.name || studentQuery || "Alumno"}
+          studentState={selected?.state}
+          studentStage={selected?.stage}
+          getEstadoBadgeClassName={getEstadoBadgeClassName}
+          onConfirm={handleCreate}
+        />
+
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
           <Button
-            onClick={handleCreate}
-            disabled={!selectedStudentId || !title.trim()}
+            onClick={handleCreateClick}
+            disabled={!selectedStudentId || !title.trim() || !type}
           >
             Crear Ticket
           </Button>

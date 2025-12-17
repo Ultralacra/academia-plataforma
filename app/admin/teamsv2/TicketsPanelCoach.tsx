@@ -106,6 +106,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InactivePorPagoConfirmDialog } from "@/components/tickets/InactivePorPagoConfirmDialog";
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
 import { useAuth } from "@/hooks/use-auth";
@@ -320,11 +321,37 @@ export default function TicketsPanelCoach({
     { url: string; type: string; name: string; size: number }[]
   >([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [inactiveCreateConfirmOpen, setInactiveCreateConfirmOpen] =
+    useState(false);
+  const bypassInactiveCreateConfirmRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<any>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+
+  const normalizeAlumnoEstado = (value?: string | null) => {
+    const raw = String(value ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return raw.trim().toUpperCase().replace(/\s+/g, " ");
+  };
+
+  const selectedAlumnoRow = useMemo(() => {
+    if (!selectedAlumno) return null;
+    return (
+      coachStudents.find((s) => String(s.alumno) === String(selectedAlumno)) ??
+      null
+    );
+  }, [coachStudents, selectedAlumno]);
+
+  const estadoAlumno = useMemo(() => {
+    return normalizeAlumnoEstado(selectedAlumnoRow?.estatus);
+  }, [selectedAlumnoRow?.estatus]);
+
+  const alumnoEsInactivo = useMemo(() => {
+    return estadoAlumno.includes("INACTIVO");
+  }, [estadoAlumno]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -891,6 +918,12 @@ export default function TicketsPanelCoach({
       toast({ title: "Selecciona un alumno" });
       return;
     }
+    if (!bypassInactiveCreateConfirmRef.current && alumnoEsInactivo) {
+      setInactiveCreateConfirmOpen(true);
+      return;
+    }
+    bypassInactiveCreateConfirmRef.current = false;
+
     if (!createNombre.trim()) {
       toast({ title: "Escribe un nombre" });
       return;
@@ -2017,6 +2050,39 @@ export default function TicketsPanelCoach({
                     )}
                   </div>
                 </div>
+
+                <InactivePorPagoConfirmDialog
+                  open={inactiveCreateConfirmOpen}
+                  onOpenChange={setInactiveCreateConfirmOpen}
+                  title={
+                    estadoAlumno.includes("PAGO")
+                      ? "Alumno inactivo por pago"
+                      : "Alumno inactivo"
+                  }
+                  description={
+                    estadoAlumno.includes("PAGO")
+                      ? "Este alumno está marcado como INACTIVO POR PAGO. ¿Seguro que quieres crear el ticket de todas formas?"
+                      : "Este alumno está marcado como INACTIVO. ¿Seguro que quieres crear el ticket de todas formas?"
+                  }
+                  studentName={selectedAlumnoRow?.nombre || "Alumno"}
+                  studentState={selectedAlumnoRow?.estatus}
+                  studentStage={selectedAlumnoRow?.fase}
+                  getEstadoBadgeClassName={(estadoRaw) => {
+                    const e = String(estadoRaw ?? "").trim().toUpperCase();
+                    if (!e) return "";
+                    if (e.includes("PAGO")) {
+                      return "border-orange-200 bg-orange-100 text-orange-900 dark:border-orange-900/40 dark:bg-orange-900/20 dark:text-orange-200";
+                    }
+                    if (e.includes("INACTIVO")) {
+                      return "border-rose-200 bg-rose-100 text-rose-900 dark:border-rose-900/40 dark:bg-rose-900/20 dark:text-rose-200";
+                    }
+                    return "border-slate-200 bg-slate-100 text-slate-800 dark:border-slate-800 dark:bg-slate-900/20 dark:text-slate-200";
+                  }}
+                  onConfirm={async () => {
+                    bypassInactiveCreateConfirmRef.current = true;
+                    await handleCreateSubmit();
+                  }}
+                />
                 <DialogFooter>
                   <Button
                     variant="outline"
