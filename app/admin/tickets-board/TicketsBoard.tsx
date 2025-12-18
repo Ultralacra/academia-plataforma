@@ -210,14 +210,22 @@ function mimeFromName(name?: string | null): string | null {
 export default function TicketsBoard({
   studentCode,
   hideHeader,
+  mode,
 }: {
   studentCode?: string;
   hideHeader?: boolean;
+  mode?: "tickets" | "feedback";
 }) {
   const { user } = useAuth();
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
   const isStudent = (user?.role || "").toLowerCase() === "student";
   const canEdit = !isStudent; // admins and team members can edit; students only view
+
+  const isFeedbackMode = mode === "feedback";
+  const uiTicket = isFeedbackMode ? "Feedback" : "Ticket";
+  const uiTickets = isFeedbackMode ? "Feedback" : "Tickets";
+  const uiTicketLower = isFeedbackMode ? "feedback" : "ticket";
+  const uiTicketsLower = isFeedbackMode ? "feedback" : "tickets";
 
   // Permisos especiales: además de admin, permitir reasignar/eliminar a usuarios puntuales
   const privilegedTicketManagerCodes = new Set<string>([
@@ -557,7 +565,7 @@ export default function TicketsBoard({
         setTickets(validTickets);
       } catch (e) {
         console.error(e);
-        toast({ title: "Error cargando tickets" });
+        toast({ title: `Error cargando ${uiTicketsLower}` });
         setTickets([]);
       } finally {
         if (mounted) setLoading(false);
@@ -580,8 +588,12 @@ export default function TicketsBoard({
     if (pausedCount > 0) {
       didShowPausedToast.current = true;
       toast({
-        title: "Tickets pausados requieren atención",
-        description: `Tienes ${pausedCount} ticket(s) en Pausado. Revisa y envía la información correspondiente.`,
+        title: isFeedbackMode
+          ? "Feedback pausado requiere atención"
+          : "Tickets pausados requieren atención",
+        description: isFeedbackMode
+          ? `Tienes ${pausedCount} feedback en Pausado. Revisa y envía la información correspondiente.`
+          : `Tienes ${pausedCount} ticket(s) en Pausado. Revisa y envía la información correspondiente.`,
       });
     }
   }, [loading, tickets]);
@@ -633,7 +645,7 @@ export default function TicketsBoard({
       .then(() => {
         // Notificación local: cambio de estado
         try {
-          const title = `Ticket actualizado: ${tk?.nombre || codigo} → ${
+          const title = `${uiTicket} actualizado: ${tk?.nombre || codigo} → ${
             STATUS_LABEL[coerceStatus(targetEstado)]
           }`;
           if (typeof window !== "undefined") {
@@ -650,11 +662,11 @@ export default function TicketsBoard({
             );
           }
         } catch {}
-        toast({ title: `Ticket actualizado` });
+        toast({ title: `${uiTicket} actualizado` });
       })
       .catch(async (err) => {
         console.error(err);
-        toast({ title: "Error al actualizar ticket" });
+        toast({ title: `Error al actualizar ${uiTicketLower}` });
         try {
           const res = await getTickets({
             page: 1,
@@ -1358,7 +1370,7 @@ export default function TicketsBoard({
       openTicketDetail(ticket);
     } catch (e) {
       console.error(e);
-      toast({ title: "No se pudo abrir el ticket" });
+      toast({ title: `No se pudo abrir el ${uiTicketLower}` });
     }
   }
 
@@ -1556,7 +1568,7 @@ export default function TicketsBoard({
           typeof editForm.estado === "string"
             ? coerceStatus(editForm.estado)
             : undefined;
-        const title = `Ticket actualizado: ${
+        const title = `${uiTicket} actualizado: ${
           editForm.nombre || selectedTicket.nombre || selectedTicket.codigo
         }${current ? ` → ${STATUS_LABEL[current]}` : ""}`;
         if (typeof window !== "undefined") {
@@ -1573,7 +1585,7 @@ export default function TicketsBoard({
           );
         }
       } catch {}
-      toast({ title: "Ticket actualizado correctamente" });
+      toast({ title: `${uiTicket} actualizado correctamente` });
       setTickets((prev) =>
         prev.map((t) =>
           t.id === selectedTicket.id
@@ -1596,7 +1608,7 @@ export default function TicketsBoard({
       setDrawerOpen(false);
     } catch (e) {
       console.error(e);
-      toast({ title: "Error al actualizar ticket" });
+      toast({ title: `Error al actualizar ${uiTicketLower}` });
     }
   }
 
@@ -1687,7 +1699,7 @@ export default function TicketsBoard({
           <DialogHeader>
             <DialogTitle>{downloadMessage}</DialogTitle>
             <DialogDescription>
-              Progreso de descarga de archivos asociados al ticket.
+              Progreso de descarga de archivos asociados al {uiTicketLower}.
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center justify-center py-4">
@@ -1729,10 +1741,11 @@ export default function TicketsBoard({
         {!hideHeader && (
           <div className="space-y-1">
             <h1 className="text-lg font-semibold tracking-tight text-foreground">
-              Tablero de Tickets
+              Tablero de {uiTickets}
             </h1>
             <p className="text-xs text-muted-foreground">
-              Arrastra y suelta tickets entre columnas para cambiar su estado
+              Arrastra y suelta {uiTicketsLower} entre columnas para cambiar su
+              estado
             </p>
           </div>
         )}
@@ -1825,10 +1838,10 @@ export default function TicketsBoard({
                 size="sm"
                 onClick={handleCreateTicket}
                 className="h-9 w-full gap-2 sm:w-auto"
-                title="Crear nuevo ticket"
+                title={`Crear nuevo ${uiTicketLower}`}
               >
                 <Plus className="h-4 w-4" />
-                Nuevo Ticket
+                Nuevo {uiTicket}
               </Button>
 
               <Button
@@ -1836,10 +1849,10 @@ export default function TicketsBoard({
                 size="sm"
                 onClick={() => setOnlyMyTickets(!onlyMyTickets)}
                 className="h-9 w-full gap-2 sm:w-auto dark:bg-primary dark:text-primary-foreground dark:border-primary/50 dark:hover:bg-primary/90"
-                title="Mostrar solo mis tickets creados"
+                title={`Mostrar solo mis ${uiTicketsLower} creados`}
               >
                 <User className="h-4 w-4" />
-                Mis Tickets
+                Mis {uiTickets}
               </Button>
             </>
           )}
@@ -1877,7 +1890,11 @@ export default function TicketsBoard({
                   studentCode,
                 });
                 setTickets(res.items ?? []);
-                toast({ title: "Tickets recargados" });
+                toast({
+                  title: isFeedbackMode
+                    ? "Feedback recargado"
+                    : "Tickets recargados",
+                });
               } catch (e) {
                 toast({ title: "Error al recargar" });
               } finally {
@@ -1905,7 +1922,7 @@ export default function TicketsBoard({
               <TableRow>
                 <TableHead className="w-[180px]">Estado</TableHead>
                 <TableHead>Asunto</TableHead>
-                {!studentCode && <TableHead>Alumno</TableHead>}
+                No hay {uiTicketsLower} para mostrar.
                 <TableHead className="w-[160px]">Creado</TableHead>
               </TableRow>
             </TableHeader>
@@ -1953,7 +1970,8 @@ export default function TicketsBoard({
                         </span>
                       </TableCell>
                       <TableCell className="font-medium">
-                        {t.nombre || (t.codigo ? `Ticket ${t.codigo}` : "—")}
+                        {t.nombre ||
+                          (t.codigo ? `${uiTicket} ${t.codigo}` : "—")}
                       </TableCell>
                       {!studentCode && (
                         <TableCell>
@@ -2060,7 +2078,7 @@ export default function TicketsBoard({
                 >
                   {itemsForCol.length === 0 ? (
                     <div className="flex h-36 items-center justify-center rounded-lg border-2 border-dashed border-border bg-background/40 text-sm text-muted-foreground">
-                      Sin tickets
+                      Sin {uiTicketsLower}
                     </div>
                   ) : (
                     groupByDate(itemsForCol).map((group) => (
@@ -2090,7 +2108,7 @@ export default function TicketsBoard({
                             <div className="space-y-3">
                               <div className="flex items-start justify-between gap-3">
                                 <h3 className="flex-1 text-sm font-medium leading-snug text-foreground">
-                                  {t.nombre ?? "Ticket"}
+                                  {t.nombre ?? uiTicket}
                                 </h3>
                                 <span
                                   className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
@@ -2687,7 +2705,7 @@ export default function TicketsBoard({
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <SheetTitle className="text-lg">
-                  {editForm.nombre || "Detalle del ticket"}
+                  {editForm.nombre || `Detalle del ${uiTicketLower}`}
                 </SheetTitle>
                 <SheetDescription className="mt-1">
                   {selectedTicket?.codigo && (
@@ -2711,7 +2729,7 @@ export default function TicketsBoard({
                     disabled={!selectedTicket?.codigo}
                     className="relative z-10 mt-1"
                   >
-                    Reasignar ticket
+                    Reasignar {uiTicketLower}
                   </Button>
                 )}
               </div>
@@ -2721,7 +2739,7 @@ export default function TicketsBoard({
           <div className="flex-1 overflow-y-auto">
             {!selectedTicket ? (
               <div className="flex items-center justify-center h-full text-sm text-slate-500">
-                Selecciona un ticket
+                Selecciona un {uiTicketLower}
               </div>
             ) : (
               <>
@@ -2773,8 +2791,8 @@ export default function TicketsBoard({
                       <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
                         <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
                         <div className="text-sm text-amber-800">
-                          Este ticket está pausado y requiere acción. Por favor
-                          envía la información correspondiente.
+                          Este {uiTicketLower} está pausado y requiere acción.
+                          Por favor envía la información correspondiente.
                         </div>
                       </div>
                     )}
@@ -2787,7 +2805,7 @@ export default function TicketsBoard({
                         onChange={(e) =>
                           setEditForm((f) => ({ ...f, nombre: e.target.value }))
                         }
-                        placeholder="Título del ticket"
+                        placeholder={`Título del ${uiTicketLower}`}
                         disabled={!canEdit}
                       />
                     </div>
@@ -3208,7 +3226,7 @@ export default function TicketsBoard({
                             rows={8}
                             value={descDraft}
                             onChange={(e) => setDescDraft(e.target.value)}
-                            placeholder="Escribe la descripción del ticket..."
+                            placeholder={`Escribe la descripción del ${uiTicketLower}...`}
                           />
                           <div className="flex items-center justify-end gap-2">
                             <Button
@@ -4228,7 +4246,7 @@ export default function TicketsBoard({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
-              Reasignar ticket
+              Reasignar {uiTicketLower}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
@@ -4278,7 +4296,7 @@ export default function TicketsBoard({
                 const coach = coaches.find((c) => c.codigo === reassignCoach);
                 const name =
                   coach?.nombre || reassignCoach || "el coach seleccionado";
-                return `¿Deseas reasignar el ticket al coach ${name}?`;
+                return `¿Deseas reasignar el ${uiTicketLower} al coach ${name}?`;
               })()}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -4294,7 +4312,7 @@ export default function TicketsBoard({
                   await reassignTicket(selectedTicket.codigo, reassignCoach);
                   const coach = coaches.find((c) => c.codigo === reassignCoach);
                   toast({
-                    title: `Ticket reasignado a ${
+                    title: `${uiTicket} reasignado a ${
                       coach?.nombre || reassignCoach
                     }`,
                   });
@@ -4319,7 +4337,7 @@ export default function TicketsBoard({
                   setLoading(false);
                 } catch (e) {
                   console.error(e);
-                  toast({ title: "Error al reasignar ticket" });
+                  toast({ title: `Error al reasignar ${uiTicketLower}` });
                 } finally {
                   setReassignLoading(false);
                   setReassignCoach("");
@@ -4341,9 +4359,9 @@ export default function TicketsBoard({
         >
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Eliminar ticket</AlertDialogTitle>
+              <AlertDialogTitle>Eliminar {uiTicketLower}</AlertDialogTitle>
               <AlertDialogDescription>
-                {`¿Deseas eliminar el ticket "${
+                {`¿Deseas eliminar el ${uiTicketLower} "${
                   selectedTicket?.nombre || "(sin título)"
                 }"? Esta acción no se puede deshacer.`}
               </AlertDialogDescription>
@@ -4365,7 +4383,7 @@ export default function TicketsBoard({
                         window.dispatchEvent(
                           new CustomEvent("ticket:notify", {
                             detail: {
-                              title: `Ticket eliminado: ${
+                              title: `${uiTicket} eliminado: ${
                                 selectedTicket?.nombre || selectedTicket.codigo
                               }`,
                               ticketId: selectedTicket.codigo,
@@ -4381,10 +4399,10 @@ export default function TicketsBoard({
                       prev.filter((t) => t.codigo !== selectedTicket.codigo)
                     );
                     setDrawerOpen(false);
-                    toast({ title: "Ticket eliminado" });
+                    toast({ title: `${uiTicket} eliminado` });
                   } catch (e) {
                     console.error(e);
-                    toast({ title: "Error al eliminar ticket" });
+                    toast({ title: `Error al eliminar ${uiTicketLower}` });
                   } finally {
                     setDeletingTicket(false);
                     setDeleteConfirmOpen(false);

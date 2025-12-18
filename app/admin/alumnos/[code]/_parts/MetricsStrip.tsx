@@ -1,6 +1,7 @@
 "use client";
 
 import { Calendar, Clock, TrendingUp, Target, Users } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { fmtES, getOptionBadgeClass } from "./detail-utils";
 
 export default function MetricsStrip({
@@ -35,6 +36,9 @@ export default function MetricsStrip({
     totalDays: number;
   } | null;
 }) {
+  const { user } = useAuth();
+  const isStudent = (user?.role || "").toLowerCase() === "student";
+
   function isoToLocalInput(v?: string | null) {
     if (!v) return "";
     const d = new Date(v);
@@ -78,8 +82,12 @@ export default function MetricsStrip({
     {
       icon: <Calendar className="h-4 w-4" />,
       label: "Permanencia",
-      value: ingreso ? `${permanencia} días` : "",
-      sub: ingreso ? `${fmtES(ingreso)} → ${fmtES(salida)}` : "",
+      value: ingreso
+        ? isStudent
+          ? fmtES(ingreso)
+          : `${permanencia} días`
+        : "",
+      sub: ingreso && !isStudent ? `${fmtES(ingreso)} → ${fmtES(salida)}` : "",
     },
     {
       icon: <Clock className="h-4 w-4" />,

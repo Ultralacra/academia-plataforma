@@ -19,7 +19,7 @@ export default function StudentFeedbackPage() {
           </h1>
         </div>
         <div className="h-[calc(100vh-140px)]">
-          <TicketsBoard studentCode={code} />
+          <TicketsBoard studentCode={code} mode="feedback" />
         </div>
       </DashboardLayout>
     </ProtectedRoute>
