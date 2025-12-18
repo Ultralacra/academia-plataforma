@@ -57,6 +57,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { CHAT_HOST } from "@/lib/api-config";
 import Spinner from "@/components/ui/spinner";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+} from "@/components/ui/context-menu";
 
 // Tipo compacto para lista de alumnos en chat (evita genérico multilínea en TSX)
 type StudentMini = {
@@ -116,6 +122,7 @@ export default function CoachDetailPage({
   const [chatsLoading, setChatsLoading] = useState<boolean>(true);
   const [decisionStamp, setDecisionStamp] = useState<string | null>(null);
   const [contactQuery, setContactQuery] = useState<string>("");
+  const [showOnlyUnread, setShowOnlyUnread] = useState(false);
   const [studentQuery, setStudentQuery] = useState<string>("");
   const [readsBump, setReadsBump] = useState<number>(0);
   // Bump para forzar re-render cuando cambian contadores persistentes de no leídos
@@ -834,6 +841,16 @@ export default function CoachDetailPage({
     code,
   ]);
 
+  const unreadConversationsCount = useMemo(() => {
+    return unifiedChatList.filter((it: any) => (it?.unreadCount ?? 0) > 0)
+      .length;
+  }, [unifiedChatList]);
+
+  const visibleChatList = useMemo(() => {
+    if (!showOnlyUnread) return unifiedChatList;
+    return unifiedChatList.filter((it: any) => (it?.unreadCount ?? 0) > 0);
+  }, [showOnlyUnread, unifiedChatList]);
+
   // Sincroniza la pestaña activa con la selección del chat (equipo/alumno)
   useEffect(() => {
     if (!activeChatTab) return;
@@ -1230,36 +1247,58 @@ export default function CoachDetailPage({
 
                     {/* Buscador estilo WhatsApp */}
                     <div className="p-2 bg-white border-b border-slate-100 flex-shrink-0">
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <Search className="h-4 w-4 text-slate-400" />
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Search className="h-4 w-4 text-slate-400" />
+                          </div>
+                          <input
+                            value={contactQuery}
+                            onChange={(e) => setContactQuery(e.target.value)}
+                            placeholder="Buscar o iniciar un nuevo chat"
+                            className="w-full h-9 pl-9 pr-3 text-sm bg-slate-100 border-none rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/50 placeholder:text-slate-500"
+                          />
                         </div>
-                        <input
-                          value={contactQuery}
-                          onChange={(e) => setContactQuery(e.target.value)}
-                          placeholder="Buscar o iniciar un nuevo chat"
-                          className="w-full h-9 pl-9 pr-3 text-sm bg-slate-100 border-none rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500/50 placeholder:text-slate-500"
-                        />
+
+                        <button
+                          type="button"
+                          onClick={() => setShowOnlyUnread((v) => !v)}
+                          className={`h-9 px-3 text-sm rounded-lg border transition-colors whitespace-nowrap ${
+                            showOnlyUnread
+                              ? "bg-slate-200 text-slate-900 border-slate-200"
+                              : "bg-slate-100 text-slate-700 border-slate-100 hover:bg-slate-200"
+                          }`}
+                          title="Filtrar conversaciones no leídas"
+                        >
+                          No leídas
+                          {unreadConversationsCount > 0
+                            ? ` (${unreadConversationsCount})`
+                            : ""}
+                        </button>
                       </div>
                     </div>
 
                     {/* Lista de chats */}
                     <div className="flex-1 overflow-y-auto min-h-0">
-                      {chatsLoading && unifiedChatList.length === 0 ? (
+                      {chatsLoading && visibleChatList.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 text-slate-500 gap-3">
                           <Spinner size={32} className="text-teal-600" />
                           <span className="text-sm font-medium">
                             Cargando conversaciones...
                           </span>
                         </div>
-                      ) : unifiedChatList.length === 0 ? (
+                      ) : visibleChatList.length === 0 ? (
                         <div className="px-4 py-8 text-sm text-slate-400 text-center flex flex-col items-center gap-2">
                           <Search className="h-8 w-8 opacity-20" />
-                          <p>No se encontraron conversaciones</p>
+                          <p>
+                            {showOnlyUnread
+                              ? "No hay conversaciones no leídas"
+                              : "No se encontraron conversaciones"}
+                          </p>
                         </div>
                       ) : (
                         <ul className="divide-y divide-slate-50">
-                          {unifiedChatList.map((item) => {
+                          {visibleChatList.map((item) => {
                             const isActive =
                               (item.type === "team" &&
                                 targetTeamCode?.toLowerCase() ===
@@ -1268,148 +1307,205 @@ export default function CoachDetailPage({
                                 targetStudentCode?.toLowerCase() ===
                                   item.code.toLowerCase());
 
+                            const canMarkUnread =
+                              !item.isNew &&
+                              Array.isArray(item.chats) &&
+                              item.chats.length > 0;
+
                             return (
                               <li key={item.key}>
-                                <button
-                                  className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors group ${
-                                    isActive ? "bg-slate-100" : ""
-                                  }`}
-                                  onClick={() => {
-                                    try {
-                                      const chatIds = (item.chats || [])
-                                        .map((it: any) => it?.id_chat ?? it?.id)
-                                        .filter((x: any) => x != null);
-                                      console.log(
-                                        "[CoachDetailPage] Click en conversación",
-                                        {
-                                          tipo: item.type,
-                                          codigo: item.code,
-                                          nombre: item.name,
-                                          chatIds,
-                                          topChatId: item.topChatId ?? null,
-                                        }
-                                      );
-                                    } catch {}
-                                    setMobileChatOpen(true);
-                                    if (item.type === "team") {
-                                      setTargetStudentCode(null);
-                                      setTargetStudentName("");
-                                      setTargetTeamCode(item.code);
-                                    } else {
-                                      setTargetTeamCode(null);
-                                      setTargetStudentCode(item.code);
-                                      setTargetStudentName(item.name);
-                                    }
-
-                                    setChatInfo({
-                                      chatId: item.topChatId,
-                                      myParticipantId: null,
-                                    });
-                                    setCurrentOpenChatId(
-                                      item.topChatId ?? null
-                                    );
-
-                                    // Add to tabs (normalizar clave a tipo:codigo)
-                                    const tabKey = `${item.type}:${String(
-                                      item.code
-                                    )}`;
-                                    setOpenTabs((prev) => {
-                                      const exists = prev.some(
-                                        (p) => p.key === tabKey
-                                      );
-                                      return exists
-                                        ? prev
-                                        : [
-                                            ...prev,
+                                <ContextMenu>
+                                  <ContextMenuTrigger asChild>
+                                    <button
+                                      className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors group ${
+                                        isActive ? "bg-slate-100" : ""
+                                      }`}
+                                      onClick={() => {
+                                        try {
+                                          const chatIds = (item.chats || [])
+                                            .map(
+                                              (it: any) => it?.id_chat ?? it?.id
+                                            )
+                                            .filter((x: any) => x != null);
+                                          console.log(
+                                            "[CoachDetailPage] Click en conversación",
                                             {
-                                              key: tabKey,
-                                              type: item.type as any,
-                                              code: String(item.code),
-                                              name: item.name,
-                                            },
-                                          ];
-                                    });
-                                    setActiveChatTab(tabKey);
-
-                                    // Clear unread
-                                    try {
-                                      for (const it of item.chats || []) {
-                                        const id = it?.id_chat ?? it?.id;
-                                        if (id == null) continue;
-                                        const uKey = `chatUnreadById:coach:${String(
-                                          id
-                                        )}`;
-                                        localStorage.setItem(uKey, "0");
-                                        window.dispatchEvent(
-                                          new CustomEvent(
-                                            "chat:unread-count-updated",
-                                            {
-                                              detail: {
-                                                chatId: id,
-                                                role: "coach",
-                                                count: 0,
-                                              },
+                                              tipo: item.type,
+                                              codigo: item.code,
+                                              nombre: item.name,
+                                              chatIds,
+                                              topChatId: item.topChatId ?? null,
                                             }
-                                          )
-                                        );
-                                      }
-                                      setUnreadBump((n) => n + 1);
-                                    } catch {}
-                                  }}
-                                >
-                                  {/* Avatar */}
-                                  <div
-                                    className={`h-12 w-12 rounded-full ${item.avatarColor} text-white grid place-items-center text-lg font-semibold flex-shrink-0 shadow-sm`}
-                                  >
-                                    {(item.name || item.code)
-                                      .slice(0, 1)
-                                      .toUpperCase()}
-                                  </div>
+                                          );
+                                        } catch {}
+                                        setMobileChatOpen(true);
+                                        if (item.type === "team") {
+                                          setTargetStudentCode(null);
+                                          setTargetStudentName("");
+                                          setTargetTeamCode(item.code);
+                                        } else {
+                                          setTargetTeamCode(null);
+                                          setTargetStudentCode(item.code);
+                                          setTargetStudentName(item.name);
+                                        }
 
-                                  {/* Content */}
-                                  <div className="min-w-0 flex-1 border-b border-slate-50 pb-3 group-hover:border-transparent transition-colors h-full flex flex-col justify-center">
-                                    <div className="flex items-baseline justify-between gap-2">
-                                      <div className="text-[15px] font-medium truncate text-slate-900 flex items-center gap-2">
-                                        <span>{item.name}</span>
-                                        <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1 rounded">
-                                          {item.id}
-                                        </span>
-                                      </div>
+                                        setChatInfo({
+                                          chatId: item.topChatId,
+                                          myParticipantId: null,
+                                        });
+                                        setCurrentOpenChatId(
+                                          item.topChatId ?? null
+                                        );
+
+                                        // Add to tabs (normalizar clave a tipo:codigo)
+                                        const tabKey = `${item.type}:${String(
+                                          item.code
+                                        )}`;
+                                        setOpenTabs((prev) => {
+                                          const exists = prev.some(
+                                            (p) => p.key === tabKey
+                                          );
+                                          return exists
+                                            ? prev
+                                            : [
+                                                ...prev,
+                                                {
+                                                  key: tabKey,
+                                                  type: item.type as any,
+                                                  code: String(item.code),
+                                                  name: item.name,
+                                                },
+                                              ];
+                                        });
+                                        setActiveChatTab(tabKey);
+
+                                        // Clear unread
+                                        try {
+                                          for (const it of item.chats || []) {
+                                            const id = it?.id_chat ?? it?.id;
+                                            if (id == null) continue;
+                                            const uKey = `chatUnreadById:coach:${String(
+                                              id
+                                            )}`;
+                                            localStorage.setItem(uKey, "0");
+                                            window.dispatchEvent(
+                                              new CustomEvent(
+                                                "chat:unread-count-updated",
+                                                {
+                                                  detail: {
+                                                    chatId: id,
+                                                    role: "coach",
+                                                    count: 0,
+                                                  },
+                                                }
+                                              )
+                                            );
+                                          }
+                                          setUnreadBump((n) => n + 1);
+                                        } catch {}
+                                      }}
+                                    >
+                                      {/* Avatar */}
                                       <div
-                                        className={`text-[11px] flex-shrink-0 ${
-                                          item.unreadCount > 0
-                                            ? "text-teal-600 font-medium"
-                                            : "text-slate-400"
-                                        }`}
+                                        className={`h-12 w-12 rounded-full ${item.avatarColor} text-white grid place-items-center text-lg font-semibold flex-shrink-0 shadow-sm`}
                                       >
-                                        {item.lastAtLabel || ""}
+                                        {(item.name || item.code)
+                                          .slice(0, 1)
+                                          .toUpperCase()}
                                       </div>
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                      <div
-                                        className={`text-[13px] truncate flex-1 ${
-                                          item.unreadCount > 0
-                                            ? "text-slate-800 font-medium"
-                                            : "text-slate-500"
-                                        }`}
-                                      >
-                                        {item.isNew ? (
-                                          <span className="italic text-teal-600">
-                                            Iniciar nueva conversación
-                                          </span>
-                                        ) : (
-                                          item.lastText ||
-                                          "Imagen o archivo adjunto"
-                                        )}
+
+                                      {/* Content */}
+                                      <div className="min-w-0 flex-1 border-b border-slate-50 pb-3 group-hover:border-transparent transition-colors h-full flex flex-col justify-center">
+                                        <div className="flex items-baseline justify-between gap-2">
+                                          <div className="text-[15px] font-medium truncate text-slate-900 flex items-center gap-2">
+                                            <span>{item.name}</span>
+                                            <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1 rounded">
+                                              {item.id}
+                                            </span>
+                                          </div>
+                                          <div
+                                            className={`text-[11px] flex-shrink-0 ${
+                                              item.unreadCount > 0
+                                                ? "text-teal-600 font-medium"
+                                                : "text-slate-400"
+                                            }`}
+                                          >
+                                            {item.lastAtLabel || ""}
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                          <div
+                                            className={`text-[13px] truncate flex-1 ${
+                                              item.unreadCount > 0
+                                                ? "text-slate-800 font-medium"
+                                                : "text-slate-500"
+                                            }`}
+                                          >
+                                            {item.isNew ? (
+                                              <span className="italic text-teal-600">
+                                                Iniciar nueva conversación
+                                              </span>
+                                            ) : (
+                                              item.lastText ||
+                                              "Imagen o archivo adjunto"
+                                            )}
+                                          </div>
+                                          {item.unreadCount > 0 && (
+                                            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-teal-500 text-white text-[10px] font-bold flex-shrink-0 animate-in zoom-in duration-200">
+                                              {item.unreadCount}
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
-                                      {item.unreadCount > 0 && (
-                                        <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-teal-500 text-white text-[10px] font-bold flex-shrink-0 animate-in zoom-in duration-200">
-                                          {item.unreadCount}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </button>
+                                    </button>
+                                  </ContextMenuTrigger>
+
+                                  <ContextMenuContent>
+                                    <ContextMenuItem
+                                      disabled={!canMarkUnread}
+                                      onSelect={() => {
+                                        if (!canMarkUnread) return;
+                                        try {
+                                          // Marcar como no leído persistiendo en localStorage
+                                          for (const it of item.chats || []) {
+                                            const id = it?.id_chat ?? it?.id;
+                                            if (id == null) continue;
+                                            const uKey = `chatUnreadById:coach:${String(
+                                              id
+                                            )}`;
+                                            const prev = Number.parseInt(
+                                              localStorage.getItem(uKey) || "0",
+                                              10
+                                            );
+                                            const next =
+                                              Number.isFinite(prev) && prev > 0
+                                                ? prev
+                                                : 1;
+                                            localStorage.setItem(
+                                              uKey,
+                                              String(next)
+                                            );
+                                            window.dispatchEvent(
+                                              new CustomEvent(
+                                                "chat:unread-count-updated",
+                                                {
+                                                  detail: {
+                                                    chatId: id,
+                                                    role: "coach",
+                                                    count: next,
+                                                  },
+                                                }
+                                              )
+                                            );
+                                          }
+                                          setUnreadBump((n) => n + 1);
+                                        } catch {}
+                                      }}
+                                    >
+                                      Marcar como no leído
+                                    </ContextMenuItem>
+                                  </ContextMenuContent>
+                                </ContextMenu>
                               </li>
                             );
                           })}
