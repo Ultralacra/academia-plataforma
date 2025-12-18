@@ -22,6 +22,14 @@ import {
   createTicketLink,
 } from "./api";
 import { Button } from "@/components/ui/button";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { getAuthToken } from "@/lib/auth";
 import { buildUrl } from "@/lib/api-config";
 import { toast } from "@/components/ui/use-toast";
@@ -200,8 +208,10 @@ function mimeFromName(name?: string | null): string | null {
 
 export default function TicketsBoard({
   studentCode,
+  hideHeader,
 }: {
   studentCode?: string;
+  hideHeader?: boolean;
 }) {
   const { user } = useAuth();
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
@@ -218,6 +228,7 @@ export default function TicketsBoard({
     isAdmin || privilegedTicketManagerCodes.has(currentUserCodigo);
   const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshBump, setRefreshBump] = useState(0);
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
   const [coachFiltro, setCoachFiltro] = useState<string>("");
   const [openFiles, setOpenFiles] = useState<null | string>(null);
@@ -383,6 +394,10 @@ export default function TicketsBoard({
   const [tipoFiltro, setTipoFiltro] = useState("");
   const [onlyMyTickets, setOnlyMyTickets] = useState(false);
 
+  const [viewMode, setViewMode] = useState<"kanban" | "table">(
+    studentCode ? "table" : "kanban"
+  );
+
   const today = new Date();
   const y = today.getFullYear();
   const m = String(today.getMonth() + 1).padStart(2, "0");
@@ -400,6 +415,61 @@ export default function TicketsBoard({
   const [fechaDesde, setFechaDesde] = useState<string>(fourDaysAgoStr);
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
 
+  const visibleTickets = useMemo(() => {
+    if (!onlyMyTickets) return tickets;
+    if (!(user?.codigo || typeof (user as any)?.id !== "undefined"))
+      return tickets;
+
+    const myCode = String((user as any)?.codigo ?? "").trim();
+    const myId = String((user as any)?.id ?? "").trim();
+
+    return tickets.filter((t) => {
+      const informanteStr = String((t as any).informante || "").trim();
+      const createdByMe =
+        informanteStr === myCode || (!!myId && informanteStr === myId);
+
+      let assignedToMe = false;
+      try {
+        const coachesArr = Array.isArray((t as any)?.coaches)
+          ? (t as any).coaches
+          : [];
+        const overrides = Array.isArray((t as any)?.coaches_override)
+          ? (t as any).coaches_override
+          : [];
+
+        assignedToMe = coachesArr.some((co: any) => {
+          const code = String(
+            (co && typeof co === "object"
+              ? co?.codigo_equipo ?? co?.codigo ?? co?.id
+              : co) ?? ""
+          ).trim();
+          return code === myCode || (!!myId && code === myId);
+        });
+
+        if (!assignedToMe && overrides.length > 0) {
+          const overrideObjects = overrides.filter(
+            (o: any) => o && typeof o === "object"
+          );
+          if (overrideObjects.length > 0) {
+            assignedToMe = overrideObjects.some((o: any) => {
+              const code = String(
+                o?.codigo_equipo || o?.codigo || o?.id || ""
+              ).trim();
+              return code === myCode || (!!myId && code === myId);
+            });
+          } else {
+            assignedToMe = overrides.some((o: any) => {
+              const code = String(o || "").trim();
+              return code === myCode || (!!myId && code === myId);
+            });
+          }
+        }
+      } catch {}
+
+      return createdByMe || assignedToMe;
+    });
+  }, [tickets, onlyMyTickets, user]);
+
   // Cargar filtros de fecha desde localStorage al montar
   useEffect(() => {
     try {
@@ -408,6 +478,16 @@ export default function TicketsBoard({
       if (savedDesde) setFechaDesde(savedDesde);
       if (savedHasta) setFechaHasta(savedHasta);
     } catch {}
+  }, []);
+
+  // Refrescar tickets cuando llegue una notificación SSE
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      setRefreshBump((n) => n + 1);
+    };
+    window.addEventListener("tickets:refresh", handler as any);
+    return () => window.removeEventListener("tickets:refresh", handler as any);
   }, []);
 
   useEffect(() => {
@@ -464,7 +544,7 @@ export default function TicketsBoard({
       mounted = false;
       clearTimeout(t);
     };
-  }, [search, fechaDesde, fechaHasta, coachFiltro, studentCode]);
+  }, [search, fechaDesde, fechaHasta, coachFiltro, studentCode, refreshBump]);
 
   // Snackbar inicial avisando sobre tickets en PAUSADO
   const didShowPausedToast = useRef(false);
@@ -1536,14 +1616,16 @@ export default function TicketsBoard({
         </DialogContent>
       </Dialog>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-lg font-semibold tracking-tight text-foreground">
-            Tablero de Tickets
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Arrastra y suelta tickets entre columnas para cambiar su estado
-          </p>
-        </div>
+        {!hideHeader && (
+          <div className="space-y-1">
+            <h1 className="text-lg font-semibold tracking-tight text-foreground">
+              Tablero de Tickets
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              Arrastra y suelta tickets entre columnas para cambiar su estado
+            </p>
+          </div>
+        )}
 
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto">
           {!isStudent && (
@@ -1652,6 +1734,25 @@ export default function TicketsBoard({
             </>
           )}
 
+          <div className="flex w-full items-center gap-2 sm:w-auto">
+            <Button
+              variant={viewMode === "kanban" ? "default" : "outline"}
+              size="sm"
+              className="h-9 flex-1 sm:flex-none"
+              onClick={() => setViewMode("kanban")}
+            >
+              Kanban
+            </Button>
+            <Button
+              variant={viewMode === "table" ? "default" : "outline"}
+              size="sm"
+              className="h-9 flex-1 sm:flex-none"
+              onClick={() => setViewMode("table")}
+            >
+              Tabla
+            </Button>
+          </div>
+
           <Button
             onClick={async () => {
               setLoading(true);
@@ -1686,6 +1787,76 @@ export default function TicketsBoard({
       {loading ? (
         <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
           Cargando tickets...
+        </div>
+      ) : viewMode === "table" ? (
+        <div className="rounded-xl border border-border bg-background overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[180px]">Estado</TableHead>
+                <TableHead>Asunto</TableHead>
+                {!studentCode && <TableHead>Alumno</TableHead>}
+                <TableHead className="w-[160px]">Creado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleTickets.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={studentCode ? 3 : 4}
+                    className="py-10 text-center text-sm text-muted-foreground"
+                  >
+                    No hay tickets para mostrar.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                visibleTickets.map((t) => {
+                  const estado = coerceStatus(t.estado);
+                  const createdLabel = (() => {
+                    const raw =
+                      (t as any)?.created_at ?? (t as any)?.fecha ?? null;
+                    if (!raw) return "—";
+                    const dt = new Date(String(raw));
+                    if (Number.isNaN(dt.getTime())) return "—";
+                    return dt
+                      .toLocaleDateString("es-ES", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })
+                      .replace(".", "");
+                  })();
+
+                  return (
+                    <TableRow
+                      key={String(
+                        (t as any)?.id ?? t.codigo ?? t.nombre ?? Math.random()
+                      )}
+                      className="cursor-pointer"
+                      onClick={() => openTicketDetail(t)}
+                    >
+                      <TableCell>
+                        <span
+                          className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium ${STATUS_STYLE[estado]}`}
+                        >
+                          {STATUS_LABEL[estado]}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {t.nombre || (t.codigo ? `Ticket ${t.codigo}` : "—")}
+                      </TableCell>
+                      {!studentCode && (
+                        <TableCell>
+                          {(t as any)?.alumno_nombre || "—"}
+                        </TableCell>
+                      )}
+                      <TableCell>{createdLabel}</TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">

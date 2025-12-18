@@ -54,6 +54,7 @@ let globalAudioCtx: AudioContext | null = null;
 let audioCtxUnlocked = false;
 
 const NOTIFICATION_SOUND_SRC = "/new-notification-022-370046.mp3";
+const NOTIFICATION_AUDIO_ELEMENT_ID = "__notification-audio";
 
 // Evitar dobles disparos (varios listeners a la vez) que suenan "erráticos"
 let lastSoundAtMs = 0;
@@ -79,11 +80,26 @@ function ensureAudioUnlocked() {
       } catch {}
 
       if (!globalAudio) {
+        // Reutilizar un <audio> pre-creado por script beforeInteractive (producción)
+        try {
+          const existing = document.getElementById(
+            NOTIFICATION_AUDIO_ELEMENT_ID
+          ) as HTMLAudioElement | null;
+          if (existing && String(existing.tagName).toLowerCase() === "audio") {
+            globalAudio = existing;
+          }
+        } catch {}
+      }
+
+      if (!globalAudio) {
         // Prefer user-provided MP3 in /public; fallback to embedded WAV if it fails
         const el = document.createElement("audio");
+        el.id = NOTIFICATION_AUDIO_ELEMENT_ID;
         el.src = NOTIFICATION_SOUND_SRC;
         el.preload = "auto";
         el.volume = 0.0;
+        el.setAttribute("playsinline", "");
+        el.style.display = "none";
         document.body.appendChild(el);
         globalAudio = el;
         // Prime once
@@ -102,7 +118,10 @@ function ensureAudioUnlocked() {
     } catch {}
   };
   try {
-    window.addEventListener("click", unlock, { once: true });
+    // Usar eventos más tempranos que click para no perder el primer gesto del usuario.
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    window.addEventListener("touchstart", unlock, { once: true, passive: true });
+    window.addEventListener("click", unlock, { once: true, passive: true });
     window.addEventListener("keydown", unlock, { once: true });
   } catch {}
 }

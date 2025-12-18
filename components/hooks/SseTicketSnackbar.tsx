@@ -142,6 +142,30 @@ export function SseTicketSnackbar() {
       playNotificationSound();
     } catch {}
 
+    // Refrescar listados de tickets en la UI cuando el backend emite cambios.
+    try {
+      if (typeof window !== "undefined") {
+        const shouldRefresh = [
+          "ticket.created",
+          "ticket.updated",
+          "ticket.reassigned",
+          "ticket.files.added",
+        ].includes(type);
+        if (shouldRefresh) {
+          window.dispatchEvent(
+            new CustomEvent("tickets:refresh", {
+              detail: {
+                type,
+                codigo,
+                notificationId: id,
+                at: lastReceived.at,
+              },
+            })
+          );
+        }
+      }
+    } catch {}
+
     const baseDescription = (() => {
       if (type === "ticket.created") {
         return nombre ? nombre : "Se creó un nuevo ticket";

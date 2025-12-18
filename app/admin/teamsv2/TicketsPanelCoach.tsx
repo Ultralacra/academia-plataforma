@@ -1225,6 +1225,18 @@ export default function TicketsPanelCoach({
     }
   }
 
+  // Refrescar tickets cuando llegue una notificación SSE (creado/actualizado/archivos/etc)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => {
+      // Mantiene filtros/paginación actuales
+      reloadTickets();
+    };
+    window.addEventListener("tickets:refresh", handler as any);
+    return () => window.removeEventListener("tickets:refresh", handler as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachCode, page, pageSize, fechaDesde, fechaHasta]);
+
   // Snackbar inicial avisando sobre tickets en PAUSADO
   const didShowPausedToast = useRef(false);
   useEffect(() => {
