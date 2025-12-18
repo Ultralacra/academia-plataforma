@@ -359,6 +359,7 @@ export default function TicketsPanelCoach({
   const [pageSize, setPageSize] = useState(50);
   const [total, setTotal] = useState(0);
   const [rows, setRows] = useState<CoachTicket[]>([]);
+  const rowsRef = useRef<CoachTicket[]>([]);
   const [fechaDesde, setFechaDesde] = useState<string>(todayYMDLocal());
   const [fechaHasta, setFechaHasta] = useState<string>(todayYMDLocal());
   const [openFiles, setOpenFiles] = useState<null | string>(null);
@@ -1203,6 +1204,80 @@ export default function TicketsPanelCoach({
     })();
     return () => ctrl.abort();
   }, [coachCode, page, pageSize, fechaDesde, fechaHasta]);
+
+  useEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+
+  async function openTicketByCodigo(codigo: string) {
+    const code = String(codigo || "").trim();
+    if (!code) return;
+
+    const existing = rowsRef.current.find(
+      (t) => String(t.codigo || "").trim() === code
+    );
+    if (existing) {
+      setEditTicket(existing);
+      setEditOpen(true);
+      return;
+    }
+
+    // Si no está en la lista, pedir detalle y abrir igual
+    try {
+      const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(code)}`);
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const json = await res.json().catch(() => ({}));
+      const data = (json as any)?.data ?? json ?? {};
+
+      const ticket: CoachTicket = {
+        id: Number((data as any)?.id ?? 0),
+        codigo: String((data as any)?.codigo ?? code),
+        nombre: (data as any)?.nombre ?? null,
+        id_alumno: (data as any)?.id_alumno ?? null,
+        alumno_nombre: (data as any)?.alumno_nombre ?? null,
+        informante: (data as any)?.informante ?? null,
+        informante_nombre: (data as any)?.informante_nombre ?? null,
+        created_at: (data as any)?.created_at ?? null,
+        deadline: (data as any)?.deadline ?? null,
+        resuelto_por: (data as any)?.resuelto_por ?? null,
+        resuelto_por_nombre: (data as any)?.resuelto_por_nombre ?? null,
+        ultimo_estado: (data as any)?.ultimo_estado ?? null,
+        estado: String((data as any)?.estado ?? "PENDIENTE"),
+        plazo_info: (data as any)?.plazo_info ?? null,
+      };
+
+      setEditTicket(ticket);
+      setEditOpen(true);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "No se pudo abrir el ticket" });
+    }
+  }
+
+  // Abrir ticket desde notificación (botón "Ver ticket")
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (ev: Event) => {
+      try {
+        const anyEv = ev as CustomEvent<any>;
+        const codigo = String(anyEv?.detail?.codigo ?? "").trim();
+        if (!codigo) return;
+        openTicketByCodigo(codigo);
+      } catch {}
+    };
+    window.addEventListener("tickets:open", handler as any);
+    return () => window.removeEventListener("tickets:open", handler as any);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function reloadTickets() {
     if (!coachCode) return;

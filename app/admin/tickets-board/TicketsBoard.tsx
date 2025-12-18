@@ -3,6 +3,7 @@
 import type React from "react";
 
 import { useEffect, useMemo, useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import {
   getTickets,
@@ -227,8 +228,10 @@ export default function TicketsBoard({
   const canManageTickets =
     isAdmin || privilegedTicketManagerCodes.has(currentUserCodigo);
   const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
+  const ticketsRef = useRef<TicketBoardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshBump, setRefreshBump] = useState(0);
+  const searchParams = useSearchParams();
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
   const [coachFiltro, setCoachFiltro] = useState<string>("");
   const [openFiles, setOpenFiles] = useState<null | string>(null);
@@ -480,6 +483,11 @@ export default function TicketsBoard({
     } catch {}
   }, []);
 
+  // Mantener ref con la lista actual (para handlers globales sin stale closures)
+  useEffect(() => {
+    ticketsRef.current = tickets;
+  }, [tickets]);
+
   // Refrescar tickets cuando llegue una notificación SSE
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -488,6 +496,21 @@ export default function TicketsBoard({
     };
     window.addEventListener("tickets:refresh", handler as any);
     return () => window.removeEventListener("tickets:refresh", handler as any);
+  }, []);
+
+  // Abrir un ticket específico desde notificación (botón "Ver ticket")
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = (ev: Event) => {
+      try {
+        const anyEv = ev as CustomEvent<any>;
+        const codigo = String(anyEv?.detail?.codigo ?? "").trim();
+        if (!codigo) return;
+        openTicketByCodigo(codigo);
+      } catch {}
+    };
+    window.addEventListener("tickets:open", handler as any);
+    return () => window.removeEventListener("tickets:open", handler as any);
   }, []);
 
   useEffect(() => {
@@ -1262,6 +1285,93 @@ export default function TicketsBoard({
     }
     setShowAllFiles(false);
   }
+
+  async function openTicketByCodigo(codigo: string) {
+    const code = String(codigo || "").trim();
+    if (!code) return;
+
+    // 1) Si está en la lista actual, abrir directo
+    const existing = ticketsRef.current.find(
+      (t) => String(t.codigo || "").trim() === code
+    );
+    if (existing) {
+      openTicketDetail(existing);
+      return;
+    }
+
+    // 2) Si no está en la lista (por filtros/fechas), pedir detalle y abrir igual
+    try {
+      const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(code)}`);
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const json = await res.json().catch(() => ({}));
+      const data = (json as any)?.data ?? json ?? {};
+
+      const ticket: TicketBoardItem = {
+        id: Number((data as any)?.id ?? 0),
+        codigo: String((data as any)?.codigo ?? code),
+        nombre: (data as any)?.nombre ?? code,
+        id_alumno: (data as any)?.id_alumno ?? null,
+        alumno_nombre: (data as any)?.alumno_nombre ?? null,
+        created_at: (data as any)?.created_at ?? null,
+        deadline: (data as any)?.deadline ?? null,
+        estado: (data as any)?.estado ?? null,
+        tipo: (data as any)?.tipo ?? null,
+        plazo: (data as any)?.plazo ?? null,
+        coaches: Array.isArray((data as any)?.coaches)
+          ? (data as any).coaches.map((c: any) => ({
+              codigo_equipo:
+                (c?.codigo_equipo ??
+                  c?.codigo ??
+                  c?.id ??
+                  c?.id_equipo ??
+                  null) &&
+                String(
+                  c?.codigo_equipo ?? c?.codigo ?? c?.id ?? c?.id_equipo
+                ).trim(),
+              nombre: (c?.nombre ?? null) && String(c?.nombre).trim(),
+              puesto:
+                (c?.puesto ?? c?.rol ?? null) &&
+                String(c?.puesto ?? c?.rol).trim(),
+              area:
+                (c?.area ?? c?.departamento ?? null) &&
+                String(c?.area ?? c?.departamento).trim(),
+            }))
+          : [],
+        ultimo_estado: (data as any)?.ultimo_estado ?? null,
+        resuelto_por: (data as any)?.resuelto_por ?? null,
+        resuelto_por_nombre: (data as any)?.resuelto_por_nombre ?? null,
+        informante: (data as any)?.informante ?? null,
+        informante_nombre: (data as any)?.informante_nombre ?? null,
+        plazo_info: (data as any)?.plazo_info ?? null,
+        coaches_override: (data as any)?.coaches_override ?? null,
+      };
+
+      openTicketDetail(ticket);
+    } catch (e) {
+      console.error(e);
+      toast({ title: "No se pudo abrir el ticket" });
+    }
+  }
+
+  // Si vienes desde una notificación (ruta /admin/tickets-board?openTicket=...)
+  useEffect(() => {
+    try {
+      const code = String(searchParams?.get("openTicket") || "").trim();
+      if (!code) return;
+      openTicketByCodigo(code);
+    } catch {}
+    // Solo reacciona a cambios de query
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function loadTicketDetail(codigo: string) {
     try {

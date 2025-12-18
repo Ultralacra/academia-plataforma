@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useSseNotifications } from "@/components/hooks/useSseNotifications";
 import { initNotificationSound, playNotificationSound } from "@/lib/utils";
+import { ToastAction } from "@/components/ui/toast";
 
 export function SseTicketSnackbar() {
   const { toast } = useToast();
@@ -217,6 +218,42 @@ export function SseTicketSnackbar() {
     toast({
       title,
       description,
+      action: codigo ? (
+        <ToastAction
+          altText="Ver ticket"
+          onClick={() => {
+            try {
+              if (typeof window === "undefined") return;
+              // Intentar abrir en el componente de tickets activo
+              window.dispatchEvent(
+                new CustomEvent("tickets:open", {
+                  detail: {
+                    codigo,
+                    type,
+                    notificationId: id,
+                    at: lastReceived.at,
+                  },
+                })
+              );
+
+              // Si no estás en una vista de tickets, navegar al tablero
+              const p = String(window.location?.pathname || "");
+              const isTicketsContext =
+                p.includes("/admin/tickets-board") ||
+                p.includes("/admin/teamsv2");
+              if (!isTicketsContext) {
+                window.location.assign(
+                  `/admin/tickets-board?openTicket=${encodeURIComponent(
+                    codigo
+                  )}`
+                );
+              }
+            } catch {}
+          }}
+        >
+          Ver ticket
+        </ToastAction>
+      ) : undefined,
     });
 
     // Persistir el último id mostrado para que un reload no lo re-dispare
