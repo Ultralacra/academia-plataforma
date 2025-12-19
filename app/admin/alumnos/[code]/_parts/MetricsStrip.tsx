@@ -81,7 +81,7 @@ export default function MetricsStrip({
     },
     {
       icon: <Calendar className="h-4 w-4" />,
-      label: "Permanencia",
+      label: "Fecha ingreso",
       value: ingreso
         ? isStudent
           ? fmtES(ingreso)

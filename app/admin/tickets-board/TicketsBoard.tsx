@@ -3060,22 +3060,27 @@ export default function TicketsBoard({
                         })()}
                       </div>
 
-                      {/* Informante */}
-                      <div className="flex items-center gap-2 text-slate-500 h-6">
-                        <Users className="h-4 w-4" /> <span>Informante</span>
-                      </div>
-                      <div className="min-h-[24px] flex items-center">
-                        {editForm.informante || "—"}
-                      </div>
+                      {!isStudent && (
+                        <>
+                          {/* Informante */}
+                          <div className="flex items-center gap-2 text-slate-500 h-6">
+                            <Users className="h-4 w-4" />{" "}
+                            <span>Informante</span>
+                          </div>
+                          <div className="min-h-[24px] flex items-center">
+                            {editForm.informante || "—"}
+                          </div>
 
-                      {/* Resuelto por */}
-                      <div className="flex items-center gap-2 text-slate-500 h-6">
-                        <CheckCircle2 className="h-4 w-4" />{" "}
-                        <span>Resuelto por</span>
-                      </div>
-                      <div className="min-h-[24px] flex items-center">
-                        {editForm.resuelto_por || "—"}
-                      </div>
+                          {/* Resuelto por */}
+                          <div className="flex items-center gap-2 text-slate-500 h-6">
+                            <CheckCircle2 className="h-4 w-4" />{" "}
+                            <span>Resuelto por</span>
+                          </div>
+                          <div className="min-h-[24px] flex items-center">
+                            {editForm.resuelto_por || "—"}
+                          </div>
+                        </>
+                      )}
 
                       {/* Creación */}
                       <div className="flex items-center gap-2 text-slate-500 h-6">
@@ -3115,124 +3120,138 @@ export default function TicketsBoard({
                           : "—"}
                       </div>
 
-                      {/* Deadline */}
-                      <div className="flex items-center gap-2 text-slate-500 h-6">
-                        <AlertTriangle className="h-4 w-4" />{" "}
-                        <span>Deadline</span>
-                      </div>
-                      <div className="min-h-[24px] flex items-center">
-                        <input
-                          type="date"
-                          className="h-7 rounded border border-slate-200 px-2 text-xs"
-                          value={
-                            editForm.deadline
-                              ? new Date(editForm.deadline)
-                                  .toISOString()
-                                  .split("T")[0]
-                              : ""
-                          }
-                          onChange={(e) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              deadline: e.target.value
-                                ? new Date(e.target.value).toISOString()
-                                : null,
-                            }))
-                          }
-                          disabled={!canEdit}
-                        />
-                      </div>
-
-                      {/* Cronómetro (SLA) oculto */}
-
-                      {/* Estado */}
-                      <div className="flex items-center gap-2 text-slate-500 h-6">
-                        <RefreshCw className="h-4 w-4" /> <span>Estado</span>
-                      </div>
-                      <div className="min-h-[24px] flex items-center">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild disabled={!canEdit}>
-                            <button
-                              className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
-                                STATUS_STYLE[
-                                  coerceStatus(editForm.estado as any)
-                                ]
-                              }`}
-                            >
-                              {
-                                STATUS_LABEL[
-                                  coerceStatus(editForm.estado as any)
-                                ]
+                      {!isStudent && (
+                        <>
+                          {/* Deadline */}
+                          <div className="flex items-center gap-2 text-slate-500 h-6">
+                            <AlertTriangle className="h-4 w-4" />{" "}
+                            <span>Deadline</span>
+                          </div>
+                          <div className="min-h-[24px] flex items-center">
+                            <input
+                              type="date"
+                              className="h-7 rounded border border-slate-200 px-2 text-xs"
+                              value={
+                                editForm.deadline
+                                  ? new Date(editForm.deadline)
+                                      .toISOString()
+                                      .split("T")[0]
+                                  : ""
                               }
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            {estados
-                              .filter(
-                                (st) => st !== "PAUSADO" || canManageTickets
-                              )
-                              .map((st) => (
-                                <DropdownMenuItem
-                                  key={st}
-                                  onClick={async () => {
-                                    const newStatus = st as StatusKey;
-                                    setEditForm((prev) => ({
-                                      ...prev,
-                                      estado: newStatus,
-                                    }));
+                              onChange={(e) =>
+                                setEditForm((prev) => ({
+                                  ...prev,
+                                  deadline: e.target.value
+                                    ? new Date(e.target.value).toISOString()
+                                    : null,
+                                }))
+                              }
+                              disabled={!canEdit}
+                            />
+                          </div>
 
-                                    if (selectedTicket?.codigo) {
-                                      try {
-                                        await updateTicket(
-                                          selectedTicket.codigo,
-                                          { estado: newStatus }
-                                        );
+                          {/* Cronómetro (SLA) oculto */}
 
-                                        setTickets((prev) =>
-                                          prev.map((t) =>
-                                            t.id === selectedTicket.id
-                                              ? { ...t, estado: newStatus }
-                                              : t
-                                          )
-                                        );
-
-                                        if (ticketDetail) {
-                                          setTicketDetail((prev: any) => ({
-                                            ...prev,
-                                            estado: newStatus,
-                                          }));
-                                        }
-
-                                        setSelectedTicket((prev) =>
-                                          prev
-                                            ? { ...prev, estado: newStatus }
-                                            : null
-                                        );
-
-                                        toast({ title: "Estado actualizado" });
-                                      } catch (e) {
-                                        console.error(e);
-                                        toast({
-                                          title: "Error al actualizar estado",
-                                          variant: "destructive",
-                                        });
-                                      }
-                                    }
-                                  }}
-                                  className="text-xs"
+                          {/* Estado */}
+                          <div className="flex items-center gap-2 text-slate-500 h-6">
+                            <RefreshCw className="h-4 w-4" />{" "}
+                            <span>Estado</span>
+                          </div>
+                          <div className="min-h-[24px] flex items-center">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild disabled={!canEdit}>
+                                <button
+                                  className={`inline-flex items-center rounded-md px-2.5 py-0.5 text-xs font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 ${
+                                    STATUS_STYLE[
+                                      coerceStatus(editForm.estado as any)
+                                    ]
+                                  }`}
                                 >
-                                  <div
-                                    className={`inline-flex items-center rounded-md px-2 py-0.5 border ${
-                                      STATUS_STYLE[st as StatusKey]
-                                    }`}
-                                  >
-                                    {STATUS_LABEL[st as StatusKey]}
-                                  </div>
-                                </DropdownMenuItem>
-                              ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
+                                  {
+                                    STATUS_LABEL[
+                                      coerceStatus(editForm.estado as any)
+                                    ]
+                                  }
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                {estados
+                                  .filter(
+                                    (st) => st !== "PAUSADO" || canManageTickets
+                                  )
+                                  .map((st) => (
+                                    <DropdownMenuItem
+                                      key={st}
+                                      onClick={async () => {
+                                        const newStatus = st as StatusKey;
+                                        setEditForm((prev) => ({
+                                          ...prev,
+                                          estado: newStatus,
+                                        }));
+
+                                        if (selectedTicket?.codigo) {
+                                          try {
+                                            await updateTicket(
+                                              selectedTicket.codigo,
+                                              { estado: newStatus }
+                                            );
+
+                                            setTickets((prev) =>
+                                              prev.map((t) =>
+                                                t.id === selectedTicket.id
+                                                  ? {
+                                                      ...t,
+                                                      estado: newStatus,
+                                                    }
+                                                  : t
+                                              )
+                                            );
+
+                                            if (ticketDetail) {
+                                              setTicketDetail((prev: any) => ({
+                                                ...prev,
+                                                estado: newStatus,
+                                              }));
+                                            }
+
+                                            setSelectedTicket((prev) =>
+                                              prev
+                                                ? {
+                                                    ...prev,
+                                                    estado: newStatus,
+                                                  }
+                                                : null
+                                            );
+
+                                            toast({
+                                              title: "Estado actualizado",
+                                            });
+                                          } catch (e) {
+                                            console.error(e);
+                                            toast({
+                                              title:
+                                                "Error al actualizar estado",
+                                              variant: "destructive",
+                                            });
+                                          }
+                                        }
+                                      }}
+                                      className="text-xs"
+                                    >
+                                      <div
+                                        className={`inline-flex items-center rounded-md px-2 py-0.5 border ${
+                                          STATUS_STYLE[st as StatusKey]
+                                        }`}
+                                      >
+                                        {STATUS_LABEL[st as StatusKey]}
+                                      </div>
+                                    </DropdownMenuItem>
+                                  ))}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </>
+                      )}
                     </div>
 
                     <Separator />
@@ -3664,75 +3683,81 @@ export default function TicketsBoard({
                       )}
                     </div>
 
-                    <Separator />
+                    {!isStudent && (
+                      <>
+                        <Separator />
 
-                    {/* Estados (Movido desde Detalle) */}
-                    <div className="space-y-2">
-                      <div className="text-sm font-medium text-slate-900">
-                        Historial de Estados
-                      </div>
-                      {ticketDetail?.ultimo_estado?.estatus && (
-                        <div className="text-xs text-slate-600">
-                          Último:{" "}
-                          {
-                            STATUS_LABEL[
-                              coerceStatus(ticketDetail.ultimo_estado.estatus)
-                            ]
-                          }
-                          {ticketDetail?.ultimo_estado?.fecha && (
-                            <>
-                              {" · "}
-                              {new Date(
-                                ticketDetail.ultimo_estado.fecha
-                              ).toLocaleString("es-ES", {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                timeZone: "UTC",
-                              })}
-                            </>
-                          )}
-                        </div>
-                      )}
-                      {Array.isArray(ticketDetail?.estados) &&
-                      ticketDetail.estados.length > 0 ? (
-                        <div className="mt-1 space-y-1">
-                          {ticketDetail.estados.map((e: any) => (
-                            <div
-                              key={e.id}
-                              className="flex items-center gap-2 text-xs text-slate-700"
-                            >
-                              <span
-                                className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
-                                  STATUS_STYLE[coerceStatus(e.estatus_id)]
-                                }`}
-                              >
-                                {STATUS_LABEL[coerceStatus(e.estatus_id)]}
-                              </span>
-                              <span>
-                                {new Date(e.created_at).toLocaleString(
-                                  "es-ES",
-                                  {
+                        {/* Estados (Movido desde Detalle) */}
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium text-slate-900">
+                            Historial de Estados
+                          </div>
+                          {ticketDetail?.ultimo_estado?.estatus && (
+                            <div className="text-xs text-slate-600">
+                              Último:{" "}
+                              {
+                                STATUS_LABEL[
+                                  coerceStatus(
+                                    ticketDetail.ultimo_estado.estatus
+                                  )
+                                ]
+                              }
+                              {ticketDetail?.ultimo_estado?.fecha && (
+                                <>
+                                  {" · "}
+                                  {new Date(
+                                    ticketDetail.ultimo_estado.fecha
+                                  ).toLocaleString("es-ES", {
                                     day: "numeric",
                                     month: "short",
                                     year: "numeric",
                                     hour: "2-digit",
                                     minute: "2-digit",
                                     timeZone: "UTC",
-                                  }
-                                )}
-                              </span>
+                                  })}
+                                </>
+                              )}
                             </div>
-                          ))}
+                          )}
+                          {Array.isArray(ticketDetail?.estados) &&
+                          ticketDetail.estados.length > 0 ? (
+                            <div className="mt-1 space-y-1">
+                              {ticketDetail.estados.map((e: any) => (
+                                <div
+                                  key={e.id}
+                                  className="flex items-center gap-2 text-xs text-slate-700"
+                                >
+                                  <span
+                                    className={`inline-flex items-center rounded px-1.5 py-0.5 border ${
+                                      STATUS_STYLE[coerceStatus(e.estatus_id)]
+                                    }`}
+                                  >
+                                    {STATUS_LABEL[coerceStatus(e.estatus_id)]}
+                                  </span>
+                                  <span>
+                                    {new Date(e.created_at).toLocaleString(
+                                      "es-ES",
+                                      {
+                                        day: "numeric",
+                                        month: "short",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                        timeZone: "UTC",
+                                      }
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-slate-500">
+                              Sin historial
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <div className="text-xs text-slate-500">
-                          Sin historial
-                        </div>
-                      )}
-                    </div>
+                      </>
+                    )}
                   </div>
                 </div>
 

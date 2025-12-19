@@ -692,6 +692,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               <ContratoCard
                 code={student.code || code}
                 contratoRaw={student.contrato ?? student.raw?.contrato}
+                canUpload={(user?.role ?? "").toLowerCase() !== "student"}
                 onUpdated={async () => {
                   try {
                     const url = `/client/get/clients?page=1&search=${encodeURIComponent(
@@ -1933,10 +1934,12 @@ function TabBtn({
 function ContratoCard({
   code,
   contratoRaw,
+  canUpload,
   onUpdated,
 }: {
   code: string;
   contratoRaw: any;
+  canUpload?: boolean;
   onUpdated?: () => Promise<void> | void;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -1947,6 +1950,12 @@ function ContratoCard({
   const [previewLoading, setPreviewLoading] = useState(false);
 
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!canUpload) {
+      try {
+        e.target.value = "";
+      } catch {}
+      return;
+    }
     const file = e.target.files?.[0];
     if (!file) return;
     // Validar tipos permitidos: PDF o Word (doc/docx)
@@ -2081,21 +2090,25 @@ function ContratoCard({
         )}
       </div>
       <div className="flex flex-wrap gap-2">
-        <input
-          ref={inputRef}
-          type="file"
-          className="hidden"
-          accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.doc,.docx"
-          onChange={onPickFile}
-        />
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-        >
-          {uploading ? "Subiendo…" : "Subir contrato"}
-        </Button>
+        {canUpload && (
+          <>
+            <input
+              ref={inputRef}
+              type="file"
+              className="hidden"
+              accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,.doc,.docx"
+              onChange={onPickFile}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? "Subiendo…" : "Subir contrato"}
+            </Button>
+          </>
+        )}
         <Button
           variant="secondary"
           size="sm"
