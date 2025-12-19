@@ -285,6 +285,11 @@ export default function TicketsBoard({
     null
   );
 
+  // Los alumnos solo pueden ver: bloquear pestañas/acciones privadas
+  useEffect(() => {
+    if (isStudent && detailTab === "notas") setDetailTab("general");
+  }, [isStudent, detailTab]);
+
   // Estado para crear ticket manual
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
@@ -409,6 +414,11 @@ export default function TicketsBoard({
     studentCode ? "table" : "kanban"
   );
 
+  // Alumno: solo vista tabla (sin kanban)
+  useEffect(() => {
+    if (isStudent && viewMode !== "table") setViewMode("table");
+  }, [isStudent, viewMode]);
+
   const today = new Date();
   const y = today.getFullYear();
   const m = String(today.getMonth() + 1).padStart(2, "0");
@@ -480,6 +490,13 @@ export default function TicketsBoard({
       return createdByMe || assignedToMe;
     });
   }, [tickets, onlyMyTickets, user]);
+
+  // Alumno: solo ver estados En progreso, Pausado y Resuelto
+  const displayTickets = useMemo(() => {
+    if (!isStudent) return visibleTickets;
+    const allowed = new Set<StatusKey>(["EN_PROGRESO", "PAUSADO", "RESUELTO"]);
+    return visibleTickets.filter((t) => allowed.has(coerceStatus(t.estado)));
+  }, [visibleTickets, isStudent]);
 
   // Cargar filtros de fecha desde localStorage al montar
   useEffect(() => {
@@ -1140,6 +1157,7 @@ export default function TicketsBoard({
   }
 
   async function handleAddComment() {
+    if (!canEdit) return;
     if (!selectedTicket?.codigo || !newComment.trim()) return;
     try {
       setAddingComment(true);
@@ -1156,6 +1174,7 @@ export default function TicketsBoard({
   }
 
   async function handleUpdateComment() {
+    if (!canEdit) return;
     if (!editingCommentId || !editingCommentText.trim()) return;
     try {
       await updateTicketComment(editingCommentId, editingCommentText);
@@ -1170,6 +1189,7 @@ export default function TicketsBoard({
   }
 
   async function handleDeleteComment(id: string) {
+    if (!canEdit) return;
     if (!confirm("¿Eliminar esta observación?")) return;
     try {
       await deleteTicketComment(id);
@@ -1184,6 +1204,10 @@ export default function TicketsBoard({
   // --- Handlers para Notas Internas ---
 
   async function loadInternalNotes(codigo: string) {
+    if (isStudent) {
+      setInternalNotes([]);
+      return;
+    }
     try {
       setInternalNotesLoading(true);
       const list = await getInternalNotes(codigo);
@@ -1197,6 +1221,7 @@ export default function TicketsBoard({
   }
 
   async function handleAddInternalNote() {
+    if (!canEdit) return;
     if (!selectedTicket?.codigo || !newInternalNote.trim()) return;
     try {
       setAddingInternalNote(true);
@@ -1213,6 +1238,7 @@ export default function TicketsBoard({
   }
 
   async function handleUpdateInternalNote() {
+    if (!canEdit) return;
     if (!editingInternalNoteId || !editingInternalNoteText.trim()) return;
     try {
       await updateInternalNote(editingInternalNoteId, editingInternalNoteText);
@@ -1228,6 +1254,7 @@ export default function TicketsBoard({
   }
 
   async function handleDeleteInternalNote(id: string) {
+    if (!canEdit) return;
     if (!confirm("¿Eliminar esta nota interna?")) return;
     try {
       await deleteInternalNote(id);
@@ -1241,6 +1268,12 @@ export default function TicketsBoard({
   }
 
   function openTicketDetail(ticket: TicketBoardItem) {
+    if (isStudent && coerceStatus(ticket.estado) !== "RESUELTO") {
+      toast({
+        title: "Solo puedes ver el detalle de tickets resueltos",
+      });
+      return;
+    }
     // Resolver nombres legibles para informante y resuelto_por cuando la API
     // entrega solo IDs. Preferimos los campos *_nombre y, si faltan, buscamos
     // coincidencias en alumno/coaches.
@@ -1293,7 +1326,7 @@ export default function TicketsBoard({
       setDetailTab("general");
       loadTicketDetail(ticket.codigo);
       loadComments(ticket.codigo);
-      loadInternalNotes(ticket.codigo);
+      if (!isStudent) loadInternalNotes(ticket.codigo);
     }
     setShowAllFiles(false);
   }
@@ -1743,10 +1776,12 @@ export default function TicketsBoard({
             <h1 className="text-lg font-semibold tracking-tight text-foreground">
               Tablero de {uiTickets}
             </h1>
-            <p className="text-xs text-muted-foreground">
-              Arrastra y suelta {uiTicketsLower} entre columnas para cambiar su
-              estado
-            </p>
+            {!isFeedbackMode && (
+              <p className="text-xs text-muted-foreground">
+                Arrastra y suelta {uiTicketsLower} entre columnas para cambiar
+                su estado
+              </p>
+            )}
           </div>
         )}
 
@@ -1857,24 +1892,26 @@ export default function TicketsBoard({
             </>
           )}
 
-          <div className="flex w-full items-center gap-2 sm:w-auto">
-            <Button
-              variant={viewMode === "kanban" ? "default" : "outline"}
-              size="sm"
-              className="h-9 flex-1 sm:flex-none"
-              onClick={() => setViewMode("kanban")}
-            >
-              Kanban
-            </Button>
-            <Button
-              variant={viewMode === "table" ? "default" : "outline"}
-              size="sm"
-              className="h-9 flex-1 sm:flex-none"
-              onClick={() => setViewMode("table")}
-            >
-              Tabla
-            </Button>
-          </div>
+          {!isStudent && (
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Button
+                variant={viewMode === "kanban" ? "default" : "outline"}
+                size="sm"
+                className="h-9 flex-1 sm:flex-none"
+                onClick={() => setViewMode("kanban")}
+              >
+                Kanban
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "outline"}
+                size="sm"
+                className="h-9 flex-1 sm:flex-none"
+                onClick={() => setViewMode("table")}
+              >
+                Tabla
+              </Button>
+            </div>
+          )}
 
           <Button
             onClick={async () => {
@@ -1922,23 +1959,24 @@ export default function TicketsBoard({
               <TableRow>
                 <TableHead className="w-[180px]">Estado</TableHead>
                 <TableHead>Asunto</TableHead>
-                No hay {uiTicketsLower} para mostrar.
+                {isFeedbackMode && <TableHead>Tipo</TableHead>}
                 <TableHead className="w-[160px]">Creado</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visibleTickets.length === 0 ? (
+              {displayTickets.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={studentCode ? 3 : 4}
+                    colSpan={(studentCode ? 3 : 4) + (isFeedbackMode ? 1 : 0)}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     No hay tickets para mostrar.
                   </TableCell>
                 </TableRow>
               ) : (
-                visibleTickets.map((t) => {
+                displayTickets.map((t) => {
                   const estado = coerceStatus(t.estado);
+                  const canOpen = !isStudent || estado === "RESUELTO";
                   const createdLabel = (() => {
                     const raw =
                       (t as any)?.created_at ?? (t as any)?.fecha ?? null;
@@ -1959,8 +1997,8 @@ export default function TicketsBoard({
                       key={String(
                         (t as any)?.id ?? t.codigo ?? t.nombre ?? Math.random()
                       )}
-                      className="cursor-pointer"
-                      onClick={() => openTicketDetail(t)}
+                      className={canOpen ? "cursor-pointer" : "cursor-default"}
+                      onClick={canOpen ? () => openTicketDetail(t) : undefined}
                     >
                       <TableCell>
                         <span
@@ -1973,6 +2011,9 @@ export default function TicketsBoard({
                         {t.nombre ||
                           (t.codigo ? `${uiTicket} ${t.codigo}` : "—")}
                       </TableCell>
+                      {isFeedbackMode && (
+                        <TableCell>{(t as any)?.tipo || "—"}</TableCell>
+                      )}
                       {!studentCode && (
                         <TableCell>
                           {(t as any)?.alumno_nombre || "—"}
@@ -2769,18 +2810,20 @@ export default function TicketsBoard({
                     >
                       Respuesta Coach
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setDetailTab("notas")}
-                      className={`px-3 py-1.5 text-xs border-l ${
-                        detailTab === "notas"
-                          ? "bg-slate-900 text-white"
-                          : "hover:bg-gray-50"
-                      }`}
-                      title="Notas internas"
-                    >
-                      Notas internas
-                    </button>
+                    {!isStudent && (
+                      <button
+                        type="button"
+                        onClick={() => setDetailTab("notas")}
+                        className={`px-3 py-1.5 text-xs border-l ${
+                          detailTab === "notas"
+                            ? "bg-slate-900 text-white"
+                            : "hover:bg-gray-50"
+                        }`}
+                        title="Notas internas"
+                      >
+                        Notas internas
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -3328,30 +3371,34 @@ export default function TicketsBoard({
                           <Paperclip className="h-4 w-4 text-slate-500" />{" "}
                           Archivos Adjuntos
                         </div>
-                        <div className="flex gap-2">
-                          <input
-                            ref={generalFileInputRef}
-                            type="file"
-                            className="hidden"
-                            multiple
-                            onChange={(e) => {
-                              const picked = Array.from(e.target.files ?? []);
-                              if (!picked.length) return;
-                              setGeneralFiles((prev) =>
-                                [...prev, ...picked].slice(0, 10)
-                              );
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-xs"
-                            onClick={() => generalFileInputRef.current?.click()}
-                          >
-                            + Agregar Archivo
-                          </Button>
-                        </div>
+                        {canEdit && (
+                          <div className="flex gap-2">
+                            <input
+                              ref={generalFileInputRef}
+                              type="file"
+                              className="hidden"
+                              multiple
+                              onChange={(e) => {
+                                const picked = Array.from(e.target.files ?? []);
+                                if (!picked.length) return;
+                                setGeneralFiles((prev) =>
+                                  [...prev, ...picked].slice(0, 10)
+                                );
+                                e.currentTarget.value = "";
+                              }}
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={() =>
+                                generalFileInputRef.current?.click()
+                              }
+                            >
+                              + Agregar Archivo
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {files.length === 0 && generalFiles.length === 0 ? (
@@ -3442,32 +3489,33 @@ export default function TicketsBoard({
                                 </div>
                               </div>
                             ))}
-                          {generalFiles.map((f, i) => (
-                            <div
-                              key={`new-gen-${i}`}
-                              className="flex items-center gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
-                            >
-                              <div className="shrink-0 text-blue-400">
-                                {iconFor(f.type, f.name)}
-                              </div>
-                              <div className="flex-1 truncate font-medium text-blue-700">
-                                {f.name}
-                              </div>
-                              <button
-                                onClick={() =>
-                                  setGeneralFiles((prev) =>
-                                    prev.filter((_, idx) => idx !== i)
-                                  )
-                                }
-                                className="text-blue-400 hover:text-blue-700"
+                          {canEdit &&
+                            generalFiles.map((f, i) => (
+                              <div
+                                key={`new-gen-${i}`}
+                                className="flex items-center gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
                               >
-                                <X className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ))}
+                                <div className="shrink-0 text-blue-400">
+                                  {iconFor(f.type, f.name)}
+                                </div>
+                                <div className="flex-1 truncate font-medium text-blue-700">
+                                  {f.name}
+                                </div>
+                                <button
+                                  onClick={() =>
+                                    setGeneralFiles((prev) =>
+                                      prev.filter((_, idx) => idx !== i)
+                                    )
+                                  }
+                                  className="text-blue-400 hover:text-blue-700"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
                         </div>
                       )}
-                      {generalFiles.length > 0 && (
+                      {canEdit && generalFiles.length > 0 && (
                         <Button
                           size="sm"
                           onClick={async () => {
@@ -3506,107 +3554,113 @@ export default function TicketsBoard({
                       )}
 
                       {/* Grabador de audio (General) */}
-                      <div className="flex items-center gap-2 pt-2">
-                        <Button
-                          size="sm"
-                          variant={isRecording ? "destructive" : "outline"}
-                          className="h-7 text-xs"
-                          onClick={() => {
-                            if (isRecording) stopRecording();
-                            else startRecording();
-                          }}
-                        >
-                          {isRecording ? "Detener" : "Grabar audio"}
-                        </Button>
-                        {isRecording && (
-                          <span className="text-xs text-red-500 animate-pulse">
-                            Grabando...
-                          </span>
-                        )}
-                        {recordedUrl && (
-                          <div className="flex items-center gap-2">
-                            <audio
-                              src={recordedUrl}
-                              controls
-                              className="h-6 w-24"
+                      {canEdit && (
+                        <div className="flex items-center gap-2 pt-2">
+                          <Button
+                            size="sm"
+                            variant={isRecording ? "destructive" : "outline"}
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              if (isRecording) stopRecording();
+                              else startRecording();
+                            }}
+                          >
+                            {isRecording ? "Detener" : "Grabar audio"}
+                          </Button>
+                          {isRecording && (
+                            <span className="text-xs text-red-500 animate-pulse">
+                              Grabando...
+                            </span>
+                          )}
+                          {recordedUrl && (
+                            <div className="flex items-center gap-2">
+                              <audio
+                                src={recordedUrl}
+                                controls
+                                className="h-6 w-24"
+                              />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0"
+                                onClick={() => {
+                                  URL.revokeObjectURL(recordedUrl!);
+                                  setRecordedUrl(null);
+                                  setRecordedBlob(null);
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-6 text-xs"
+                                onClick={addRecordedToGeneralFiles}
+                              >
+                                Guardar
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Agregar URL (General) */}
+                      {canEdit && (
+                        <>
+                          <div className="flex items-center gap-2 pt-1">
+                            <Input
+                              placeholder="Agregar URL..."
+                              className="h-7 text-xs w-full max-w-[200px]"
+                              value={newGeneralUrl}
+                              onChange={(e) => setNewGeneralUrl(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const v = (newGeneralUrl || "").trim();
+                                  if (v) {
+                                    setGeneralUrls((prev) => [...prev, v]);
+                                    setNewGeneralUrl("");
+                                  }
+                                }
+                              }}
                             />
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="h-6 w-6 p-0"
+                              className="h-7 w-7 p-0"
                               onClick={() => {
-                                URL.revokeObjectURL(recordedUrl!);
-                                setRecordedUrl(null);
-                                setRecordedBlob(null);
+                                const v = (newGeneralUrl || "").trim();
+                                if (v) {
+                                  setGeneralUrls((prev) => [...prev, v]);
+                                  setNewGeneralUrl("");
+                                }
                               }}
                             >
-                              <X className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="h-6 text-xs"
-                              onClick={addRecordedToGeneralFiles}
-                            >
-                              Guardar
+                              <Plus className="h-4 w-4" />
                             </Button>
                           </div>
-                        )}
-                      </div>
-
-                      {/* Agregar URL (General) */}
-                      <div className="flex items-center gap-2 pt-1">
-                        <Input
-                          placeholder="Agregar URL..."
-                          className="h-7 text-xs w-full max-w-[200px]"
-                          value={newGeneralUrl}
-                          onChange={(e) => setNewGeneralUrl(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              const v = (newGeneralUrl || "").trim();
-                              if (v) {
-                                setGeneralUrls((prev) => [...prev, v]);
-                                setNewGeneralUrl("");
-                              }
-                            }
-                          }}
-                        />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => {
-                            const v = (newGeneralUrl || "").trim();
-                            if (v) {
-                              setGeneralUrls((prev) => [...prev, v]);
-                              setNewGeneralUrl("");
-                            }
-                          }}
-                        >
-                          <Plus className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      {generalUrls.length > 0 && (
-                        <div className="flex flex-col gap-1 pt-1">
-                          {generalUrls.map((u, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-1 rounded border border-slate-100"
-                            >
-                              <LinkIcon className="h-3 w-3" />
-                              <span className="truncate flex-1">{u}</span>
-                              <button
-                                onClick={() =>
-                                  setGeneralUrls((prev) =>
-                                    prev.filter((_, idx) => idx !== i)
-                                  )
-                                }
-                                className="text-slate-400 hover:text-red-500"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
+                          {generalUrls.length > 0 && (
+                            <div className="flex flex-col gap-1 pt-1">
+                              {generalUrls.map((u, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 p-1 rounded border border-slate-100"
+                                >
+                                  <LinkIcon className="h-3 w-3" />
+                                  <span className="truncate flex-1">{u}</span>
+                                  <button
+                                    onClick={() =>
+                                      setGeneralUrls((prev) =>
+                                        prev.filter((_, idx) => idx !== i)
+                                      )
+                                    }
+                                    className="text-slate-400 hover:text-red-500"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
+                          )}
+                        </>
                       )}
                     </div>
 
@@ -3691,30 +3745,32 @@ export default function TicketsBoard({
                           <Paperclip className="h-4 w-4 text-slate-500" /> Tu
                           Respuesta (Archivos y Evidencias)
                         </div>
-                        <div className="flex gap-2">
-                          <input
-                            ref={editFileInputRef}
-                            type="file"
-                            className="hidden"
-                            multiple
-                            onChange={(e) => {
-                              const picked = Array.from(e.target.files ?? []);
-                              if (!picked.length) return;
-                              setEditFiles((prev) =>
-                                [...prev, ...picked].slice(0, 10)
-                              );
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 text-xs"
-                            onClick={() => editFileInputRef.current?.click()}
-                          >
-                            + Agregar Archivo
-                          </Button>
-                        </div>
+                        {canEdit && (
+                          <div className="flex gap-2">
+                            <input
+                              ref={editFileInputRef}
+                              type="file"
+                              className="hidden"
+                              multiple
+                              onChange={(e) => {
+                                const picked = Array.from(e.target.files ?? []);
+                                if (!picked.length) return;
+                                setEditFiles((prev) =>
+                                  [...prev, ...picked].slice(0, 10)
+                                );
+                                e.currentTarget.value = "";
+                              }}
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs"
+                              onClick={() => editFileInputRef.current?.click()}
+                            >
+                              + Agregar Archivo
+                            </Button>
+                          </div>
+                        )}
                       </div>
 
                       {/* Lista de archivos existentes (Filtrados: Solo respuestas > 5 min) + nuevos */}
@@ -3787,31 +3843,32 @@ export default function TicketsBoard({
                               </div>
                             </div>
                           ))}
-                        {editFiles.map((f, i) => (
-                          <div
-                            key={`new-${i}`}
-                            className="flex items-center gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
-                          >
-                            <div className="shrink-0 text-blue-400">
-                              {iconFor(f.type, f.name)}
-                            </div>
-                            <div className="flex-1 truncate font-medium text-blue-700">
-                              {f.name}
-                            </div>
-                            <button
-                              onClick={() =>
-                                setEditFiles((prev) =>
-                                  prev.filter((_, idx) => idx !== i)
-                                )
-                              }
-                              className="text-blue-400 hover:text-blue-700"
+                        {canEdit &&
+                          editFiles.map((f, i) => (
+                            <div
+                              key={`new-${i}`}
+                              className="flex items-center gap-2 rounded border border-blue-100 bg-blue-50 p-2 text-xs"
                             >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ))}
+                              <div className="shrink-0 text-blue-400">
+                                {iconFor(f.type, f.name)}
+                              </div>
+                              <div className="flex-1 truncate font-medium text-blue-700">
+                                {f.name}
+                              </div>
+                              <button
+                                onClick={() =>
+                                  setEditFiles((prev) =>
+                                    prev.filter((_, idx) => idx !== i)
+                                  )
+                                }
+                                className="text-blue-400 hover:text-blue-700"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          ))}
                       </div>
-                      {editFiles.length > 0 && (
+                      {canEdit && editFiles.length > 0 && (
                         <Button
                           size="sm"
                           onClick={async () => {
@@ -3895,52 +3952,54 @@ export default function TicketsBoard({
                       )}
 
                       {/* Grabador de audio (Compacto) */}
-                      <div className="flex items-center gap-2 pt-2">
-                        <Button
-                          size="sm"
-                          variant={isRecording ? "destructive" : "outline"}
-                          className="h-7 text-xs"
-                          onClick={() => {
-                            if (isRecording) stopRecording();
-                            else startRecording();
-                          }}
-                        >
-                          {isRecording ? "Detener" : "Grabar audio"}
-                        </Button>
-                        {isRecording && (
-                          <span className="text-xs text-red-500 animate-pulse">
-                            Grabando...
-                          </span>
-                        )}
-                        {recordedUrl && (
-                          <div className="flex items-center gap-2">
-                            <audio
-                              src={recordedUrl}
-                              controls
-                              className="h-6 w-24"
-                            />
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 p-0"
-                              onClick={() => {
-                                URL.revokeObjectURL(recordedUrl!);
-                                setRecordedUrl(null);
-                                setRecordedBlob(null);
-                              }}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              className="h-6 text-xs"
-                              onClick={addRecordedToFiles}
-                            >
-                              Guardar
-                            </Button>
-                          </div>
-                        )}
-                      </div>
+                      {canEdit && (
+                        <div className="flex items-center gap-2 pt-2">
+                          <Button
+                            size="sm"
+                            variant={isRecording ? "destructive" : "outline"}
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              if (isRecording) stopRecording();
+                              else startRecording();
+                            }}
+                          >
+                            {isRecording ? "Detener" : "Grabar audio"}
+                          </Button>
+                          {isRecording && (
+                            <span className="text-xs text-red-500 animate-pulse">
+                              Grabando...
+                            </span>
+                          )}
+                          {recordedUrl && (
+                            <div className="flex items-center gap-2">
+                              <audio
+                                src={recordedUrl}
+                                controls
+                                className="h-6 w-24"
+                              />
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 w-6 p-0"
+                                onClick={() => {
+                                  URL.revokeObjectURL(recordedUrl!);
+                                  setRecordedUrl(null);
+                                  setRecordedBlob(null);
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-6 text-xs"
+                                onClick={addRecordedToFiles}
+                              >
+                                Guardar
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <Separator />
@@ -4081,143 +4140,152 @@ export default function TicketsBoard({
                   </div>
                 </div>
 
-                <div className={detailTab === "notas" ? "block" : "hidden"}>
-                  <div className="p-6 space-y-4">
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-medium">
-                          Notas internas (Privado)
-                        </Label>
-                        <span className="text-xs text-slate-500">
-                          Solo visible para el equipo
-                        </span>
-                      </div>
+                {!isStudent && (
+                  <div className={detailTab === "notas" ? "block" : "hidden"}>
+                    <div className="p-6 space-y-4">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">
+                            Notas internas (Privado)
+                          </Label>
+                          <span className="text-xs text-slate-500">
+                            Solo visible para el equipo
+                          </span>
+                        </div>
 
-                      {/* Lista de notas */}
-                      <div className="space-y-4 max-h-[400px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-4">
-                        {internalNotesLoading ? (
-                          <div className="flex items-center justify-center py-8 text-sm text-slate-500">
-                            Cargando notas...
-                          </div>
-                        ) : internalNotes.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-slate-500">
-                            <p>No hay notas internas.</p>
-                          </div>
-                        ) : (
-                          internalNotes.map((note) => (
-                            <div
-                              key={note.id}
-                              className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
-                                    {(note.user_nombre || "U")[0].toUpperCase()}
+                        {/* Lista de notas */}
+                        <div className="space-y-4 max-h-[400px] overflow-y-auto rounded-md border border-slate-200 bg-slate-50 p-4">
+                          {internalNotesLoading ? (
+                            <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+                              Cargando notas...
+                            </div>
+                          ) : internalNotes.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-slate-500">
+                              <p>No hay notas internas.</p>
+                            </div>
+                          ) : (
+                            internalNotes.map((note) => (
+                              <div
+                                key={note.id}
+                                className="flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
+                                      {(note.user_nombre ||
+                                        "U")[0].toUpperCase()}
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-xs font-semibold text-slate-900">
+                                        {note.user_nombre || "Usuario"}
+                                      </span>
+                                      <span className="text-[10px] text-slate-500">
+                                        {note.created_at
+                                          ? new Date(
+                                              note.created_at
+                                            ).toLocaleDateString()
+                                          : ""}
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-xs font-semibold text-slate-900">
-                                      {note.user_nombre || "Usuario"}
-                                    </span>
-                                    <span className="text-[10px] text-slate-500">
-                                      {note.created_at
-                                        ? new Date(
-                                            note.created_at
-                                          ).toLocaleDateString()
-                                        : ""}
-                                    </span>
-                                  </div>
+                                  {canEdit && (
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
+                                        onClick={() => {
+                                          setEditingInternalNoteId(note.id);
+                                          setEditingInternalNoteText(
+                                            note.contenido
+                                          );
+                                        }}
+                                      >
+                                        <FileText className="h-3 w-3" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 text-slate-400 hover:text-red-600"
+                                        onClick={() =>
+                                          handleDeleteInternalNote(note.id)
+                                        }
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  )}
                                 </div>
-                                {canEdit && (
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0 text-slate-400 hover:text-slate-600"
-                                      onClick={() => {
-                                        setEditingInternalNoteId(note.id);
+
+                                {editingInternalNoteId === note.id ? (
+                                  <div className="mt-2 space-y-2">
+                                    <Textarea
+                                      value={editingInternalNoteText}
+                                      onChange={(e) =>
                                         setEditingInternalNoteText(
-                                          note.contenido
-                                        );
-                                      }}
-                                    >
-                                      <FileText className="h-3 w-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 w-6 p-0 text-slate-400 hover:text-red-600"
-                                      onClick={() =>
-                                        handleDeleteInternalNote(note.id)
+                                          e.target.value
+                                        )
                                       }
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </Button>
+                                      className="min-h-[60px] text-sm"
+                                    />
+                                    <div className="flex justify-end gap-2">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => {
+                                          setEditingInternalNoteId(null);
+                                          setEditingInternalNoteText("");
+                                        }}
+                                      >
+                                        Cancelar
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        onClick={handleUpdateInternalNote}
+                                        disabled={
+                                          !editingInternalNoteText.trim()
+                                        }
+                                      >
+                                        Guardar
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-sm text-slate-700 whitespace-pre-wrap break-words pl-8">
+                                    {note.contenido}
                                   </div>
                                 )}
                               </div>
+                            ))
+                          )}
+                        </div>
 
-                              {editingInternalNoteId === note.id ? (
-                                <div className="mt-2 space-y-2">
-                                  <Textarea
-                                    value={editingInternalNoteText}
-                                    onChange={(e) =>
-                                      setEditingInternalNoteText(e.target.value)
-                                    }
-                                    className="min-h-[60px] text-sm"
-                                  />
-                                  <div className="flex justify-end gap-2">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        setEditingInternalNoteId(null);
-                                        setEditingInternalNoteText("");
-                                      }}
-                                    >
-                                      Cancelar
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      onClick={handleUpdateInternalNote}
-                                      disabled={!editingInternalNoteText.trim()}
-                                    >
-                                      Guardar
-                                    </Button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-sm text-slate-700 whitespace-pre-wrap break-words pl-8">
-                                  {note.contenido}
-                                </div>
-                              )}
-                            </div>
-                          ))
+                        {/* Formulario nueva nota */}
+                        {canEdit && (
+                          <div className="flex gap-2 items-start">
+                            <Textarea
+                              value={newInternalNote}
+                              onChange={(e) =>
+                                setNewInternalNote(e.target.value)
+                              }
+                              placeholder="Escribe una nota interna..."
+                              className="min-h-[80px] resize-none"
+                            />
+                            <Button
+                              onClick={handleAddInternalNote}
+                              disabled={
+                                addingInternalNote || !newInternalNote.trim()
+                              }
+                              className="shrink-0"
+                            >
+                              {addingInternalNote ? "..." : "Agregar"}
+                            </Button>
+                          </div>
                         )}
                       </div>
-
-                      {/* Formulario nueva nota */}
-                      {canEdit && (
-                        <div className="flex gap-2 items-start">
-                          <Textarea
-                            value={newInternalNote}
-                            onChange={(e) => setNewInternalNote(e.target.value)}
-                            placeholder="Escribe una nota interna..."
-                            className="min-h-[80px] resize-none"
-                          />
-                          <Button
-                            onClick={handleAddInternalNote}
-                            disabled={
-                              addingInternalNote || !newInternalNote.trim()
-                            }
-                            className="shrink-0"
-                          >
-                            {addingInternalNote ? "..." : "Agregar"}
-                          </Button>
-                        </div>
-                      )}
                     </div>
                   </div>
-                </div>
+                )}
               </>
             )}
           </div>
