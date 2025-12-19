@@ -112,7 +112,7 @@ export default function StudentInicioPage() {
 
           <InternalCard
             title="Feedback"
-            description="Ver tickets y estado"
+            description={isStudent ? "Ver feedback" : "Ver tickets y estado"}
             href={`/admin/alumnos/${code}/feedback`}
             icon={ThumbsUp}
           />
