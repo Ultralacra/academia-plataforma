@@ -1,7 +1,15 @@
 // Núcleo de helpers simples sin estado
 
 export const getEmitter = (obj: any) =>
-  obj?.id_chat_participante_emisor ?? obj?.emisor ?? obj?.id_emisor ?? null;
+  obj?.id_chat_participante_emisor ??
+  obj?.id_participante_emisor ??
+  obj?.emisor ??
+  obj?.emisor_id ??
+  obj?.sender ??
+  obj?.sender_id ??
+  obj?.id_emisor ??
+  obj?.from_participant_id ??
+  null;
 
 export const normalizeDateStr = (v: any): string | undefined => {
   if (!v) return undefined;

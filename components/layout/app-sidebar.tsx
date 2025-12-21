@@ -57,6 +57,7 @@ const adminItems: MenuItem[] = [
   { title: "Coachs", url: "/admin/teamsv2", icon: Users },
   { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
   { title: "Tickets", url: "/admin/tickets-board", icon: MessageSquare },
+  { title: "Pagos", url: "/admin/payments", icon: CreditCard },
   { title: "Chat Beta", url: "/chat/beta", icon: MessageSquare },
   { title: "Usuarios sistema", url: "/admin/users", icon: Users },
   { title: "Roles", url: "/admin/access/roles", icon: Settings },
@@ -596,7 +597,10 @@ export function AppSidebar() {
                                   />
                                   <span className="truncate flex items-center gap-2">
                                     {item.title}
-                                    {item.url?.includes("/chat") &&
+                                    {(item.url?.includes("/chat") ||
+                                      item.title
+                                        .toLowerCase()
+                                        .includes("chat")) &&
                                       unreadGrandTotal > 0 && (
                                         <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold">
                                           {unreadGrandTotal > 99

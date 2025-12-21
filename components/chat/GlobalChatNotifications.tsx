@@ -50,9 +50,12 @@ export function GlobalChatNotifications() {
       initNotificationSound();
     } catch {}
 
+    const role = String(user.role || "").toLowerCase();
+    const isStudentRole = ["student", "alumno", "cliente"].includes(role);
+    const isCoachRole = ["coach", "equipo"].includes(role);
+
     // If user is coach/equipo, we use the dedicated CoachChatNotifier component
-    const role = (user.role || "").toLowerCase();
-    if (role === "coach" || role === "equipo") return;
+    if (isCoachRole) return;
 
     const token = getAuthToken();
     if (!token) {
@@ -95,13 +98,13 @@ export function GlobalChatNotifications() {
 
       // Construct payload based on role
       const payload: any = {};
-      if (user.role === "student") {
+      if (isStudentRole) {
         const code = (user as any).codigo;
         if (code) {
           payload.participante_tipo = "cliente";
           payload.id_cliente = String(code);
         }
-      } else if (user.role === "coach" || user.role === "equipo") {
+      } else if (isCoachRole) {
         const code = (user as any).codigo;
         if (code) {
           payload.participante_tipo = "equipo";
@@ -112,7 +115,7 @@ export function GlobalChatNotifications() {
           payload.participante_tipo = "usuario";
           payload.id_usuario = String(user.id);
         }
-      } else if (user.role === "admin") {
+      } else if (role === "admin") {
         // Admins might want to see everything or specific chats.
         // For now, we skip auto-subscription for admins to avoid noise,
         // unless they have a specific "equipo" code assigned.
@@ -273,12 +276,11 @@ export function GlobalChatNotifications() {
 
         // Update unread count in localStorage
         if (msg.id_chat) {
-          const roleKey =
-            user.role === "student"
-              ? "alumno"
-              : user.role === "coach" || user.role === "equipo"
-              ? "coach"
-              : "admin";
+          const roleKey = isStudentRole
+            ? "alumno"
+            : isCoachRole
+            ? "coach"
+            : "admin";
           const key = `chatUnreadById:${roleKey}:${msg.id_chat}`;
           try {
             const current = parseInt(localStorage.getItem(key) || "0", 10);

@@ -2156,6 +2156,24 @@ export default function ChatRealtime({
   const [pendingPreviews, setPendingPreviews] = React.useState<
     { url: string; name: string; type: string; size: number }[]
   >([]);
+  const [dragActive, setDragActive] = React.useState(false);
+  const dragCounterRef = React.useRef(0);
+
+  function dragHasFiles(e: React.DragEvent) {
+    try {
+      const dt = e.dataTransfer;
+      if (!dt) return false;
+      if (dt.files && dt.files.length > 0) return true;
+      const items = Array.from(dt.items || []);
+      if (items.some((it) => it.kind === "file")) return true;
+      const types = Array.from((dt.types as any) || []) as string[];
+      return (
+        types.includes("Files") || types.includes("application/x-moz-file")
+      );
+    } catch {
+      return false;
+    }
+  }
 
   React.useEffect(() => {
     const urls = pendingFiles.map((f) => ({
@@ -2170,8 +2188,8 @@ export default function ChatRealtime({
     };
   }, [pendingFiles]);
 
-  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const list = Array.from(e.target.files ?? []);
+  function addPendingAttachments(files: FileList | File[] | null | undefined) {
+    const list = Array.isArray(files) ? files : files ? Array.from(files) : [];
     if (!list.length) return;
     setAttachError(null);
     const rejected = list.filter((f) => (f?.size || 0) > MAX_FILE_SIZE);
@@ -2186,12 +2204,18 @@ export default function ChatRealtime({
         `No se pueden adjuntar archivos mayores a 50MB. Se omitieron: ${names}${more}.`
       );
     }
-    if (!valid.length) {
-      e.currentTarget.value = "";
-      return;
-    }
+    if (!valid.length) return;
     setPendingFiles((prev) => prev.concat(valid).slice(0, 10));
-    e.currentTarget.value = "";
+  }
+
+  function onFileInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    try {
+      addPendingAttachments(e.target.files);
+    } finally {
+      try {
+        e.currentTarget.value = "";
+      } catch {}
+    }
   }
 
   async function generateTicketFromRecent() {
@@ -3303,9 +3327,51 @@ export default function ChatRealtime({
   return (
     <>
       <div
-        className={`${containerBase} chat-root ${className ?? ""}`}
+        className={`${containerBase} chat-root ${className ?? ""} relative`}
         style={useFullscreen ? { height: "100%" } : undefined}
+        onDragEnter={(e) => {
+          try {
+            if (dragHasFiles(e)) {
+              dragCounterRef.current += 1;
+              setDragActive(true);
+            }
+          } catch {}
+        }}
+        onDragOver={(e) => {
+          try {
+            if (dragHasFiles(e)) {
+              e.preventDefault();
+              setDragActive(true);
+            }
+          } catch {}
+        }}
+        onDragLeave={() => {
+          dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+          if (dragCounterRef.current === 0) setDragActive(false);
+        }}
+        onDrop={(e) => {
+          try {
+            if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+              e.preventDefault();
+              addPendingAttachments(e.dataTransfer.files);
+            }
+          } catch {}
+          dragCounterRef.current = 0;
+          setDragActive(false);
+        }}
       >
+        {dragActive && (
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+            <div className="rounded-xl bg-white/95 px-4 py-3 shadow-lg border border-gray-200">
+              <div className="text-sm font-medium text-gray-900">
+                Suelta para adjuntar
+              </div>
+              <div className="text-xs text-gray-600">
+                Máx. 10 archivos • 50MB por archivo
+              </div>
+            </div>
+          </div>
+        )}
         <div
           className={`sticky top-0 z-10 flex-shrink-0 flex items-center justify-between px-3 sm:px-4 bg-[#075e54] text-white shadow transition-all duration-300 ${
             headerCollapsed ? "py-1" : "py-3"

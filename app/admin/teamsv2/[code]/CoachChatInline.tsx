@@ -1324,17 +1324,21 @@ export default function CoachChatInline({
 
         const senderIsById =
           myPid != null && emitter != null && String(emitter) === String(myPid);
-        const senderIsBySession =
-          !!m?.client_session &&
-          String(m.client_session) === String(clientSessionRef.current);
-
         const atts = mapArchivoToAttachments(m);
+
+        // Recent-upload es un "heurístico de eco" para mis propias subidas.
+        // En realtime, `hasRecentUploadLoose` puede dar falsos positivos (mismo tipo+size)
+        // y termina mostrando adjuntos entrantes como si fueran míos.
+        const senderIsByRecentStrict = hasRecentUploadMatch(role, cid, atts);
+        const senderIsByRecentLoose = hasRecentUploadLoose(role, cid, atts);
         const senderIsByRecent =
-          hasRecentUploadMatch(role, cid, atts) ||
-          hasRecentUploadLoose(role, cid, atts);
+          ctx === "realtime"
+            ? senderIsByRecentStrict
+            : senderIsByRecentStrict || senderIsByRecentLoose;
 
         // Outbox heuristic: el texto + timestamp comparable con envíos locales
         let senderIsByOutbox = false;
+        let matchedOutboxClientId: string | null = null;
         try {
           const txt = String(m?.contenido ?? m?.texto ?? "").trim();
           const tMsg = Date.parse(
@@ -1349,15 +1353,61 @@ export default function CoachChatInline({
             const nearNow = Math.abs(Date.now() - (ob.at || 0)) < 12000;
             if (near || nearNow) {
               senderIsByOutbox = true;
+              matchedOutboxClientId = ob.clientId;
               break;
             }
           }
         } catch {}
 
-        // Tipo de participante cuando aplique
-        const tipoNorm = normalizeTipo(
-          m?.participante_tipo || getTipoByParticipantId(emitter)
-        );
+        // Endurecer outbox: sólo si hay un optimista local correspondiente.
+        // Evita colisiones cuando el otro envía el mismo texto.
+        if (senderIsByOutbox) {
+          try {
+            const clientId = matchedOutboxClientId;
+            const prev = itemsRef.current || [];
+            const hasOptimistic = !!clientId
+              ? prev.some(
+                  (x) =>
+                    String(x?.id) === String(clientId) &&
+                    x?.delivered === false &&
+                    String(x?.sender || "").toLowerCase() ===
+                      String(role || "").toLowerCase()
+                )
+              : false;
+            if (!hasOptimistic) {
+              senderIsByOutbox = false;
+              matchedOutboxClientId = null;
+            }
+          } catch {
+            senderIsByOutbox = false;
+            matchedOutboxClientId = null;
+          }
+        }
+
+        // Nota: algunos backends propagan `client_session` del receptor en eventos realtime.
+        // Para evitar misclasificar como "mío", sólo usamos session si ya hay evidencia
+        // (outbox/recent) de que fue un eco de envío local, o en contexto "user".
+        const senderIsBySessionRaw =
+          !!m?.client_session &&
+          String(m.client_session) === String(clientSessionRef.current);
+        const senderIsBySession =
+          (ctx === "user" || senderIsByOutbox || senderIsByRecent) &&
+          senderIsBySessionRaw;
+
+        // Tipo de participante cuando aplique.
+        // Importante: preferir el tipo resuelto por `id_chat_participante_emisor`
+        // (según la lista de participantes del JOIN), porque algunos eventos realtime
+        // traen `participante_tipo` incorrecto/ambiguo y eso rompe la alineación.
+        const tipoFromPid =
+          emitter != null ? getTipoByParticipantId(emitter) : "";
+        const tipoNorm = tipoFromPid
+          ? tipoFromPid
+          : normalizeTipo(
+              m?.participante_tipo ||
+                m?.emisor_tipo ||
+                m?.tipo_emisor ||
+                m?.remitente_tipo
+            );
         const senderIsByTipoKnown =
           tipoNorm === "cliente" ||
           tipoNorm === "equipo" ||
@@ -1371,40 +1421,60 @@ export default function CoachChatInline({
           reason = "byId";
           final = role;
         } else {
-          // Usar heurísticas ordenadas: session -> outbox -> tipo -> recent
-          if (senderIsBySession) {
-            reason = "bySession";
-            final = role;
-          } else if (senderIsByOutbox) {
-            reason = "byOutbox";
-            final = role;
-          } else if (senderIsByTipoKnown) {
-            reason = "byParticipantType";
-            if (tipoNorm === "cliente") final = "alumno";
-            else if (tipoNorm === "equipo") final = "coach";
-            else final = role;
-          } else if (senderIsByRecent) {
-            reason = "byRecentUpload";
-            final = role;
-          } else {
-            reason = "fallback-other";
-            const hasAtts = Array.isArray(atts) && atts.length > 0;
-            const twoParty = !!isTwoPartyAlumnoCoachRef.current;
-            if (hasAtts && twoParty) {
-              final =
-                role === "alumno"
-                  ? "coach"
-                  : role === "coach"
-                  ? "alumno"
-                  : "alumno";
-              reason = "fallback-twoParty-attachments-other";
+          // Regla clave: en REALTIME, si no hay emisor por ID confiable,
+          // NO asumimos "mío". Sólo aceptamos tipo explícito; si no, asumimos "otro".
+          if (ctx === "realtime") {
+            if (senderIsByTipoKnown) {
+              reason = "realtime-byParticipantType";
+              if (tipoNorm === "cliente") final = "alumno";
+              else if (tipoNorm === "equipo") final = "coach";
+              else final = role;
             } else {
+              reason = "realtime-assume-other";
               final =
                 role === "alumno"
                   ? "coach"
                   : role === "coach"
                   ? "alumno"
                   : "alumno";
+            }
+          } else {
+            // En no-realtime sí usamos heurísticas para reconciliar ecos propios.
+            // Orden: outbox -> recent -> session -> tipo
+            if (senderIsByOutbox) {
+              reason = "byOutbox";
+              final = role;
+            } else if (senderIsByRecent) {
+              reason = "byRecentUpload";
+              final = role;
+            } else if (senderIsBySession) {
+              reason = "bySession";
+              final = role;
+            } else if (senderIsByTipoKnown) {
+              reason = "byParticipantType";
+              if (tipoNorm === "cliente") final = "alumno";
+              else if (tipoNorm === "equipo") final = "coach";
+              else final = role;
+            } else {
+              reason = "fallback-other";
+              const hasAtts = Array.isArray(atts) && atts.length > 0;
+              const twoParty = !!isTwoPartyAlumnoCoachRef.current;
+              if (hasAtts && twoParty) {
+                final =
+                  role === "alumno"
+                    ? "coach"
+                    : role === "coach"
+                    ? "alumno"
+                    : "alumno";
+                reason = "fallback-twoParty-attachments-other";
+              } else {
+                final =
+                  role === "alumno"
+                    ? "coach"
+                    : role === "coach"
+                    ? "alumno"
+                    : "alumno";
+              }
             }
           }
         }
@@ -3836,13 +3906,78 @@ export default function CoachChatInline({
     } catch {}
   }, [socketio?.participants, socketio?.idEquipo]);
 
+  const [dragActive, setDragActive] = React.useState(false);
+  const dragCounterRef = React.useRef(0);
+
+  const dragHasFiles = (e: React.DragEvent) => {
+    try {
+      const dt = e.dataTransfer;
+      if (!dt) return false;
+      if (dt.files && dt.files.length > 0) return true;
+      const items = Array.from(dt.items || []);
+      if (items.some((it) => it.kind === "file")) return true;
+      const types = Array.from((dt.types as any) || []) as string[];
+      return (
+        types.includes("Files") || types.includes("application/x-moz-file")
+      );
+    } catch {
+      return false;
+    }
+  };
+
   return (
     <>
       <div
         className={`relative h-full flex flex-col w-full min-h-0 chat-root bg-[#EFEAE2] ${
           className || ""
         }`}
+        onDragEnter={(e) => {
+          try {
+            if (dragHasFiles(e)) {
+              dragCounterRef.current += 1;
+              setDragActive(true);
+            }
+          } catch {}
+        }}
+        onDragOver={(e) => {
+          try {
+            if (dragHasFiles(e)) {
+              e.preventDefault();
+              setDragActive(true);
+            }
+          } catch {}
+        }}
+        onDragLeave={() => {
+          dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+          if (dragCounterRef.current === 0) setDragActive(false);
+        }}
+        onDrop={(e) => {
+          // Si un hijo ya procesó el drop (p.ej. barra inferior), no duplicar.
+          if (e.defaultPrevented) {
+            dragCounterRef.current = 0;
+            setDragActive(false);
+            return;
+          }
+          try {
+            if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+              e.preventDefault();
+              addPendingAttachments(e.dataTransfer.files);
+            }
+          } catch {}
+          dragCounterRef.current = 0;
+          setDragActive(false);
+        }}
       >
+        {dragActive && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-black/20 backdrop-blur-[1px]">
+            <div className="rounded-xl bg-white/95 px-4 py-3 shadow-lg border border-gray-200">
+              <div className="text-sm font-medium text-gray-900">
+                Suelta para adjuntar
+              </div>
+              <div className="text-xs text-gray-600">Máx. 50MB por archivo</div>
+            </div>
+          </div>
+        )}
         {/* Header estilo WhatsApp Web */}
         <div
           className={`flex items-center justify-between px-4 transition-all duration-300 bg-[#F0F2F5] border-b border-[#d1d7db] z-10 flex-shrink-0 ${

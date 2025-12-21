@@ -5,6 +5,8 @@ import CoachChatInline from "@/components/chat/StudentChatFriendly";
 import { CHAT_HOST } from "@/lib/api-config";
 import { dataService } from "@/lib/data-service";
 import { apiFetch } from "@/lib/api-config";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Ya no usamos un ID hardcodeado para "administración"; si no se especifica coachEquipoId,
 // intentaremos resolver el primer coach asignado al alumno vía dataService.getClientCoaches(code).
@@ -24,8 +26,16 @@ export default function StudentChatInline({
 }) {
   const room = React.useMemo(() => (code || "").trim().toLowerCase(), [code]);
   const SOCKET_URL = (CHAT_HOST || "").replace(/\/$/, "");
+  const coachIdFromProps = React.useMemo(() => {
+    const v = (coachEquipoId || "").trim();
+    return v ? v : null;
+  }, [coachEquipoId]);
+
+  const [coachResolution, setCoachResolution] = React.useState<
+    "loading" | "ready" | "missing"
+  >(coachIdFromProps ? "ready" : "loading");
   const [resolvedEquipoId, setResolvedEquipoId] = React.useState<string | null>(
-    coachEquipoId ? String(coachEquipoId) : null
+    coachIdFromProps ? String(coachIdFromProps) : null
   );
   const [resolvedEquipoName, setResolvedEquipoName] = React.useState<
     string | null
@@ -42,9 +52,10 @@ export default function StudentChatInline({
   React.useEffect(() => {
     let alive = true;
     (async () => {
-      if (coachEquipoId) return; // ya provisto por el padre
+      if (coachIdFromProps) return; // ya provisto por el padre
       const alumno = (code || "").trim();
       if (!alumno) return;
+      setCoachResolution("loading");
       try {
         const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
           alumno
@@ -103,6 +114,7 @@ export default function StudentChatInline({
           });
         } catch {}
         setResolvedEquipoId(codeEquipo);
+        setCoachResolution(codeEquipo ? "ready" : "missing");
         try {
           const alumNom = rows?.[0]?.alumno_nombre
             ? String(rows[0].alumno_nombre)
@@ -118,13 +130,17 @@ export default function StudentChatInline({
           setResolvedEquipoName(eqName);
         } catch {}
       } catch {
-        if (alive) setResolvedEquipoId(null);
+        if (alive) {
+          setResolvedEquipoId(null);
+          setResolvedEquipoName(null);
+          setCoachResolution("missing");
+        }
       }
     })();
     return () => {
       alive = false;
     };
-  }, [code, coachEquipoId]);
+  }, [code, coachIdFromProps]);
 
   // Definimos participantes para que el servidor pueda hacer find-or-create del chat.
   const participants = React.useMemo(() => {
@@ -160,28 +176,50 @@ export default function StudentChatInline({
   );
 
   return (
-    <CoachChatInline
-      room={room}
-      role="alumno"
-      title={title}
-      subtitle={subtitle}
-      variant="card"
-      className={className}
-      // Activar precreateOnParticipants para que el alumno intente localizar
-      // y unirse automáticamente a la conversación existente al cargar.
-      precreateOnParticipants={true}
-      resolveName={resolveName}
-      socketio={{
-        url: SOCKET_URL || undefined,
-        idCliente: String(code),
-        idEquipo: resolvedEquipoId ? String(resolvedEquipoId) : undefined,
-        participants,
-        // Solo creamos automáticamente si conocemos el id_equipo destino;
-        // si no, intentaremos localizar una conversación existente por cliente.
-        autoCreate: !!resolvedEquipoId,
-        autoJoin: true,
-      }}
-      listParams={{ participante_tipo: "cliente", id_cliente: String(code) }}
-    />
+    <div className={className}>
+      {coachResolution === "missing" ? (
+        <Card className="h-full">
+          <CardHeader>
+            <CardTitle>Chat bloqueado</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Alert>
+              <AlertTitle>No tienes coach asignado</AlertTitle>
+              <AlertDescription>
+                No tienes un coach de Atención al Cliente asignado. Habla con un
+                administrador para que te asignen uno y puedas usar el chat.
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+        </Card>
+      ) : (
+        <CoachChatInline
+          room={room}
+          role="alumno"
+          title={title}
+          subtitle={subtitle}
+          variant="card"
+          className="h-full"
+          // Activar precreateOnParticipants para que el alumno intente localizar
+          // y unirse automáticamente a la conversación existente al cargar.
+          precreateOnParticipants={true}
+          resolveName={resolveName}
+          socketio={{
+            url: SOCKET_URL || undefined,
+            idCliente: String(code),
+            idEquipo: resolvedEquipoId ? String(resolvedEquipoId) : undefined,
+            participants,
+            // Solo creamos automáticamente si conocemos el id_equipo destino;
+            // si no, intentaremos localizar una conversación existente por cliente.
+            autoCreate: !!resolvedEquipoId,
+            autoJoin: true,
+          }}
+          listParams={{
+            participante_tipo: "cliente",
+            id_cliente: String(code),
+          }}
+        />
+      )}
+    </div>
   );
 }

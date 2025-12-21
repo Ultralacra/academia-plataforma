@@ -25,23 +25,12 @@ import {
 import {
   getEmitter,
   normalizeDateStr,
-  normalizeTipo,
 } from "@/app/admin/teamsv2/[code]/chat-core";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST, apiFetch, buildUrl } from "@/lib/api-config";
 import { playNotificationSound } from "@/lib/utils";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,32 +53,29 @@ import {
   Check,
 } from "lucide-react";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { useIsMobile } from "@/hooks/use-mobile";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
-// Tipos movidos a ./chat-types
-
-// Debug simple: imprime siempre con contexto de rol y sala
 function chatDebug(): boolean {
-  return true;
+  return false;
 }
+
 function dbg(...args: any[]) {
   try {
-    // Prefijo consistente para facilitar lectura
+    if (!chatDebug()) return;
     console.log("[Chat]", ...args);
   } catch {}
 }
 
-// Pistas de subida movidas a ./chat-recent-upload
-
-// Config movida a ./chat-types
-export default function CoachChatInline({
+export default function StudentChatFriendly({
   room,
   role = "coach",
   title = "Chat",
@@ -162,6 +148,7 @@ export default function CoachChatInline({
       return false;
     }
   }, []);
+
   const [contacts, setContacts] = React.useState<
     Array<{ codigo_equipo: string; area?: string }>
   >([]);
@@ -1039,12 +1026,16 @@ export default function CoachChatInline({
   };
 
   const nameOf = React.useCallback(
-    (tipo: "equipo" | "cliente" | "admin", id: any): string => {
+    (tipo: any, id: any): string => {
       try {
         const s = String(id ?? "");
         if (!s) return s;
-        if (typeof resolveName === "function") {
-          const n = resolveName(tipo, s);
+        const t =
+          tipo === "equipo" || tipo === "cliente" || tipo === "admin"
+            ? (tipo as "equipo" | "cliente" | "admin")
+            : normalizeTipo(tipo);
+        if (typeof resolveName === "function" && t) {
+          const n = resolveName(t as any, s);
           if (n && typeof n === "string") return n;
         }
         return s;
@@ -1094,15 +1085,19 @@ export default function CoachChatInline({
         const emitter = getEmitter(m);
         const senderIsById =
           myPid != null && emitter != null && String(emitter) === String(myPid);
-        const senderIsBySession =
-          !!m?.client_session &&
-          String(m.client_session) === String(clientSessionRef.current);
         const atts = mapArchivoToAttachments(m);
+        // Recent-upload es un "heurístico de eco" para mis propias subidas.
+        // En realtime, `hasRecentUploadLoose` puede dar falsos positivos (mismo tipo+size)
+        // y termina mostrando adjuntos entrantes como si fueran míos.
+        const senderIsByRecentStrict = hasRecentUploadMatch(role, cid, atts);
+        const senderIsByRecentLoose = hasRecentUploadLoose(role, cid, atts);
         const senderIsByRecent =
-          hasRecentUploadMatch(role, cid, atts) ||
-          hasRecentUploadLoose(role, cid, atts);
+          ctx === "realtime"
+            ? senderIsByRecentStrict
+            : senderIsByRecentStrict || senderIsByRecentLoose;
         // Outbox heuristic: el texto + timestamp comparable con envíos locales
         let senderIsByOutbox = false;
+        let matchedOutboxClientId: string | null = null;
         try {
           const txt = String(m?.contenido ?? m?.texto ?? "").trim();
           const tMsg = Date.parse(
@@ -1115,15 +1110,56 @@ export default function CoachChatInline({
             const nearNow = Math.abs(Date.now() - (ob.at || 0)) < 12000;
             if (near || nearNow) {
               senderIsByOutbox = true;
+              matchedOutboxClientId = ob.clientId;
               break;
             }
           }
         } catch {}
 
+        // Endurecer outbox: sólo si hay un optimista local correspondiente.
+        // Esto evita colisiones cuando el otro envía el mismo texto ("ok", "si", etc.)
+        // y el backend incluye `client_session` del receptor.
+        if (senderIsByOutbox) {
+          try {
+            const clientId = matchedOutboxClientId;
+            const prev = itemsRef.current || [];
+            const hasOptimistic = !!clientId
+              ? prev.some(
+                  (x) =>
+                    String(x?.id) === String(clientId) &&
+                    x?.delivered === false &&
+                    String(x?.sender || "").toLowerCase() ===
+                      String(role || "").toLowerCase()
+                )
+              : false;
+            if (!hasOptimistic) {
+              senderIsByOutbox = false;
+              matchedOutboxClientId = null;
+            }
+          } catch {
+            senderIsByOutbox = false;
+            matchedOutboxClientId = null;
+          }
+        }
+
+        // Nota: algunos backends propagan `client_session` del receptor en eventos realtime
+        // (especialmente de adjuntos). Para evitar misclasificar como "mío", sólo usamos
+        // session como pista fuerte en contextos no-realtime, o cuando ya hay evidencia
+        // (outbox/recent) de que fue un eco de envío local.
+        const senderIsBySessionRaw =
+          !!m?.client_session &&
+          String(m.client_session) === String(clientSessionRef.current);
+        const senderIsBySession =
+          (ctx === "user" || senderIsByOutbox || senderIsByRecent) &&
+          senderIsBySessionRaw;
+
         // Tipo de participante cuando aplique
         const tipoNorm = normalizeTipo(
           m?.participante_tipo ||
-            getTipoByParticipantId(m?.id_chat_participante_emisor)
+            m?.emisor_tipo ||
+            m?.tipo_emisor ||
+            m?.remitente_tipo ||
+            getTipoByParticipantId(m?.id_chat_participante_emisor ?? emitter)
         );
         const senderIsByTipoKnown =
           tipoNorm === "cliente" ||
@@ -1140,40 +1176,62 @@ export default function CoachChatInline({
           else if (role === "coach") final = isMine ? "coach" : "alumno";
           else final = isMine ? role : "alumno";
         } else {
-          // Usar heurísticas ordenadas: session -> outbox -> recent -> tipo
-          if (senderIsBySession) {
-            reason = "bySession";
-            final = role;
-          } else if (senderIsByOutbox) {
-            reason = "byOutbox";
-            final = role;
-          } else if (senderIsByRecent) {
-            reason = "byRecentUpload";
-            final = role;
-          } else if (senderIsByTipoKnown) {
-            reason = "byParticipantType";
-            if (tipoNorm === "cliente") final = "alumno";
-            else if (tipoNorm === "equipo") final = "coach";
-            else final = role; // admin u otros
-          } else {
-            reason = "fallback-other";
-            const hasAtts = Array.isArray(atts) && atts.length > 0;
-            const twoParty = !!isTwoPartyAlumnoCoachRef.current;
-            if (hasAtts && twoParty) {
-              final =
-                role === "alumno"
-                  ? "coach"
-                  : role === "coach"
-                  ? "alumno"
-                  : "alumno";
-              reason = "fallback-twoParty-attachments-other";
+          // Regla clave: en REALTIME, si el backend no entrega el emisor de forma confiable,
+          // NO asumimos "mío". Sólo aceptamos tipo explícito; si no, asumimos "otro".
+          // Esto evita que todo se renderice a la derecha. Los ecos propios se siguen
+          // reconciliando por los merges (optimistas/client_session) sin depender de esto.
+          if (ctx === "realtime") {
+            if (senderIsByTipoKnown) {
+              reason = "realtime-byParticipantType";
+              if (tipoNorm === "cliente") final = "alumno";
+              else if (tipoNorm === "equipo") final = "coach";
+              else final = role;
             } else {
+              reason = "realtime-assume-other";
               final =
                 role === "alumno"
                   ? "coach"
                   : role === "coach"
                   ? "alumno"
                   : "alumno";
+            }
+          } else {
+            // En no-realtime sí usamos heurísticas para reconciliar ecos propios.
+            // Orden: outbox -> recent -> session -> tipo
+            if (senderIsByOutbox) {
+              reason = "byOutbox";
+              final = role;
+            } else if (senderIsByRecent) {
+              reason = "byRecentUpload";
+              final = role;
+            } else if (senderIsBySession) {
+              reason = "bySession";
+              final = role;
+            } else if (senderIsByTipoKnown) {
+              reason = "byParticipantType";
+              if (tipoNorm === "cliente") final = "alumno";
+              else if (tipoNorm === "equipo") final = "coach";
+              else final = role; // admin u otros
+            } else {
+              reason = "fallback-other";
+              const hasAtts = Array.isArray(atts) && atts.length > 0;
+              const twoParty = !!isTwoPartyAlumnoCoachRef.current;
+              if (hasAtts && twoParty) {
+                final =
+                  role === "alumno"
+                    ? "coach"
+                    : role === "coach"
+                    ? "alumno"
+                    : "alumno";
+                reason = "fallback-twoParty-attachments-other";
+              } else {
+                final =
+                  role === "alumno"
+                    ? "coach"
+                    : role === "coach"
+                    ? "alumno"
+                    : "alumno";
+              }
             }
           }
         }
@@ -1456,16 +1514,49 @@ export default function CoachChatInline({
   // Mapear archivo/archivos del backend a adjuntos del UI
   function mapArchivoToAttachments(src: any): Attachment[] | undefined {
     try {
-      const one = src?.archivo ?? src?.Archivo ?? null;
-      const many = src?.archivos ?? src?.Archivos ?? null;
-      const list = Array.isArray(many) ? many : one ? [one] : [];
+      const looksLikeFile = (it: any) => {
+        if (!it) return false;
+        return (
+          it?.id_archivo != null ||
+          it?.nombre_archivo != null ||
+          it?.mime_type != null ||
+          it?.contenido_base64 != null ||
+          it?.url != null
+        );
+      };
+
+      const candidates: any[] = [];
+      const push = (v: any) => {
+        if (!v) return;
+        if (Array.isArray(v)) candidates.push(...v);
+        else candidates.push(v);
+      };
+
+      // Formatos comunes del backend
+      push(src?.archivo ?? src?.Archivo);
+      push(src?.archivos ?? src?.Archivos);
+
+      // Wrappers típicos en eventos/socket
+      push(src?.data?.archivo ?? src?.data?.Archivo);
+      push(src?.data?.archivos ?? src?.data?.Archivos);
+      push(src?.payload?.archivo ?? src?.payload?.Archivo);
+      push(src?.payload?.archivos ?? src?.payload?.Archivos);
+
+      // A veces el payload *es* el archivo
+      if (looksLikeFile(src)) candidates.push(src);
+      if (looksLikeFile(src?.data)) candidates.push(src.data);
+      if (looksLikeFile(src?.payload)) candidates.push(src.payload);
+
       const atts: Attachment[] = [];
-      for (const it of list) {
+      const seen = new Set<string>();
+      for (const it of candidates) {
         if (!it) continue;
+        if (!looksLikeFile(it)) continue;
+        const id = String(it?.id_archivo ?? it?.id ?? "");
+        if (id && seen.has(id)) continue;
+        if (id) seen.add(id);
         atts.push({
-          id: String(
-            it?.id_archivo ?? it?.id ?? `${Date.now()}-${Math.random()}`
-          ),
+          id: id || String(`${Date.now()}-${Math.random()}`),
           name: String(it?.nombre_archivo ?? it?.nombre ?? "archivo"),
           mime: String(it?.mime_type ?? it?.mime ?? "application/octet-stream"),
           size: Number(it?.tamano_bytes ?? it?.size ?? 0),
@@ -1730,10 +1821,37 @@ export default function CoachChatInline({
                   (myPidNow != null &&
                     String(getEmitter(msg) ?? "") === String(myPidNow)) ||
                   false;
-                const isMineBySession =
+                // Para evitar falsos positivos (backends que reflejan session del receptor),
+                // sólo consideramos session si hay evidencia (outbox/recent) de eco propio.
+                let isMineByOutbox = false;
+                try {
+                  const txt = String(msg?.contenido ?? msg?.texto ?? "").trim();
+                  const tMsg = Date.parse(
+                    String(normalizeDateStr(msg?.fecha_envio) || "")
+                  );
+                  for (let i = outboxRef.current.length - 1; i >= 0; i--) {
+                    const ob = outboxRef.current[i];
+                    if ((ob.text || "").trim() !== txt) continue;
+                    const near =
+                      !isNaN(tMsg) && Math.abs(tMsg - (ob.at || 0)) < 12000;
+                    const nearNow = Math.abs(Date.now() - (ob.at || 0)) < 12000;
+                    if (near || nearNow) {
+                      isMineByOutbox = true;
+                      break;
+                    }
+                  }
+                } catch {}
+                const attsOther = mapArchivoToAttachments(msg);
+                const isMineByRecent =
+                  hasRecentUploadMatch(role, msg?.id_chat, attsOther) ||
+                  hasRecentUploadLoose(role, msg?.id_chat, attsOther);
+                const isMineBySessionRaw =
                   !!msg?.client_session &&
                   String(msg.client_session) ===
                     String(clientSessionRef.current);
+                const isMineBySession =
+                  isMineBySessionRaw && (isMineByOutbox || isMineByRecent);
+
                 if (!isMineById && !isMineBySession) {
                   playNotificationSound();
                   const evtBump = new CustomEvent("chat:unread-bump", {
@@ -1779,9 +1897,6 @@ export default function CoachChatInline({
               (myPidNow != null &&
                 String(getEmitter(msg) ?? "") === String(myPidNow)) ||
               false;
-            const senderIsMeBySession =
-              !!msg?.client_session &&
-              String(msg.client_session) === String(clientSessionRef.current);
             let senderIsMeByOutbox = false;
             let matchedClientId: string | null = null;
             try {
@@ -1810,6 +1925,13 @@ export default function CoachChatInline({
               currentChatId,
               attsLive
             );
+
+            const senderIsMeBySessionRaw =
+              !!msg?.client_session &&
+              String(msg.client_session) === String(clientSessionRef.current);
+            const senderIsMeBySession =
+              senderIsMeBySessionRaw &&
+              (senderIsMeByOutbox || senderIsMeByRecent);
 
             if (
               !senderIsMeById &&
@@ -2660,9 +2782,7 @@ export default function CoachChatInline({
           : null;
         if (!alumnoCode) return;
         const j = await apiFetch<any>(
-          `${endpoints.coachClient.list}?alumno=${encodeURIComponent(
-            alumnoCode
-          )}`
+          `/client/get/clients-coaches?alumno=${encodeURIComponent(alumnoCode)}`
         );
         const rows: any[] = Array.isArray(j?.data) ? j.data : [];
         const list = rows
@@ -3530,13 +3650,62 @@ export default function CoachChatInline({
     }
   }
 
+  const [dragActive, setDragActive] = React.useState(false);
+  const dragCounterRef = React.useRef(0);
+
   return (
     <>
       <div
         className={`relative h-full flex ${
           role === "alumno" ? "flex-row" : "flex-col"
         } w-full min-h-0 chat-root ${className || ""}`}
+        onDragEnter={(e) => {
+          try {
+            if (e.dataTransfer?.types?.includes("Files")) {
+              dragCounterRef.current += 1;
+              setDragActive(true);
+            }
+          } catch {}
+        }}
+        onDragOver={(e) => {
+          try {
+            if (e.dataTransfer?.types?.includes("Files")) {
+              e.preventDefault();
+              setDragActive(true);
+            }
+          } catch {}
+        }}
+        onDragLeave={() => {
+          dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+          if (dragCounterRef.current === 0) setDragActive(false);
+        }}
+        onDrop={(e) => {
+          // Evitar doble manejo si el drop ocurre sobre un hijo que ya lo procesó (p.ej. la barra inferior)
+          if (e.defaultPrevented) {
+            dragCounterRef.current = 0;
+            setDragActive(false);
+            return;
+          }
+          try {
+            if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+              e.preventDefault();
+              addPendingAttachments(e.dataTransfer.files);
+            }
+          } catch {}
+          dragCounterRef.current = 0;
+          setDragActive(false);
+        }}
       >
+        {dragActive && (
+          <div className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-background/40 backdrop-blur-[1px]">
+            <div className="rounded-xl bg-background/95 px-4 py-3 shadow-lg border">
+              <div className="text-sm font-medium">Suelta para adjuntar</div>
+              <div className="text-xs text-muted-foreground">
+                Máx. 50MB por archivo
+              </div>
+            </div>
+          </div>
+        )}
         {role === "alumno" && (
           <div
             className={`${
