@@ -72,12 +72,24 @@ export function SalePreview({
   const pay = {
     mode: draft?.paymentMode ?? payload?.payment?.mode ?? payload?.paymentMode,
     amount: draft?.paymentAmount ?? payload?.payment?.amount,
+    hasReserve: (draft as any)?.paymentHasReserve ?? payload?.payment?.hasReserve,
+    reserveAmount:
+      (draft as any)?.paymentReserveAmount ??
+      payload?.payment?.reserveAmount ??
+      payload?.payment?.reservationAmount ??
+      payload?.payment?.reserva ??
+      payload?.payment?.deposit ??
+      payload?.payment?.downPayment ??
+      payload?.payment?.anticipo ??
+      null,
     platform: draft?.paymentPlatform ?? payload?.payment?.platform,
     nextChargeDate:
       draft?.nextChargeDate ?? payload?.payment?.nextChargeDate ?? null,
   } as {
     mode?: string;
     amount?: string;
+    hasReserve?: boolean;
+    reserveAmount?: any;
     platform?: string;
     nextChargeDate?: string | null;
   };
@@ -111,14 +123,22 @@ export function SalePreview({
   })();
 
   const rawMode = String(pay?.mode || "").toLowerCase();
-  const reserveAmountRaw = (payload?.payment?.reserveAmount ??
+  const reserveAmountRaw = (
+    pay?.reserveAmount ??
     payload?.reserveAmount ??
-    null) as any;
+    payload?.reservationAmount ??
+    payload?.reserva ??
+    payload?.deposit ??
+    payload?.downPayment ??
+    payload?.anticipo ??
+    null
+  ) as any;
   const reserveAmountNum =
     reserveAmountRaw === null || reserveAmountRaw === undefined
       ? null
       : Number(reserveAmountRaw);
   const hasReserva =
+    pay?.hasReserve === true ||
     (reserveAmountNum !== null &&
       !Number.isNaN(reserveAmountNum) &&
       reserveAmountNum > 0) ||
@@ -356,13 +376,12 @@ export function SalePreview({
           </div>
           <div className="flex items-center gap-2 min-w-0">
             <Tags className="h-4 w-4 text-slate-400" />
-            <span className="truncate">
-              Plan: {planLabel} · ¿Con reserva?: {hasReserva ? "Sí" : "No"}
-              {hasReserva &&
-              reserveAmountNum !== null &&
-              !Number.isNaN(reserveAmountNum)
-                ? ` (Reserva: ${reserveAmountRaw})`
-                : ""}
+            <span className="truncate">Plan: {planLabel}</span>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <Tags className="h-4 w-4 text-slate-400" />
+            <span className="whitespace-normal break-words">
+              Reserva: {hasReserva ? "Sí" : "No"} · Monto reserva: {reserveAmountRaw ?? "—"}
             </span>
           </div>
           <div className="flex items-center gap-2 min-w-0">

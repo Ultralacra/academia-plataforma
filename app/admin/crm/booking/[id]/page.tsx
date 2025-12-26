@@ -8,9 +8,17 @@ import {
   type CloseSaleInput,
 } from "@/app/admin/crm/components/CloseSaleForm2";
 import { CallFlowManager } from "@/app/admin/crm/components/CallFlowManager";
-import { Card } from "@/components/ui/card";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +31,7 @@ import Link from "next/link";
 import { SalePreview } from "@/app/admin/crm/components/SalePreview";
 import { updateMetadataPayload } from "@/app/admin/crm/api";
 import { toast } from "@/components/ui/use-toast";
+import { StageBadge } from "@/app/admin/crm/components/StageBadge";
 
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   return (
@@ -114,6 +123,16 @@ function Content({ id }: { id: string }) {
   })();
 
   const leadDisposition = String(p.lead_disposition ?? "");
+  const leadDispositionLabel = (() => {
+    const v = String(leadDisposition || "").toLowerCase();
+    if (!v) return "";
+    if (v === "interesado") return "Interesado";
+    if (v === "reagendar") return "Reagendar";
+    if (v === "no_responde") return "No responde";
+    if (v === "no_califica") return "No califica";
+    if (v === "no_interesado") return "No interesado";
+    return leadDisposition;
+  })();
 
   const statusRaw = String(salePayload?.status || "");
   const statusLabel = (() => {
@@ -128,6 +147,36 @@ function Content({ id }: { id: string }) {
     if (v === "contract_signed") return "contrato firmado";
     return v.replace(/_/g, " ");
   })();
+
+  const salePaymentMode = String(salePayload?.payment?.mode || "").toLowerCase();
+  const draftPaymentHasReserve = (draft as any)?.paymentHasReserve;
+  const draftPaymentReserveAmount = (draft as any)?.paymentReserveAmount;
+  const reserveAmountRaw =
+    draftPaymentReserveAmount ??
+    salePayload?.payment?.reserveAmount ??
+    salePayload?.payment?.reservationAmount ??
+    salePayload?.payment?.reserva ??
+    salePayload?.payment?.deposit ??
+    salePayload?.payment?.downPayment ??
+    salePayload?.payment?.anticipo ??
+    salePayload?.reserveAmount ??
+    salePayload?.reservationAmount ??
+    salePayload?.reserva ??
+    salePayload?.deposit ??
+    salePayload?.downPayment ??
+    salePayload?.anticipo ??
+    null;
+  const reserveAmountNum =
+    reserveAmountRaw === null || reserveAmountRaw === undefined
+      ? null
+      : Number(reserveAmountRaw);
+  const hasReserva =
+    draftPaymentHasReserve === true ||
+    salePayload?.payment?.hasReserve === true ||
+    ((reserveAmountNum !== null &&
+      !Number.isNaN(reserveAmountNum) &&
+      reserveAmountNum > 0) ||
+      /reserva|apartado|señ?a|anticipo/i.test(salePaymentMode));
 
   const initial: Partial<CloseSaleInput> = {
     fullName: p.name || salePayload?.name || "",
@@ -144,6 +193,27 @@ function Content({ id }: { id: string }) {
       : [],
     paymentMode: salePayload?.payment?.mode || "",
     paymentAmount: salePayload?.payment?.amount || "",
+    paymentHasReserve:
+      !!(
+        salePayload?.payment?.hasReserve ||
+        salePayload?.payment?.reserveAmount ||
+        salePayload?.payment?.reservationAmount ||
+        salePayload?.payment?.reserva ||
+        salePayload?.payment?.deposit ||
+        salePayload?.payment?.downPayment ||
+        salePayload?.payment?.anticipo
+      ) ||
+      /reserva|apartado|señ?a|anticipo/i.test(
+        String(salePayload?.payment?.mode || "").toLowerCase()
+      ),
+    paymentReserveAmount:
+      (salePayload?.payment?.reserveAmount ??
+        salePayload?.payment?.reservationAmount ??
+        salePayload?.payment?.reserva ??
+        salePayload?.payment?.deposit ??
+        salePayload?.payment?.downPayment ??
+        salePayload?.payment?.anticipo ??
+        "") as any,
     paymentPlatform: salePayload?.payment?.platform || "hotmart",
     nextChargeDate: salePayload?.payment?.nextChargeDate || "",
     contractThirdParty: !!salePayload?.contract?.thirdParty,
@@ -167,155 +237,210 @@ function Content({ id }: { id: string }) {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Detalle del lead</h1>
-          <div className="text-sm text-slate-600">ID: {record.id}</div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold truncate">
+            {p.name || salePayload?.name || "Detalle del lead"}
+          </h1>
+          <div className="text-sm text-muted-foreground">
+            Booking • ID: {record.id}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <StageBadge stage={leadStageLabel} />
+            {!!leadDispositionLabel && (
+              <Badge variant="muted">Estado: {leadDispositionLabel}</Badge>
+            )}
+            <Badge variant="secondary" className="capitalize">
+              Venta: {statusLabel}
+            </Badge>
+          </div>
         </div>
+
         <div className="flex items-center gap-2">
-          <Badge className="bg-indigo-100 text-indigo-700 capitalize">
-            Lead: {leadStageLabel}
-          </Badge>
-          <Badge className="bg-slate-100 text-slate-700 capitalize">
-            Estatus: {statusLabel}
-          </Badge>
-          <select
-            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none"
-            value={leadStatus}
-            disabled={stageSaving}
-            onChange={async (e) => {
-              const next = e.target.value;
-              setStageSaving(true);
-              try {
-                await updateMetadataPayload(String(record.id), {
-                  status: next,
-                } as any);
-                toast({
-                  title: "Etapa actualizada",
-                  description: `Lead → ${next}`,
-                });
-                await load();
-              } catch (err: any) {
-                toast({
-                  title: "Error",
-                  description: err?.message || "No se pudo actualizar la etapa",
-                  variant: "destructive",
-                });
-              } finally {
-                setStageSaving(false);
-              }
-            }}
-            title="Cambiar etapa del lead"
-          >
-            <option value="new">Nuevo</option>
-            <option value="contacted">Contactado</option>
-            <option value="qualified">Calificado</option>
-            <option value="won">Ganado</option>
-            <option value="lost">Perdido</option>
-          </select>
-          <select
-            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none"
-            value={leadDisposition}
-            disabled={dispositionSaving}
-            onChange={async (e) => {
-              const next = e.target.value;
-              setDispositionSaving(true);
-              try {
-                await updateMetadataPayload(String(record.id), {
-                  lead_disposition: next || null,
-                } as any);
-                toast({ title: "Estado guardado" });
-                await load();
-              } catch (err: any) {
-                toast({
-                  title: "Error",
-                  description: err?.message || "No se pudo guardar",
-                  variant: "destructive",
-                });
-              } finally {
-                setDispositionSaving(false);
-              }
-            }}
-            title="Estado comercial (no califica / reagendar / etc)"
-          >
-            <option value="">Estado: —</option>
-            <option value="interesado">Interesado</option>
-            <option value="reagendar">Reagendar</option>
-            <option value="no_responde">No responde</option>
-            <option value="no_califica">No califica</option>
-            <option value="no_interesado">No interesado</option>
-          </select>
-          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-            <DialogTrigger asChild>
-              <Button variant="secondary">Vista previa</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Vista previa / contrato</DialogTitle>
-              </DialogHeader>
-              <SalePreview
-                payload={salePayload}
-                draft={draft || undefined}
-                id={record.id}
-                entity="booking"
-                title="Contrato / resumen"
-                onUpdated={() => load()}
-              />
-            </DialogContent>
-          </Dialog>
           <Button asChild variant="outline">
             <Link href="/admin/crm">Volver al CRM</Link>
           </Button>
         </div>
       </div>
 
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-          <div className="flex items-center gap-2 min-w-0">
-            <Mail className="h-4 w-4 text-slate-400" />
-            <span className="truncate">{p.email || "—"}</span>
-          </div>
-          <div className="flex items-center gap-2 min-w-0">
-            <Phone className="h-4 w-4 text-slate-400" />
-            <span className="truncate">{p.phone || "—"}</span>
-          </div>
-          <div className="flex items-center gap-2 min-w-0">
-            <Tags className="h-4 w-4 text-slate-400" />
-            <span className="truncate">{p.source || "booking"}</span>
-          </div>
-          <div className="flex items-center gap-2 min-w-0">
-            <Calendar className="h-4 w-4 text-slate-400" />
-            <span className="truncate">
-              Registrado: {fmtDate(record.created_at || p.created_at)}
-            </span>
-          </div>
-        </div>
-      </Card>
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <div className="xl:col-span-2 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Resumen</CardTitle>
+              <CardDescription>Datos básicos del contacto</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-3 text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  <span className="truncate">{p.email || "—"}</span>
+                </div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="truncate">{p.phone || "—"}</span>
+                </div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Tags className="h-4 w-4 text-muted-foreground" />
+                  <span className="truncate">{p.source || "booking"}</span>
+                </div>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                  <span className="truncate">
+                    Registrado: {fmtDate(record.created_at || p.created_at)}
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Flujo de llamada según diagrama (recordatorios, resultado, reagenda) */}
-      <CallFlowManager
-        recordId={record.id}
-        payload={p}
-        onSaved={() => load()}
-      />
+          <Card>
+            <CardHeader>
+              <CardTitle>Estado del lead</CardTitle>
+              <CardDescription>
+                Etapa del pipeline + estado comercial
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4">
+                <div className="grid gap-1">
+                  <Label htmlFor="lead-stage">Etapa</Label>
+                  <select
+                    id="lead-stage"
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none"
+                    value={leadStatus}
+                    disabled={stageSaving}
+                    onChange={async (e) => {
+                      const next = e.target.value;
+                      setStageSaving(true);
+                      try {
+                        await updateMetadataPayload(String(record.id), {
+                          status: next,
+                        } as any);
+                        toast({
+                          title: "Etapa actualizada",
+                          description: `Lead → ${next}`,
+                        });
+                        await load();
+                      } catch (err: any) {
+                        toast({
+                          title: "Error",
+                          description:
+                            err?.message || "No se pudo actualizar la etapa",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setStageSaving(false);
+                      }
+                    }}
+                  >
+                    <option value="new">Nuevo</option>
+                    <option value="contacted">Contactado</option>
+                    <option value="qualified">Calificado</option>
+                    <option value="won">Ganado</option>
+                    <option value="lost">Perdido</option>
+                  </select>
+                </div>
 
-      <Card className="p-4">
-        <div className="text-sm font-medium mb-2">
-          Cierre de venta dentro del lead
+                <div className="grid gap-1">
+                  <Label htmlFor="lead-disposition">Estado comercial</Label>
+                  <select
+                    id="lead-disposition"
+                    className="h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none"
+                    value={leadDisposition}
+                    disabled={dispositionSaving}
+                    onChange={async (e) => {
+                      const next = e.target.value;
+                      setDispositionSaving(true);
+                      try {
+                        await updateMetadataPayload(String(record.id), {
+                          lead_disposition: next || null,
+                        } as any);
+                        toast({ title: "Estado guardado" });
+                        await load();
+                      } catch (err: any) {
+                        toast({
+                          title: "Error",
+                          description: err?.message || "No se pudo guardar",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setDispositionSaving(false);
+                      }
+                    }}
+                  >
+                    <option value="">—</option>
+                    <option value="interesado">Interesado</option>
+                    <option value="reagendar">Reagendar</option>
+                    <option value="no_responde">No responde</option>
+                    <option value="no_califica">No califica</option>
+                    <option value="no_interesado">No interesado</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">
+                Se guarda automáticamente.
+              </div>
+            </CardContent>
+          </Card>
         </div>
-        <CloseSaleForm
-          mode="edit"
-          recordId={record.id}
-          entity="booking"
-          initial={initial}
-          autoSave
-          onChange={(f) => setDraft({ ...f })}
-          onDone={() => {
-            // tras guardar, refrescamos la data sin recargar la página
-            load();
-          }}
-        />
-      </Card>
+
+        <div className="xl:col-span-3 space-y-6">
+          <CallFlowManager
+            recordId={record.id}
+            payload={p}
+            onSaved={() => load()}
+          />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Venta</CardTitle>
+              <CardDescription>Cierre de venta dentro del lead</CardDescription>
+              <CardAction>
+                <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="secondary">Vista previa</Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Vista previa / contrato</DialogTitle>
+                    </DialogHeader>
+                    <SalePreview
+                      payload={salePayload}
+                      draft={draft || undefined}
+                      id={record.id}
+                      entity="booking"
+                      title="Contrato / resumen"
+                      onUpdated={() => load()}
+                    />
+                  </DialogContent>
+                </Dialog>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                Pago con reserva: <span className="text-foreground">{hasReserva ? "Sí" : "No"}</span>
+                {hasReserva ? (
+                  <>
+                    {" "}· Monto reserva: <span className="text-foreground">{String(reserveAmountRaw ?? "—")}</span>
+                  </>
+                ) : null}
+              </div>
+              <CloseSaleForm
+                mode="edit"
+                recordId={record.id}
+                entity="booking"
+                initial={initial}
+                autoSave
+                onChange={(f) => setDraft({ ...f })}
+                onDone={() => {
+                  load();
+                }}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

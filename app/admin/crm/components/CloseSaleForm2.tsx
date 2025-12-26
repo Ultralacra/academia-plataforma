@@ -42,6 +42,8 @@ export interface CloseSaleInput {
   bonuses?: string[];
   paymentMode: string;
   paymentAmount: string;
+  paymentHasReserve?: boolean;
+  paymentReserveAmount?: string;
   paymentPlatform: PaymentPlatform;
   nextChargeDate?: string;
   contractThirdParty?: boolean;
@@ -97,6 +99,8 @@ export function CloseSaleForm({
     bonuses: (initial?.bonuses as string[] | undefined) || [],
     paymentMode: initial?.paymentMode || "",
     paymentAmount: initial?.paymentAmount || "",
+    paymentHasReserve: (initial as any)?.paymentHasReserve || false,
+    paymentReserveAmount: (initial as any)?.paymentReserveAmount || "",
     paymentPlatform: (initial?.paymentPlatform as PaymentPlatform) || "hotmart",
     nextChargeDate: initial?.nextChargeDate || "",
     contractThirdParty: !!initial?.contractThirdParty,
@@ -162,6 +166,10 @@ export function CloseSaleForm({
       payment: {
         mode: form.paymentMode,
         amount: form.paymentAmount,
+        hasReserve: !!form.paymentHasReserve,
+        reserveAmount: form.paymentHasReserve
+          ? form.paymentReserveAmount || null
+          : null,
         platform: form.paymentPlatform,
         nextChargeDate: form.nextChargeDate || null,
       },
@@ -239,6 +247,10 @@ export function CloseSaleForm({
         bonuses: (initial?.bonuses as string[] | undefined) ?? prev.bonuses,
         paymentMode: initial?.paymentMode ?? prev.paymentMode,
         paymentAmount: initial?.paymentAmount ?? prev.paymentAmount,
+        paymentHasReserve:
+          (initial as any)?.paymentHasReserve ?? prev.paymentHasReserve,
+        paymentReserveAmount:
+          (initial as any)?.paymentReserveAmount ?? prev.paymentReserveAmount,
         paymentPlatform:
           (initial?.paymentPlatform as PaymentPlatform) ?? prev.paymentPlatform,
         nextChargeDate: initial?.nextChargeDate ?? prev.nextChargeDate,
@@ -387,6 +399,8 @@ export function CloseSaleForm({
           bonuses: [],
           paymentMode: "",
           paymentAmount: "",
+          paymentHasReserve: false,
+          paymentReserveAmount: "",
           paymentPlatform: "hotmart",
           nextChargeDate: "",
           contractThirdParty: false,
@@ -726,6 +740,45 @@ export function CloseSaleForm({
                     }
                   />
                 </div>
+
+                <div className="md:col-span-3">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      checked={!!form.paymentHasReserve}
+                      onCheckedChange={(v) => {
+                        const checked = v === true;
+                        setForm({
+                          ...form,
+                          paymentHasReserve: checked,
+                          paymentReserveAmount: checked
+                            ? form.paymentReserveAmount
+                            : "",
+                        });
+                      }}
+                      id="paymentHasReserve"
+                    />
+                    <Label htmlFor="paymentHasReserve">
+                      ¿Pago con reserva?
+                    </Label>
+                  </div>
+                  {form.paymentHasReserve ? (
+                    <div className="mt-2 max-w-xs">
+                      <Label>Monto de reserva (USD)</Label>
+                      <Input
+                        placeholder="$"
+                        className={inputAccent}
+                        value={form.paymentReserveAmount || ""}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            paymentReserveAmount: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  ) : null}
+                </div>
+
                 <div className="md:col-span-3">
                   <Label>Comprobante de pago (imagen)</Label>
                   <Input

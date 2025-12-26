@@ -238,6 +238,15 @@ export function CallFlowManager({
   const fmt = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleString("es-ES") : "—";
 
+  const nextAppointmentText = () => {
+    const d = call?.reschedule?.date || "";
+    const t = call?.reschedule?.time || "";
+    if (!d && !t) return "—";
+    if (d && t) return `${d} ${t}`;
+    if (d && !t) return `${d} (sin hora)`;
+    return `Hora ${t} (sin fecha)`;
+  };
+
   const statusBadge = () => {
     const s = call?.outcome || null;
     if (s === "attended")
@@ -275,6 +284,25 @@ export function CallFlowManager({
         </div>
         {statusBadge()}
       </div>
+
+      {call?.reschedule?.requested ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50/60 p-3 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold text-amber-900">
+              Reagenda solicitada
+              {call?.outcome === "cancelled" ? " (cancelada + reagendada)" : ""}
+            </div>
+            <Badge className="bg-amber-100 text-amber-800">
+              Próxima cita: {nextAppointmentText()}
+            </Badge>
+          </div>
+          {!call?.reschedule?.date && !call?.reschedule?.time ? (
+            <div className="mt-1 text-[11px] text-amber-800">
+              Falta definir fecha/hora.
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Sección: Estado y acciones rápidas */}
       <Card className="p-3 border-slate-200">
@@ -494,7 +522,7 @@ export function CallFlowManager({
       {/* Sección: Reagendar */}
       <Card className="p-3 border-slate-200">
         <div className="text-xs font-semibold mb-2">Reagendar</div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end">
           <div>
             <Label className="text-xs">Fecha</Label>
             <Input
@@ -513,31 +541,31 @@ export function CallFlowManager({
               onChange={(e) => setRescheduleTime(e.target.value)}
             />
           </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={guardarReagenda}
-              className="w-full sm:w-auto"
-            >
-              <Calendar className="h-4 w-4 mr-1" /> Guardar re-agenda
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={marcarCancelada}
-              className="w-full sm:w-auto"
-            >
-              <RotateCcw className="h-4 w-4 mr-1" /> Cancelar + re-agendar
-            </Button>
-          </div>
+        </div>
+
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={guardarReagenda}
+            className="w-full"
+          >
+            <Calendar className="h-4 w-4 mr-1" /> Guardar re-agenda
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={marcarCancelada}
+            className="w-full"
+          >
+            <RotateCcw className="h-4 w-4 mr-1" /> Cancelar + re-agendar
+          </Button>
         </div>
         {call?.reschedule?.date || call?.reschedule?.time ? (
           <div className="mt-2 text-[11px] text-slate-600">
-            Próxima cita: {call?.reschedule?.date || "—"}{" "}
-            {call?.reschedule?.time || ""}
+            Próxima cita: {nextAppointmentText()}
           </div>
         ) : null}
       </Card>
