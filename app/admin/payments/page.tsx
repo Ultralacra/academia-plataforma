@@ -108,8 +108,10 @@ function computePaymentMetrics(rows: PaymentRow[]): PaymentMetrics {
 
   for (const r of rows) {
     const reserva = r?.monto_reserva;
-    const reservaNum = reserva === null || reserva === undefined ? null : Number(reserva);
-    const hasReserva = reservaNum !== null && !Number.isNaN(reservaNum) && reservaNum > 0;
+    const reservaNum =
+      reserva === null || reserva === undefined ? null : Number(reserva);
+    const hasReserva =
+      reservaNum !== null && !Number.isNaN(reservaNum) && reservaNum > 0;
     if (hasReserva) withReserva += 1;
     else withoutReserva += 1;
 
@@ -117,7 +119,8 @@ function computePaymentMetrics(rows: PaymentRow[]): PaymentMetrics {
     if (est.includes("reembol")) refunds += 1;
 
     const cuotas = r?.nro_cuotas;
-    const cuotasNum = cuotas === null || cuotas === undefined ? null : Number(cuotas);
+    const cuotasNum =
+      cuotas === null || cuotas === undefined ? null : Number(cuotas);
     if (cuotasNum !== null && !Number.isNaN(cuotasNum) && cuotasNum > 0) {
       totalCuotas += cuotasNum;
       countCuotas += 1;
@@ -125,7 +128,14 @@ function computePaymentMetrics(rows: PaymentRow[]): PaymentMetrics {
   }
 
   const avgCuotas = countCuotas ? totalCuotas / countCuotas : 0;
-  return { totalPayments, withReserva, withoutReserva, refunds, totalCuotas, avgCuotas };
+  return {
+    totalPayments,
+    withReserva,
+    withoutReserva,
+    refunds,
+    totalCuotas,
+    avgCuotas,
+  };
 }
 
 function PaymentsContent() {
@@ -219,26 +229,44 @@ function PaymentsContent() {
         metodo: debouncedMetodo.trim() || undefined,
         fechaDesde: fechaDesde || undefined,
         fechaHasta: fechaHasta || undefined,
-        montoMin: debouncedMontoMin.trim() ? Number(debouncedMontoMin) : undefined,
-        montoMax: debouncedMontoMax.trim() ? Number(debouncedMontoMax) : undefined,
+        montoMin: debouncedMontoMin.trim()
+          ? Number(debouncedMontoMin)
+          : undefined,
+        montoMax: debouncedMontoMax.trim()
+          ? Number(debouncedMontoMax)
+          : undefined,
       } as const;
 
-      const first = await getPayments({ page: 1, pageSize: metricsPageSize, ...common });
+      const first = await getPayments({
+        page: 1,
+        pageSize: metricsPageSize,
+        ...common,
+      });
       if (metricsReqIdRef.current !== reqId) return;
 
       const totalPagesFromApi = Number(first?.totalPages ?? 1);
-      const all: PaymentRow[] = Array.isArray(first?.data) ? [...first.data] : [];
+      const all: PaymentRow[] = Array.isArray(first?.data)
+        ? [...first.data]
+        : [];
 
       for (let p = 2; p <= totalPagesFromApi; p++) {
-        const next = await getPayments({ page: p, pageSize: metricsPageSize, ...common });
+        const next = await getPayments({
+          page: p,
+          pageSize: metricsPageSize,
+          ...common,
+        });
         if (metricsReqIdRef.current !== reqId) return;
         if (Array.isArray(next?.data) && next.data.length) {
           all.push(...next.data);
         }
       }
 
-      const min = debouncedReservaMin.trim() ? Number(debouncedReservaMin) : null;
-      const max = debouncedReservaMax.trim() ? Number(debouncedReservaMax) : null;
+      const min = debouncedReservaMin.trim()
+        ? Number(debouncedReservaMin)
+        : null;
+      const max = debouncedReservaMax.trim()
+        ? Number(debouncedReservaMax)
+        : null;
       const allWithReservaFilter = all.filter((r) => {
         if (min === null && max === null) return true;
         const amount = r.monto_reserva ?? null;
@@ -349,7 +377,8 @@ function PaymentsContent() {
           <div>
             <div className="text-sm font-semibold">Métricas</div>
             <div className="text-xs text-muted-foreground">
-              Calculadas sobre todos los pagos que coinciden con los filtros actuales.
+              Calculadas sobre todos los pagos que coinciden con los filtros
+              actuales.
             </div>
           </div>
           <Button
@@ -397,13 +426,15 @@ function PaymentsContent() {
             </div>
           </div>
           <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Cuotas (promedio)</div>
+            <div className="text-xs text-muted-foreground">
+              Cuotas (promedio)
+            </div>
             <div className="text-sm font-semibold">
               {metricsLoading
                 ? "…"
                 : metrics
-                  ? metrics.avgCuotas.toFixed(2)
-                  : "—"}
+                ? metrics.avgCuotas.toFixed(2)
+                : "—"}
             </div>
           </div>
         </div>
@@ -610,7 +641,8 @@ function PaymentsContent() {
                 </TableRow>
               ) : (
                 filtered.map((r) => {
-                  const clientName = r.cliente_nombre || r.cliente_codigo || "—";
+                  const clientName =
+                    r.cliente_nombre || r.cliente_codigo || "—";
                   return (
                     <TableRow
                       key={r.codigo}
