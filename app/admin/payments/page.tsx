@@ -30,7 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getPaymentByCodigo, getPayments, type PaymentRow } from "./api";
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
@@ -89,6 +89,45 @@ function getStatusVariant(
   return "outline";
 }
 
+type PaymentMetrics = {
+  totalPayments: number;
+  withReserva: number;
+  withoutReserva: number;
+  refunds: number;
+  totalCuotas: number;
+  avgCuotas: number;
+};
+
+function computePaymentMetrics(rows: PaymentRow[]): PaymentMetrics {
+  const totalPayments = Array.isArray(rows) ? rows.length : 0;
+  let withReserva = 0;
+  let withoutReserva = 0;
+  let refunds = 0;
+  let totalCuotas = 0;
+  let countCuotas = 0;
+
+  for (const r of rows) {
+    const reserva = r?.monto_reserva;
+    const reservaNum = reserva === null || reserva === undefined ? null : Number(reserva);
+    const hasReserva = reservaNum !== null && !Number.isNaN(reservaNum) && reservaNum > 0;
+    if (hasReserva) withReserva += 1;
+    else withoutReserva += 1;
+
+    const est = String(r?.estatus ?? "").toLowerCase();
+    if (est.includes("reembol")) refunds += 1;
+
+    const cuotas = r?.nro_cuotas;
+    const cuotasNum = cuotas === null || cuotas === undefined ? null : Number(cuotas);
+    if (cuotasNum !== null && !Number.isNaN(cuotasNum) && cuotasNum > 0) {
+      totalCuotas += cuotasNum;
+      countCuotas += 1;
+    }
+  }
+
+  const avgCuotas = countCuotas ? totalCuotas / countCuotas : 0;
+  return { totalPayments, withReserva, withoutReserva, refunds, totalCuotas, avgCuotas };
+}
+
 function PaymentsContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +163,11 @@ function PaymentsContent() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
 
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
+  const [metrics, setMetrics] = useState<PaymentMetrics | null>(null);
+  const metricsReqIdRef = useRef(0);
+
   async function loadList(next?: { page?: number; pageSize?: number }) {
     setIsLoading(true);
     setError(null);
@@ -158,6 +202,58 @@ function PaymentsContent() {
       setTotalPages(1);
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadMetrics() {
+    const reqId = ++metricsReqIdRef.current;
+    setMetricsLoading(true);
+    setMetricsError(null);
+
+    try {
+      const metricsPageSize = 200;
+      const common = {
+        search: debouncedSearch.trim() || undefined,
+        cliente_codigo: debouncedClienteCodigo.trim() || undefined,
+        estatus: estatus || undefined,
+        metodo: debouncedMetodo.trim() || undefined,
+        fechaDesde: fechaDesde || undefined,
+        fechaHasta: fechaHasta || undefined,
+        montoMin: debouncedMontoMin.trim() ? Number(debouncedMontoMin) : undefined,
+        montoMax: debouncedMontoMax.trim() ? Number(debouncedMontoMax) : undefined,
+      } as const;
+
+      const first = await getPayments({ page: 1, pageSize: metricsPageSize, ...common });
+      if (metricsReqIdRef.current !== reqId) return;
+
+      const totalPagesFromApi = Number(first?.totalPages ?? 1);
+      const all: PaymentRow[] = Array.isArray(first?.data) ? [...first.data] : [];
+
+      for (let p = 2; p <= totalPagesFromApi; p++) {
+        const next = await getPayments({ page: p, pageSize: metricsPageSize, ...common });
+        if (metricsReqIdRef.current !== reqId) return;
+        if (Array.isArray(next?.data) && next.data.length) {
+          all.push(...next.data);
+        }
+      }
+
+      const min = debouncedReservaMin.trim() ? Number(debouncedReservaMin) : null;
+      const max = debouncedReservaMax.trim() ? Number(debouncedReservaMax) : null;
+      const allWithReservaFilter = all.filter((r) => {
+        if (min === null && max === null) return true;
+        const amount = r.monto_reserva ?? null;
+        if (amount === null || Number.isNaN(Number(amount))) return false;
+        if (min !== null && Number(amount) < min) return false;
+        if (max !== null && Number(amount) > max) return false;
+        return true;
+      });
+
+      setMetrics(computePaymentMetrics(allWithReservaFilter));
+    } catch (e: any) {
+      setMetrics(null);
+      setMetricsError(e?.message || "No se pudieron calcular las métricas");
+    } finally {
+      if (metricsReqIdRef.current === reqId) setMetricsLoading(false);
     }
   }
 
@@ -216,6 +312,7 @@ function PaymentsContent() {
   useEffect(() => {
     // Carga inicial
     void loadList({ page: 1, pageSize: 25 });
+    void loadMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -223,6 +320,7 @@ function PaymentsContent() {
   useEffect(() => {
     // Cuando cambian los filtros, volvemos a página 1
     void loadList({ page: 1, pageSize });
+    void loadMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     pageSize,
@@ -230,10 +328,11 @@ function PaymentsContent() {
     fechaDesde,
     fechaHasta,
     debouncedSearch,
-    debouncedClienteCodigo,
     debouncedMetodo,
     debouncedMontoMin,
     debouncedMontoMax,
+    debouncedReservaMin,
+    debouncedReservaMax,
   ]);
 
   return (
@@ -243,6 +342,71 @@ function PaymentsContent() {
         <p className="text-sm text-muted-foreground">
           Gestión de pagos (lista + detalle)
         </p>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold">Métricas</div>
+            <div className="text-xs text-muted-foreground">
+              Calculadas sobre todos los pagos que coinciden con los filtros actuales.
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={metricsLoading}
+            onClick={() => loadMetrics()}
+          >
+            {metricsLoading ? "Calculando…" : "Recalcular"}
+          </Button>
+        </div>
+
+        {metricsError ? (
+          <div className="mt-3">
+            <Alert variant="destructive">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{metricsError}</AlertDescription>
+            </Alert>
+          </div>
+        ) : null}
+
+        <div className="mt-3 grid gap-2 md:grid-cols-5">
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Con reserva</div>
+            <div className="text-sm font-semibold">
+              {metricsLoading ? "…" : metrics?.withReserva ?? "—"}
+            </div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Sin reserva</div>
+            <div className="text-sm font-semibold">
+              {metricsLoading ? "…" : metrics?.withoutReserva ?? "—"}
+            </div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Reembolsos</div>
+            <div className="text-sm font-semibold">
+              {metricsLoading ? "…" : metrics?.refunds ?? "—"}
+            </div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Cuotas (total)</div>
+            <div className="text-sm font-semibold">
+              {metricsLoading ? "…" : metrics?.totalCuotas ?? "—"}
+            </div>
+          </div>
+          <div className="rounded-md border p-3">
+            <div className="text-xs text-muted-foreground">Cuotas (promedio)</div>
+            <div className="text-sm font-semibold">
+              {metricsLoading
+                ? "…"
+                : metrics
+                  ? metrics.avgCuotas.toFixed(2)
+                  : "—"}
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card p-4">
@@ -446,8 +610,7 @@ function PaymentsContent() {
                 </TableRow>
               ) : (
                 filtered.map((r) => {
-                  const clientName =
-                    r.cliente_nombre || r.cliente_codigo || "—";
+                  const clientName = r.cliente_nombre || r.cliente_codigo || "—";
                   return (
                     <TableRow
                       key={r.codigo}
@@ -663,7 +826,7 @@ function PaymentsContent() {
 
 export default function PaymentsPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "coach", "equipo"]}>
       <DashboardLayout>
         <PaymentsContent />
       </DashboardLayout>

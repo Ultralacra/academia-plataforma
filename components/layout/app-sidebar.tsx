@@ -223,6 +223,7 @@ export function AppSidebar() {
                     url: "/coach/tickets",
                     icon: MessageSquare,
                   },
+                  { title: "Pagos", url: "/admin/payments", icon: CreditCard },
                 ] as MenuItem[];
               })()
         ) as MenuItem[];
@@ -272,6 +273,7 @@ export function AppSidebar() {
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
               },
+              { title: "Pagos", url: "/admin/payments", icon: CreditCard },
             ]
           : [
               {
@@ -306,6 +308,7 @@ export function AppSidebar() {
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
               },
+              { title: "Pagos", url: "/admin/payments", icon: CreditCard },
             ];
         // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
         return (
