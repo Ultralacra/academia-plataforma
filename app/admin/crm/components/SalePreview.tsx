@@ -111,23 +111,26 @@ export function SalePreview({
   })();
 
   const rawMode = String(pay?.mode || "").toLowerCase();
-  const reserveAmountRaw =
-    (payload?.payment?.reserveAmount ?? payload?.reserveAmount ?? null) as any;
+  const reserveAmountRaw = (payload?.payment?.reserveAmount ??
+    payload?.reserveAmount ??
+    null) as any;
   const reserveAmountNum =
     reserveAmountRaw === null || reserveAmountRaw === undefined
       ? null
       : Number(reserveAmountRaw);
   const hasReserva =
-    (reserveAmountNum !== null && !Number.isNaN(reserveAmountNum) && reserveAmountNum > 0) ||
+    (reserveAmountNum !== null &&
+      !Number.isNaN(reserveAmountNum) &&
+      reserveAmountNum > 0) ||
     /reserva|apartado|señ?a|anticipo/i.test(rawMode);
   const isPagoTotal = cuotas === 1 || /pago[_\s-]*total|contado/.test(rawMode);
   const planLabel = isPagoTotal
     ? "Pago total"
     : cuotas && cuotas > 1
-      ? `${cuotas} cuotas`
-      : hasReserva
-        ? "Con reserva"
-        : "—";
+    ? `${cuotas} cuotas`
+    : hasReserva
+    ? "Con reserva"
+    : "—";
 
   const [localStatus, setLocalStatus] = React.useState<string>(
     String(payload?.status || "")
@@ -355,7 +358,9 @@ export function SalePreview({
             <Tags className="h-4 w-4 text-slate-400" />
             <span className="truncate">
               Plan: {planLabel} · ¿Con reserva?: {hasReserva ? "Sí" : "No"}
-              {hasReserva && reserveAmountNum !== null && !Number.isNaN(reserveAmountNum)
+              {hasReserva &&
+              reserveAmountNum !== null &&
+              !Number.isNaN(reserveAmountNum)
                 ? ` (Reserva: ${reserveAmountRaw})`
                 : ""}
             </span>

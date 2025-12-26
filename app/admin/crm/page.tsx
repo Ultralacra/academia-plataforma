@@ -482,7 +482,8 @@ function CrmContent() {
                                 } catch (err) {
                                   toast({
                                     title: "Error",
-                                    description: "No se pudo actualizar la etapa",
+                                    description:
+                                      "No se pudo actualizar la etapa",
                                     variant: "destructive",
                                   });
                                 } finally {

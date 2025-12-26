@@ -83,9 +83,18 @@ function Content({ id }: { id: string }) {
   const salePayload = p.sale || {};
 
   const normalizeLeadStatus = (raw?: any) => {
-    const v = String(raw ?? "").trim().toLowerCase();
+    const v = String(raw ?? "")
+      .trim()
+      .toLowerCase();
     if (!v) return "new";
-    if (v === "new" || v === "contacted" || v === "qualified" || v === "won" || v === "lost") return v;
+    if (
+      v === "new" ||
+      v === "contacted" ||
+      v === "qualified" ||
+      v === "won" ||
+      v === "lost"
+    )
+      return v;
     if (v === "nuevo") return "new";
     if (v === "contactado") return "contacted";
     if (v === "calificado") return "qualified";
@@ -178,11 +187,20 @@ function Content({ id }: { id: string }) {
               const next = e.target.value;
               setStageSaving(true);
               try {
-                await updateMetadataPayload(String(record.id), { status: next } as any);
-                toast({ title: "Etapa actualizada", description: `Lead → ${next}` });
+                await updateMetadataPayload(String(record.id), {
+                  status: next,
+                } as any);
+                toast({
+                  title: "Etapa actualizada",
+                  description: `Lead → ${next}`,
+                });
                 await load();
               } catch (err: any) {
-                toast({ title: "Error", description: err?.message || "No se pudo actualizar la etapa", variant: "destructive" });
+                toast({
+                  title: "Error",
+                  description: err?.message || "No se pudo actualizar la etapa",
+                  variant: "destructive",
+                });
               } finally {
                 setStageSaving(false);
               }
@@ -203,11 +221,17 @@ function Content({ id }: { id: string }) {
               const next = e.target.value;
               setDispositionSaving(true);
               try {
-                await updateMetadataPayload(String(record.id), { lead_disposition: next || null } as any);
+                await updateMetadataPayload(String(record.id), {
+                  lead_disposition: next || null,
+                } as any);
                 toast({ title: "Estado guardado" });
                 await load();
               } catch (err: any) {
-                toast({ title: "Error", description: err?.message || "No se pudo guardar", variant: "destructive" });
+                toast({
+                  title: "Error",
+                  description: err?.message || "No se pudo guardar",
+                  variant: "destructive",
+                });
               } finally {
                 setDispositionSaving(false);
               }
