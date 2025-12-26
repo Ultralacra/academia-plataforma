@@ -148,7 +148,9 @@ function Content({ id }: { id: string }) {
     return v.replace(/_/g, " ");
   })();
 
-  const salePaymentMode = String(salePayload?.payment?.mode || "").toLowerCase();
+  const salePaymentMode = String(
+    salePayload?.payment?.mode || ""
+  ).toLowerCase();
   const draftPaymentHasReserve = (draft as any)?.paymentHasReserve;
   const draftPaymentReserveAmount = (draft as any)?.paymentReserveAmount;
   const reserveAmountRaw =
@@ -173,10 +175,10 @@ function Content({ id }: { id: string }) {
   const hasReserva =
     draftPaymentHasReserve === true ||
     salePayload?.payment?.hasReserve === true ||
-    ((reserveAmountNum !== null &&
+    (reserveAmountNum !== null &&
       !Number.isNaN(reserveAmountNum) &&
       reserveAmountNum > 0) ||
-      /reserva|apartado|señ?a|anticipo/i.test(salePaymentMode));
+    /reserva|apartado|señ?a|anticipo/i.test(salePaymentMode);
 
   const initial: Partial<CloseSaleInput> = {
     fullName: p.name || salePayload?.name || "",
@@ -206,14 +208,13 @@ function Content({ id }: { id: string }) {
       /reserva|apartado|señ?a|anticipo/i.test(
         String(salePayload?.payment?.mode || "").toLowerCase()
       ),
-    paymentReserveAmount:
-      (salePayload?.payment?.reserveAmount ??
-        salePayload?.payment?.reservationAmount ??
-        salePayload?.payment?.reserva ??
-        salePayload?.payment?.deposit ??
-        salePayload?.payment?.downPayment ??
-        salePayload?.payment?.anticipo ??
-        "") as any,
+    paymentReserveAmount: (salePayload?.payment?.reserveAmount ??
+      salePayload?.payment?.reservationAmount ??
+      salePayload?.payment?.reserva ??
+      salePayload?.payment?.deposit ??
+      salePayload?.payment?.downPayment ??
+      salePayload?.payment?.anticipo ??
+      "") as any,
     paymentPlatform: salePayload?.payment?.platform || "hotmart",
     nextChargeDate: salePayload?.payment?.nextChargeDate || "",
     contractThirdParty: !!salePayload?.contract?.thirdParty,
@@ -419,10 +420,17 @@ function Content({ id }: { id: string }) {
             </CardHeader>
             <CardContent>
               <div className="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                Pago con reserva: <span className="text-foreground">{hasReserva ? "Sí" : "No"}</span>
+                Pago con reserva:{" "}
+                <span className="text-foreground">
+                  {hasReserva ? "Sí" : "No"}
+                </span>
                 {hasReserva ? (
                   <>
-                    {" "}· Monto reserva: <span className="text-foreground">{String(reserveAmountRaw ?? "—")}</span>
+                    {" "}
+                    · Monto reserva:{" "}
+                    <span className="text-foreground">
+                      {String(reserveAmountRaw ?? "—")}
+                    </span>
                   </>
                 ) : null}
               </div>

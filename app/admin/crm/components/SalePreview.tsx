@@ -72,7 +72,8 @@ export function SalePreview({
   const pay = {
     mode: draft?.paymentMode ?? payload?.payment?.mode ?? payload?.paymentMode,
     amount: draft?.paymentAmount ?? payload?.payment?.amount,
-    hasReserve: (draft as any)?.paymentHasReserve ?? payload?.payment?.hasReserve,
+    hasReserve:
+      (draft as any)?.paymentHasReserve ?? payload?.payment?.hasReserve,
     reserveAmount:
       (draft as any)?.paymentReserveAmount ??
       payload?.payment?.reserveAmount ??
@@ -123,16 +124,14 @@ export function SalePreview({
   })();
 
   const rawMode = String(pay?.mode || "").toLowerCase();
-  const reserveAmountRaw = (
-    pay?.reserveAmount ??
+  const reserveAmountRaw = (pay?.reserveAmount ??
     payload?.reserveAmount ??
     payload?.reservationAmount ??
     payload?.reserva ??
     payload?.deposit ??
     payload?.downPayment ??
     payload?.anticipo ??
-    null
-  ) as any;
+    null) as any;
   const reserveAmountNum =
     reserveAmountRaw === null || reserveAmountRaw === undefined
       ? null
@@ -381,7 +380,8 @@ export function SalePreview({
           <div className="flex items-center gap-2 min-w-0">
             <Tags className="h-4 w-4 text-slate-400" />
             <span className="whitespace-normal break-words">
-              Reserva: {hasReserva ? "Sí" : "No"} · Monto reserva: {reserveAmountRaw ?? "—"}
+              Reserva: {hasReserva ? "Sí" : "No"} · Monto reserva:{" "}
+              {reserveAmountRaw ?? "—"}
             </span>
           </div>
           <div className="flex items-center gap-2 min-w-0">
