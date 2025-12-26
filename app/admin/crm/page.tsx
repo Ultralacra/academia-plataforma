@@ -80,6 +80,7 @@ function CrmContent() {
   };
 
   const [rows, setRows] = useState<Prospect[]>([]);
+  const [stageUpdatingId, setStageUpdatingId] = useState<string | null>(null);
 
   const mapLeadStatusToEtapa = (status?: string) => {
     const s = (status || "new").toLowerCase();
@@ -89,6 +90,16 @@ function CrmContent() {
     if (s === "won") return "Ganado";
     if (s === "lost") return "Perdido";
     return "Nuevo";
+  };
+
+  const mapEtapaToLeadStatus = (etapa?: string) => {
+    const e = String(etapa || "").toLowerCase();
+    if (e === "nuevo") return "new";
+    if (e === "contactado") return "contacted";
+    if (e === "calificado") return "qualified";
+    if (e === "ganado") return "won";
+    if (e === "perdido") return "lost";
+    return "new";
   };
 
   // Eliminado: ya no usamos submissions locales vía localStorage.
@@ -437,7 +448,55 @@ function CrmContent() {
                             )}
                           </div>
                           <div className="col-span-2">
-                            <StageBadge stage={p.etapa} />
+                            <select
+                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none"
+                              value={p.etapa}
+                              disabled={stageUpdatingId === p.id}
+                              onChange={async (e) => {
+                                const nextEtapa = e.target.value;
+                                setStageUpdatingId(p.id);
+                                try {
+                                  const row = rows.find((r) => r.id === p.id);
+                                  if (row?.remote) {
+                                    await updateLead(p.id, {
+                                      status: mapEtapaToLeadStatus(nextEtapa),
+                                    });
+                                  } else {
+                                    const stageMap: Record<string, any> = {
+                                      Nuevo: "nuevo",
+                                      Contactado: "contactado",
+                                      Calificado: "calificado",
+                                      Ganado: "ganado",
+                                      Perdido: "perdido",
+                                    };
+                                    crmService.updateProspectStage(
+                                      p.id,
+                                      stageMap[nextEtapa] || "nuevo"
+                                    );
+                                  }
+                                  toast({
+                                    title: "Etapa actualizada",
+                                    description: `${p.nombre} → ${nextEtapa}`,
+                                  });
+                                  await reload();
+                                } catch (err) {
+                                  toast({
+                                    title: "Error",
+                                    description: "No se pudo actualizar la etapa",
+                                    variant: "destructive",
+                                  });
+                                } finally {
+                                  setStageUpdatingId(null);
+                                }
+                              }}
+                              title="Cambiar etapa"
+                            >
+                              {etapas.map((e) => (
+                                <option key={e} value={e}>
+                                  {e}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                           <div className="col-span-1 flex items-center">
                             {p.saleStatus ? (
@@ -589,7 +648,7 @@ function CrmContent() {
 
 export default function CrmPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <CrmContent />
       </DashboardLayout>

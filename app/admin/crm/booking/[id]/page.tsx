@@ -10,13 +10,23 @@ import {
 import { CallFlowManager } from "@/app/admin/crm/components/CallFlowManager";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Loader2, Mail, Phone, Tags, Calendar } from "lucide-react";
 import Link from "next/link";
 import { SalePreview } from "@/app/admin/crm/components/SalePreview";
+import { updateMetadataPayload } from "@/app/admin/crm/api";
+import { toast } from "@/components/ui/use-toast";
 
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <Content id={params.id} />
       </DashboardLayout>
@@ -30,6 +40,9 @@ function Content({ id }: { id: string }) {
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
     null
   );
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+  const [stageSaving, setStageSaving] = React.useState(false);
+  const [dispositionSaving, setDispositionSaving] = React.useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -68,6 +81,44 @@ function Content({ id }: { id: string }) {
 
   const p = record.payload || {};
   const salePayload = p.sale || {};
+
+  const normalizeLeadStatus = (raw?: any) => {
+    const v = String(raw ?? "").trim().toLowerCase();
+    if (!v) return "new";
+    if (v === "new" || v === "contacted" || v === "qualified" || v === "won" || v === "lost") return v;
+    if (v === "nuevo") return "new";
+    if (v === "contactado") return "contacted";
+    if (v === "calificado") return "qualified";
+    if (v === "ganado") return "won";
+    if (v === "perdido") return "lost";
+    return "new";
+  };
+
+  const leadStatus = normalizeLeadStatus(p.status);
+  const leadStageLabel = (() => {
+    if (leadStatus === "new") return "Nuevo";
+    if (leadStatus === "contacted") return "Contactado";
+    if (leadStatus === "qualified") return "Calificado";
+    if (leadStatus === "won") return "Ganado";
+    if (leadStatus === "lost") return "Perdido";
+    return "Nuevo";
+  })();
+
+  const leadDisposition = String(p.lead_disposition ?? "");
+
+  const statusRaw = String(salePayload?.status || "");
+  const statusLabel = (() => {
+    const v = statusRaw.toLowerCase();
+    if (!v) return "borrador";
+    if (v === "payment_verification_pending") return "verificación de pago";
+    if (v === "payment_confirmed") return "pago confirmado";
+    if (v === "active" || v === "active_provisional") return "activo";
+    if (v === "cancelled" || v === "lost") return "cancelada";
+    if (v === "operational_closure") return "cierre operativo";
+    if (v === "contract_sent") return "contrato enviado";
+    if (v === "contract_signed") return "contrato firmado";
+    return v.replace(/_/g, " ");
+  })();
 
   const initial: Partial<CloseSaleInput> = {
     fullName: p.name || salePayload?.name || "",
@@ -113,6 +164,81 @@ function Content({ id }: { id: string }) {
           <div className="text-sm text-slate-600">ID: {record.id}</div>
         </div>
         <div className="flex items-center gap-2">
+          <Badge className="bg-indigo-100 text-indigo-700 capitalize">
+            Lead: {leadStageLabel}
+          </Badge>
+          <Badge className="bg-slate-100 text-slate-700 capitalize">
+            Estatus: {statusLabel}
+          </Badge>
+          <select
+            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none"
+            value={leadStatus}
+            disabled={stageSaving}
+            onChange={async (e) => {
+              const next = e.target.value;
+              setStageSaving(true);
+              try {
+                await updateMetadataPayload(String(record.id), { status: next } as any);
+                toast({ title: "Etapa actualizada", description: `Lead → ${next}` });
+                await load();
+              } catch (err: any) {
+                toast({ title: "Error", description: err?.message || "No se pudo actualizar la etapa", variant: "destructive" });
+              } finally {
+                setStageSaving(false);
+              }
+            }}
+            title="Cambiar etapa del lead"
+          >
+            <option value="new">Nuevo</option>
+            <option value="contacted">Contactado</option>
+            <option value="qualified">Calificado</option>
+            <option value="won">Ganado</option>
+            <option value="lost">Perdido</option>
+          </select>
+          <select
+            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none"
+            value={leadDisposition}
+            disabled={dispositionSaving}
+            onChange={async (e) => {
+              const next = e.target.value;
+              setDispositionSaving(true);
+              try {
+                await updateMetadataPayload(String(record.id), { lead_disposition: next || null } as any);
+                toast({ title: "Estado guardado" });
+                await load();
+              } catch (err: any) {
+                toast({ title: "Error", description: err?.message || "No se pudo guardar", variant: "destructive" });
+              } finally {
+                setDispositionSaving(false);
+              }
+            }}
+            title="Estado comercial (no califica / reagendar / etc)"
+          >
+            <option value="">Estado: —</option>
+            <option value="interesado">Interesado</option>
+            <option value="reagendar">Reagendar</option>
+            <option value="no_responde">No responde</option>
+            <option value="no_califica">No califica</option>
+            <option value="no_interesado">No interesado</option>
+          </select>
+          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+            <DialogTrigger asChild>
+              <Button variant="secondary">Vista previa</Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Vista previa / contrato</DialogTitle>
+              </DialogHeader>
+              <SalePreview
+                payload={salePayload}
+                draft={draft || undefined}
+                id={record.id}
+                entity="booking"
+                title="Contrato / resumen"
+                onUpdated={() => load()}
+              />
+            </DialogContent>
+          </Dialog>
           <Button asChild variant="outline">
             <Link href="/admin/crm">Volver al CRM</Link>
           </Button>
@@ -166,15 +292,6 @@ function Content({ id }: { id: string }) {
           }}
         />
       </Card>
-      {draft || (salePayload && Object.keys(salePayload).length > 0) ? (
-        <SalePreview
-          payload={salePayload}
-          draft={draft || undefined}
-          id={record.id}
-          entity="booking"
-          onUpdated={() => load()}
-        />
-      ) : null}
     </div>
   );
 }

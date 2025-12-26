@@ -110,6 +110,25 @@ export function SalePreview({
       : undefined;
   })();
 
+  const rawMode = String(pay?.mode || "").toLowerCase();
+  const reserveAmountRaw =
+    (payload?.payment?.reserveAmount ?? payload?.reserveAmount ?? null) as any;
+  const reserveAmountNum =
+    reserveAmountRaw === null || reserveAmountRaw === undefined
+      ? null
+      : Number(reserveAmountRaw);
+  const hasReserva =
+    (reserveAmountNum !== null && !Number.isNaN(reserveAmountNum) && reserveAmountNum > 0) ||
+    /reserva|apartado|señ?a|anticipo/i.test(rawMode);
+  const isPagoTotal = cuotas === 1 || /pago[_\s-]*total|contado/.test(rawMode);
+  const planLabel = isPagoTotal
+    ? "Pago total"
+    : cuotas && cuotas > 1
+      ? `${cuotas} cuotas`
+      : hasReserva
+        ? "Con reserva"
+        : "—";
+
   const [localStatus, setLocalStatus] = React.useState<string>(
     String(payload?.status || "")
   );
@@ -334,6 +353,15 @@ export function SalePreview({
           </div>
           <div className="flex items-center gap-2 min-w-0">
             <Tags className="h-4 w-4 text-slate-400" />
+            <span className="truncate">
+              Plan: {planLabel} · ¿Con reserva?: {hasReserva ? "Sí" : "No"}
+              {hasReserva && reserveAmountNum !== null && !Number.isNaN(reserveAmountNum)
+                ? ` (Reserva: ${reserveAmountRaw})`
+                : ""}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <Tags className="h-4 w-4 text-slate-400" />
             <span className="truncate">Plataforma: {pay?.platform || "—"}</span>
           </div>
           <div className="flex items-center gap-2 min-w-0">
@@ -347,6 +375,12 @@ export function SalePreview({
             <Tags className="h-4 w-4 text-slate-400" />
             <span className="truncate">
               ¿Pago confirmado?: {isPaid ? "Sí" : "No"}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
+            <Tags className="h-4 w-4 text-slate-400" />
+            <span className="truncate">
+              ¿Pagó todo el plan?: {isPagoTotal && isPaid ? "Sí" : "No"}
             </span>
           </div>
           {!isPaid ? (

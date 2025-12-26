@@ -274,6 +274,7 @@ export function AppSidebar() {
                 icon: MessageSquare,
               },
               { title: "Pagos", url: "/admin/payments", icon: CreditCard },
+              { title: "CRM", url: "/admin/crm", icon: Users },
             ]
           : [
               {
@@ -309,6 +310,7 @@ export function AppSidebar() {
                 icon: MessageSquare,
               },
               { title: "Pagos", url: "/admin/payments", icon: CreditCard },
+              { title: "CRM", url: "/admin/crm", icon: Users },
             ];
         // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
         return (

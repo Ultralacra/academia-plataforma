@@ -15,7 +15,7 @@ import { Loader2 } from "lucide-react";
 
 export default function MetadataPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <MetadataContent />
       </DashboardLayout>

@@ -15,7 +15,7 @@ import { SalePreview } from "@/app/admin/crm/components/SalePreview";
 
 export default function SaleEditPage({ params }: { params: { id: string } }) {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <Content id={params.id} />
       </DashboardLayout>
