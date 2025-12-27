@@ -53,17 +53,92 @@ function Content({ id }: { id: string }) {
   const [stageSaving, setStageSaving] = React.useState(false);
   const [dispositionSaving, setDispositionSaving] = React.useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const applyPayloadPatch = React.useCallback(
+    (patch: Record<string, any>) => {
+      setRecord((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          payload: {
+            ...(prev.payload || {}),
+            ...patch,
+          },
+        };
+      });
+    },
+    []
+  );
+
+  const load = React.useCallback(async ({ silent }: { silent?: boolean } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const rec = await getMetadata<any>(id);
       setRecord(rec);
     } catch (e) {
-      setRecord(null);
+      if (!silent) {
+        setRecord(null);
+      } else {
+        toast({
+          title: "Error",
+          description: "No se pudo refrescar el lead",
+          variant: "destructive",
+        });
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, [id]);
+
+  const handlePrint = React.useCallback(() => {
+    if (!record) return;
+
+    const escapeHtml = (s: string) =>
+      s
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+    const printable = {
+      id: record.id,
+      entity: record.entity,
+      created_at: record.created_at,
+      payload: record.payload,
+    };
+    const json = JSON.stringify(printable, null, 2);
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast({
+        title: "No se pudo abrir la impresión",
+        description: "Tu navegador bloqueó la ventana emergente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    w.document.open();
+    w.document.write(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Lead ${String(record.id)} — JSON</title>
+    <style>
+      body { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; padding: 16px; }
+      h1 { font-size: 14px; margin: 0 0 12px; }
+      pre { white-space: pre-wrap; word-break: break-word; border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
+      @media print { body { padding: 0; } pre { border: none; padding: 0; } }
+    </style>
+  </head>
+  <body>
+    <h1>Lead ${String(record.id)} (booking) — JSON</h1>
+    <pre>${escapeHtml(json)}</pre>
+    <script>window.focus(); window.print();</script>
+  </body>
+</html>`);
+    w.document.close();
+  }, [record]);
 
   React.useEffect(() => {
     load();
@@ -127,6 +202,8 @@ function Content({ id }: { id: string }) {
     const v = String(leadDisposition || "").toLowerCase();
     if (!v) return "";
     if (v === "interesado") return "Interesado";
+    if (v === "en_seguimiento") return "En seguimiento";
+    if (v === "pendiente_pago") return "Pendiente de pago";
     if (v === "reagendar") return "Reagendar";
     if (v === "no_responde") return "No responde";
     if (v === "no_califica") return "No califica";
@@ -261,6 +338,9 @@ function Content({ id }: { id: string }) {
           <Button asChild variant="outline">
             <Link href="/admin/crm">Volver al CRM</Link>
           </Button>
+          <Button variant="secondary" onClick={handlePrint}>
+            Imprimir
+          </Button>
         </div>
       </div>
 
@@ -313,6 +393,8 @@ function Content({ id }: { id: string }) {
                     disabled={stageSaving}
                     onChange={async (e) => {
                       const next = e.target.value;
+                      const prev = (record.payload || {})?.status;
+                      applyPayloadPatch({ status: next });
                       setStageSaving(true);
                       try {
                         await updateMetadataPayload(String(record.id), {
@@ -322,14 +404,15 @@ function Content({ id }: { id: string }) {
                           title: "Etapa actualizada",
                           description: `Lead → ${next}`,
                         });
-                        await load();
                       } catch (err: any) {
+                        applyPayloadPatch({ status: prev });
                         toast({
                           title: "Error",
                           description:
                             err?.message || "No se pudo actualizar la etapa",
                           variant: "destructive",
                         });
+                        await load({ silent: true });
                       } finally {
                         setStageSaving(false);
                       }
@@ -352,19 +435,22 @@ function Content({ id }: { id: string }) {
                     disabled={dispositionSaving}
                     onChange={async (e) => {
                       const next = e.target.value;
+                      const prev = (record.payload || {})?.lead_disposition;
+                      applyPayloadPatch({ lead_disposition: next || null });
                       setDispositionSaving(true);
                       try {
                         await updateMetadataPayload(String(record.id), {
                           lead_disposition: next || null,
                         } as any);
                         toast({ title: "Estado guardado" });
-                        await load();
                       } catch (err: any) {
+                        applyPayloadPatch({ lead_disposition: prev ?? null });
                         toast({
                           title: "Error",
                           description: err?.message || "No se pudo guardar",
                           variant: "destructive",
                         });
+                        await load({ silent: true });
                       } finally {
                         setDispositionSaving(false);
                       }
@@ -372,6 +458,8 @@ function Content({ id }: { id: string }) {
                   >
                     <option value="">—</option>
                     <option value="interesado">Interesado</option>
+                    <option value="en_seguimiento">En seguimiento</option>
+                    <option value="pendiente_pago">Pendiente de pago</option>
                     <option value="reagendar">Reagendar</option>
                     <option value="no_responde">No responde</option>
                     <option value="no_califica">No califica</option>
@@ -390,7 +478,9 @@ function Content({ id }: { id: string }) {
           <CallFlowManager
             recordId={record.id}
             payload={p}
-            onSaved={() => load()}
+            onSaved={(nextCall) => {
+              if (nextCall) applyPayloadPatch({ call: nextCall });
+            }}
           />
 
           <Card>
@@ -412,7 +502,7 @@ function Content({ id }: { id: string }) {
                       id={record.id}
                       entity="booking"
                       title="Contrato / resumen"
-                      onUpdated={() => load()}
+                      onUpdated={() => load({ silent: true })}
                     />
                   </DialogContent>
                 </Dialog>
@@ -442,7 +532,7 @@ function Content({ id }: { id: string }) {
                 autoSave
                 onChange={(f) => setDraft({ ...f })}
                 onDone={() => {
-                  load();
+                  load({ silent: true });
                 }}
               />
             </CardContent>

@@ -454,7 +454,16 @@ function CrmContent() {
                               disabled={stageUpdatingId === p.id}
                               onChange={async (e) => {
                                 const nextEtapa = e.target.value;
+                                  const prevEtapa = p.etapa;
                                 setStageUpdatingId(p.id);
+                                  // Optimista: reflejar cambio sin recargar
+                                  setRows((prev) =>
+                                    prev.map((r) =>
+                                      r.id === p.id
+                                        ? { ...r, etapa: nextEtapa as any }
+                                        : r
+                                    )
+                                  );
                                 try {
                                   const row = rows.find((r) => r.id === p.id);
                                   if (row?.remote) {
@@ -478,8 +487,15 @@ function CrmContent() {
                                     title: "Etapa actualizada",
                                     description: `${p.nombre} → ${nextEtapa}`,
                                   });
-                                  await reload();
                                 } catch (err) {
+                                    // rollback
+                                    setRows((prev) =>
+                                      prev.map((r) =>
+                                        r.id === p.id
+                                          ? { ...r, etapa: prevEtapa as any }
+                                          : r
+                                      )
+                                    );
                                   toast({
                                     title: "Error",
                                     description:

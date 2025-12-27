@@ -11,17 +11,13 @@ import { updateMetadataPayload } from "@/app/admin/crm/api";
 import {
   Calendar,
   CheckCircle2,
-  Clock,
   CircleOff,
   PhoneOff,
-  PhoneOutgoing,
   RotateCcw,
-  Send,
-  TimerReset,
   Bell,
-  AlarmClock,
   AlertTriangle,
   PhoneCall,
+  Clock,
 } from "lucide-react";
 
 // Estructura que guardamos dentro de payload de un booking
@@ -32,6 +28,23 @@ export interface CallFlowState {
   started_at?: string | null;
   result_at?: string | null;
   notes?: string | null;
+  evidence_images?: Array<{
+    id: string;
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl: string;
+    created_at: string;
+    outcome?: CallOutcome;
+  }>;
+  notes_images?: Array<{
+    id: string;
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl: string;
+    created_at: string;
+  }>;
   // Recordatorios programados
   reminders?: Array<{
     id: string;
@@ -42,6 +55,7 @@ export interface CallFlowState {
       | "noshow_10m"
       | "noshow_1h"
       | "noshow_24h";
+    label?: string;
     at: string; // ISO
     status: "pending" | "sent" | "skipped";
   }>;
@@ -62,6 +76,15 @@ export interface CallFlowState {
 function isoPlusMinutes(min: number) {
   const d = new Date(Date.now() + min * 60 * 1000);
   return d.toISOString();
+}
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
 }
 
 function scheduleDefaultPrecallReminders(): CallFlowState["reminders"] {
@@ -117,7 +140,7 @@ export function CallFlowManager({
 }: {
   recordId: string | number; // id del registro metadata (booking)
   payload: any; // payload actual (booking)
-  onSaved?: () => void;
+  onSaved?: (nextCall: CallFlowState) => void;
 }) {
   const call: CallFlowState = (payload?.call as CallFlowState) || {};
   const [rescheduleDate, setRescheduleDate] = React.useState<string>(
@@ -127,6 +150,8 @@ export function CallFlowManager({
     call?.reschedule?.time || ""
   );
   const [notes, setNotes] = React.useState<string>(call?.notes || "");
+  const [newReminderAt, setNewReminderAt] = React.useState<string>("");
+  const [newReminderLabel, setNewReminderLabel] = React.useState<string>("");
   const inputAccent =
     "border-slate-300 focus-visible:ring-slate-200 focus-visible:border-slate-400";
 
@@ -138,44 +163,84 @@ export function CallFlowManager({
       };
       await updateMetadataPayload(String(recordId), { call: next } as any);
       toast({ title: "Guardado" });
-      onSaved?.();
+      onSaved?.(next);
+      return next;
     } catch (e: any) {
       toast({
         title: "Error",
         description: e?.message || String(e),
         variant: "destructive",
       });
+      throw e;
     }
   };
 
-  const programarPrecall = () => {
-    const existing = Array.isArray(call.reminders) ? call.reminders : [];
-    const appended = [...existing, ...scheduleDefaultPrecallReminders()!];
-    safeUpdate({ reminders: appended });
-  };
-
-  const programarRecordatorio = (
-    kind: NonNullable<CallFlowState["reminders"]>[number]["kind"]
-  ) => {
+  const agregarRecordatorioPersonalizado = async () => {
+    if (!newReminderAt) {
+      toast({
+        title: "Falta fecha y hora",
+        description: "Selecciona una fecha y hora para el recordatorio.",
+        variant: "destructive",
+      });
+      return;
+    }
+    const whenIso = new Date(newReminderAt).toISOString();
     const entry = {
-      id: crypto.randomUUID?.() || `r-${Date.now()}-${kind}`,
-      kind,
-      at:
-        kind === "precall_24h"
-          ? isoPlusMinutes(24 * 60)
-          : kind === "precall_1h"
-          ? isoPlusMinutes(60)
-          : kind === "precall_15m"
-          ? isoPlusMinutes(15)
-          : kind === "noshow_10m"
-          ? isoPlusMinutes(10)
-          : kind === "noshow_1h"
-          ? isoPlusMinutes(60)
-          : isoPlusMinutes(24 * 60),
+      id: crypto.randomUUID?.() || `r-${Date.now()}-custom`,
+      kind: "custom" as any,
+      label: newReminderLabel?.trim() || "Personalizado",
+      at: whenIso,
       status: "pending" as const,
     };
     const existing = Array.isArray(call.reminders) ? call.reminders : [];
-    safeUpdate({ reminders: [...existing, entry] });
+    await safeUpdate({ reminders: [...existing, entry] });
+    setNewReminderAt("");
+    setNewReminderLabel("");
+  };
+
+  const onUploadImages = async (
+    files: FileList | null | undefined,
+    target: "evidence_images" | "notes_images"
+  ) => {
+    if (!files || files.length === 0) return;
+    try {
+      const existing = Array.isArray((call as any)[target])
+        ? ((call as any)[target] as any[])
+        : [];
+      const created_at = new Date().toISOString();
+      const nextItems = [] as any[];
+      for (const file of Array.from(files)) {
+        if (!file.type?.startsWith("image/")) continue;
+        const dataUrl = await fileToDataUrl(file);
+        nextItems.push({
+          id: crypto.randomUUID?.() || `img-${Date.now()}-${file.name}`,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          dataUrl,
+          created_at,
+          ...(target === "evidence_images" ? { outcome: call?.outcome || null } : {}),
+        });
+      }
+      if (nextItems.length === 0) return;
+      await safeUpdate({ [target]: [...existing, ...nextItems] } as any);
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.message || "No se pudo subir la imagen",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const removeImage = async (
+    target: "evidence_images" | "notes_images",
+    id: string
+  ) => {
+    const existing = Array.isArray((call as any)[target])
+      ? ((call as any)[target] as any[])
+      : [];
+    await safeUpdate({ [target]: existing.filter((x) => x.id !== id) } as any);
   };
 
   const eliminarRecordatorio = (id: string) => {
@@ -272,6 +337,7 @@ export function CallFlowManager({
     noshow_10m: "+10m",
     noshow_1h: "+1h",
     noshow_24h: "+24h",
+    custom: "Personalizado",
   };
 
   return (
@@ -281,6 +347,11 @@ export function CallFlowManager({
         <div className="flex items-center gap-2">
           <PhoneCall className="h-4 w-4 text-slate-400" />
           <div className="text-sm font-semibold">Flujo de llamada</div>
+          {nextAppointmentText() !== "—" ? (
+            <Badge className="bg-slate-100 text-slate-700">
+              Agenda: {nextAppointmentText()}
+            </Badge>
+          ) : null}
         </div>
         {statusBadge()}
       </div>
@@ -362,97 +433,96 @@ export function CallFlowManager({
             Ventana de negociación activa hasta: {fmt(call?.negotiation?.until)}
           </div>
         ) : null}
+
+        <div className="mt-3">
+          <div className="text-[11px] font-semibold text-slate-600 mb-1">
+            Evidencia del estado (imagen)
+          </div>
+          <Input
+            type="file"
+            accept="image/*"
+            multiple
+            className={inputAccent}
+            onChange={async (e) =>
+              onUploadImages(e.target.files, "evidence_images")
+            }
+          />
+          {Array.isArray(call?.evidence_images) && call.evidence_images.length ? (
+            <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {call.evidence_images.map((img) => (
+                <div
+                  key={img.id}
+                  className="rounded-md border border-slate-200 overflow-hidden"
+                >
+                  <img
+                    src={img.dataUrl}
+                    alt={img.name || "Evidencia"}
+                    className="h-24 w-full object-cover"
+                  />
+                  <div className="p-1 flex items-center justify-between gap-1">
+                    <span className="text-[10px] text-slate-600 truncate">
+                      {img.name || "imagen"}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => removeImage("evidence_images", img.id)}
+                    >
+                      Quitar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-1 text-[11px] text-slate-500">
+              Sin evidencias cargadas.
+            </div>
+          )}
+        </div>
       </Card>
 
       {/* Sección: Recordatorios */}
       <Card className="p-3 border-slate-200 space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-xs font-semibold">Recordatorios</div>
-          <div className="flex items-center gap-2">
+          <div className="text-[11px] text-slate-500">
+            Agrega fecha y hora (personalizado)
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+          <div className="sm:col-span-2">
+            <Label className="text-xs">Fecha y hora</Label>
+            <Input
+              type="datetime-local"
+              className={inputAccent}
+              value={newReminderAt}
+              onChange={(e) => setNewReminderAt(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Etiqueta (opcional)</Label>
+            <Input
+              className={inputAccent}
+              value={newReminderLabel}
+              onChange={(e) => setNewReminderLabel(e.target.value)}
+              placeholder="Ej: Llamar / WhatsApp"
+            />
+          </div>
+          <div className="sm:col-span-3">
             <Button
               type="button"
               size="sm"
               variant="outline"
-              onClick={programarPrecall}
-              className="gap-2"
+              className="w-full gap-2"
+              onClick={agregarRecordatorioPersonalizado}
             >
-              <TimerReset className="h-4 w-4" /> Pre-llamada 24h·1h·15m
+              <Clock className="h-4 w-4" /> Agregar recordatorio
             </Button>
-            {call?.outcome === "no_show" ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  const existing = Array.isArray(call.reminders)
-                    ? call.reminders
-                    : [];
-                  const appended = [...existing, ...scheduleNoShowFollowups()!];
-                  safeUpdate({ reminders: appended });
-                }}
-                className="gap-2"
-              >
-                <AlarmClock className="h-4 w-4" /> Seguimiento +10m·1h·24h
-              </Button>
-            ) : null}
           </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            variant="outline"
-            onClick={() => programarRecordatorio("precall_24h")}
-          >
-            24h
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            variant="outline"
-            onClick={() => programarRecordatorio("precall_1h")}
-          >
-            1h
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            variant="outline"
-            onClick={() => programarRecordatorio("precall_15m")}
-          >
-            15m
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            variant="outline"
-            onClick={() => programarRecordatorio("noshow_10m")}
-          >
-            +10m
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            variant="outline"
-            onClick={() => programarRecordatorio("noshow_1h")}
-          >
-            +1h
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            variant="outline"
-            onClick={() => programarRecordatorio("noshow_24h")}
-          >
-            +24h
-          </Button>
         </div>
 
         {reminders.length > 0 ? (
@@ -465,7 +535,9 @@ export function CallFlowManager({
                 <div className="flex items-center gap-2 min-w-0">
                   <Bell className="h-3.5 w-3.5 text-slate-400" />
                   <span className="truncate">
-                    {labelKind[r.kind] || r.kind}
+                    {r.kind === ("custom" as any)
+                      ? (r as any).label || labelKind.custom
+                      : labelKind[r.kind] || r.kind}
                   </span>
                   <Badge
                     className={
@@ -593,6 +665,53 @@ export function CallFlowManager({
           >
             Guardar notas
           </Button>
+        </div>
+
+        <div className="mt-3">
+          <div className="text-[11px] font-semibold text-slate-600 mb-1">
+            Adjuntar imágenes a las notas
+          </div>
+          <Input
+            type="file"
+            accept="image/*"
+            multiple
+            className={inputAccent}
+            onChange={async (e) => onUploadImages(e.target.files, "notes_images")}
+          />
+          {Array.isArray(call?.notes_images) && call.notes_images.length ? (
+            <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {call.notes_images.map((img) => (
+                <div
+                  key={img.id}
+                  className="rounded-md border border-slate-200 overflow-hidden"
+                >
+                  <img
+                    src={img.dataUrl}
+                    alt={img.name || "Adjunto"}
+                    className="h-24 w-full object-cover"
+                  />
+                  <div className="p-1 flex items-center justify-between gap-1">
+                    <span className="text-[10px] text-slate-600 truncate">
+                      {img.name || "imagen"}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-6 px-2 text-[10px]"
+                      onClick={() => removeImage("notes_images", img.id)}
+                    >
+                      Quitar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-1 text-[11px] text-slate-500">
+              Sin adjuntos.
+            </div>
+          )}
         </div>
       </Card>
     </Card>
