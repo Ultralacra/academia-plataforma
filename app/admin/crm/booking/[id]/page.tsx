@@ -53,41 +53,41 @@ function Content({ id }: { id: string }) {
   const [stageSaving, setStageSaving] = React.useState(false);
   const [dispositionSaving, setDispositionSaving] = React.useState(false);
 
-  const applyPayloadPatch = React.useCallback(
-    (patch: Record<string, any>) => {
-      setRecord((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          payload: {
-            ...(prev.payload || {}),
-            ...patch,
-          },
-        };
-      });
-    },
-    []
-  );
+  const applyPayloadPatch = React.useCallback((patch: Record<string, any>) => {
+    setRecord((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        payload: {
+          ...(prev.payload || {}),
+          ...patch,
+        },
+      };
+    });
+  }, []);
 
-  const load = React.useCallback(async ({ silent }: { silent?: boolean } = {}) => {
-    if (!silent) setLoading(true);
-    try {
-      const rec = await getMetadata<any>(id);
-      setRecord(rec);
-    } catch (e) {
-      if (!silent) {
-        setRecord(null);
-      } else {
-        toast({
-          title: "Error",
-          description: "No se pudo refrescar el lead",
-          variant: "destructive",
-        });
+  const load = React.useCallback(
+    async ({ silent }: { silent?: boolean } = {}) => {
+      if (!silent) setLoading(true);
+      try {
+        const rec = await getMetadata<any>(id);
+        setRecord(rec);
+      } catch (e) {
+        if (!silent) {
+          setRecord(null);
+        } else {
+          toast({
+            title: "Error",
+            description: "No se pudo refrescar el lead",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [id]);
+    },
+    [id]
+  );
 
   const handlePrint = React.useCallback(() => {
     if (!record) return;

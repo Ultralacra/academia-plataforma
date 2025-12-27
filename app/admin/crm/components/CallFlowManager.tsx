@@ -219,7 +219,9 @@ export function CallFlowManager({
           size: file.size,
           dataUrl,
           created_at,
-          ...(target === "evidence_images" ? { outcome: call?.outcome || null } : {}),
+          ...(target === "evidence_images"
+            ? { outcome: call?.outcome || null }
+            : {}),
         });
       }
       if (nextItems.length === 0) return;
@@ -447,7 +449,8 @@ export function CallFlowManager({
               onUploadImages(e.target.files, "evidence_images")
             }
           />
-          {Array.isArray(call?.evidence_images) && call.evidence_images.length ? (
+          {Array.isArray(call?.evidence_images) &&
+          call.evidence_images.length ? (
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
               {call.evidence_images.map((img) => (
                 <div
@@ -676,7 +679,9 @@ export function CallFlowManager({
             accept="image/*"
             multiple
             className={inputAccent}
-            onChange={async (e) => onUploadImages(e.target.files, "notes_images")}
+            onChange={async (e) =>
+              onUploadImages(e.target.files, "notes_images")
+            }
           />
           {Array.isArray(call?.notes_images) && call.notes_images.length ? (
             <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -708,9 +713,7 @@ export function CallFlowManager({
               ))}
             </div>
           ) : (
-            <div className="mt-1 text-[11px] text-slate-500">
-              Sin adjuntos.
-            </div>
+            <div className="mt-1 text-[11px] text-slate-500">Sin adjuntos.</div>
           )}
         </div>
       </Card>
