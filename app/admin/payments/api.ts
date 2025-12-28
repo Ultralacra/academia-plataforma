@@ -103,3 +103,27 @@ export async function getPaymentByCodigo(
   const safe = encodeURIComponent(String(codigo || "").trim());
   return fetchJson<PaymentDetailEnvelope>(`/payments/get/payment/${safe}`);
 }
+
+export type SyncPaymentClienteEnvelope = {
+  code?: number;
+  status?: string;
+  data?: any;
+};
+
+export async function syncPaymentCliente(
+  paymentCodigo: string,
+  clienteCodigo: string
+): Promise<SyncPaymentClienteEnvelope> {
+  const safePayment = encodeURIComponent(String(paymentCodigo || "").trim());
+  const body = {
+    new_cliente_codigo: String(clienteCodigo || "").trim(),
+  };
+
+  return fetchJson<SyncPaymentClienteEnvelope>(
+    `/payments/sync/payment/${safePayment}/cliente`,
+    {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }
+  );
+}

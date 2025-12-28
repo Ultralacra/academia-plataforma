@@ -12,6 +12,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,7 +41,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getPaymentByCodigo, getPayments, type PaymentRow } from "./api";
+import {
+  getPaymentByCodigo,
+  getPayments,
+  syncPaymentCliente,
+  type PaymentRow,
+} from "./api";
+import { fetchUsers, type SysUser } from "../users/api";
+import { toast } from "@/components/ui/use-toast";
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState<T>(value);
@@ -75,18 +92,107 @@ function formatDateTime(value: string | null | undefined) {
   }).format(d);
 }
 
+function fixMojibake(value: string | null | undefined) {
+  if (value === null || value === undefined) return "";
+  const s = String(value);
+  // Heurística: típico mojibake UTF-8 interpretado como Latin-1 (Ã¡, Ã©, etc.)
+  if (!/[ÃÂ�]/.test(s)) return s;
+  try {
+    const bytes = Uint8Array.from(s, (ch) => ch.charCodeAt(0));
+    const decoded = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+    const badBefore = (s.match(/[ÃÂ�]/g) || []).length;
+    const badAfter = (decoded.match(/[ÃÂ�]/g) || []).length;
+    if (decoded && decoded !== s && badAfter < badBefore) {
+      // Si el backend ya entregó caracteres de reemplazo (�), no siempre es
+      // reversible; aplicamos un fallback de correcciones comunes más abajo.
+      if (!decoded.includes("�")) return decoded;
+      return fixReplacementCharNames(decoded);
+    }
+  } catch {
+    // noop
+  }
+
+  if (s.includes("�")) return fixReplacementCharNames(s);
+  return s;
+}
+
+function fixReplacementCharNames(input: string) {
+  // Cuando aparece "�" (U+FFFD), el byte original se perdió. Esto aplica un
+  // set pequeño de arreglos comunes en nombres ES para mejorar la lectura.
+  if (!input.includes("�")) return input;
+
+  const rules: Array<[RegExp, string]> = [
+    [/Encarnaci�n/gi, "Encarnación"],
+    [/Mart�n\b/gi, "Martín"],
+    [/Mart�nez\b/gi, "Martínez"],
+    [/D�az\b/gi, "Díaz"],
+    [/S�nchez\b/gi, "Sánchez"],
+    [/Ram�rez\b/gi, "Ramírez"],
+    [/Rodr�guez\b/gi, "Rodríguez"],
+    [/Garc�a\b/gi, "García"],
+    [/Hern�ndez\b/gi, "Hernández"],
+    [/L�pez\b/gi, "López"],
+    [/G�mez\b/gi, "Gómez"],
+    [/Mu�oz\b/gi, "Muñoz"],
+    [/Pe�a\b/gi, "Peña"],
+    [/Nu�ez\b/gi, "Núñez"],
+    [/Iba�ez\b/gi, "Ibáñez"],
+  ];
+
+  let out = input;
+  for (const [re, rep] of rules) out = out.replace(re, rep);
+  return out;
+}
+
 function getStatusVariant(
   status?: string | null
-): "default" | "secondary" | "muted" | "outline" {
+): "default" | "secondary" | "muted" | "outline" | "destructive" {
   const s = String(status || "").toLowerCase();
   if (!s) return "muted";
-  // Colores neutrales: evitar rojo/alto contraste
-  if (s.includes("moro")) return "outline";
-  if (s.includes("en_proceso") || s.includes("en proceso")) return "secondary";
-  if (s.includes("listo") || s.includes("pagad")) return "default";
-  if (s.includes("reembol")) return "muted";
+  // Colores tipo "semáforo" como en otras vistas
+  if (s.includes("moro") || s.includes("venc")) return "destructive";
+  if (
+    s.includes("en_proceso") ||
+    s.includes("en proceso") ||
+    s.includes("progres") ||
+    s.includes("pendien")
+  )
+    return "secondary";
+  if (s.includes("listo") || s.includes("pagad") || s.includes("aprob"))
+    return "default";
+  if (s.includes("reembol") || s.includes("devuel") || s.includes("anul"))
+    return "muted";
   if (s.includes("no_aplico") || s.includes("no aplico")) return "outline";
   return "outline";
+}
+
+function getStatusChipClass(status?: string | null) {
+  const s = String(status || "").toLowerCase();
+  if (!s)
+    return "border bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950/35 dark:text-slate-200 dark:border-slate-900/60";
+
+  // Pasteles (similar a tickets-board)
+  if (s.includes("moro") || s.includes("venc"))
+    return "border bg-red-50 text-red-700 border-red-200 dark:bg-red-950/35 dark:text-red-200 dark:border-red-900/60";
+
+  if (s.includes("reembol") || s.includes("devuel") || s.includes("anul"))
+    return "border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/35 dark:text-purple-200 dark:border-purple-900/60";
+
+  if (
+    s.includes("en_proceso") ||
+    s.includes("en proceso") ||
+    s.includes("progres") ||
+    s.includes("pendien")
+  )
+    return "border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-900/60";
+
+  if (s.includes("listo") || s.includes("pagad") || s.includes("aprob"))
+    return "border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60";
+
+  if (s.includes("no_aplico") || s.includes("no aplico"))
+    return "border bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/35 dark:text-sky-200 dark:border-sky-900/60";
+
+  return "border bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950/35 dark:text-slate-200 dark:border-slate-900/60";
 }
 
 type PaymentMetrics = {
@@ -172,6 +278,35 @@ function PaymentsContent() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
+
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncPayment, setSyncPayment] = useState<PaymentRow | null>(null);
+  const [syncUserSearch, setSyncUserSearch] = useState("");
+  const debouncedSyncUserSearch = useDebouncedValue(syncUserSearch, 300);
+  const [syncUsers, setSyncUsers] = useState<SysUser[]>([]);
+  const [syncUsersLoading, setSyncUsersLoading] = useState(false);
+  const [syncUsersError, setSyncUsersError] = useState<string | null>(null);
+  const [syncUsersPage, setSyncUsersPage] = useState(1);
+  const [syncUsersTotalPages, setSyncUsersTotalPages] = useState(1);
+
+  const [syncSelectedUser, setSyncSelectedUser] = useState<SysUser | null>(
+    null
+  );
+  const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
+  const [syncSaving, setSyncSaving] = useState(false);
+  const [syncSaveError, setSyncSaveError] = useState<string | null>(null);
+
+  const [onlyUnlinked, setOnlyUnlinked] = useState(false);
+
+  const isPaymentSynced = (r: PaymentRow) => {
+    const name = String(r?.cliente_nombre ?? "").trim();
+    const code = String(r?.cliente_codigo ?? "").trim();
+    // Regla: para considerar sincronizado, deben venir completos:
+    // - cliente_nombre (no vacío)
+    // - cliente_codigo que parezca un ID/código real (no un nombre)
+    const looksLikeId = /[A-Za-z0-9_-]{6,}/.test(code);
+    return !!name && !!code && looksLikeId;
+  };
 
   const [metricsLoading, setMetricsLoading] = useState(false);
   const [metricsError, setMetricsError] = useState<string | null>(null);
@@ -323,8 +458,123 @@ function PaymentsContent() {
       return db - da;
     });
 
-    return withReserva;
-  }, [rows, debouncedReservaMin, debouncedReservaMax]);
+    const withLinkFilter = onlyUnlinked
+      ? withReserva.filter((r) => {
+          return !isPaymentSynced(r);
+        })
+      : withReserva;
+
+    return withLinkFilter;
+  }, [rows, debouncedReservaMin, debouncedReservaMax, onlyUnlinked]);
+
+  const unlinkedCount = useMemo(() => {
+    const list = Array.isArray(rows) ? rows : [];
+    let c = 0;
+    for (const r of list) {
+      if (!isPaymentSynced(r)) c += 1;
+    }
+    return c;
+  }, [rows]);
+
+  async function loadUsersList(next?: { page?: number }) {
+    setSyncUsersLoading(true);
+    setSyncUsersError(null);
+    try {
+      const p = next?.page ?? syncUsersPage;
+      const res = await fetchUsers({
+        page: p,
+        pageSize: 25,
+        search: debouncedSyncUserSearch.trim(),
+      });
+      const raw = Array.isArray(res?.data) ? res.data : [];
+      const onlyAlumnos = raw.filter((u) => {
+        const role = String(u?.role ?? "").toLowerCase();
+        // Mostrar solo alumnos (excluir admin/equipo)
+        return role === "alumno" || role === "student";
+      });
+      setSyncUsers(onlyAlumnos);
+      setSyncUsersPage(Number(res?.page ?? p) || p);
+      setSyncUsersTotalPages(Number(res?.totalPages ?? 1) || 1);
+    } catch (e: any) {
+      setSyncUsersError(e?.message || "No se pudieron cargar usuarios");
+      setSyncUsers([]);
+      setSyncUsersTotalPages(1);
+    } finally {
+      setSyncUsersLoading(false);
+    }
+  }
+
+  function openSync(payment: PaymentRow) {
+    if (isPaymentSynced(payment)) {
+      toast({
+        title: "Ya está sincronizado",
+        description: `El pago ${payment.codigo} ya tiene usuario asociado.`,
+      });
+      return;
+    }
+    setSyncPayment(payment);
+    setSyncSelectedUser(null);
+    setSyncSaveError(null);
+    setSyncUsersPage(1);
+    setSyncOpen(true);
+  }
+
+  async function doSync() {
+    if (!syncPayment || !syncSelectedUser) return;
+    if (isPaymentSynced(syncPayment)) {
+      toast({
+        title: "Ya está sincronizado",
+        description: `El pago ${syncPayment.codigo} ya tiene usuario asociado.`,
+      });
+      setSyncConfirmOpen(false);
+      setSyncOpen(false);
+      setSyncPayment(null);
+      setSyncSelectedUser(null);
+      return;
+    }
+    setSyncSaving(true);
+    setSyncSaveError(null);
+    try {
+      const clienteCodigo = String(syncSelectedUser.codigo || "").trim();
+      if (!clienteCodigo)
+        throw new Error("El usuario seleccionado no tiene código");
+
+      await syncPaymentCliente(syncPayment.codigo, clienteCodigo);
+
+      // Optimistic update: reflejar en tabla inmediatamente
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.codigo !== syncPayment.codigo) return r;
+          return {
+            ...r,
+            cliente_codigo: clienteCodigo,
+            cliente_nombre: fixMojibake(
+              syncSelectedUser.name || syncSelectedUser.email || clienteCodigo
+            ),
+          };
+        })
+      );
+
+      setSyncConfirmOpen(false);
+      setSyncOpen(false);
+      setSyncPayment(null);
+      setSyncSelectedUser(null);
+
+      toast({
+        title: "Sincronización exitosa",
+        description: `Pago ${syncPayment.codigo} → ${clienteCodigo}`,
+      });
+    } catch (e: any) {
+      setSyncSaveError(e?.message || "No se pudo sincronizar");
+      toast({
+        title: "Error al sincronizar",
+        description: e?.message || "No se pudo sincronizar",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncSaving(false);
+    }
+  }
 
   const statusOptions = useMemo(() => {
     const set = new Set<string>();
@@ -362,6 +612,12 @@ function PaymentsContent() {
     debouncedReservaMin,
     debouncedReservaMax,
   ]);
+
+  useEffect(() => {
+    if (!syncOpen) return;
+    void loadUsersList({ page: 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncOpen, debouncedSyncUserSearch]);
 
   return (
     <div className="space-y-4">
@@ -583,8 +839,22 @@ function PaymentsContent() {
                 <span className="text-foreground">{rows.length}</span>
               </>
             ) : null}
+            {unlinkedCount ? (
+              <>
+                {" "}
+                · Sin sincronizar:{" "}
+                <span className="text-foreground">{unlinkedCount}</span>
+              </>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant={onlyUnlinked ? "default" : "outline"}
+              size="sm"
+              onClick={() => setOnlyUnlinked((v) => !v)}
+            >
+              {onlyUnlinked ? "Viendo: sin sincronizar" : "Ver sin sincronizar"}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -617,6 +887,7 @@ function PaymentsContent() {
                 <TableHead className="whitespace-nowrap">Reserva</TableHead>
                 <TableHead>Moneda</TableHead>
                 <TableHead>Estatus</TableHead>
+                <TableHead className="whitespace-nowrap">Acciones</TableHead>
                 <TableHead className="whitespace-nowrap">Creado</TableHead>
               </TableRow>
             </TableHeader>
@@ -624,7 +895,7 @@ function PaymentsContent() {
               {isLoading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="text-sm text-muted-foreground"
                   >
                     Cargando…
@@ -633,7 +904,7 @@ function PaymentsContent() {
               ) : filtered.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="text-sm text-muted-foreground"
                   >
                     Sin resultados.
@@ -641,20 +912,38 @@ function PaymentsContent() {
                 </TableRow>
               ) : (
                 filtered.map((r) => {
-                  const clientName =
-                    r.cliente_nombre || r.cliente_codigo || "—";
+                  const clientName = fixMojibake(
+                    r.cliente_nombre || r.cliente_codigo || "—"
+                  );
+                  const synced = isPaymentSynced(r);
+
                   return (
                     <TableRow
                       key={r.codigo}
                       className="cursor-pointer"
-                      onClick={() => openDetail(r.codigo)}
+                      onClick={() => {
+                        try {
+                          console.debug("[payments] row selected", {
+                            codigo: r.codigo,
+                            synced,
+                            cliente_codigo: fixMojibake(r.cliente_codigo),
+                            cliente_nombre: fixMojibake(r.cliente_nombre),
+                          });
+                        } catch {}
+                        openDetail(r.codigo);
+                      }}
                     >
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="text-sm">{clientName}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm">{clientName}</span>
+                            {!synced ? (
+                              <Badge variant="destructive">Sin usuario</Badge>
+                            ) : null}
+                          </div>
                           {r.cliente_nombre && r.cliente_codigo ? (
                             <span className="text-xs text-muted-foreground">
-                              {r.cliente_codigo}
+                              {fixMojibake(r.cliente_codigo)}
                             </span>
                           ) : null}
                         </div>
@@ -667,9 +956,31 @@ function PaymentsContent() {
                       </TableCell>
                       <TableCell>{r.moneda || "—"}</TableCell>
                       <TableCell>
-                        <Badge variant={getStatusVariant(r.estatus)}>
+                        <Badge
+                          variant="outline"
+                          className={getStatusChipClass(r.estatus)}
+                        >
                           {r.estatus || "—"}
                         </Badge>
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        {synced ? (
+                          <Badge
+                            variant="outline"
+                            className="border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60"
+                          >
+                            Sincronizado
+                          </Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-900/60 dark:hover:bg-amber-950/55"
+                            onClick={() => openSync(r)}
+                          >
+                            Sincronizar
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {formatDateTime(r.created_at)}
@@ -682,6 +993,212 @@ function PaymentsContent() {
           </Table>
         </div>
       </div>
+
+      <Dialog
+        open={syncOpen}
+        onOpenChange={(open) => {
+          setSyncOpen(open);
+          if (!open) {
+            setSyncPayment(null);
+            setSyncSelectedUser(null);
+            setSyncUserSearch("");
+            setSyncUsers([]);
+            setSyncUsersError(null);
+            setSyncSaveError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Sincronizar pago con usuario</DialogTitle>
+            <DialogDescription>
+              {syncPayment
+                ? `Pago: ${syncPayment.codigo}`
+                : "Selecciona un pago para sincronizar."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3">
+            <div className="grid gap-1">
+              <Label>Buscar usuario</Label>
+              <Input
+                placeholder="Nombre, email o código…"
+                value={syncUserSearch}
+                onChange={(e) => setSyncUserSearch(e.target.value)}
+              />
+            </div>
+
+            {syncUsersError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{syncUsersError}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            {syncSaveError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Error</AlertTitle>
+                <AlertDescription>{syncSaveError}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            <div className="rounded-md border overflow-hidden">
+              <ScrollArea className="h-[320px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Usuario</TableHead>
+                      <TableHead>Rol</TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        Código
+                      </TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        Acción
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {syncUsersLoading ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="text-sm text-muted-foreground"
+                        >
+                          Cargando usuarios…
+                        </TableCell>
+                      </TableRow>
+                    ) : syncUsers.length === 0 ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          className="text-sm text-muted-foreground"
+                        >
+                          Sin resultados.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      syncUsers.map((u) => {
+                        const isSelected = syncSelectedUser?.id === u.id;
+                        const label =
+                          u.name || u.email || u.codigo || "(sin nombre)";
+                        return (
+                          <TableRow key={u.id}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <div className="text-sm font-medium">
+                                  {fixMojibake(label)}
+                                </div>
+                                {u.email ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {u.email}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{u.role || "—"}</Badge>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {fixMojibake(u.codigo || "—")}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <Button
+                                size="sm"
+                                variant={isSelected ? "secondary" : "outline"}
+                                onClick={() => setSyncSelectedUser(u)}
+                              >
+                                {isSelected ? "Seleccionado" : "Seleccionar"}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+              <div>
+                Página <span className="text-foreground">{syncUsersPage}</span>/{" "}
+                <span className="text-foreground">{syncUsersTotalPages}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={syncUsersLoading || syncUsersPage <= 1}
+                  onClick={() =>
+                    loadUsersList({ page: Math.max(1, syncUsersPage - 1) })
+                  }
+                >
+                  Anterior
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={
+                    syncUsersLoading || syncUsersPage >= syncUsersTotalPages
+                  }
+                  onClick={() =>
+                    loadUsersList({
+                      page: Math.min(syncUsersTotalPages, syncUsersPage + 1),
+                    })
+                  }
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setSyncOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                disabled={!syncPayment || !syncSelectedUser}
+                onClick={() => setSyncConfirmOpen(true)}
+              >
+                Confirmar sincronización
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={syncConfirmOpen} onOpenChange={setSyncConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar sincronización</AlertDialogTitle>
+            <AlertDialogDescription>
+              {syncPayment && syncSelectedUser
+                ? `Esto asociará el pago ${
+                    syncPayment.codigo
+                  } al usuario ${fixMojibake(
+                    syncSelectedUser.name ||
+                      syncSelectedUser.email ||
+                      syncSelectedUser.codigo
+                  )}.`
+                : "Selecciona un usuario para continuar."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={syncSaving}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={syncSaving || !syncPayment || !syncSelectedUser}
+              onClick={(e) => {
+                e.preventDefault();
+                void doSync();
+              }}
+            >
+              {syncSaving ? "Sincronizando…" : "Sí, sincronizar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog
         open={detailOpen}
@@ -720,11 +1237,13 @@ function PaymentsContent() {
                   <div className="rounded-md border p-3">
                     <div className="text-xs text-muted-foreground">Cliente</div>
                     <div className="text-sm font-medium">
-                      {detail.cliente_nombre || detail.cliente_codigo || "—"}
+                      {fixMojibake(
+                        detail.cliente_nombre || detail.cliente_codigo || "—"
+                      )}
                     </div>
                     {detail.cliente_nombre && detail.cliente_codigo ? (
                       <div className="text-xs text-muted-foreground">
-                        {detail.cliente_codigo}
+                        {fixMojibake(detail.cliente_codigo)}
                       </div>
                     ) : null}
                   </div>
@@ -741,7 +1260,10 @@ function PaymentsContent() {
                   <div className="rounded-md border p-3">
                     <div className="text-xs text-muted-foreground">Estatus</div>
                     <div className="mt-1">
-                      <Badge variant={getStatusVariant(detail.estatus)}>
+                      <Badge
+                        variant="outline"
+                        className={getStatusChipClass(detail.estatus)}
+                      >
                         {detail.estatus || "—"}
                       </Badge>
                     </div>
@@ -823,7 +1345,10 @@ function PaymentsContent() {
                                 )}
                               </TableCell>
                               <TableCell>
-                                <Badge variant={getStatusVariant(d.estatus)}>
+                                <Badge
+                                  variant="outline"
+                                  className={getStatusChipClass(d.estatus)}
+                                >
                                   {d.estatus || "—"}
                                 </Badge>
                               </TableCell>
