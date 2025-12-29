@@ -29,9 +29,10 @@ import {
 import { Loader2, Mail, Phone, Tags, Calendar } from "lucide-react";
 import Link from "next/link";
 import { SalePreview } from "@/app/admin/crm/components/SalePreview";
-import { updateMetadataPayload } from "@/app/admin/crm/api";
+import { createLeadSnapshot, updateMetadataPayload } from "@/app/admin/crm/api";
 import { toast } from "@/components/ui/use-toast";
 import { StageBadge } from "@/app/admin/crm/components/StageBadge";
+import { useAuth } from "@/hooks/use-auth";
 
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   return (
@@ -44,6 +45,7 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
 }
 
 function Content({ id }: { id: string }) {
+  const { user } = useAuth();
   const [loading, setLoading] = React.useState(true);
   const [record, setRecord] = React.useState<MetadataRecord<any> | null>(null);
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
@@ -52,6 +54,7 @@ function Content({ id }: { id: string }) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [stageSaving, setStageSaving] = React.useState(false);
   const [dispositionSaving, setDispositionSaving] = React.useState(false);
+  const [snapshotSaving, setSnapshotSaving] = React.useState(false);
 
   const applyPayloadPatch = React.useCallback((patch: Record<string, any>) => {
     setRecord((prev) => {
@@ -139,6 +142,197 @@ function Content({ id }: { id: string }) {
 </html>`);
     w.document.close();
   }, [record]);
+
+  const handleSaveSnapshot = React.useCallback(async () => {
+    if (!record) return;
+    const p = record.payload || {};
+    const salePayload = p.sale || {};
+
+    const normalizeLeadStatus = (raw?: any) => {
+      const v = String(raw ?? "")
+        .trim()
+        .toLowerCase();
+      if (!v) return "new";
+      if (
+        v === "new" ||
+        v === "contacted" ||
+        v === "qualified" ||
+        v === "won" ||
+        v === "lost"
+      )
+        return v;
+      if (v === "nuevo") return "new";
+      if (v === "contactado") return "contacted";
+      if (v === "calificado") return "qualified";
+      if (v === "ganado") return "won";
+      if (v === "perdido") return "lost";
+      return "new";
+    };
+
+    const leadStatus = normalizeLeadStatus(p.status);
+    const leadStageLabel = (() => {
+      if (leadStatus === "new") return "Nuevo";
+      if (leadStatus === "contacted") return "Contactado";
+      if (leadStatus === "qualified") return "Calificado";
+      if (leadStatus === "won") return "Ganado";
+      if (leadStatus === "lost") return "Perdido";
+      return "Nuevo";
+    })();
+
+    const leadDisposition = String(p.lead_disposition ?? "");
+    const leadDispositionLabel = (() => {
+      const v = String(leadDisposition || "").toLowerCase();
+      if (!v) return "";
+      if (v === "interesado") return "Interesado";
+      if (v === "en_seguimiento") return "En seguimiento";
+      if (v === "pendiente_pago") return "Pendiente de pago";
+      if (v === "reagendar") return "Reagendar";
+      if (v === "no_responde") return "No responde";
+      if (v === "no_califica") return "No califica";
+      if (v === "no_interesado") return "No interesado";
+      return leadDisposition;
+    })();
+
+    const statusRaw = String(salePayload?.status || "");
+    const statusLabel = (() => {
+      const v = statusRaw.toLowerCase();
+      if (!v) return "borrador";
+      if (v === "payment_verification_pending") return "verificación de pago";
+      if (v === "payment_confirmed") return "pago confirmado";
+      if (v === "active" || v === "active_provisional") return "activo";
+      if (v === "cancelled" || v === "lost") return "cancelada";
+      if (v === "operational_closure") return "cierre operativo";
+      if (v === "contract_sent") return "contrato enviado";
+      if (v === "contract_signed") return "contrato firmado";
+      return v.replace(/_/g, " ");
+    })();
+
+    const salePaymentMode = String(
+      salePayload?.payment?.mode || ""
+    ).toLowerCase();
+    const draftPaymentHasReserve = (draft as any)?.paymentHasReserve;
+    const draftPaymentReserveAmount = (draft as any)?.paymentReserveAmount;
+    const reserveAmountRaw =
+      draftPaymentReserveAmount ??
+      salePayload?.payment?.reserveAmount ??
+      salePayload?.payment?.reservationAmount ??
+      salePayload?.payment?.reserva ??
+      salePayload?.payment?.deposit ??
+      salePayload?.payment?.downPayment ??
+      salePayload?.payment?.anticipo ??
+      salePayload?.reserveAmount ??
+      salePayload?.reservationAmount ??
+      salePayload?.reserva ??
+      salePayload?.deposit ??
+      salePayload?.downPayment ??
+      salePayload?.anticipo ??
+      null;
+    const reserveAmountNum =
+      reserveAmountRaw === null || reserveAmountRaw === undefined
+        ? null
+        : Number(reserveAmountRaw);
+    const hasReserva =
+      draftPaymentHasReserve === true ||
+      salePayload?.payment?.hasReserve === true ||
+      (reserveAmountNum !== null &&
+        !Number.isNaN(reserveAmountNum) &&
+        reserveAmountNum > 0) ||
+      /reserva|apartado|señ?a|anticipo/i.test(salePaymentMode);
+
+    const snapshot = {
+      schema_version: 1 as const,
+      captured_at: new Date().toISOString(),
+      captured_by: user
+        ? {
+            id: (user as any).id ?? null,
+            name: user.name ?? null,
+            email: user.email ?? null,
+            role: (user as any).role ?? null,
+          }
+        : null,
+      source: {
+        record_id: record.id,
+        entity: record.entity,
+        entity_id: record.entity_id,
+      },
+      route: {
+        pathname:
+          typeof window !== "undefined" ? window.location.pathname : undefined,
+        url: typeof window !== "undefined" ? window.location.href : undefined,
+        user_agent:
+          typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+      },
+      record: {
+        id: record.id,
+        entity: record.entity,
+        entity_id: record.entity_id,
+        created_at: record.created_at,
+        updated_at: record.updated_at,
+      },
+      payload_current: p,
+      computed: {
+        lead: {
+          status: leadStatus,
+          stage_label: leadStageLabel,
+          disposition: leadDisposition || null,
+          disposition_label: leadDispositionLabel || null,
+        },
+        sale: {
+          status_raw: statusRaw,
+          status_label: statusLabel,
+          payment_mode: salePaymentMode,
+          has_reserva: hasReserva,
+          reserve_amount_raw: reserveAmountRaw,
+        },
+      },
+      options: {
+        lead_stage_options: [
+          { value: "new", label: "Nuevo" },
+          { value: "contacted", label: "Contactado" },
+          { value: "qualified", label: "Calificado" },
+          { value: "won", label: "Ganado" },
+          { value: "lost", label: "Perdido" },
+        ],
+        lead_disposition_options: [
+          { value: "", label: "—" },
+          { value: "interesado", label: "Interesado" },
+          { value: "en_seguimiento", label: "En seguimiento" },
+          { value: "pendiente_pago", label: "Pendiente de pago" },
+          { value: "reagendar", label: "Reagendar" },
+          { value: "no_responde", label: "No responde" },
+          { value: "no_califica", label: "No califica" },
+          { value: "no_interesado", label: "No interesado" },
+        ],
+      },
+      draft: draft || null,
+    };
+
+    setSnapshotSaving(true);
+    try {
+      const created = await createLeadSnapshot({
+        source: {
+          record_id: record.id,
+          entity: record.entity,
+          entity_id: record.entity_id,
+        },
+        snapshot,
+      });
+      toast({
+        title: "Snapshot guardado",
+        description: `Se guardó en backend (metadata) con id: ${String(
+          (created as any)?.id ?? "—"
+        )}`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err?.message || "No se pudo guardar el snapshot",
+        variant: "destructive",
+      });
+    } finally {
+      setSnapshotSaving(false);
+    }
+  }, [draft, record, user]);
 
   React.useEffect(() => {
     load();
@@ -340,6 +534,15 @@ function Content({ id }: { id: string }) {
           </Button>
           <Button variant="secondary" onClick={handlePrint}>
             Imprimir
+          </Button>
+          <Button onClick={handleSaveSnapshot} disabled={snapshotSaving}>
+            {snapshotSaving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Guardando JSON
+              </>
+            ) : (
+              "Guardar JSON"
+            )}
           </Button>
         </div>
       </div>

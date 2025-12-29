@@ -275,6 +275,79 @@ export async function updateMetadataPayload(
   return (updateResp as any)?.data ?? updateResp;
 }
 
+export type CrmLeadSnapshotEntity = "crm_lead_snapshot";
+
+export interface LeadDetailSnapshotV1 {
+  schema_version: 1;
+  captured_at: string; // ISO
+  captured_by?: {
+    id?: string | number | null;
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+  } | null;
+  source: {
+    record_id: string | number;
+    entity: string;
+    entity_id: string;
+  };
+  route?: {
+    pathname?: string;
+    url?: string;
+    user_agent?: string;
+  };
+  // "Lo que se muestra": payload entero + valores calculados y opciones.
+  record: {
+    id: string | number;
+    entity: string;
+    entity_id: string;
+    created_at?: string;
+    updated_at?: string;
+  };
+  payload_current: any;
+  computed?: Record<string, any>;
+  options?: Record<string, any>;
+  draft?: any;
+}
+
+export interface CreateLeadSnapshotInput {
+  source: {
+    record_id: string | number;
+    entity: string;
+    entity_id: string;
+  };
+  snapshot: LeadDetailSnapshotV1;
+}
+
+export async function createLeadSnapshot(input: CreateLeadSnapshotInput) {
+  if (!input?.source?.record_id) throw new Error("record_id requerido");
+  if (!input?.source?.entity) throw new Error("entity requerido");
+  if (!input?.source?.entity_id) throw new Error("entity_id requerido");
+  if (!input?.snapshot) throw new Error("snapshot requerido");
+
+  const entity: CrmLeadSnapshotEntity = "crm_lead_snapshot";
+  const capturedAt = input.snapshot.captured_at || new Date().toISOString();
+  const entityId = `${String(input.source.entity)}:${String(input.source.record_id)}:${capturedAt}`;
+
+  const payload = {
+    ...input.snapshot,
+    schema_version: 1 as const,
+    captured_at: capturedAt,
+    source: {
+      record_id: input.source.record_id,
+      entity: input.source.entity,
+      entity_id: input.source.entity_id,
+    },
+  } satisfies LeadDetailSnapshotV1;
+
+  const raw = await apiFetch<any>(`/metadata`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entity, entity_id: entityId, payload }),
+  });
+  return (raw as any)?.data ?? raw;
+}
+
 // Helpers para mutaciones optimistas (opcional)
 export function optimisticAddLead(list: Lead[], lead: Lead) {
   return [lead, ...list];

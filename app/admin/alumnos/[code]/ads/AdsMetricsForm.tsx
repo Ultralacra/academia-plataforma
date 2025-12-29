@@ -14,6 +14,49 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { apiFetch } from "@/lib/api-config";
+import { isoDay, parseMaybe } from "../_parts/detail-utils";
+
+function normPhaseId(v: unknown) {
+  return String(v ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function isFase5(etapaId: unknown) {
+  const n = normPhaseId(etapaId);
+  if (n === "F5" || n === "FASE5") return true;
+  if (n.startsWith("F5") && n.length > 2 && !/\d/.test(n[2])) return true;
+  if (n.startsWith("FASE5") && n.length > 5 && !/\d/.test(n[5])) return true;
+  return false;
+}
+
+async function fetchFase5StartDateISO(
+  studentCode: string
+): Promise<string | null> {
+  try {
+    const histUrl = `/client/get/cliente-etapas/${encodeURIComponent(
+      studentCode
+    )}`;
+    const jh = await apiFetch<any>(histUrl);
+    const rows = Array.isArray(jh?.data) ? jh.data : [];
+
+    const dates = rows
+      .filter((r: any) =>
+        isFase5(r?.etapa_id ?? r?.etapa ?? r?.fase ?? r?.stage)
+      )
+      .map((r: any) => parseMaybe(r?.created_at ?? r?.fecha ?? r?.createdAt))
+      .filter((d: Date | null): d is Date => Boolean(d))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    return dates[0] ? isoDay(dates[0]) : null;
+  } catch {
+    return null;
+  }
+}
 
 // Utilidades numéricas para formato en vista previa del formulario ADS
 function toNum(v?: string | number | null) {
@@ -120,18 +163,30 @@ export default function AdsMetricsForm({
     (async () => {
       setLoading(true);
       try {
+        const fase5Start = await fetchFase5StartDateISO(studentCode);
         const key = `ads-metrics:${studentCode}`;
         const raw =
           typeof window !== "undefined"
             ? window.localStorage.getItem(key)
             : null;
-        if (mounted && raw) {
+        if (!mounted) return;
+
+        let maybeForm: any = null;
+        if (raw) {
           try {
             const parsed = JSON.parse(raw);
-            const maybeForm = parsed?.form ?? parsed;
-            setData((prev) => ({ ...prev, ...maybeForm }));
-          } catch {}
+            maybeForm = parsed?.form ?? parsed;
+          } catch {
+            maybeForm = null;
+          }
         }
+
+        setData((prev) => {
+          const merged = { ...prev, ...(maybeForm ?? {}) } as Metrics;
+          // Regla: fecha_inicio debe ser la fecha de entrada a Fase 5 si existe.
+          if (fase5Start) merged.fecha_inicio = fase5Start;
+          return merged;
+        });
       } catch (e) {
         console.error("ADS metrics local load error", e);
       } finally {

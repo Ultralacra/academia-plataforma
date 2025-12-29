@@ -100,59 +100,40 @@ export default function StudentDetailContent({ code }: { code: string }) {
           : Array.isArray(json?.getClients?.data)
           ? json.getClients.data
           : [];
-        const list = rows.map(
-          (r) =>
-            ({
-              id: r.id,
-              code: r.codigo ?? r.code ?? null,
-              name: (r.nombre ?? r.name) || "-",
-              stage: r.etapa ?? r.stage ?? null,
-              state: r.estado ?? r.state ?? null,
-              ingreso: r.ingreso ?? r.joinDate ?? null,
-              lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
-              teamMembers: Array.isArray(r.teamMembers)
-                ? r.teamMembers
-                : r.equipo ?? r.alumnos ?? [],
-              contrato: r.contrato ?? null,
-              raw: r,
-            } as any)
-        );
-
-        let s =
-          list.find(
-            (x) => (x.code ?? "").toLowerCase() === code.toLowerCase()
+        const rawSelected =
+          rows.find(
+            (r) =>
+              String(r.codigo ?? r.code ?? "").toLowerCase() ===
+              code.toLowerCase()
           ) ||
-          list[0] ||
+          rows[0] ||
           null;
-        // Fallback: si no aparece en el listado (p.ej. rol "user" no indexado), consultar endpoint directo
-        if (!s) {
-          try {
-            const j = await apiFetch<any>(
-              `/client/get/cliente/${encodeURIComponent(code)}`
-            );
-            const r = j?.data || j;
-            if (r && (r.codigo || r.code || r.id)) {
-              s = {
-                id: r.id,
-                code: r.codigo ?? r.code ?? code,
-                name: r.nombre ?? r.name ?? "-",
-                stage: r.etapa ?? r.stage ?? null,
-                state: r.estado ?? r.state ?? null,
-                ingreso: r.ingreso ?? r.joinDate ?? null,
-                lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
-                teamMembers: Array.isArray(r.teamMembers)
-                  ? r.teamMembers
-                  : r.equipo ?? r.alumnos ?? [],
-                contrato: r.contrato ?? null,
-                raw: r,
-              } as any;
-            }
-          } catch {}
-        }
-        if (!alive) return;
-        setStudent(s as any);
 
-        if (s?.code) {
+        const s = rawSelected
+          ? ({
+              id: rawSelected.id ?? null,
+              code: rawSelected.codigo ?? rawSelected.code ?? code,
+              name: rawSelected.nombre ?? rawSelected.name ?? "-",
+              stage: rawSelected.etapa ?? rawSelected.stage ?? null,
+              state: rawSelected.estado ?? rawSelected.state ?? null,
+              ingreso: rawSelected.ingreso ?? rawSelected.joinDate ?? null,
+              salida: rawSelected.salida ?? null,
+              lastActivity:
+                rawSelected.ultima_actividad ??
+                rawSelected.lastActivity ??
+                null,
+              teamMembers: Array.isArray(rawSelected.teamMembers)
+                ? rawSelected.teamMembers
+                : rawSelected.equipo ?? rawSelected.alumnos ?? [],
+              contrato: rawSelected.contrato ?? null,
+              raw: rawSelected,
+            } as any)
+          : null;
+
+        if (!alive) return;
+        setStudent(s);
+
+        if (s) {
           try {
             await loadCoaches(s.code);
           } catch {
@@ -895,6 +876,34 @@ function TabsTicketsChat({
   );
 }
 
+function ChatPanel({
+  code,
+  studentName,
+}: {
+  code: string;
+  studentName?: string | null;
+}) {
+  const href = `/chat/${encodeURIComponent(code)}`;
+  return (
+    <Card>
+      <CardHeader className="py-3">
+        <CardTitle className="text-sm">Chat</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        <div className="text-xs text-muted-foreground">
+          {studentName ? `Chat con ${studentName}` : "Abrir chat del alumno"}
+        </div>
+        <Button asChild variant="secondary" size="sm" className="w-fit">
+          <Link href={href}>
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Abrir chat
+          </Link>
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Utilidades numéricas para formato en vista previa del formulario ADS
 function toNum(v?: string | number | null) {
   if (v == null) return null;
@@ -925,6 +934,51 @@ function fmtPct(n?: string | number | null) {
   if (v == null) return "—";
   const pct = v <= 1 ? v * 100 : v;
   return `${pct.toFixed(1)}%`;
+}
+
+function normPhaseId(v: unknown) {
+  return String(v ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
+
+function isFase5(etapaId: unknown) {
+  const n = normPhaseId(etapaId);
+  if (n === "F5" || n === "FASE5") return true;
+  if (n.startsWith("F5") && n.length > 2 && !/\d/.test(n[2])) return true;
+  if (n.startsWith("FASE5") && n.length > 5 && !/\d/.test(n[5])) return true;
+  return false;
+}
+
+function byDateAsc(a: Date, b: Date) {
+  return a.getTime() - b.getTime();
+}
+
+async function fetchFase5StartDateISO(
+  studentCode: string
+): Promise<string | null> {
+  try {
+    const histUrl = `/client/get/cliente-etapas/${encodeURIComponent(
+      studentCode
+    )}`;
+    const jh = await apiFetch<any>(histUrl);
+    const rows = Array.isArray(jh?.data) ? jh.data : [];
+
+    const dates = rows
+      .filter((r: any) =>
+        isFase5(r?.etapa_id ?? r?.etapa ?? r?.fase ?? r?.stage)
+      )
+      .map((r: any) => parseMaybe(r?.created_at ?? r?.fecha ?? r?.createdAt))
+      .filter((d: Date | null): d is Date => Boolean(d))
+      .sort(byDateAsc);
+
+    return dates[0] ? isoDay(dates[0]) : null;
+  } catch {
+    return null;
+  }
 }
 
 // Formulario embellecido de Métricas ADS con shadcn/ui
@@ -987,6 +1041,88 @@ function AdsMetricsForm({
   const saveTimerRef = useRef<number | null>(null);
   const didInitRef = useRef<boolean>(false);
 
+  const [assignedCoaches, setAssignedCoaches] = useState<
+    Array<{ name: string; area?: string | null; puesto?: string | null }>
+  >([]);
+
+  const norm = (v: unknown) =>
+    String(v ?? "")
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .trim()
+      .toUpperCase();
+
+  const coachCopyAssigned = useMemo(() => {
+    return assignedCoaches.find((c) => norm(c.area).includes("COPY")) || null;
+  }, [assignedCoaches]);
+
+  const coachAdsAssigned = useMemo(() => {
+    return assignedCoaches.find((c) => norm(c.area).includes("ADS")) || null;
+  }, [assignedCoaches]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
+          studentCode
+        )}`;
+        const j = await apiFetch<any>(url);
+        if (!alive) return;
+        const rows: any[] = Array.isArray(j?.data)
+          ? j.data
+          : Array.isArray(j)
+          ? j
+          : [];
+        const mapped = rows
+          .map((r) => {
+            const name = String(
+              r?.coach_nombre ?? r?.name ?? r?.nombre ?? ""
+            ).trim();
+            if (!name) return null;
+            return {
+              name,
+              area: r?.area ?? null,
+              puesto: r?.puesto ?? null,
+            };
+          })
+          .filter(Boolean) as Array<{
+          name: string;
+          area?: string | null;
+          puesto?: string | null;
+        }>;
+        const uniqByName = Array.from(
+          new Map(mapped.map((c) => [c.name, c])).values()
+        ).sort((a, b) => a.name.localeCompare(b.name, "es"));
+        setAssignedCoaches(uniqByName);
+      } catch {
+        if (!alive) return;
+        setAssignedCoaches([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [studentCode]);
+
+  useEffect(() => {
+    const nextCopy = coachCopyAssigned?.name || "";
+    const nextAds = coachAdsAssigned?.name || "";
+    setData((prev) => {
+      if (
+        (prev.coach_copy || "") === nextCopy &&
+        (prev.coach_plat || "") === nextAds
+      )
+        return prev;
+      return {
+        ...prev,
+        coach_copy: nextCopy,
+        coach_plat: nextAds,
+      };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachCopyAssigned?.name, coachAdsAssigned?.name]);
+
   function toNumOrNull(s?: string): number | null {
     if (s == null || s === "") return null;
     const n = Number(s);
@@ -1015,21 +1151,31 @@ function AdsMetricsForm({
     (async () => {
       setLoading(true);
       try {
+        const fase5Start = await fetchFase5StartDateISO(studentCode);
         const key = `ads-metrics:${studentCode}`;
         const raw =
           typeof window !== "undefined"
             ? window.localStorage.getItem(key)
             : null;
-        if (mounted && raw) {
+        if (!mounted) return;
+
+        let maybeForm: any = null;
+        if (raw) {
           try {
             const parsed = JSON.parse(raw);
             // Por compatibilidad, si hay payloads antiguos, guardar solo el objeto de formulario
-            const maybeForm = parsed?.form ?? parsed;
-            setData({ ...data, ...maybeForm });
+            maybeForm = parsed?.form ?? parsed;
           } catch {
-            // si falla parseo, ignoramos y arrancamos vacío
+            maybeForm = null;
           }
         }
+
+        setData((prev) => {
+          const merged = { ...prev, ...(maybeForm ?? {}) } as Metrics;
+          // Regla: fecha_inicio debe ser la fecha de entrada a Fase 5 si existe.
+          if (fase5Start) merged.fecha_inicio = fase5Start;
+          return merged;
+        });
       } catch (e) {
         console.error("ADS metrics local load error", e);
       } finally {
@@ -1728,19 +1874,29 @@ function AdsMetricsForm({
               <CardContent className="grid grid-cols-1 gap-3">
                 <div className="space-y-1.5">
                   <Label>Coach de Copy</Label>
-                  <Input
-                    placeholder="Nombre"
-                    value={data.coach_copy || ""}
-                    onChange={(e) => onChange("coach_copy", e.target.value)}
-                  />
+                  <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
+                    <span className="font-medium">
+                      {coachCopyAssigned?.name || "—"}
+                    </span>
+                    {coachCopyAssigned?.area ? (
+                      <Badge variant="secondary">
+                        {String(coachCopyAssigned.area)}
+                      </Badge>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Coach de Plataformas</Label>
-                  <Input
-                    placeholder="Nombre"
-                    value={data.coach_plat || ""}
-                    onChange={(e) => onChange("coach_plat", e.target.value)}
-                  />
+                  <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
+                    <span className="font-medium">
+                      {coachAdsAssigned?.name || "—"}
+                    </span>
+                    {coachAdsAssigned?.area ? (
+                      <Badge variant="secondary">
+                        {String(coachAdsAssigned.area)}
+                      </Badge>
+                    ) : null}
+                  </div>
                 </div>
               </CardContent>
             </Card>
