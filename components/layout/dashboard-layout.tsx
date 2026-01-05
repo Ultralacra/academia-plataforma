@@ -7,7 +7,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { LogOut, User, Menu, Bell, Plus, RefreshCw } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
 import {
   Popover,
   PopoverContent,
@@ -292,7 +291,6 @@ export function DashboardLayout({
             </div>
             <div className="flex items-center gap-2 sm:gap-4 ml-auto">
               <ThemeToggle />
-              <InstallPwaButton />
               <NotificationsBadge />
               <div className="flex items-center gap-2 text-sm min-w-0">
                 <User className="h-4 w-4" />

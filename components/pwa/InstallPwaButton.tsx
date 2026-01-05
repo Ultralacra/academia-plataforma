@@ -3,6 +3,8 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { Apple, Download, Smartphone } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Chrome/Edge Android: beforeinstallprompt
 interface BeforeInstallPromptEvent extends Event {
@@ -26,6 +28,9 @@ export function InstallPwaButton() {
   const [deferred, setDeferred] =
     React.useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = React.useState(false);
+
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
 
   React.useEffect(() => {
     setInstalled(isStandaloneMode());
@@ -78,8 +83,6 @@ export function InstallPwaButton() {
     }
 
     // Fallback: instrucciones rápidas
-    const ua = navigator.userAgent || "";
-    const isIOS = /iPhone|iPad|iPod/i.test(ua);
 
     toast({
       title: "Cómo instalar",
@@ -90,8 +93,36 @@ export function InstallPwaButton() {
   };
 
   return (
-    <Button variant="outline" size="sm" onClick={onClick}>
-      {canPrompt ? "Instalar" : "Instalar app"}
+    <Button
+      variant="default"
+      size="sm"
+      onClick={onClick}
+      className={cn(
+        "w-full h-auto py-2 flex-col items-center justify-center gap-1",
+        isIOS ? "" : ""
+      )}
+      title={
+        canPrompt
+          ? "Instalar Academia X"
+          : isIOS
+            ? "iPhone: Compartir → Añadir a pantalla de inicio"
+            : "Android: menú ⋮ → Instalar aplicación"
+      }
+    >
+      <span className="inline-flex items-center gap-2">
+        <Download className="h-4 w-4" />
+        <span className="font-medium">Instalar app</span>
+      </span>
+      <span className="flex items-center gap-3 text-xs opacity-80">
+        <span className="inline-flex items-center gap-1">
+          <Apple className="h-3.5 w-3.5" />
+          <span>iOS</span>
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <Smartphone className="h-3.5 w-3.5" />
+          <span>Android</span>
+        </span>
+      </span>
     </Button>
   );
 }

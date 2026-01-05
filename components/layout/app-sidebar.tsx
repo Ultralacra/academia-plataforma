@@ -39,6 +39,7 @@ import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
 import { useTheme } from "next-themes";
+import { InstallPwaButton } from "@/components/pwa/InstallPwaButton";
 
 /* ====================== Tipos ====================== */
 type MenuItem = {
@@ -722,8 +723,11 @@ export function AppSidebar() {
 
         {/* Footer minimal — Notion-like */}
         <Separator className="mx-3 mt-2" />
-        <div className="px-3 py-2 flex items-center justify-between">
-          <p className="text-[11px] text-muted-foreground">
+        <div className="px-3 py-2 flex flex-col items-center gap-2">
+          <div className="w-full max-w-[260px]">
+            <InstallPwaButton />
+          </div>
+          <p className="text-[11px] text-muted-foreground text-center">
             {new Date().getFullYear()} • Workspace
           </p>
           {/*  <button
