@@ -107,7 +107,8 @@ export function PwaPushClient() {
 
     toast({
       title: "Activar notificaciones",
-      description: "Para recibir mensajes del chat en el móvil, permite notificaciones.",
+      description:
+        "Para recibir mensajes del chat en el móvil, permite notificaciones.",
       action: (
         <ToastAction
           altText="Permitir"

@@ -13,7 +13,9 @@ interface BeforeInstallPromptEvent extends Event {
 function isStandaloneMode() {
   if (typeof window === "undefined") return false;
   // PWA display-mode
-  const isStandaloneDisplay = window.matchMedia?.("(display-mode: standalone)")?.matches;
+  const isStandaloneDisplay = window.matchMedia?.(
+    "(display-mode: standalone)"
+  )?.matches;
   // iOS Safari
   const isIOSStandalone = (window.navigator as any)?.standalone === true;
   return Boolean(isStandaloneDisplay || isIOSStandalone);
@@ -21,7 +23,8 @@ function isStandaloneMode() {
 
 export function InstallPwaButton() {
   const { toast } = useToast();
-  const [deferred, setDeferred] = React.useState<BeforeInstallPromptEvent | null>(null);
+  const [deferred, setDeferred] =
+    React.useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = React.useState(false);
 
   React.useEffect(() => {
@@ -38,11 +41,17 @@ export function InstallPwaButton() {
       setDeferred(null);
     };
 
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt as any);
+    window.addEventListener(
+      "beforeinstallprompt",
+      onBeforeInstallPrompt as any
+    );
     window.addEventListener("appinstalled", onAppInstalled);
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt as any);
+      window.removeEventListener(
+        "beforeinstallprompt",
+        onBeforeInstallPrompt as any
+      );
       window.removeEventListener("appinstalled", onAppInstalled);
     };
   }, []);
