@@ -11,6 +11,7 @@ import { CoachChatNotifier } from "@/components/chat/CoachChatNotifier";
 import { CoachChatSnackbar } from "@/components/chat/CoachChatSnackbar";
 import { StudentChatSnackbar } from "@/components/chat/StudentChatSnackbar";
 import { SseTicketSnackbar } from "@/components/hooks/SseTicketSnackbar";
+import { PwaPushClient } from "@/components/pwa/PwaPushClient";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -19,6 +20,7 @@ export const metadata: Metadata = {
   title: "Academia X",
   description: "Plataforma de gestión para academia",
   generator: "",
+  manifest: "/manifest.webmanifest",
   // Favicon e iconos. Coloca tu archivo en public/ (p. ej. /favicon.png o /favicon.ico)
   // o agrega app/icon.png para que Next lo detecte automáticamente.
   icons: {
@@ -132,6 +134,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <SseNotificationsProvider>
+            <PwaPushClient />
             <GlobalChatNotifications />
             <CoachChatNotifier />
             <CoachChatSnackbar />
