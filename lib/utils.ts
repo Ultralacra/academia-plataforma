@@ -209,6 +209,57 @@ export function playNotificationSound() {
   }
 }
 
+export async function showSystemNotification(opts: {
+  title: string;
+  body?: string;
+  url?: string;
+  tag?: string;
+}): Promise<boolean> {
+  try {
+    if (typeof window === "undefined") return false;
+    if (!("Notification" in window)) return false;
+    if (Notification.permission !== "granted") return false;
+
+    const title = String(opts.title || "Notificación").trim() || "Notificación";
+    const body = String(opts.body || "").trim();
+    const url = String(opts.url || "/").trim() || "/";
+    const tag = String(opts.tag || "academiax").trim() || "academiax";
+
+    // Preferir SW: funciona mejor en PWA en background (cuando el navegador lo permite)
+    try {
+      if ("serviceWorker" in navigator) {
+        const reg = await navigator.serviceWorker.ready.catch(() => null);
+        if (reg && typeof reg.showNotification === "function") {
+          await reg.showNotification(title, {
+            body,
+            tag,
+            renotify: true,
+            icon: "/favicon.png",
+            badge: "/favicon.png",
+            data: { url },
+          });
+          return true;
+        }
+      }
+    } catch {}
+
+    // Fallback: Notification API directa (no siempre funciona en background)
+    try {
+      new Notification(title, {
+        body,
+        tag,
+        data: { url },
+        icon: "/favicon.png",
+      } as any);
+      return true;
+    } catch {}
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // Enganchar el unlock lo antes posible, para no perder el primer click.
 // (Este módulo se importa en muchos componentes client, así que suele ejecutarse temprano.)
 try {

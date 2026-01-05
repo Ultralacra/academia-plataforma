@@ -5,7 +5,11 @@ import { io, Socket } from "socket.io-client";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
 import { useToast } from "@/hooks/use-toast";
-import { initNotificationSound, playNotificationSound } from "@/lib/utils";
+import {
+  initNotificationSound,
+  playNotificationSound,
+  showSystemNotification,
+} from "@/lib/utils";
 
 interface StudentChatNotifierProps {
   studentCode: string;
@@ -104,22 +108,47 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
       console.log("[Notifier] Message received:", { msg, esMio });
 
       if (!esMio) {
+        const isBackground =
+          typeof document !== "undefined" &&
+          typeof document.hidden === "boolean" &&
+          document.hidden;
+
         // Sonido de notificación (maneja unlock/autoplay internamente)
         try {
-          playNotificationSound();
+          if (!isBackground) playNotificationSound();
         } catch {}
 
-        // Snackbar/Toast para mensajes entrantes
-        try {
-          const textRaw = String(
-            msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
-          ).trim();
-          const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
-          toast({
-            title: "Nuevo mensaje",
-            description: preview,
-          });
-        } catch {}
+        if (isBackground) {
+          try {
+            const textRaw = String(
+              msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+            ).trim();
+            const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+            const chatUrl = studentCode
+              ? `/chat/${encodeURIComponent(studentCode)}`
+              : "/chat";
+            showSystemNotification({
+              title: "Academia X: Nuevo mensaje",
+              body: preview,
+              url: chatUrl,
+              tag: `chat:${String(msg?.id_chat ?? "student")}`,
+            });
+          } catch {}
+        }
+
+        // Snackbar/Toast para mensajes entrantes (solo en foreground)
+        if (!isBackground) {
+          try {
+            const textRaw = String(
+              msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+            ).trim();
+            const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+            toast({
+              title: "Nuevo mensaje",
+              description: preview,
+            });
+          } catch {}
+        }
       }
     });
 

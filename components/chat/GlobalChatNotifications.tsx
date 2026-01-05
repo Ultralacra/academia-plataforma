@@ -7,7 +7,11 @@ import { CHAT_HOST } from "@/lib/api-config";
 import { useToast } from "@/hooks/use-toast";
 import { io, Socket } from "socket.io-client";
 import { usePathname } from "next/navigation";
-import { initNotificationSound, playNotificationSound } from "@/lib/utils";
+import {
+  initNotificationSound,
+  playNotificationSound,
+  showSystemNotification,
+} from "@/lib/utils";
 
 // Global set for deduplication across component instances/remounts
 const processedMessageIds = new Set<string>();
@@ -231,12 +235,21 @@ export function GlobalChatNotifications() {
         const currentPath = pathnameRef.current;
         const isChatView =
           currentPath?.includes("/chat") || currentPath?.includes("/teamsv2");
+
+        const isBackground =
+          typeof document !== "undefined" &&
+          typeof document.hidden === "boolean" &&
+          document.hidden;
+
         if (!isChatView) {
-          playNotificationSound();
+          try {
+            // En background, el audio suele ser bloqueado; usamos notificación del sistema.
+            if (!isBackground) playNotificationSound();
+          } catch {}
         }
 
         // Snackbar/Toast para mensajes entrantes cuando no estás en una vista de chat
-        if (!isChatView) {
+        if (!isChatView && !isBackground) {
           const textRaw = String(
             msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
           ).trim();
@@ -271,6 +284,33 @@ export function GlobalChatNotifications() {
                 })
               );
             }
+          } catch {}
+        }
+
+        // En background: lanzar notificación del sistema (si hay permisos)
+        if (!isChatView && isBackground) {
+          try {
+            const textRaw = String(
+              msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+            ).trim();
+            const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+            const senderName = String(msg?.nombre_emisor ?? "").trim();
+
+            const myRole = String(user.role || "").toLowerCase();
+            const myCode = String((user as any)?.codigo ?? "").trim();
+            const chatUrl =
+              ["student", "alumno", "cliente"].includes(myRole) && myCode
+                ? `/chat/${encodeURIComponent(myCode)}`
+                : "/chat";
+
+            showSystemNotification({
+              title: senderName
+                ? `Academia X: ${senderName}`
+                : "Academia X: Nuevo mensaje",
+              body: preview,
+              url: chatUrl,
+              tag: `chat:${String(msg?.id_chat ?? msgId)}`,
+            });
           } catch {}
         }
 

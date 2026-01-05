@@ -5,7 +5,11 @@ import { io, Socket } from "socket.io-client";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST } from "@/lib/api-config";
 import { useAuth } from "@/hooks/use-auth";
-import { initNotificationSound, playNotificationSound } from "@/lib/utils";
+import {
+  initNotificationSound,
+  playNotificationSound,
+  showSystemNotification,
+} from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
 
 // Global set for deduplication across component instances/remounts
@@ -361,8 +365,14 @@ export function CoachChatNotifier() {
 
         // Sonido + snackbar solo fuera del chat del coach (evita dobles con la UI)
         if (!isCoachChatView) {
+          const isBackground =
+            typeof document !== "undefined" &&
+            typeof document.hidden === "boolean" &&
+            document.hidden;
+
           try {
-            playNotificationSound();
+            // En background, el audio suele ser bloqueado; usamos notificación del sistema.
+            if (!isBackground) playNotificationSound();
           } catch {}
 
           try {
@@ -392,17 +402,27 @@ export function CoachChatNotifier() {
               ? `/admin/teamsv2/${String(myCode)}/chat`
               : "/admin/teamsv2";
 
-            window.dispatchEvent(
-              new CustomEvent("coach-chat:snackbar", {
-                detail: {
-                  title,
-                  studentName: isAlumno ? senderName || undefined : undefined,
-                  preview,
-                  chatUrl,
-                  chatId: msg?.id_chat,
-                },
-              })
-            );
+            if (isBackground) {
+              // Notificación del sistema mientras la PWA está en segundo plano
+              showSystemNotification({
+                title: `Academia X: ${title}`,
+                body: preview,
+                url: chatUrl,
+                tag: `chat:${String(msg?.id_chat ?? "coach")}`,
+              });
+            } else {
+              window.dispatchEvent(
+                new CustomEvent("coach-chat:snackbar", {
+                  detail: {
+                    title,
+                    studentName: isAlumno ? senderName || undefined : undefined,
+                    preview,
+                    chatUrl,
+                    chatId: msg?.id_chat,
+                  },
+                })
+              );
+            }
           } catch {}
         }
 
