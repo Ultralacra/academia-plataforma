@@ -18,6 +18,8 @@ import {
   Loader2,
   List,
   LayoutGrid,
+  Eye,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -41,7 +43,6 @@ import { ProspectEditor } from "./components/ProspectEditor";
 import { ProspectFilters } from "./components/ProspectFilters";
 import { CrmTabsLayout } from "./components/TabsLayout";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { crmService } from "@/lib/crm-service";
 import type {
   ProspectCore,
   CrmGlobalMetrics,
@@ -57,7 +58,6 @@ import { toast } from "@/components/ui/use-toast";
 import { StageBadge } from "./components/StageBadge";
 import { CloseSaleForm } from "./components/CloseSaleForm2";
 import { SalesPersonalMetrics } from "./components/SalesPersonalMetrics";
-import { listMetadata } from "@/lib/metadata";
 import { useRouter } from "next/navigation";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { DeleteLeadConfirmDialog } from "./components/DeleteLeadConfirmDialog";
@@ -108,22 +108,10 @@ function CrmContent() {
   // Eliminado: ya no usamos submissions locales vía localStorage.
 
   const reload = async () => {
-    // Cargar leads desde API real
+    // Cargar leads desde /v1/leads
     try {
       const { items } = await listLeads({ page: 1, pageSize: 500 });
-      // Enriquecer con status de venta embebido si existe (payload.sale.status)
-      let saleStatusMap = new Map<string, string>();
-      try {
-        const meta = await listMetadata<any>();
-        for (const r of meta.items || []) {
-          if (r.entity === "booking" && (r as any).payload?.sale?.status) {
-            saleStatusMap.set(String(r.id), (r as any).payload.sale.status);
-          }
-        }
-      } catch (e) {
-        // no bloquear por errores en metadata
-      }
-      const mappedFromLeads: Prospect[] = items.map((l: Lead) => ({
+      const mapped: Prospect[] = items.map((l: Lead) => ({
         id: l.codigo,
         nombre: l.name,
         email: l.email || undefined,
@@ -133,17 +121,16 @@ function CrmContent() {
         creado: l.created_at || undefined,
         actualizado: l.updated_at || undefined,
         remote: true,
-        saleStatus: saleStatusMap.get(l.codigo || ""),
+        saleStatus: undefined,
       }));
-      setRows(mappedFromLeads);
+      setRows(mapped);
       return;
     } catch (e) {
       console.warn("listLeads falló, mostrando lista vacía", e);
       setRows([]);
       toast({
         title: "Error cargando leads",
-        description:
-          "El endpoint /v1/leads falló. No se mostrarán datos de prueba.",
+        description: "El endpoint /v1/leads falló.",
         variant: "destructive",
       });
       return;
@@ -431,24 +418,9 @@ function CrmContent() {
                                   )
                                 );
                                 try {
-                                  const row = rows.find((r) => r.id === p.id);
-                                  if (row?.remote) {
-                                    await updateLead(p.id, {
-                                      status: mapEtapaToLeadStatus(nextEtapa),
-                                    });
-                                  } else {
-                                    const stageMap: Record<string, any> = {
-                                      Nuevo: "nuevo",
-                                      Contactado: "contactado",
-                                      Calificado: "calificado",
-                                      Ganado: "ganado",
-                                      Perdido: "perdido",
-                                    };
-                                    crmService.updateProspectStage(
-                                      p.id,
-                                      stageMap[nextEtapa] || "nuevo"
-                                    );
-                                  }
+                                  await updateLead(p.id, {
+                                    status: mapEtapaToLeadStatus(nextEtapa),
+                                  });
                                   toast({
                                     title: "Etapa actualizada",
                                     description: `${p.nombre} → ${nextEtapa}`,
@@ -497,23 +469,19 @@ function CrmContent() {
                           </div>
                           <div className="col-span-2 flex items-center justify-end">
                             <div className="flex items-center gap-2">
-                              <Button
-                                asChild
-                                size="sm"
-                                variant="outline"
+                              <Link
+                                href={`/admin/crm/booking/${encodeURIComponent(
+                                  p.id
+                                )}`}
+                                aria-label={`Ver detalle de ${p.nombre}`}
                                 title="Ver detalle"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                               >
-                                <Link
-                                  href={`/admin/crm/booking/${encodeURIComponent(
-                                    p.id
-                                  )}`}
-                                >
-                                  Detalle
-                                </Link>
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
+                                <Eye className="h-4 w-4" />
+                              </Link>
+                              <button
+                                type="button"
+                                aria-label={`Eliminar lead ${p.nombre}`}
                                 title="Eliminar lead"
                                 onClick={() =>
                                   setDeleteTarget({
@@ -521,9 +489,10 @@ function CrmContent() {
                                     nombre: p.nombre,
                                   })
                                 }
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 hover:bg-red-50 hover:text-red-700"
                               >
-                                Eliminar
-                              </Button>
+                                <Trash2 className="h-4 w-4" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -550,34 +519,30 @@ function CrmContent() {
                   }
                   onMoved={() => reload()}
                   onStageChange={async (id, newStage) => {
-                    const row = rows.find((r) => r.id === id);
-                    if (row?.remote) {
-                      // Mapear la etapa del Kanban (pipeline) al status del payload de metadata
-                      const statusMap: Record<string, string> = {
-                        nuevo: "new",
-                        contactado: "contacted",
-                        calificado: "qualified",
-                        ganado: "won",
-                        perdido: "lost",
-                      };
-                      const newStatus = statusMap[newStage] || "new";
-                      try {
-                        await updateLead(id, { status: newStatus });
-                        toast({
-                          title: "Etapa actualizada",
-                          description: `${row.nombre} → ${newStage}`,
-                        });
-                        reload();
-                      } catch (e) {
-                        toast({
-                          title: "Error",
-                          description: "No se pudo actualizar la etapa",
-                        });
-                      }
-                      return;
+                    // Mapear la etapa del Kanban (pipeline) al status del lead
+                    const statusMap: Record<string, string> = {
+                      nuevo: "new",
+                      contactado: "contacted",
+                      calificado: "qualified",
+                      ganado: "won",
+                      perdido: "lost",
+                    };
+                    const newStatus = statusMap[newStage] || "new";
+                    try {
+                      const row = rows.find((r) => r.id === id);
+                      await updateLead(id, { status: newStatus });
+                      toast({
+                        title: "Etapa actualizada",
+                        description: `${row?.nombre || id} → ${newStage}`,
+                      });
+                      reload();
+                    } catch {
+                      toast({
+                        title: "Error",
+                        description: "No se pudo actualizar la etapa",
+                        variant: "destructive",
+                      });
                     }
-                    // Fallback: actualizar en mock local
-                    crmService.updateProspectStage(id, newStage);
                   }}
                 />
               )}

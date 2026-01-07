@@ -606,6 +606,26 @@ export async function updateClient(clientCode: string, payload: Record<string, a
   });
 }
 
+// Actualizar solo la etapa del cliente (usa FormData por compatibilidad con backend)
+export async function updateClientEtapa(clientCode: string, etapa: string): Promise<any> {
+  if (!clientCode) throw new Error('clientCode requerido');
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
+  const fd = new FormData();
+  fd.set('etapa', String(etapa));
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: 'PUT',
+    body: fd,
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  return await res.json().catch(() => ({}));
+}
+
 // 12) Historial de tareas del cliente
 export type ClienteTareaHist = {
   id: number | string;

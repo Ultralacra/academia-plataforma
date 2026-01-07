@@ -7,6 +7,8 @@ import {
   getAllCoachesFromTeams,
   getCoachStudentsByCoachId,
   createStudent,
+  getOpciones,
+  updateClientEtapa,
 } from "./api";
 import {
   Search,
@@ -134,6 +136,13 @@ export default function StudentsContent() {
   const [filterStage, setFilterStage] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<string | null>(null);
   const [openCoach, setOpenCoach] = useState(false);
+
+  // Edición inline de fase (etapa)
+  const [etapas, setEtapas] = useState<Array<{ key: string; value: string }>>(
+    []
+  );
+  const [openStageFor, setOpenStageFor] = useState<string | null>(null);
+  const [updatingStageFor, setUpdatingStageFor] = useState<string | null>(null);
   // Crear alumno
   const [openCreate, setOpenCreate] = useState(false);
   const [createNombre, setCreateNombre] = useState("");
@@ -201,6 +210,41 @@ export default function StudentsContent() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Cargar catálogo de etapas (para edición inline de fase)
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const list = await getOpciones("etapa");
+        if (!active) return;
+        const mapped = (list || [])
+          .map((x) => ({ key: String(x.key), value: String(x.value) }))
+          .filter((x) => x.key.trim());
+        setEtapas(mapped);
+      } catch (e) {
+        if (!active) return;
+        setEtapas([
+          { key: "ONBOARDING", value: "ONBOARDING" },
+          { key: "F1", value: "F1" },
+          { key: "F2", value: "F2" },
+          { key: "F3", value: "F3" },
+          { key: "F4", value: "F4" },
+          { key: "F5", value: "F5" },
+        ]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const stageLabel = (stage?: string | null) => {
+    const raw = String(stage ?? "").trim();
+    if (!raw) return "—";
+    const match = etapas.find((e) => e.key === raw);
+    return match?.value ?? raw;
+  };
 
   // Si por alguna razón no tenemos coaches del endpoint, inferir por alumnos
   useEffect(() => {
@@ -846,12 +890,127 @@ export default function StudentsContent() {
                           : v
                           ? "bg-muted text-muted-foreground"
                           : "bg-muted text-muted-foreground";
-                        return (
+
+                        const canEdit = Boolean(student.code);
+                        const code = String(student.code || "");
+                        const isOpen = openStageFor === code;
+                        const isUpdating = updatingStageFor === code;
+
+                        const badge = (
                           <span
                             className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
                           >
-                            {student.stage || "—"}
+                            {stageLabel(student.stage)}
                           </span>
+                        );
+
+                        if (!canEdit) return badge;
+
+                        return (
+                          <Popover
+                            open={isOpen}
+                            onOpenChange={(o) =>
+                              setOpenStageFor(o ? code : null)
+                            }
+                          >
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                disabled={isUpdating}
+                                aria-label={`Cambiar fase de ${student.name}`}
+                                title="Cambiar fase"
+                                className={cn(
+                                  "inline-flex items-center gap-1 rounded hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
+                                  isUpdating ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                                )}
+                              >
+                                {badge}
+                                <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="p-0 w-[260px] shadow-none"
+                              align="start"
+                              sideOffset={8}
+                            >
+                              <Command>
+                                <CommandInput
+                                  placeholder="Cambiar fase..."
+                                  autoFocus
+                                  className="text-sm"
+                                />
+                                <CommandList className="max-h-64">
+                                  <CommandEmpty>No hay resultados.</CommandEmpty>
+                                  <CommandGroup heading="Fases">
+                                    {(etapas.length
+                                      ? etapas
+                                      : [
+                                          { key: "ONBOARDING", value: "ONBOARDING" },
+                                          { key: "F1", value: "F1" },
+                                          { key: "F2", value: "F2" },
+                                          { key: "F3", value: "F3" },
+                                          { key: "F4", value: "F4" },
+                                          { key: "F5", value: "F5" },
+                                        ]
+                                    ).map((opt) => (
+                                      <CommandItem
+                                        key={opt.key}
+                                        value={`${opt.key} ${opt.value}`}
+                                        onSelect={async () => {
+                                          if (!student.code) return;
+                                          const nextKey = opt.key;
+                                          const prevStage = student.stage;
+                                          setUpdatingStageFor(code);
+                                          // optimista
+                                          setAll((prev) =>
+                                            prev.map((r) =>
+                                              r.code === student.code
+                                                ? { ...r, stage: nextKey }
+                                                : r
+                                            )
+                                          );
+                                          try {
+                                            await updateClientEtapa(code, nextKey);
+                                            toast({
+                                              title: "Fase actualizada",
+                                              description: `${student.name} → ${opt.value}`,
+                                            });
+                                            setOpenStageFor(null);
+                                          } catch (e) {
+                                            // rollback
+                                            setAll((prev) =>
+                                              prev.map((r) =>
+                                                r.code === student.code
+                                                  ? { ...r, stage: prevStage }
+                                                  : r
+                                              )
+                                            );
+                                            toast({
+                                              title: "Error",
+                                              description: getSpanishApiError(
+                                                e,
+                                                "No se pudo actualizar la fase"
+                                              ),
+                                              variant: "destructive",
+                                            });
+                                          } finally {
+                                            setUpdatingStageFor(null);
+                                          }
+                                        }}
+                                        className="cursor-pointer"
+                                      >
+                                        <span className="truncate">{opt.value}</span>
+                                        {String(student.stage || "").trim() ===
+                                          opt.key && (
+                                          <Check className="ml-auto h-4 w-4 text-blue-600" />
+                                        )}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                         );
                       })()}
                     </td>
