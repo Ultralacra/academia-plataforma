@@ -921,7 +921,9 @@ export default function StudentsContent() {
                                 title="Cambiar fase"
                                 className={cn(
                                   "inline-flex items-center gap-1 rounded hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
-                                  isUpdating ? "opacity-60 cursor-not-allowed" : "cursor-pointer"
+                                  isUpdating
+                                    ? "opacity-60 cursor-not-allowed"
+                                    : "cursor-pointer"
                                 )}
                               >
                                 {badge}
@@ -940,12 +942,17 @@ export default function StudentsContent() {
                                   className="text-sm"
                                 />
                                 <CommandList className="max-h-64">
-                                  <CommandEmpty>No hay resultados.</CommandEmpty>
+                                  <CommandEmpty>
+                                    No hay resultados.
+                                  </CommandEmpty>
                                   <CommandGroup heading="Fases">
                                     {(etapas.length
                                       ? etapas
                                       : [
-                                          { key: "ONBOARDING", value: "ONBOARDING" },
+                                          {
+                                            key: "ONBOARDING",
+                                            value: "ONBOARDING",
+                                          },
                                           { key: "F1", value: "F1" },
                                           { key: "F2", value: "F2" },
                                           { key: "F3", value: "F3" },
@@ -970,7 +977,10 @@ export default function StudentsContent() {
                                             )
                                           );
                                           try {
-                                            await updateClientEtapa(code, nextKey);
+                                            await updateClientEtapa(
+                                              code,
+                                              nextKey
+                                            );
                                             toast({
                                               title: "Fase actualizada",
                                               description: `${student.name} → ${opt.value}`,
@@ -999,7 +1009,9 @@ export default function StudentsContent() {
                                         }}
                                         className="cursor-pointer"
                                       >
-                                        <span className="truncate">{opt.value}</span>
+                                        <span className="truncate">
+                                          {opt.value}
+                                        </span>
                                         {String(student.stage || "").trim() ===
                                           opt.key && (
                                           <Check className="ml-auto h-4 w-4 text-blue-600" />

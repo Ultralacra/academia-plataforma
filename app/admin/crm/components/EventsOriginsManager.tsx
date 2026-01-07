@@ -310,14 +310,19 @@ export function EventsOriginsManager() {
                             const eventCodigoRow = String(
                               (it as any)?.event_codigo || ""
                             ).trim();
-                            const fallbackCodigo = String(it?.codigo || "").trim();
+                            const fallbackCodigo = String(
+                              it?.codigo || ""
+                            ).trim();
                             const code = eventCodigoRow || fallbackCodigo;
                             if (!code) return;
                             const origin =
-                              typeof window !== "undefined" && window.location?.origin
+                              typeof window !== "undefined" &&
+                              window.location?.origin
                                 ? window.location.origin
                                 : "http://localhost:3000";
-                            const url = `${origin}/booking/${encodeURIComponent(code)}`;
+                            const url = `${origin}/booking/${encodeURIComponent(
+                              code
+                            )}`;
                             try {
                               await navigator.clipboard.writeText(url);
                               toast({ title: "Link copiado" });
@@ -330,7 +335,9 @@ export function EventsOriginsManager() {
                             }
                           }}
                           disabled={
-                            !String((it as any)?.event_codigo || it?.codigo || "").trim()
+                            !String(
+                              (it as any)?.event_codigo || it?.codigo || ""
+                            ).trim()
                           }
                           aria-label="Copiar link del formulario"
                           title="Copiar link del formulario"
@@ -425,7 +432,9 @@ export function EventsOriginsManager() {
               <Label>Config</Label>
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">medium</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    medium
+                  </Label>
                   <Input
                     value={configMedium}
                     onChange={(e) => setConfigMedium(e.target.value)}
@@ -433,7 +442,9 @@ export function EventsOriginsManager() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">source</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    source
+                  </Label>
                   <Input
                     value={configSource}
                     onChange={(e) => setConfigSource(e.target.value)}
@@ -441,7 +452,9 @@ export function EventsOriginsManager() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">campaign_id</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    campaign_id
+                  </Label>
                   <Input
                     value={configCampaignId}
                     onChange={(e) => setConfigCampaignId(e.target.value)}
