@@ -6,12 +6,14 @@ export function CrmTabsLayout({
   value,
   onValueChange,
   pipeline,
+  campanas,
   agenda,
   metrics,
 }: {
   value: string;
   onValueChange: (v: string) => void;
   pipeline: React.ReactNode;
+  campanas?: React.ReactNode;
   agenda?: React.ReactNode;
   metrics: React.ReactNode;
 }) {
@@ -44,6 +46,14 @@ export function CrmTabsLayout({
           >
             Métricas
           </TabsTrigger>
+          {campanas ? (
+            <TabsTrigger
+              value="campanas"
+              className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
+            >
+              Campañas
+            </TabsTrigger>
+          ) : null}
         </TabsList>
       </div>
       {/* overflow-auto aquí sí, para que cada tab pueda scrollear si crece */}
@@ -59,6 +69,11 @@ export function CrmTabsLayout({
         <TabsContent value="metricas" className="m-0 h-full">
           {metrics}
         </TabsContent>
+        {campanas ? (
+          <TabsContent value="campanas" className="m-0 h-full">
+            {campanas}
+          </TabsContent>
+        ) : null}
       </div>
     </Tabs>
   );

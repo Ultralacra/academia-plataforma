@@ -14,7 +14,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { BONOS_BY_KEY } from "@/lib/bonos";
-import { updateMetadataPayload } from "@/app/admin/crm/api";
+import { updateLeadPatch, updateMetadataPayload } from "@/app/admin/crm/api";
 import { useToast } from "@/components/ui/use-toast";
 import type { CloseSaleInput } from "./CloseSaleForm2";
 
@@ -52,6 +52,7 @@ export function SalePreview({
   payload,
   draft,
   id,
+  leadCodigo,
   entity = "sale",
   title = "Resumen de venta",
   onUpdated,
@@ -59,6 +60,7 @@ export function SalePreview({
   payload?: any;
   draft?: Partial<CloseSaleInput> | null;
   id?: string | number;
+  leadCodigo?: string;
   entity?: "sale" | "booking";
   title?: string;
   onUpdated?: () => void;
@@ -170,13 +172,16 @@ export function SalePreview({
   })();
 
   const confirmPayment = async () => {
-    if (!id) return;
+    if (entity === "booking" && !leadCodigo) return;
+    if (entity === "sale" && !id) return;
     try {
-      const next = { ...(payload || {}), status: "payment_confirmed" } as any;
       if (entity === "sale") {
+        const next = { ...(payload || {}), status: "payment_confirmed" } as any;
         await updateMetadataPayload(String(id), next);
       } else {
-        await updateMetadataPayload(String(id), { sale: next } as any);
+        await updateLeadPatch(String(leadCodigo), {
+          payment_status: "payment_confirmed",
+        });
       }
       setLocalStatus("payment_confirmed");
       toast({ title: "Pago confirmado" });
@@ -191,16 +196,19 @@ export function SalePreview({
   };
 
   const unconfirmPayment = async () => {
-    if (!id) return;
+    if (entity === "booking" && !leadCodigo) return;
+    if (entity === "sale" && !id) return;
     try {
-      const next = {
-        ...(payload || {}),
-        status: "payment_verification_pending",
-      } as any;
       if (entity === "sale") {
+        const next = {
+          ...(payload || {}),
+          status: "payment_verification_pending",
+        } as any;
         await updateMetadataPayload(String(id), next);
       } else {
-        await updateMetadataPayload(String(id), { sale: next } as any);
+        await updateLeadPatch(String(leadCodigo), {
+          payment_status: "payment_verification_pending",
+        });
       }
       setLocalStatus("payment_verification_pending");
       toast({ title: "Pago desconfirmado" });

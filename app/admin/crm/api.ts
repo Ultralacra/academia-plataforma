@@ -26,7 +26,13 @@ export interface LeadCreateInput {
   source?: string;
   status?: LeadStatus;
   owner_codigo?: string; // requerido para asignar dueño
+
+  // Opcional: asociar el lead a una campaña/origen
+  source_entity_id?: string;
+  source_entity?: string;
 }
+
+// Nota: la creación ahora es POST /v1/leads (sin :codigo), el backend asigna el codigo.
 
 export interface LeadUpdateInput {
   name?: string;
@@ -35,6 +41,61 @@ export interface LeadUpdateInput {
   source?: string;
   status?: LeadStatus;
   owner_codigo?: string;
+}
+
+// Detalle extendido (GET /v1/leads/:codigo)
+export interface LeadDetail extends Lead {
+  id?: number;
+  deleted?: number | boolean;
+  record_id?: number;
+  record_entity?: string;
+  source_entity_id?: string;
+  source_entity?: string;
+
+  instagram_user?: string | null;
+  platform_call?: string | null;
+  call_outcome?: string | null;
+  call_result_at?: string | null;
+  call_reschedule_date?: string | null;
+  call_reschedule_time?: string | null;
+  call_negotiation_active?: number | boolean | null;
+  call_negotiation_until?: string | null;
+
+  monthly_budget?: number | null;
+  lead_disposition?: string | null;
+  program?: string | null;
+
+  payment_status?: string | null;
+  payment_mode?: string | null;
+  payment_platform?: string | null;
+  payment_amount?: string | number | null;
+  payment_has_reserve?: number | boolean | null;
+  payment_reserve_amount?: string | number | null;
+  next_charge_date?: string | null;
+
+  sale_notes?: string | null;
+
+  contract_status?: string | null;
+  contract_is_company?: number | boolean | null;
+  contract_third_party?: number | boolean | null;
+  contract_party_address?: string | null;
+  contract_party_city?: string | null;
+  contract_party_country?: string | null;
+  contract_company_name?: string | null;
+  contract_company_tax_id?: string | null;
+  contract_company_address?: string | null;
+  contract_company_city?: string | null;
+  contract_company_country?: string | null;
+
+  closer?: any;
+  setter?: any;
+  reminders?: any[];
+  reminders_actions?: any[];
+  contract_parties?: any[];
+
+  reminders_list?: any[];
+  contract_parties_list?: any[];
+  bonuses_list?: any[];
 }
 
 // Tipos para registro de venta (sale)
@@ -106,69 +167,124 @@ function mapLead(raw: any): Lead {
 
 // Listar todos los leads
 export async function listLeads(params?: { page?: number; pageSize?: number; status?: string; owner?: string; search?: string; entity?: string }) {
-  // Ahora consultamos /v1/metadata en vez de /v1/leads
-  // El backend envuelve en { code, status, data }
+  // Consultar /v1/leads (API_HOST ya incluye /v1)
+  // Respuesta esperada:
+  // { code: 200, status: 'success', data: [...], total, page, pageSize, totalPages }
   const qs = new URLSearchParams();
   if (params?.page) qs.set("page", String(params.page));
   if (params?.pageSize) qs.set("pageSize", String(params.pageSize));
+  if (params?.status) qs.set("status", String(params.status));
+  if (params?.owner) qs.set("owner", String(params.owner));
+  if (params?.search) qs.set("search", String(params.search));
+
   const query = qs.toString();
-  const url = `/metadata${query ? `?${query}` : ""}`;
-  const raw = await apiFetch<any>(url, { method: "GET" });
-  const data = raw && typeof raw === "object" && Array.isArray(raw.data) ? raw.data : Array.isArray(raw) ? raw : [];
-  // Filtrar por entidad si se solicita (por defecto 'booking')
-  const entity = params?.entity || "booking";
-  const rows = data.filter((r: any) => !entity || r?.entity === entity);
-  const leads: Lead[] = rows.map(mapLead);
+  const url = `/leads${query ? `?${query}` : ""}`;
+
+  const raw = (await apiFetch<LeadsListResponse | any>(url, {
+    method: "GET",
+  })) as LeadsListResponse | any;
+
+  const data =
+    raw && typeof raw === "object" && Array.isArray((raw as any).data)
+      ? (raw as any).data
+      : Array.isArray(raw)
+        ? raw
+        : [];
+
+  const leads: Lead[] = data.map(mapLead);
+  const total =
+    raw && typeof raw === "object" && typeof (raw as any).total === "number"
+      ? (raw as any).total
+      : leads.length;
+  const page =
+    raw && typeof raw === "object" && typeof (raw as any).page === "number"
+      ? (raw as any).page
+      : params?.page ?? 1;
+  const pageSize =
+    raw && typeof raw === "object" && typeof (raw as any).pageSize === "number"
+      ? (raw as any).pageSize
+      : params?.pageSize ?? leads.length;
+  const totalPages =
+    raw && typeof raw === "object" && typeof (raw as any).totalPages === "number"
+      ? (raw as any).totalPages
+      : 1;
+
   return {
     items: leads,
-    total: leads.length,
-    page: params?.page ?? 1,
-    pageSize: params?.pageSize ?? leads.length,
-    totalPages: 1,
+    total,
+    page,
+    pageSize,
+    totalPages,
   } as const;
 }
 
 // Obtener un lead por código
 export async function getLead(codigo: string) {
   if (!codigo) throw new Error("codigo requerido");
-  // Buscar en metadata por id OR filtrar todos y encontrar entity_id
-  // Primero intentamos /metadata/:id
+
+  // Primero: endpoint real de leads (detalle)
   try {
-    const one = await apiFetch<any>(`/metadata/${encodeURIComponent(codigo)}`, { method: "GET" });
+    const resp = await apiFetch<any>(`/leads/${encodeURIComponent(codigo)}`, {
+      method: "GET",
+    });
+    const data = (resp as any)?.data ?? resp;
+    if (data && typeof data === "object") {
+      const isMetadataLike =
+        "payload" in (data as any) &&
+        "entity" in (data as any) &&
+        ("id" in (data as any) || "entity_id" in (data as any));
+      if (isMetadataLike) return data as LeadDetail;
+
+      const base = mapLead(data);
+      return { ...(data as any), ...base } as LeadDetail;
+    }
+  } catch {
+    // seguimos con fallback a metadata
+  }
+
+  // Fallback legacy: metadata
+  try {
+    const one = await apiFetch<any>(`/metadata/${encodeURIComponent(codigo)}`, {
+      method: "GET",
+    });
     const data = (one as any)?.data ?? one;
     if (data && data.entity) return mapLead(data);
   } catch {}
-  // Fallback: listar y filtrar
   try {
     const raw = await apiFetch<any>(`/metadata`, { method: "GET" });
     const arr = raw?.data ?? [];
-    const found = Array.isArray(arr) ? arr.find((r: any) => r?.entity_id === codigo || r?.id === codigo) : null;
+    const found = Array.isArray(arr)
+      ? arr.find((r: any) => r?.entity_id === codigo || r?.id === codigo)
+      : null;
     if (found) return mapLead(found);
   } catch {}
-  throw new Error("Lead/metadata no encontrado");
+
+  throw new Error("Lead no encontrado");
 }
 
 // Crear un lead
 export async function createLead(input: LeadCreateInput) {
   if (!input?.name) throw new Error("name requerido");
-  // Crear registro en metadata como 'booking' (o general 'lead')
-  const payload = {
+  const body = {
     name: input.name,
-    email: input.email,
-    phone: input.phone,
+    email: input.email ?? null,
+    phone: input.phone ?? null,
     source: input.source ?? "manual_form",
     status: input.status ?? "new",
     owner_codigo: input.owner_codigo ?? null,
-    created_at: new Date().toISOString(),
+    ...(input.source_entity_id ? { source_entity_id: input.source_entity_id } : {}),
+    ...(input.source_entity ? { source_entity: input.source_entity } : {}),
   };
-  const entityId = (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) || `lead-${Date.now()}`;
-  const raw = await apiFetch<any>(`/metadata`, {
+
+  // Crear lead "plano" en /v1/leads (el backend crea el codigo)
+  const resp = await apiFetch<any>(`/leads`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entity: "booking", entity_id: entityId, payload }),
+    body: JSON.stringify(body),
   });
-  const data = (raw as any)?.data ?? raw;
-  return mapLead(data);
+  const data = (resp as any)?.data ?? resp;
+  const base = mapLead(data);
+  return { ...(data as any), ...base } as LeadDetail;
 }
 
 // Crear una venta (sale) en metadata
@@ -214,47 +330,189 @@ export async function createSale(input: SaleCreateInput) {
   return mapLead(data);
 }
 
-// Actualizar un lead
-export async function updateLead(codigo: string, input: LeadUpdateInput) {
+// PUT /v1/leads/:codigo (se espera enviar el body completo del lead)
+export async function updateLeadFull(codigo: string, body: Partial<LeadDetail> & Record<string, any>) {
   if (!codigo) throw new Error("codigo requerido");
-  // Hacemos read-modify-write contra /v1/metadata/:codigo
-  // 1) Traer registro actual (raw) para conocer entity, entity_id y payload
-  const detailResp = await apiFetch<any>(`/metadata/${encodeURIComponent(codigo)}`, { method: "GET" });
-  const curr = (detailResp as any)?.data ?? detailResp;
-  if (!curr || !curr.id) throw new Error("No existe metadata para actualizar");
-
-  const currPayload = (curr as any)?.payload ?? {};
-  const mergedPayload = {
-    ...currPayload,
-    ...(input.name !== undefined ? { name: input.name } : {}),
-    ...(input.email !== undefined ? { email: input.email } : {}),
-    ...(input.phone !== undefined ? { phone: input.phone } : {}),
-    ...(input.source !== undefined ? { source: input.source } : {}),
-    ...(input.status !== undefined ? { status: input.status } : {}),
-    ...(input.owner_codigo !== undefined ? { owner_codigo: input.owner_codigo } : {}),
-    updated_at: new Date().toISOString(),
-  };
-
-  // 2) Enviar PUT a /metadata/:codigo con entity y entity_id para mantener consistencia
-  const body = {
-    entity: curr.entity,
-    entity_id: curr.entity_id,
-    payload: mergedPayload,
-  };
-
-  const updateResp = await apiFetch<any>(`/metadata/${encodeURIComponent(codigo)}`, {
+  try {
+    // Debug en navegador (la mayoría de estas llamadas ocurren client-side)
+    // para verificar que efectivamente estamos enviando payload.name, sale, call, etc.
+    console.log("[CRM] PUT /v1/leads/:codigo body", { codigo, body });
+  } catch {}
+  const resp = await apiFetch<any>(`/leads/${encodeURIComponent(codigo)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body ?? {}),
   });
-  const updated = (updateResp as any)?.data ?? updateResp;
-  return mapLead(updated);
+  const data = (resp as any)?.data ?? resp;
+  if (data && typeof data === "object") {
+    const isMetadataLike =
+      "payload" in (data as any) &&
+      "entity" in (data as any) &&
+      ("id" in (data as any) || "entity_id" in (data as any));
+    if (isMetadataLike) return data as LeadDetail;
+  }
+  const base = mapLead(data);
+  return { ...(data as any), ...base } as LeadDetail;
+}
+
+// Helper para actualizar campos dentro de `payload` (formato booking/metadata) usando PUT /v1/leads/:codigo
+export async function updateLeadPayloadPatch(
+  codigo: string,
+  payloadPatch: Record<string, any>
+) {
+  if (!codigo) throw new Error("codigo requerido");
+  const current = await getLead(codigo);
+  const now = new Date().toISOString();
+
+  if (current && typeof current === "object" && "payload" in (current as any)) {
+    const currPayload = (current as any)?.payload ?? {};
+    const fullBody = {
+      ...(current as any),
+      payload: {
+        ...currPayload,
+        ...payloadPatch,
+        updated_at: now,
+      },
+    };
+
+    // Algunos backends requieren source_entity_id para ubicar el record base (booking).
+    // Lo preservamos / inferimos desde el recurso actual si existe.
+    const inferredSourceEntityId =
+      (current as any)?.source_entity_id ??
+      (current as any)?.payload?.source_entity_id ??
+      (current as any)?.entity_id ??
+      (current as any)?.payload?.entity_id;
+    if ((fullBody as any).source_entity_id === undefined && inferredSourceEntityId) {
+      (fullBody as any).source_entity_id = String(inferredSourceEntityId);
+    }
+    if ((fullBody as any).source_entity === undefined && (current as any)?.source_entity) {
+      (fullBody as any).source_entity = (current as any).source_entity;
+    }
+
+    return await updateLeadFull(codigo, fullBody);
+  }
+
+  // Si no hay payload, hacemos merge plano (best-effort)
+  const fullBody = {
+    ...(current as any),
+    ...payloadPatch,
+    codigo: (current as any)?.codigo ?? codigo,
+    updated_at: now,
+  };
+  return await updateLeadFull(codigo, fullBody);
+}
+
+// Helper para actualizar campos en el lead "plano" (sin payload) usando PUT /v1/leads/:codigo
+// El backend pide enviar el body completo; aquí hacemos read+merge y mandamos el objeto completo.
+export async function updateLeadPatch(
+  codigo: string,
+  patch: Record<string, any>,
+  currentOverride?: any
+) {
+  if (!codigo) throw new Error("codigo requerido");
+  const current = currentOverride ?? (await getLead(codigo));
+  const now = new Date().toISOString();
+
+  const fullBody = {
+    ...(current as any),
+    ...(patch ?? {}),
+    codigo: (current as any)?.codigo ?? codigo,
+    updated_at: now,
+  };
+
+  // Preservar / inferir source_entity_id para que el backend pueda editar correctamente.
+  const inferredSourceEntityId =
+    (current as any)?.source_entity_id ??
+    (current as any)?.payload?.source_entity_id ??
+    (current as any)?.entity_id ??
+    (current as any)?.payload?.entity_id;
+  if ((fullBody as any).source_entity_id === undefined && inferredSourceEntityId) {
+    (fullBody as any).source_entity_id = String(inferredSourceEntityId);
+  }
+  if ((fullBody as any).source_entity === undefined && (current as any)?.source_entity) {
+    (fullBody as any).source_entity = (current as any).source_entity;
+  }
+
+  return await updateLeadFull(codigo, fullBody);
+}
+
+// Actualizar un lead
+export async function updateLead(
+  codigo: string,
+  input: LeadUpdateInput,
+  currentOverride?: any
+) {
+  if (!codigo) throw new Error("codigo requerido");
+
+  // Preferimos el endpoint real: PUT /v1/leads/:codigo, enviando body completo.
+  // Como la UI a veces manda sólo un patch (ej. {status}), hacemos read+merge.
+  const current = currentOverride ?? (await getLead(codigo));
+  const now = new Date().toISOString();
+
+  // Si el recurso viene en formato metadata (booking), los campos a actualizar viven en payload.
+  if (current && typeof current === "object" && "payload" in (current as any)) {
+    const currPayload = (current as any)?.payload ?? {};
+    const payloadPatch = {
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.email !== undefined ? { email: input.email } : {}),
+      ...(input.phone !== undefined ? { phone: input.phone } : {}),
+      ...(input.source !== undefined ? { source: input.source } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+      ...(input.owner_codigo !== undefined ? { owner_codigo: input.owner_codigo } : {}),
+      updated_at: now,
+    };
+    const fullBody = {
+      ...(current as any),
+      payload: {
+        ...currPayload,
+        ...payloadPatch,
+      },
+    };
+
+    const inferredSourceEntityId =
+      (current as any)?.source_entity_id ??
+      (current as any)?.payload?.source_entity_id ??
+      (current as any)?.entity_id ??
+      (current as any)?.payload?.entity_id;
+    if ((fullBody as any).source_entity_id === undefined && inferredSourceEntityId) {
+      (fullBody as any).source_entity_id = String(inferredSourceEntityId);
+    }
+    if ((fullBody as any).source_entity === undefined && (current as any)?.source_entity) {
+      (fullBody as any).source_entity = (current as any).source_entity;
+    }
+
+    return await updateLeadFull(codigo, fullBody);
+  }
+
+  // Si es un lead "plano" (sin payload), hacemos merge en raíz.
+  const fullBody = {
+    ...(current as any),
+    ...(input ?? {}),
+    codigo: (current as any)?.codigo ?? codigo,
+    updated_at: now,
+  };
+
+  const inferredSourceEntityId =
+    (current as any)?.source_entity_id ??
+    (current as any)?.payload?.source_entity_id ??
+    (current as any)?.entity_id ??
+    (current as any)?.payload?.entity_id;
+  if ((fullBody as any).source_entity_id === undefined && inferredSourceEntityId) {
+    (fullBody as any).source_entity_id = String(inferredSourceEntityId);
+  }
+  if ((fullBody as any).source_entity === undefined && (current as any)?.source_entity) {
+    (fullBody as any).source_entity = (current as any).source_entity;
+  }
+  return await updateLeadFull(codigo, fullBody);
 }
 
 // Eliminar un lead
 export async function deleteLead(codigo: string) {
-  // No se define delete en metadata; dejar notificación.
-  throw new Error("Eliminar metadata no soportado aún");
+  if (!codigo) throw new Error("codigo requerido");
+  const resp = await apiFetch<any>(`/leads/${encodeURIComponent(codigo)}`, {
+    method: "DELETE",
+  });
+  return (resp as any)?.data ?? resp;
 }
 
 // Actualizar payload arbitrario de metadata (helper genérico)
@@ -340,10 +598,45 @@ export async function createLeadSnapshot(input: CreateLeadSnapshotInput) {
     },
   } satisfies LeadDetailSnapshotV1;
 
-  const raw = await apiFetch<any>(`/metadata`, {
+  // Nuevo endpoint: /v1/leads/snapshot (apiFetch ya apunta a /v1)
+  // Body esperado (tal cual): { entity, entity_id, payload }
+  const raw = await apiFetch<any>(`/leads/snapshot`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ entity, entity_id: entityId, payload }),
+  });
+  return (raw as any)?.data ?? raw;
+}
+
+// ===================== Lead Form (público) =====================
+
+export interface LeadFormInput {
+  origen?: string;
+  event_codigo: string;
+  fecha: string; // YYYY-MM-DD
+  hora: string; // HH:mm
+  nombre: string;
+  name: string;
+  email: string;
+  necesita_consulta: boolean;
+  whatsapp: string;
+  instagram: string;
+  meta_facturacion: number | null;
+  obstaculo: string;
+  compromiso: boolean;
+  confirmado: boolean;
+  enviar_mensajes: boolean;
+}
+
+export async function createLeadFromForm(input: LeadFormInput) {
+  if (!input?.event_codigo) throw new Error("event_codigo requerido");
+  if (!input?.fecha) throw new Error("fecha requerida");
+  if (!input?.hora) throw new Error("hora requerida");
+
+  const raw = await apiFetch<any>(`/leads/form`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
   return (raw as any)?.data ?? raw;
 }
@@ -357,4 +650,57 @@ export function optimisticUpdateLead(list: Lead[], updated: Lead) {
 }
 export function optimisticDeleteLead(list: Lead[], codigo: string) {
   return list.filter((l) => l.codigo !== codigo);
+}
+
+// ===================== Eventos / Orígenes de Leads =====================
+
+export interface LeadOrigin {
+  id?: string | number;
+  codigo: string;
+  name?: string | null;
+  description?: string | null;
+  event_codigo?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  config?: any;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+function unwrapData<T>(raw: any): T {
+  return (raw && typeof raw === "object" && "data" in raw ? (raw as any).data : raw) as T;
+}
+
+export async function listLeadOrigins() {
+  const raw = await apiFetch<any>(`/leads/origins`, { method: "GET" });
+  const data = unwrapData<any>(raw);
+  const items = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+  return items as LeadOrigin[];
+}
+
+export async function getLeadOrigin(codigo: string) {
+  if (!codigo) throw new Error("codigo requerido");
+  const raw = await apiFetch<any>(`/leads/origins/${encodeURIComponent(codigo)}`, {
+    method: "GET",
+  });
+  return unwrapData<LeadOrigin>(raw);
+}
+
+export async function createLeadOrigin(input: Partial<LeadOrigin>) {
+  const raw = await apiFetch<any>(`/leads/origins`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {}),
+  });
+  return unwrapData<LeadOrigin>(raw);
+}
+
+export async function updateLeadOrigin(codigo: string, input: Partial<LeadOrigin>) {
+  if (!codigo) throw new Error("codigo requerido");
+  const raw = await apiFetch<any>(`/leads/origins/${encodeURIComponent(codigo)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input ?? {}),
+  });
+  return unwrapData<LeadOrigin>(raw);
 }

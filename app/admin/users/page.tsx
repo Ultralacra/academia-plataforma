@@ -8,6 +8,7 @@ import UsersTable from "./components/UsersTable";
 import { fetchUsers, type SysUser } from "./api";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { CreateUserDialog } from "./components/CreateUserDialog";
 
 function UsersContent() {
   const [q, setQ] = useState("");
@@ -19,6 +20,7 @@ function UsersContent() {
   const [rows, setRows] = useState<SysUser[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Debounce búsqueda (300ms)
   useEffect(() => {
@@ -42,12 +44,16 @@ function UsersContent() {
     return () => {
       alive = false;
     };
-  }, [page, pageSize, debouncedQ]);
+  }, [page, pageSize, debouncedQ, refreshKey]);
 
   // Filtrado por rol (cliente)
-  const filtered = useMemo(() => {
+  const filteredRows = useMemo(() => {
+    const normalizeRole = (value: unknown) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase();
     if (tab === "all") return rows;
-    return rows.filter((r) => (r.role || "").toLowerCase() === tab);
+    return rows.filter((r) => normalizeRole(r.role) === tab);
   }, [rows, tab]);
 
   // Resetear a página 1 al cambiar búsqueda o tab
@@ -79,6 +85,14 @@ function UsersContent() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+
+        <CreateUserDialog
+          onCreated={() => {
+            setPage(1);
+            setRefreshKey((k) => k + 1);
+          }}
+        />
+
         <div className="ml-auto flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">
             Página {page} de {Math.max(totalPages, 1)}
@@ -113,10 +127,10 @@ function UsersContent() {
         </div>
       </div>
 
-      <UsersTable rows={filtered} loading={loading} />
+      <UsersTable rows={filteredRows} loading={loading} />
 
       <div className="text-xs text-muted-foreground">
-        Resultados: {filtered.length} de {total} (servidor)
+        Resultados: {filteredRows.length} de {total} (servidor)
       </div>
     </div>
   );

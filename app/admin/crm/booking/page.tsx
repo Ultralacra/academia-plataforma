@@ -1,10 +1,6 @@
-"use client";
-import React from "react";
-import { BookingForm } from "../components/BookingForm";
+import { redirect } from "next/navigation";
 
-// Página standalone para el formulario de reserva / lead intake.
-// No usa DashboardLayout ni ProtectedRoute para permitir acceso público si se desea.
-// Si luego se requiere protección, envolver con ProtectedRoute.
+// El formulario ahora es público (fuera de /admin): /booking
 export default function BookingStandalonePage() {
-  return <BookingForm />;
+  redirect("/booking");
 }

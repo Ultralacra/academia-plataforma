@@ -5,13 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
 import { Suspense } from "react";
 import Script from "next/script";
-import { SseNotificationsProvider } from "@/components/hooks/useSseNotifications";
-import { GlobalChatNotifications } from "@/components/chat/GlobalChatNotifications";
-import { CoachChatNotifier } from "@/components/chat/CoachChatNotifier";
-import { CoachChatSnackbar } from "@/components/chat/CoachChatSnackbar";
-import { StudentChatSnackbar } from "@/components/chat/StudentChatSnackbar";
-import { SseTicketSnackbar } from "@/components/hooks/SseTicketSnackbar";
-import { PwaPushClient } from "@/components/pwa/PwaPushClient";
+import { ConditionalAppOverlays } from "@/components/layout/ConditionalAppOverlays";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -133,15 +127,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SseNotificationsProvider>
-            <PwaPushClient />
-            <GlobalChatNotifications />
-            <CoachChatNotifier />
-            <CoachChatSnackbar />
-            <StudentChatSnackbar />
-            <SseTicketSnackbar />
+          <ConditionalAppOverlays>
             <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
-          </SseNotificationsProvider>
+          </ConditionalAppOverlays>
           <Toaster />
           <Analytics />
         </ThemeProvider>

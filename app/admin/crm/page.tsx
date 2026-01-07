@@ -52,13 +52,16 @@ import { MetricsOverview } from "./components/MetricsOverview";
 import { SellerMetricsTable } from "./components/SellerMetricsTable";
 import { MetricsTabs } from "./components/MetricsTabs";
 import { crmAutomations } from "@/lib/crm-service";
-import { createLead, listLeads, updateLead, type Lead } from "./api";
+import { listLeads, updateLead, type Lead } from "./api";
 import { toast } from "@/components/ui/use-toast";
 import { StageBadge } from "./components/StageBadge";
 import { CloseSaleForm } from "./components/CloseSaleForm2";
 import { SalesPersonalMetrics } from "./components/SalesPersonalMetrics";
 import { listMetadata } from "@/lib/metadata";
 import { useRouter } from "next/navigation";
+import { CreateLeadDialog } from "./components/CreateLeadDialog";
+import { DeleteLeadConfirmDialog } from "./components/DeleteLeadConfirmDialog";
+import { EventsOriginsManager } from "./components/EventsOriginsManager";
 
 function CrmContent() {
   const router = useRouter();
@@ -135,35 +138,16 @@ function CrmContent() {
       setRows(mappedFromLeads);
       return;
     } catch (e) {
-      console.warn("listLeads falló, usando datos locales/mocks", e);
+      console.warn("listLeads falló, mostrando lista vacía", e);
+      setRows([]);
+      toast({
+        title: "Error cargando leads",
+        description:
+          "El endpoint /v1/leads falló. No se mostrarán datos de prueba.",
+        variant: "destructive",
+      });
+      return;
     }
-    // Fallback a mock
-    const res = crmService.listProspects({});
-    const mapped: Prospect[] = res.items.map((p: ProspectCore) => ({
-      id: p.id,
-      nombre: p.nombre,
-      email: p.email || undefined,
-      telefono: p.telefono || undefined,
-      canal: p.canalFuente || undefined,
-      etapa:
-        p.etapaPipeline === "nuevo"
-          ? "Nuevo"
-          : p.etapaPipeline === "contactado"
-          ? "Contactado"
-          : p.etapaPipeline === "calificado" || p.etapaPipeline === "propuesta"
-          ? "Calificado"
-          : p.etapaPipeline === "ganado"
-          ? "Ganado"
-          : "Perdido",
-      pais: p.pais || undefined,
-      ciudad: p.ciudad || undefined,
-      tags: p.tags || [],
-      creado: p.creadoAt,
-      actualizado: p.actualizadoAt,
-      notas: p.notasResumen || undefined,
-      remote: false,
-    }));
-    setRows(mapped);
   };
 
   useEffect(() => {
@@ -177,7 +161,10 @@ function CrmContent() {
   // Owner eliminado de la tabla; mantenemos estado por compatibilidad UI pero podría retirarse luego.
   const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
   const [openCreate, setOpenCreate] = useState(false);
-  const [openCreateLead, setOpenCreateLead] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    nombre: string;
+  } | null>(null);
   // Drawer eliminado en favor de ruta dedicada
   const [drawerId, setDrawerId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<string>("pipeline");
@@ -308,28 +295,7 @@ function CrmContent() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            <Dialog open={openCreateLead} onOpenChange={setOpenCreateLead}>
-              <DialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
-                >
-                  <Plus className="h-4 w-4" /> Nuevo lead
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                  <DialogTitle>Crear lead</DialogTitle>
-                </DialogHeader>
-                <CreateLeadForm
-                  onCreated={() => {
-                    setOpenCreateLead(false);
-                    reload();
-                  }}
-                />
-              </DialogContent>
-            </Dialog>
+            <CreateLeadDialog onCreated={reload} />
           </div>
         </div>
       </div>
@@ -530,20 +496,35 @@ function CrmContent() {
                             )}
                           </div>
                           <div className="col-span-2 flex items-center justify-end">
-                            <Button
-                              asChild
-                              size="sm"
-                              variant="outline"
-                              title="Ver detalle"
-                            >
-                              <Link
-                                href={`/admin/crm/booking/${encodeURIComponent(
-                                  p.id
-                                )}`}
+                            <div className="flex items-center gap-2">
+                              <Button
+                                asChild
+                                size="sm"
+                                variant="outline"
+                                title="Ver detalle"
                               >
-                                Detalle
-                              </Link>
-                            </Button>
+                                <Link
+                                  href={`/admin/crm/booking/${encodeURIComponent(
+                                    p.id
+                                  )}`}
+                                >
+                                  Detalle
+                                </Link>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                title="Eliminar lead"
+                                onClick={() =>
+                                  setDeleteTarget({
+                                    id: p.id,
+                                    nombre: p.nombre,
+                                  })
+                                }
+                              >
+                                Eliminar
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       ))
@@ -655,10 +636,25 @@ function CrmContent() {
               <SalesPersonalMetrics />
             </div>
           }
+          campanas={
+            <div className="h-full">
+              <EventsOriginsManager />
+            </div>
+          }
         />
       </div>
 
       {/* Drawer deshabilitado */}
+
+      <DeleteLeadConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        leadCodigo={deleteTarget?.id || ""}
+        leadName={deleteTarget?.nombre || ""}
+        onDeleted={reload}
+      />
     </div>
   );
 }
@@ -670,99 +666,5 @@ export default function CrmPage() {
         <CrmContent />
       </DashboardLayout>
     </ProtectedRoute>
-  );
-}
-
-// Formulario para crear un lead manualmente vía API /v1/leads
-function CreateLeadForm({ onCreated }: { onCreated: () => void }) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [source, setSource] = useState("web_form");
-  const [status, setStatus] = useState("new");
-  const [owner, setOwner] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const submit = async () => {
-    if (!name.trim()) return;
-    setLoading(true);
-    try {
-      await createLead({
-        name: name.trim(),
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
-        source: source.trim() || undefined,
-        status: status.trim() || undefined,
-        owner_codigo: owner.trim() || undefined,
-      });
-      toast({ title: "Lead creado", description: name.trim() });
-      onCreated();
-    } catch (e) {
-      toast({ title: "Error", description: "No se pudo crear el lead" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="grid grid-cols-2 gap-4">
-      <div className="col-span-2 space-y-2">
-        <Label>Nombre *</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Email</Label>
-        <Input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Teléfono</Label>
-        <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Source</Label>
-        <Input value={source} onChange={(e) => setSource(e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>Status</Label>
-        <select
-          className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          <option value="new">new</option>
-          <option value="contacted">contacted</option>
-          <option value="qualified">qualified</option>
-          <option value="won">won</option>
-          <option value="lost">lost</option>
-        </select>
-      </div>
-      <div className="space-y-2">
-        <Label>Owner código</Label>
-        <Input value={owner} onChange={(e) => setOwner(e.target.value)} />
-      </div>
-      <div className="col-span-2 flex justify-end gap-2 mt-2">
-        <Button
-          variant="outline"
-          onClick={() => {
-            setName("");
-            setEmail("");
-            setPhone("");
-            setOwner("");
-            setSource("web_form");
-            setStatus("new");
-          }}
-        >
-          Limpiar
-        </Button>
-        <Button onClick={submit} disabled={loading || !name.trim()}>
-          {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          Crear lead
-        </Button>
-      </div>
-    </div>
   );
 }

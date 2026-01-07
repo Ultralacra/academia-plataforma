@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ChevronLeft, ChevronRight, Clock, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
-import { createMetadata } from "@/lib/metadata";
+import { createLeadFromForm, listLeadOrigins } from "@/app/admin/crm/api";
 
 export interface BookingFormProps {
   eventTitle?: string;
@@ -16,6 +16,9 @@ export interface BookingFormProps {
   eventDescription?: string;
   logoUrl?: string;
   avatarUrl?: string;
+
+  // Si viene desde /booking/:event_codigo, asociamos el registro a esa campaña.
+  campaignEventCodigo?: string;
 }
 
 export function BookingForm({
@@ -24,6 +27,7 @@ export function BookingForm({
   eventDescription = "En la sesión podrás realizar todas las preguntas que desees y juntos determinaremos si este programa realmente aplica para ti.",
   logoUrl = "https://d3v0px0pttie1i.cloudfront.net/uploads/branding/logo/202214fc-22a0-4a5f-9dd3-02d885ee4f1a/45c39d8c.png",
   avatarUrl = "https://d3v0px0pttie1i.cloudfront.net/uploads/team/avatar/364502/91dd42a7.jpg",
+  campaignEventCodigo,
 }: BookingFormProps) {
   const [step, setStep] = useState<"calendar" | "details">("calendar");
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -47,6 +51,56 @@ export function BookingForm({
   });
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
+
+  const [campaignName, setCampaignName] = useState<string | null>(null);
+  const [campaignDescription, setCampaignDescription] = useState<string | null>(
+    null
+  );
+  const [campaignOrigenCodigo, setCampaignOrigenCodigo] = useState<
+    string | null
+  >(null);
+
+  useEffect(() => {
+    let alive = true;
+    const eventCodigo = String(campaignEventCodigo || "").trim();
+    if (!eventCodigo) {
+      setCampaignName(null);
+      setCampaignDescription(null);
+      setCampaignOrigenCodigo(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const origins = await listLeadOrigins();
+        const origin = Array.isArray(origins)
+          ? origins.find(
+              (o: any) => String(o?.event_codigo || "").trim() === eventCodigo
+            )
+          : null;
+        if (!alive) return;
+        setCampaignName(String((origin as any)?.name || eventCodigo));
+        setCampaignDescription(
+          (origin as any)?.description
+            ? String((origin as any).description)
+            : null
+        );
+        setCampaignOrigenCodigo(
+          (origin as any)?.codigo ? String((origin as any).codigo) : null
+        );
+      } catch {
+        if (!alive) return;
+        // No bloquear el formulario si no se puede cargar la campaña
+        setCampaignName(eventCodigo);
+        setCampaignDescription(null);
+        setCampaignOrigenCodigo(null);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [campaignEventCodigo]);
 
   useEffect(() => {
     const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -132,6 +186,16 @@ export function BookingForm({
     e.preventDefault();
     // Validación mínima
     if (!formData.name || !formData.email || !formData.whatsappNumber) return;
+    const eventCodigo = String(campaignEventCodigo || "").trim();
+    if (!eventCodigo) {
+      toast({
+        title: "Falta event_codigo",
+        description: "Abre el formulario desde la URL /booking/:event_codigo.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!selectedDate || !selectedTime) return;
     setSubmitting(true);
     const digits = (formData.whatsappNumber || "").replace(/\D+/g, "");
     const cc = (countryCode || "+").replace(/[^+\d]/g, "");
@@ -142,49 +206,48 @@ export function BookingForm({
         }`.replace(/\s+/g, "");
 
     try {
-      const metadataPayload = {
+      const y = selectedDate.getFullYear();
+      const m = String(selectedDate.getMonth() + 1).padStart(2, "0");
+      const d = String(selectedDate.getDate()).padStart(2, "0");
+      const fecha = `${y}-${m}-${d}`;
+
+      const rawBudget = String(formData.monthlyBudget || "");
+      const parsedBudget = rawBudget
+        ? Number(rawBudget.replace(/[^0-9.,-]/g, "").replace(/,/g, ""))
+        : NaN;
+      const meta_facturacion = Number.isFinite(parsedBudget)
+        ? parsedBudget
+        : null;
+
+      const body = {
+        origen: campaignOrigenCodigo || undefined,
+        event_codigo: eventCodigo,
+        fecha,
+        hora: String(selectedTime),
+        nombre: formData.name.trim(),
         name: formData.name.trim(),
         email: formData.email.trim(),
-        phone,
-        source: "booking_form",
-        status: "new",
-        instagramUser: formData.instagramUser,
-        monthlyBudget: formData.monthlyBudget,
-        mainObstacle: formData.mainObstacle,
-        commitment: formData.commitment,
-        inviteOthers: formData.inviteOthers,
-        confirmado: formData.confirmado,
-        textMessages: formData.textMessages,
-        selectedDate: selectedDate ? selectedDate.toISOString() : null,
-        selectedTime: selectedTime,
-        timezone,
-        countryCode,
-        countryFlag,
-        created_at: new Date().toISOString(),
-        trace: {
-          userAgent:
-            typeof window !== "undefined"
-              ? window.navigator.userAgent
-              : "server",
-          ts: Date.now(),
-        },
+        necesita_consulta: String(formData.inviteOthers) === "yes",
+        whatsapp: phone,
+        instagram: String(formData.instagramUser || "").trim(),
+        meta_facturacion,
+        obstaculo: String(formData.mainObstacle || "").trim(),
+        compromiso: String(formData.commitment) === "yes",
+        confirmado:
+          String(formData.confirmado || "")
+            .trim()
+            .toUpperCase() === "CONFIRMADO",
+        enviar_mensajes: Boolean(String(formData.textMessages || "").trim()),
       };
-      const entityId =
-        (typeof crypto !== "undefined" && (crypto as any).randomUUID?.()) ||
-        `booking-${Date.now()}`;
-      console.log("POST /v1/metadata ->", {
-        entity: "booking",
-        entity_id: entityId,
-        payload: metadataPayload,
-      });
-      const saved = await createMetadata({
-        entity: "booking",
-        entity_id: entityId,
-        payload: metadataPayload,
-      });
+
+      console.log("POST /v1/leads/form ->", body);
+
+      const saved = await createLeadFromForm(body);
       toast({
         title: "Registro creado",
-        description: `ID: ${String(saved.id)}`,
+        description: `OK${
+          (saved as any)?.id ? ` · ID: ${String((saved as any).id)}` : ""
+        }`,
       });
       // Opcional: reset y volver a calendario
       setFormData({
@@ -249,9 +312,18 @@ export function BookingForm({
                   Hotselling Lite
                 </p>
                 <h1 className="text-lg font-bold text-gray-900 mb-2 leading-tight">
-                  {eventTitle}
+                  {campaignName || eventTitle}
                 </h1>
               </div>
+              {campaignDescription ? (
+                <p className="text-sm text-gray-600 leading-snug">
+                  {campaignDescription}
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600 leading-snug">
+                  {eventDescription}
+                </p>
+              )}
               <div className="flex items-center gap-2 text-gray-600 text-sm">
                 <Clock className="w-4 h-4" />
                 <span>{eventDuration} min</span>

@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { createMetadata } from "@/lib/metadata";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { updateMetadataPayload } from "@/app/admin/crm/api";
+import { updateLeadPatch, updateMetadataPayload } from "@/app/admin/crm/api";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Check } from "lucide-react";
@@ -69,12 +69,68 @@ export interface CloseSaleInput {
 
 type Mode = "create" | "edit";
 
+function toLeadIsoDateOrNull(v?: string | null) {
+  if (!v) return null;
+  const s = String(v);
+  if (!s) return null;
+  // YYYY-MM-DD -> ISO midnight
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    try {
+      return new Date(`${s}T00:00:00.000Z`).toISOString();
+    } catch {
+      return s;
+    }
+  }
+  return s;
+}
+
+function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
+  const payment = salePayload?.payment ?? {};
+  const contract = salePayload?.contract ?? {};
+  const party = contract?.party ?? {};
+  const company = contract?.company ?? {};
+  const closer = salePayload?.closer ?? null;
+
+  return {
+    program: salePayload?.program ?? null,
+    bonuses: Array.isArray(salePayload?.bonuses) ? salePayload.bonuses : [],
+
+    payment_status: salePayload?.status ?? null,
+    payment_mode: payment?.mode ?? null,
+    payment_amount: payment?.amount ?? null,
+    payment_platform: payment?.platform ?? null,
+    next_charge_date: toLeadIsoDateOrNull(payment?.nextChargeDate ?? null),
+    payment_has_reserve: payment?.hasReserve ? 1 : 0,
+    payment_reserve_amount: payment?.hasReserve
+      ? payment?.reserveAmount ?? null
+      : null,
+
+    sale_notes: salePayload?.notes ?? null,
+
+    contract_status: contract?.status ?? null,
+    contract_third_party: contract?.thirdParty ? 1 : 0,
+    contract_is_company: contract?.isCompany ? 1 : 0,
+    contract_parties: Array.isArray(contract?.parties) ? contract.parties : [],
+    contract_party_address: party?.address ?? null,
+    contract_party_city: party?.city ?? null,
+    contract_party_country: party?.country ?? null,
+    contract_company_name: company?.name ?? null,
+    contract_company_tax_id: company?.taxId ?? null,
+    contract_company_address: company?.address ?? null,
+    contract_company_city: company?.city ?? null,
+    contract_company_country: company?.country ?? null,
+
+    closer_name: closer?.name ?? null,
+  };
+}
+
 export function CloseSaleForm({
   onDone,
   onChange,
   initial,
   mode = "create",
   recordId,
+  leadCodigo,
   entity = "sale",
   autoSave = false,
   autoSaveDelay = 600,
@@ -84,6 +140,7 @@ export function CloseSaleForm({
   initial?: Partial<CloseSaleInput> & { status?: string };
   mode?: Mode;
   recordId?: string | number;
+  leadCodigo?: string;
   entity?: "sale" | "booking";
   autoSave?: boolean;
   autoSaveDelay?: number;
@@ -215,16 +272,26 @@ export function CloseSaleForm({
   // Autosave: persistir cambios en modo edición sin recargar
   useEffect(() => {
     if (!autoSave) return;
-    if (mode !== "edit" || !recordId) return;
+    if (mode !== "edit") return;
     const handle = setTimeout(async () => {
       try {
         const salePayload = buildSalePayload(false);
         if (entity === "sale") {
+          if (!recordId) return;
           await updateMetadataPayload(String(recordId), salePayload as any);
         } else {
-          await updateMetadataPayload(String(recordId), {
-            sale: salePayload,
-          } as any);
+          // booking: guardar dentro del lead (plano) vía /v1/leads/:codigo
+          if (leadCodigo) {
+            await updateLeadPatch(
+              String(leadCodigo),
+              salePayloadToLeadPatch(salePayload)
+            );
+          } else if (recordId) {
+            // fallback legacy
+            await updateMetadataPayload(String(recordId), {
+              sale: salePayload,
+            } as any);
+          }
         }
       } catch (e) {
         // silencioso para no molestar al usuario mientras escribe
@@ -288,27 +355,27 @@ export function CloseSaleForm({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (
-      !form.fullName ||
-      !form.email ||
-      !form.phone ||
-      !form.program ||
-      !form.paymentMode ||
-      !form.paymentAmount
-    ) {
-      toast({ title: "Faltan campos obligatorios", variant: "destructive" });
-      return;
-    }
     setSubmitting(true);
     try {
-      if (mode === "edit" && recordId) {
+      if (mode === "edit" && (recordId || leadCodigo)) {
         const salePayload: any = buildSalePayload(true);
         if (entity === "sale") {
+          if (!recordId)
+            throw new Error("recordId requerido para editar una venta");
           await updateMetadataPayload(String(recordId), salePayload as any);
         } else {
-          await updateMetadataPayload(String(recordId), {
-            sale: salePayload,
-          } as any);
+          if (leadCodigo) {
+            await updateLeadPatch(
+              String(leadCodigo),
+              salePayloadToLeadPatch(salePayload)
+            );
+          } else {
+            // fallback legacy
+            if (!recordId) throw new Error("leadCodigo o recordId requerido");
+            await updateMetadataPayload(String(recordId), {
+              sale: salePayload,
+            } as any);
+          }
         }
         toast({ title: "Venta actualizada" });
         onDone?.();

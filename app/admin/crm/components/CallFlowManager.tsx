@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/use-toast";
-import { updateMetadataPayload } from "@/app/admin/crm/api";
+import { updateLeadPatch } from "@/app/admin/crm/api";
 import {
   Calendar,
   CheckCircle2,
@@ -78,6 +78,19 @@ function isoPlusMinutes(min: number) {
   return d.toISOString();
 }
 
+function toMidnightIso(date?: string | null) {
+  if (!date) return null;
+  const s = String(date);
+  // Si ya es ISO, lo dejamos
+  if (s.includes("T")) return s;
+  // YYYY-MM-DD -> ISO a medianoche UTC
+  try {
+    return new Date(`${s}T00:00:00.000Z`).toISOString();
+  } catch {
+    return s;
+  }
+}
+
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -134,11 +147,11 @@ function scheduleNoShowFollowups(): CallFlowState["reminders"] {
 }
 
 export function CallFlowManager({
-  recordId,
+  leadCodigo,
   payload,
   onSaved,
 }: {
-  recordId: string | number; // id del registro metadata (booking)
+  leadCodigo: string; // codigo del lead (ruta /v1/leads/:codigo)
   payload: any; // payload actual (booking)
   onSaved?: (nextCall: CallFlowState) => void;
 }) {
@@ -161,7 +174,22 @@ export function CallFlowManager({
         ...call,
         ...patch,
       };
-      await updateMetadataPayload(String(recordId), { call: next } as any);
+
+      const leadPatch: Record<string, any> = {
+        call_outcome: next?.outcome ?? null,
+        call_result_at: next?.result_at ?? null,
+        call_reschedule_date: toMidnightIso(next?.reschedule?.date ?? null),
+        call_reschedule_time: next?.reschedule?.time ?? null,
+        call_negotiation_active: next?.negotiation?.active ? 1 : 0,
+        call_negotiation_until: next?.negotiation?.until ?? null,
+        reminders: Array.isArray(next?.reminders) ? next.reminders : [],
+      };
+      // Guardamos notas de llamada en un campo existente del lead (best-effort)
+      if (patch?.notes !== undefined) {
+        leadPatch.text_messages = next?.notes ?? null;
+      }
+
+      await updateLeadPatch(leadCodigo, leadPatch, payload);
       toast({ title: "Guardado" });
       onSaved?.(next);
       return next;

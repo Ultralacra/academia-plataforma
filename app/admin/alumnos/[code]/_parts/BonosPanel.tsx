@@ -21,10 +21,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Eye } from "lucide-react";
+import { Eye, Send, UserMinus } from "lucide-react";
 import * as alumnosApi from "@/app/admin/alumnos/api";
+import RequestBonoImplementacionTecnicaDialog from "./RequestBonoImplementacionTecnicaDialog";
+import RequestBonoEdicionVslDialog from "./RequestBonoEdicionVslDialog";
 
 function pad2(n: number) {
   return String(n).padStart(2, "0");
@@ -62,6 +69,50 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
   const [detailCodigo, setDetailCodigo] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detail, setDetail] = useState<alumnosApi.Bono | null>(null);
+
+  const [requestModal, setRequestModal] = useState<
+    "implementacion" | "vsl" | null
+  >(null);
+
+  const isBonoImplementacionTecnica = (b: alumnosApi.BonoAssignment) => {
+    const norm = (v: unknown) =>
+      String(v ?? "")
+        .trim()
+        .toUpperCase();
+    const normName = (v: unknown) =>
+      String(v ?? "")
+        .trim()
+        .toLowerCase();
+    const codeA = norm((b as any)?.bono_codigo);
+    const codeB = norm((b as any)?.codigo);
+    const name = normName((b as any)?.nombre);
+    return (
+      codeA === "BONO_IMPLEMENTACION_TECNICA" ||
+      codeB === "BONO_IMPLEMENTACION_TECNICA" ||
+      (name.includes("implementación") && name.includes("técnica")) ||
+      (name.includes("implementacion") && name.includes("tecnica"))
+    );
+  };
+
+  const isBonoEdicionVsl = (b: alumnosApi.BonoAssignment) => {
+    const norm = (v: unknown) =>
+      String(v ?? "")
+        .trim()
+        .toUpperCase();
+    const normName = (v: unknown) =>
+      String(v ?? "")
+        .trim()
+        .toLowerCase();
+    const codeA = norm((b as any)?.bono_codigo);
+    const codeB = norm((b as any)?.codigo);
+    const name = normName((b as any)?.nombre);
+    return (
+      codeA === "BONO_EDICION_VSL" ||
+      codeB === "BONO_EDICION_VSL" ||
+      (name.includes("vsl") &&
+        (name.includes("edición") || name.includes("edicion")))
+    );
+  };
 
   async function refreshAssigned() {
     setLoading(true);
@@ -261,6 +312,8 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
           </div>
         ) : (
           assigned.map((b) => {
+            const canRequestImpl = isBonoImplementacionTecnica(b);
+            const canRequestVsl = isBonoEdicionVsl(b);
             return (
               <div
                 key={`${b.bono_codigo}-${b.id}`}
@@ -278,30 +331,88 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {!isStudent ? (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => {
-                          setUnassignCodigo(String(b.bono_codigo));
-                          setUnassignNombre(String(b.nombre ?? ""));
-                          setUnassignOpen(true);
-                        }}
-                      >
-                        Desasignar
-                      </Button>
+                    {canRequestImpl ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Solicitar bono"
+                            onClick={() => {
+                              setRequestModal("implementacion");
+                            }}
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>
+                          Solicitar bono
+                        </TooltipContent>
+                      </Tooltip>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        setDetailCodigo(b.bono_codigo);
-                        setDetailOpen(true);
-                      }}
-                    >
-                      <Eye className="h-4 w-4 mr-2" />
-                      Detalle
-                    </Button>
+
+                    {canRequestVsl ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Solicitar bono"
+                            onClick={() => {
+                              setRequestModal("vsl");
+                            }}
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>
+                          Solicitar bono
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
+
+                    {!isStudent ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Desasignar bono"
+                            onClick={() => {
+                              setUnassignCodigo(String(b.bono_codigo));
+                              setUnassignNombre(String(b.nombre ?? ""));
+                              setUnassignOpen(true);
+                            }}
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>
+                          Desasignar
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          aria-label="Detalle del bono"
+                          onClick={() => {
+                            setDetailCodigo(b.bono_codigo);
+                            setDetailOpen(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>Detalle</TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
               </div>
@@ -488,6 +599,20 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal: Solicitar bono (solo implementación técnica por ahora) */}
+      <RequestBonoImplementacionTecnicaDialog
+        open={requestModal === "implementacion"}
+        onOpenChange={(v) => setRequestModal(v ? "implementacion" : null)}
+        studentCode={studentCode}
+      />
+
+      {/* Modal: Solicitar bono (Edición de VSL) */}
+      <RequestBonoEdicionVslDialog
+        open={requestModal === "vsl"}
+        onOpenChange={(v) => setRequestModal(v ? "vsl" : null)}
+        studentCode={studentCode}
+      />
     </div>
   );
 }

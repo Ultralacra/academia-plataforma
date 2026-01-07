@@ -67,6 +67,24 @@ export type UpdateUserPayload = Partial<{
   role: string;
 }>;
 
+export type CreateUserPayload = {
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  tipo: string;
+  puesto: string;
+  area: string;
+};
+
+export async function createUser(payload: CreateUserPayload): Promise<UserEnvelope> {
+  const res = await apiFetch<UserEnvelope>(`/users`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return res;
+}
+
 export async function updateUser(
   codigo: string,
   payload: UpdateUserPayload

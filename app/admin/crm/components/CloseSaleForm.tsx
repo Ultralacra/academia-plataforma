@@ -555,17 +555,6 @@ export function CloseSaleForm({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (
-      !form.fullName ||
-      !form.email ||
-      !form.phone ||
-      !form.program ||
-      !form.paymentMode ||
-      !form.paymentAmount
-    ) {
-      toast({ title: "Faltan campos obligatorios", variant: "destructive" });
-      return;
-    }
     setSubmitting(true);
     try {
       if (mode === "edit" && recordId) {
