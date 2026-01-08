@@ -31,11 +31,7 @@ import {
 // Producto por defecto (si el lead no trae uno)
 const STATIC_PROGRAM = "HOTSELLING PRO";
 
-type PaymentPlanType =
-  | "contado"
-  | "cuotas"
-  | "excepcion_2_cuotas"
-  | "reserva";
+type PaymentPlanType = "contado" | "cuotas" | "excepcion_2_cuotas" | "reserva";
 
 export type PaymentPlatform =
   | "hotmart"
@@ -225,14 +221,12 @@ export function CloseSaleForm({
   onDone?: () => void;
   onChange?: (form: CloseSaleInput) => void;
   onPaymentProofChange?: (
-    proof:
-      | {
-          dataUrl: string;
-          name?: string;
-          type?: string;
-          size?: number;
-        }
-      | null
+    proof: {
+      dataUrl: string;
+      name?: string;
+      type?: string;
+      size?: number;
+    } | null
   ) => void;
   onSalePayloadChange?: (payload: any) => void;
   initial?: Partial<CloseSaleInput> & { status?: string };
@@ -248,7 +242,9 @@ export function CloseSaleForm({
   const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const inferredInitialPlanType: PaymentPlanType = (() => {
-    const explicit = (initial as any)?.paymentPlanType as PaymentPlanType | undefined;
+    const explicit = (initial as any)?.paymentPlanType as
+      | PaymentPlanType
+      | undefined;
     if (explicit) return explicit;
     const m = String(initial?.paymentMode ?? "").toLowerCase();
     if ((initial as any)?.paymentHasReserve) return "reserva";
@@ -270,9 +266,12 @@ export function CloseSaleForm({
     paymentPlanType: inferredInitialPlanType,
     paymentInstallmentsCount: (initial as any)?.paymentInstallmentsCount,
     paymentInstallmentAmount: (initial as any)?.paymentInstallmentAmount,
-    paymentFirstInstallmentAmount: (initial as any)?.paymentFirstInstallmentAmount,
-    paymentSecondInstallmentAmount: (initial as any)?.paymentSecondInstallmentAmount,
-    paymentSecondInstallmentDate: (initial as any)?.paymentSecondInstallmentDate,
+    paymentFirstInstallmentAmount: (initial as any)
+      ?.paymentFirstInstallmentAmount,
+    paymentSecondInstallmentAmount: (initial as any)
+      ?.paymentSecondInstallmentAmount,
+    paymentSecondInstallmentDate: (initial as any)
+      ?.paymentSecondInstallmentDate,
     paymentExceptionNotes: (initial as any)?.paymentExceptionNotes || "",
     reservePaidDate: (initial as any)?.reservePaidDate,
     reserveRemainingDueDate: (initial as any)?.reserveRemainingDueDate,
@@ -358,16 +357,16 @@ export function CloseSaleForm({
 
     const installmentsCount =
       planType === "cuotas"
-        ? Number(form.paymentInstallmentsCount ?? defaultInstallments?.count ?? 0)
+        ? Number(
+            form.paymentInstallmentsCount ?? defaultInstallments?.count ?? 0
+          )
         : planType === "excepcion_2_cuotas"
         ? 2
         : 0;
     const installmentAmount =
       planType === "cuotas"
         ? String(
-            form.paymentInstallmentAmount ??
-              defaultInstallments?.amount ??
-              ""
+            form.paymentInstallmentAmount ?? defaultInstallments?.amount ?? ""
           )
         : "";
 
@@ -380,7 +379,8 @@ export function CloseSaleForm({
       }
       if (planType === "cuotas") {
         const a = toNumberOrNull(installmentAmount);
-        if (a !== null && installmentsCount > 0) return String(a * installmentsCount);
+        if (a !== null && installmentsCount > 0)
+          return String(a * installmentsCount);
         return String(form.paymentAmount || "");
       }
       if (planType === "excepcion_2_cuotas") {
@@ -393,9 +393,12 @@ export function CloseSaleForm({
     })();
 
     const computedPaidAmount = (() => {
-      if (String(form.paymentPaidAmount || "").trim()) return String(form.paymentPaidAmount);
-      if (planType === "excepcion_2_cuotas") return String(form.paymentFirstInstallmentAmount || "");
-      if (planType === "reserva") return String(form.paymentReserveAmount || "");
+      if (String(form.paymentPaidAmount || "").trim())
+        return String(form.paymentPaidAmount);
+      if (planType === "excepcion_2_cuotas")
+        return String(form.paymentFirstInstallmentAmount || "");
+      if (planType === "reserva")
+        return String(form.paymentReserveAmount || "");
       if (planType === "contado") return computedTotalCommitted;
       return "";
     })();
@@ -609,9 +612,11 @@ export function CloseSaleForm({
         paymentPlanType:
           (initial as any)?.paymentPlanType ?? prev.paymentPlanType,
         paymentInstallmentsCount:
-          (initial as any)?.paymentInstallmentsCount ?? prev.paymentInstallmentsCount,
+          (initial as any)?.paymentInstallmentsCount ??
+          prev.paymentInstallmentsCount,
         paymentInstallmentAmount:
-          (initial as any)?.paymentInstallmentAmount ?? prev.paymentInstallmentAmount,
+          (initial as any)?.paymentInstallmentAmount ??
+          prev.paymentInstallmentAmount,
         paymentFirstInstallmentAmount:
           (initial as any)?.paymentFirstInstallmentAmount ??
           prev.paymentFirstInstallmentAmount,
@@ -626,7 +631,8 @@ export function CloseSaleForm({
         reservePaidDate:
           (initial as any)?.reservePaidDate ?? prev.reservePaidDate,
         reserveRemainingDueDate:
-          (initial as any)?.reserveRemainingDueDate ?? prev.reserveRemainingDueDate,
+          (initial as any)?.reserveRemainingDueDate ??
+          prev.reserveRemainingDueDate,
         reserveNotes: (initial as any)?.reserveNotes ?? prev.reserveNotes,
         paymentAttachments: Array.isArray((initial as any)?.paymentAttachments)
           ? ((initial as any).paymentAttachments as any)
@@ -937,7 +943,10 @@ export function CloseSaleForm({
                           open={productConfigOpen}
                           onOpenChange={(open) => {
                             setProductConfigOpen(open);
-                            if (open) setProductConfigValue(String(form.program || STATIC_PROGRAM));
+                            if (open)
+                              setProductConfigValue(
+                                String(form.program || STATIC_PROGRAM)
+                              );
                           }}
                         >
                           <DialogTrigger asChild>
@@ -956,20 +965,28 @@ export function CloseSaleForm({
                             </DialogHeader>
                             <div className="space-y-3">
                               <div className="text-sm text-slate-700">
-                                Selecciona el producto estándar para aplicar precios preconfigurados.
+                                Selecciona el producto estándar para aplicar
+                                precios preconfigurados.
                               </div>
                               <div className="space-y-1.5">
                                 <Label>Producto</Label>
                                 <Select
                                   value={productConfigValue}
-                                  onValueChange={(v) => setProductConfigValue(v)}
+                                  onValueChange={(v) =>
+                                    setProductConfigValue(v)
+                                  }
                                 >
-                                  <SelectTrigger className={`w-full ${selectAccent}`}>
+                                  <SelectTrigger
+                                    className={`w-full ${selectAccent}`}
+                                  >
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
                                     {PRODUCT_OPTIONS.map((opt) => (
-                                      <SelectItem key={opt.value} value={opt.value}>
+                                      <SelectItem
+                                        key={opt.value}
+                                        value={opt.value}
+                                      >
                                         {opt.label}
                                       </SelectItem>
                                     ))}
@@ -988,7 +1005,10 @@ export function CloseSaleForm({
                                 <Button
                                   type="button"
                                   onClick={() => {
-                                    setForm({ ...form, program: productConfigValue });
+                                    setForm({
+                                      ...form,
+                                      program: productConfigValue,
+                                    });
                                     setProductConfigOpen(false);
                                   }}
                                 >
@@ -1165,7 +1185,8 @@ export function CloseSaleForm({
                     ? PRICING.FOUNDATION
                     : null;
 
-                const plan = (form.paymentPlanType || "contado") as PaymentPlanType;
+                const plan = (form.paymentPlanType ||
+                  "contado") as PaymentPlanType;
                 const stdInstallments = pricing?.discount.installments;
                 const stdCash = pricing?.discount.cashTotal;
 
@@ -1182,21 +1203,39 @@ export function CloseSaleForm({
                 return (
                   <div className="space-y-4">
                     <div className="rounded-md border border-slate-200 bg-white p-3 text-sm">
-                      <div className="font-semibold">Precios preconfigurados ({stdPlanLabel})</div>
+                      <div className="font-semibold">
+                        Precios preconfigurados ({stdPlanLabel})
+                      </div>
                       {pricing ? (
                         <div className="mt-2 grid grid-cols-1 gap-1 text-slate-700">
                           <div>
-                            <span className="text-slate-500">Precio lista:</span>{" "}
-                            USD {pricing.list.total.toLocaleString("en-US")}
-                            {" "}· {pricing.list.installments.count} cuotas de USD {pricing.list.installments.amount.toLocaleString("en-US")}
+                            <span className="text-slate-500">
+                              Precio lista:
+                            </span>{" "}
+                            USD {pricing.list.total.toLocaleString("en-US")} ·{" "}
+                            {pricing.list.installments.count} cuotas de USD{" "}
+                            {pricing.list.installments.amount.toLocaleString(
+                              "en-US"
+                            )}
                           </div>
                           <div>
-                            <span className="text-slate-500">Descuento estándar:</span>{" "}
-                            Contado USD {pricing.discount.cashTotal.toLocaleString("en-US")} · {pricing.discount.installments.count} cuotas de USD {pricing.discount.installments.amount.toLocaleString("en-US")} (cada 30 días)
+                            <span className="text-slate-500">
+                              Descuento estándar:
+                            </span>{" "}
+                            Contado USD{" "}
+                            {pricing.discount.cashTotal.toLocaleString("en-US")}{" "}
+                            · {pricing.discount.installments.count} cuotas de
+                            USD{" "}
+                            {pricing.discount.installments.amount.toLocaleString(
+                              "en-US"
+                            )}{" "}
+                            (cada 30 días)
                           </div>
                         </div>
                       ) : (
-                        <div className="mt-2 text-slate-600">Producto no reconocido para precios estándar.</div>
+                        <div className="mt-2 text-slate-600">
+                          Producto no reconocido para precios estándar.
+                        </div>
                       )}
                     </div>
 
@@ -1219,13 +1258,16 @@ export function CloseSaleForm({
                               return;
                             }
                             if (nextPlan === "cuotas" && stdInstallments) {
-                              const total = stdInstallments.count * stdInstallments.amount;
+                              const total =
+                                stdInstallments.count * stdInstallments.amount;
                               setForm({
                                 ...form,
                                 paymentPlanType: nextPlan,
                                 paymentMode: `${stdInstallments.count}_cuotas`,
                                 paymentInstallmentsCount: stdInstallments.count,
-                                paymentInstallmentAmount: String(stdInstallments.amount),
+                                paymentInstallmentAmount: String(
+                                  stdInstallments.amount
+                                ),
                                 paymentAmount: String(total),
                                 paymentPaidAmount: "",
                                 paymentSecondInstallmentDate: isoPlusDays(30),
@@ -1250,9 +1292,12 @@ export function CloseSaleForm({
                               paymentPlanType: nextPlan,
                               paymentMode: "reserva",
                               paymentHasReserve: true,
-                              paymentReserveAmount: form.paymentReserveAmount || "",
-                              reservePaidDate: form.reservePaidDate || isoPlusDays(0),
-                              reserveRemainingDueDate: form.reserveRemainingDueDate || "",
+                              paymentReserveAmount:
+                                form.paymentReserveAmount || "",
+                              reservePaidDate:
+                                form.reservePaidDate || isoPlusDays(0),
+                              reserveRemainingDueDate:
+                                form.reserveRemainingDueDate || "",
                               reserveNotes: form.reserveNotes || "",
                               paymentPaidAmount: form.paymentPaidAmount || "",
                             });
@@ -1262,9 +1307,15 @@ export function CloseSaleForm({
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="contado">Venta al contado</SelectItem>
-                            <SelectItem value="cuotas">Venta en cuotas (estándar)</SelectItem>
-                            <SelectItem value="excepcion_2_cuotas">Excepción: 2 cuotas personalizadas</SelectItem>
+                            <SelectItem value="contado">
+                              Venta al contado
+                            </SelectItem>
+                            <SelectItem value="cuotas">
+                              Venta en cuotas (estándar)
+                            </SelectItem>
+                            <SelectItem value="excepcion_2_cuotas">
+                              Excepción: 2 cuotas personalizadas
+                            </SelectItem>
                             <SelectItem value="reserva">Reserva</SelectItem>
                           </SelectContent>
                         </Select>
@@ -1327,7 +1378,11 @@ export function CloseSaleForm({
                         <Input
                           type="date"
                           className={inputAccent}
-                          value={form.paymentSecondInstallmentDate || form.nextChargeDate || ""}
+                          value={
+                            form.paymentSecondInstallmentDate ||
+                            form.nextChargeDate ||
+                            ""
+                          }
                           onChange={(e) =>
                             setForm({
                               ...form,
@@ -1343,16 +1398,19 @@ export function CloseSaleForm({
                       <div className="rounded-md border border-slate-200 bg-white p-3 text-sm">
                         <div className="font-semibold">Cuotas estándar</div>
                         <div className="mt-1 text-xs text-slate-600">
-                          En “Cuotas estándar” el número de cuotas y el monto por cuota son fijos según el
-                          producto (plan preconfigurado). Si necesitas cambiar cuotas o montos, usa
-                          “Excepción: 2 cuotas personalizadas”.
+                          En “Cuotas estándar” el número de cuotas y el monto
+                          por cuota son fijos según el producto (plan
+                          preconfigurado). Si necesitas cambiar cuotas o montos,
+                          usa “Excepción: 2 cuotas personalizadas”.
                         </div>
                         <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="space-y-1.5">
                             <Label>Número de cuotas</Label>
                             <Input
                               className={inputAccent}
-                              value={String(form.paymentInstallmentsCount ?? stdQuotaCount)}
+                              value={String(
+                                form.paymentInstallmentsCount ?? stdQuotaCount
+                              )}
                               readOnly
                             />
                           </div>
@@ -1360,13 +1418,19 @@ export function CloseSaleForm({
                             <Label>Monto por cuota (USD)</Label>
                             <Input
                               className={inputAccent}
-                              value={String(form.paymentInstallmentAmount ?? stdQuotaAmount)}
+                              value={String(
+                                form.paymentInstallmentAmount ?? stdQuotaAmount
+                              )}
                               readOnly
                             />
                           </div>
                           <div className="space-y-1.5">
                             <Label>Periodicidad</Label>
-                            <Input className={inputAccent} value="Cada 30 días" readOnly />
+                            <Input
+                              className={inputAccent}
+                              value="Cada 30 días"
+                              readOnly
+                            />
                           </div>
                         </div>
                       </div>
@@ -1374,9 +1438,13 @@ export function CloseSaleForm({
 
                     {plan === "excepcion_2_cuotas" ? (
                       <div className="rounded-md border border-slate-200 bg-white p-3 text-sm space-y-3">
-                        <div className="font-semibold">Excepción: 2 cuotas personalizadas</div>
+                        <div className="font-semibold">
+                          Excepción: 2 cuotas personalizadas
+                        </div>
                         <div className="text-xs text-slate-600">
-                          Condiciones: máximo 2 cuotas · 2da cuota dentro de 30 días · 1ra cuota mínimo 50% del valor con descuento (mínimo USD 1,995).
+                          Condiciones: máximo 2 cuotas · 2da cuota dentro de 30
+                          días · 1ra cuota mínimo 50% del valor con descuento
+                          (mínimo USD 1,995).
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="space-y-1.5">
@@ -1403,7 +1471,8 @@ export function CloseSaleForm({
                               onChange={(e) =>
                                 setForm({
                                   ...form,
-                                  paymentSecondInstallmentAmount: e.target.value,
+                                  paymentSecondInstallmentAmount:
+                                    e.target.value,
                                 })
                               }
                             />
@@ -1444,7 +1513,8 @@ export function CloseSaleForm({
                       <div className="rounded-md border border-slate-200 bg-white p-3 text-sm space-y-3">
                         <div className="font-semibold">Reserva</div>
                         <div className="text-xs text-slate-600">
-                          Sugerencias de mínimo: USD 300 / USD 500 (editable). La fecha del restante debe definirse lo antes posible.
+                          Sugerencias de mínimo: USD 300 / USD 500 (editable).
+                          La fecha del restante debe definirse lo antes posible.
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="space-y-1.5">
@@ -1470,7 +1540,10 @@ export function CloseSaleForm({
                               className={inputAccent}
                               value={form.reservePaidDate || ""}
                               onChange={(e) =>
-                                setForm({ ...form, reservePaidDate: e.target.value })
+                                setForm({
+                                  ...form,
+                                  reservePaidDate: e.target.value,
+                                })
                               }
                             />
                           </div>
@@ -1504,7 +1577,9 @@ export function CloseSaleForm({
                     ) : null}
 
                     <div className="rounded-md border border-slate-200 bg-white p-3 text-sm space-y-3">
-                      <div className="font-semibold">Comprobantes y adjuntos</div>
+                      <div className="font-semibold">
+                        Comprobantes y adjuntos
+                      </div>
                       <div className="space-y-1.5">
                         <Label>Adjuntar comprobantes (PDF / imágenes)</Label>
                         <Input
@@ -1516,7 +1591,9 @@ export function CloseSaleForm({
                             const files = e.target.files;
                             if (!files || files.length === 0) return;
                             const created_at = new Date().toISOString();
-                            const existing = Array.isArray(form.paymentAttachments)
+                            const existing = Array.isArray(
+                              form.paymentAttachments
+                            )
                               ? form.paymentAttachments
                               : [];
                             const nextItems: any[] = [];
@@ -1553,7 +1630,9 @@ export function CloseSaleForm({
                                   </div>
                                   <div className="text-[11px] text-slate-600">
                                     {a.type || ""}{" "}
-                                    {a.size ? `· ${Math.round(a.size / 1024)} KB` : ""}
+                                    {a.size
+                                      ? `· ${Math.round(a.size / 1024)} KB`
+                                      : ""}
                                   </div>
                                 </div>
                                 <Button
@@ -1567,8 +1646,8 @@ export function CloseSaleForm({
                                         form.paymentAttachments
                                       )
                                         ? form.paymentAttachments
-                                        : [])
-                                        .filter((x) => x.id !== a.id),
+                                        : []
+                                      ).filter((x) => x.id !== a.id),
                                     });
                                   }}
                                 >

@@ -258,8 +258,12 @@ export function BookingForm({
         main_obstacle: String(formData.mainObstacle || "").trim() || null,
         commitment: String(formData.commitment) === "yes" ? 1 : 0,
         invite_others: String(formData.inviteOthers) === "yes" ? 1 : 0,
-        confirmado: 
-          String(formData.confirmado || "").trim().toUpperCase() === "CONFIRMADO" ? 1 : 0,
+        confirmado:
+          String(formData.confirmado || "")
+            .trim()
+            .toUpperCase() === "CONFIRMADO"
+            ? 1
+            : 0,
         text_messages: String(formData.textMessages || "").trim() || null,
         selected_date: leadSelectedDateIso,
         selected_time: String(selectedTime),

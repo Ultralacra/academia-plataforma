@@ -2,10 +2,7 @@
 import React from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import {
-  createLeadSnapshot,
-  getLead,
-} from "@/app/admin/crm/api";
+import { createLeadSnapshot, getLead } from "@/app/admin/crm/api";
 import {
   CloseSaleForm,
   type CloseSaleInput,
@@ -63,15 +60,12 @@ function Content({ id }: { id: string }) {
   const [saleDraftPayload, setSaleDraftPayload] = React.useState<any | null>(
     null
   );
-  const [paymentProof, setPaymentProof] = React.useState<
-    | {
-        dataUrl: string;
-        name?: string;
-        type?: string;
-        size?: number;
-      }
-    | null
-  >(null);
+  const [paymentProof, setPaymentProof] = React.useState<{
+    dataUrl: string;
+    name?: string;
+    type?: string;
+    size?: number;
+  } | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [snapshotSaving, setSnapshotSaving] = React.useState(false);
 
@@ -156,7 +150,10 @@ function Content({ id }: { id: string }) {
       };
     }
 
-    if (!Array.isArray(sale.payment.attachments) || sale.payment.attachments.length === 0) {
+    if (
+      !Array.isArray(sale.payment.attachments) ||
+      sale.payment.attachments.length === 0
+    ) {
       sale.payment.attachments = [
         {
           id: "att-test-1",
@@ -324,7 +321,10 @@ function Content({ id }: { id: string }) {
     };
 
     const program = String(
-      saleDraftPayload?.program || (leadForUi as any)?.program || (record as any)?.program || ""
+      saleDraftPayload?.program ||
+        (leadForUi as any)?.program ||
+        (record as any)?.program ||
+        ""
     ).trim();
 
     return {
@@ -414,7 +414,9 @@ function Content({ id }: { id: string }) {
     const base = buildSnapshotBodyForConsole();
     if (!base) return null;
 
-    const mkPlan = (type: "contado" | "cuotas" | "excepcion_2_cuotas" | "reserva") => {
+    const mkPlan = (
+      type: "contado" | "cuotas" | "excepcion_2_cuotas" | "reserva"
+    ) => {
       if (type === "contado") {
         return { type, total: 3990, paid_amount: 3990 };
       }
@@ -649,7 +651,7 @@ function Content({ id }: { id: string }) {
         ),
         payment_has_reserve: (d as any).paymentHasReserve ? 1 : 0,
         payment_reserve_amount: (d as any).paymentHasReserve
-          ? ((d as any).paymentReserveAmount || null)
+          ? (d as any).paymentReserveAmount || null
           : null,
 
         sale_notes: (d as any).notes ?? undefined,
@@ -739,7 +741,9 @@ function Content({ id }: { id: string }) {
       return v.replace(/_/g, " ");
     })();
 
-    const salePaymentMode = String(salePayload?.payment?.mode || "").toLowerCase();
+    const salePaymentMode = String(
+      salePayload?.payment?.mode || ""
+    ).toLowerCase();
     const draftPaymentHasReserve = (draft as any)?.paymentHasReserve;
     const draftPaymentReserveAmount = (draft as any)?.paymentReserveAmount;
     const reserveAmountRaw =
@@ -924,7 +928,18 @@ function Content({ id }: { id: string }) {
     } finally {
       setSnapshotSaving(false);
     }
-  }, [draft, draftToLeadPatch, id, leadForUi, load, paymentProof, record, saleDraftPayload, snapshotSaving, user]);
+  }, [
+    draft,
+    draftToLeadPatch,
+    id,
+    leadForUi,
+    load,
+    paymentProof,
+    record,
+    saleDraftPayload,
+    snapshotSaving,
+    user,
+  ]);
 
   React.useEffect(() => {
     load();
@@ -1130,7 +1145,6 @@ function Content({ id }: { id: string }) {
   const bonusesList: string[] = Array.isArray(initial?.bonuses)
     ? (initial.bonuses as string[])
     : [];
-
 
   return (
     <div className="p-6 space-y-6">
@@ -1363,7 +1377,9 @@ function Content({ id }: { id: string }) {
                       <SelectItem value="reagendar">Reagendar</SelectItem>
                       <SelectItem value="no_responde">No responde</SelectItem>
                       <SelectItem value="no_califica">No califica</SelectItem>
-                      <SelectItem value="no_interesado">No interesado</SelectItem>
+                      <SelectItem value="no_interesado">
+                        No interesado
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1447,7 +1463,8 @@ function Content({ id }: { id: string }) {
                     if (!body) {
                       toast({
                         title: "No disponible",
-                        description: "No se pudo construir el body en este momento.",
+                        description:
+                          "No se pudo construir el body en este momento.",
                         variant: "destructive",
                       });
                       return;
@@ -1495,7 +1512,10 @@ function Content({ id }: { id: string }) {
                       return;
                     }
                     const sanitized = sanitizeForBackendExample(full);
-                    console.log("[CRM] Snapshot completo (payment.plans con 4 tipos, test)", sanitized);
+                    console.log(
+                      "[CRM] Snapshot completo (payment.plans con 4 tipos, test)",
+                      sanitized
+                    );
                     toast({
                       title: "Impreso en consola",
                       description:

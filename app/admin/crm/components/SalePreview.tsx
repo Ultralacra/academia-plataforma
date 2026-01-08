@@ -114,7 +114,7 @@ export function SalePreview({
     const planType =
       String(
         (primaryPlan as any)?.type ??
-        (payload as any)?.payment?.plan_type ??
+          (payload as any)?.payment?.plan_type ??
           (payload as any)?.payment?.planType ??
           (draft as any)?.paymentPlanType ??
           ""
