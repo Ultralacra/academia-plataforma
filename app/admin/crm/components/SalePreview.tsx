@@ -56,6 +56,7 @@ export function SalePreview({
   entity = "sale",
   title = "Resumen de venta",
   onUpdated,
+  persistMode = "api",
 }: {
   payload?: any;
   draft?: Partial<CloseSaleInput> | null;
@@ -64,6 +65,7 @@ export function SalePreview({
   entity?: "sale" | "booking";
   title?: string;
   onUpdated?: () => void;
+  persistMode?: "api" | "local";
 }) {
   const { toast } = useToast();
   // Preferimos el borrador en vivo si existe, si no caemos al payload persistido
@@ -71,9 +73,17 @@ export function SalePreview({
   const email = draft?.email ?? payload?.email ?? "";
   const phone = draft?.phone ?? payload?.phone ?? "";
   const program = draft?.program ?? payload?.program ?? "";
+  const primaryPlan =
+    (payload as any)?.payment?.plans?.[0] ?? (payload as any)?.payment?.plan;
   const pay = {
     mode: draft?.paymentMode ?? payload?.payment?.mode ?? payload?.paymentMode,
     amount: draft?.paymentAmount ?? payload?.payment?.amount,
+    paidAmount:
+      (draft as any)?.paymentPaidAmount ??
+      payload?.payment?.paid_amount ??
+      payload?.payment?.paidAmount ??
+      primaryPlan?.paid_amount ??
+      null,
     hasReserve:
       (draft as any)?.paymentHasReserve ?? payload?.payment?.hasReserve,
     reserveAmount:
@@ -84,6 +94,7 @@ export function SalePreview({
       payload?.payment?.deposit ??
       payload?.payment?.downPayment ??
       payload?.payment?.anticipo ??
+      primaryPlan?.reserve?.amount ??
       null,
     platform: draft?.paymentPlatform ?? payload?.payment?.platform,
     nextChargeDate:
@@ -91,11 +102,58 @@ export function SalePreview({
   } as {
     mode?: string;
     amount?: string;
+    paidAmount?: any;
     hasReserve?: boolean;
     reserveAmount?: any;
     platform?: string;
     nextChargeDate?: string | null;
   };
+
+  const ticket = (() => {
+    const program = String(draft?.program ?? payload?.program ?? "").trim();
+    const planType =
+      String(
+        (primaryPlan as any)?.type ??
+        (payload as any)?.payment?.plan_type ??
+          (payload as any)?.payment?.planType ??
+          (draft as any)?.paymentPlanType ??
+          ""
+      ) || "";
+    const mode = String(pay?.mode || "").toLowerCase();
+
+    const tipo = (() => {
+      if (planType === "reserva" || mode.includes("reserva")) return "Reserva";
+      if (planType === "excepcion_2_cuotas" || mode.includes("excepcion"))
+        return "Excepción (2 cuotas)";
+      if (planType === "cuotas" || mode.includes("cuota")) return "Cuotas";
+      return "Contado";
+    })();
+
+    const cuotasCount =
+      (primaryPlan as any)?.installments?.count ??
+      (payload as any)?.payment?.installments?.count ??
+      (draft as any)?.paymentInstallmentsCount ??
+      (mode.match(/(\d+)_cuotas/)?.[1]
+        ? Number(mode.match(/(\d+)_cuotas/)?.[1])
+        : null);
+    const cuotaAmount =
+      (primaryPlan as any)?.installments?.amount ??
+      (payload as any)?.payment?.installments?.amount ??
+      (draft as any)?.paymentInstallmentAmount ??
+      null;
+
+    const total = pay?.amount ?? (primaryPlan as any)?.total ?? null;
+    const pagado = pay?.paidAmount ?? (primaryPlan as any)?.paid_amount ?? null;
+
+    return {
+      program: program || "—",
+      tipo,
+      cuotasCount,
+      cuotaAmount,
+      total,
+      pagado,
+    };
+  })();
   const contract = payload?.contract || {};
   const bonuses: string[] = Array.isArray(draft?.bonuses)
     ? (draft?.bonuses as string[])
@@ -174,6 +232,14 @@ export function SalePreview({
   const confirmPayment = async () => {
     if (entity === "booking" && !leadCodigo) return;
     if (entity === "sale" && !id) return;
+    if (persistMode === "local") {
+      toast({
+        title: "Listo para guardar",
+        description: "Este cambio se guardará al presionar “Guardar cambios”.",
+      });
+      setLocalStatus("payment_confirmed");
+      return;
+    }
     try {
       if (entity === "sale") {
         const next = { ...(payload || {}), status: "payment_confirmed" } as any;
@@ -198,6 +264,14 @@ export function SalePreview({
   const unconfirmPayment = async () => {
     if (entity === "booking" && !leadCodigo) return;
     if (entity === "sale" && !id) return;
+    if (persistMode === "local") {
+      toast({
+        title: "Listo para guardar",
+        description: "Este cambio se guardará al presionar “Guardar cambios”.",
+      });
+      setLocalStatus("payment_verification_pending");
+      return;
+    }
     try {
       if (entity === "sale") {
         const next = {
@@ -306,6 +380,52 @@ export function SalePreview({
               {it.label}
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="mb-4 rounded-md border border-slate-200 bg-white p-3">
+        <div className="text-xs font-semibold text-slate-700">
+          Ticket (resumen)
+        </div>
+        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-500">Producto</span>
+            <span className="text-slate-900 truncate">{ticket.program}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-500">Tipo de pago</span>
+            <span className="text-slate-900">{ticket.tipo}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-500">Cuotas</span>
+            <span className="text-slate-900">
+              {ticket.cuotasCount ? String(ticket.cuotasCount) : "—"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-500">Monto por cuota</span>
+            <span className="text-slate-900">
+              {ticket.cuotaAmount !== null && ticket.cuotaAmount !== undefined
+                ? String(ticket.cuotaAmount)
+                : "—"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-500">Total comprometido</span>
+            <span className="text-slate-900">
+              {ticket.total !== null && ticket.total !== undefined
+                ? String(ticket.total)
+                : "—"}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-slate-500">Pagado</span>
+            <span className="text-slate-900">
+              {ticket.pagado !== null && ticket.pagado !== undefined
+                ? String(ticket.pagado)
+                : "—"}
+            </span>
+          </div>
         </div>
       </div>
 

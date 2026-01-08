@@ -334,9 +334,7 @@ export async function createSale(input: SaleCreateInput) {
 export async function updateLeadFull(codigo: string, body: Partial<LeadDetail> & Record<string, any>) {
   if (!codigo) throw new Error("codigo requerido");
   try {
-    // Debug en navegador (la mayoría de estas llamadas ocurren client-side)
-    // para verificar que efectivamente estamos enviando payload.name, sale, call, etc.
-    console.log("[CRM] PUT /v1/leads/:codigo body", { codigo, body });
+      // Removed debug log to avoid printing sensitive bodies
   } catch {}
   const resp = await apiFetch<any>(`/leads/${encodeURIComponent(codigo)}`, {
     method: "PUT",
@@ -569,6 +567,9 @@ export interface LeadDetailSnapshotV1 {
 }
 
 export interface CreateLeadSnapshotInput {
+  // Código del lead (crm lead). Algunos backends lo requieren para asociar el snapshot.
+  // En la UI normalmente es el param :id de /admin/crm/booking/:id
+  codigo?: string;
   source: {
     record_id: string | number;
     entity: string;
@@ -600,10 +601,14 @@ export async function createLeadSnapshot(input: CreateLeadSnapshotInput) {
 
   // Nuevo endpoint: /v1/leads/snapshot (apiFetch ya apunta a /v1)
   // Body esperado (tal cual): { entity, entity_id, payload }
+  // Nota: algunos backends también aceptan/requieren `codigo` (lead).
+  const body: Record<string, any> = { entity, entity_id: entityId, payload };
+  const leadCodigo = String((input as any)?.codigo ?? "").trim();
+  if (leadCodigo) body.codigo = leadCodigo;
   const raw = await apiFetch<any>(`/leads/snapshot`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ entity, entity_id: entityId, payload }),
+    body: JSON.stringify(body),
   });
   return (raw as any)?.data ?? raw;
 }

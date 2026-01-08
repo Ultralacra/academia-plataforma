@@ -150,10 +150,12 @@ export function CallFlowManager({
   leadCodigo,
   payload,
   onSaved,
+  persistMode = "api",
 }: {
   leadCodigo: string; // codigo del lead (ruta /v1/leads/:codigo)
   payload: any; // payload actual (booking)
   onSaved?: (nextCall: CallFlowState) => void;
+  persistMode?: "api" | "local";
 }) {
   const call: CallFlowState = (payload?.call as CallFlowState) || {};
   const [rescheduleDate, setRescheduleDate] = React.useState<string>(
@@ -189,8 +191,15 @@ export function CallFlowManager({
         leadPatch.text_messages = next?.notes ?? null;
       }
 
-      await updateLeadPatch(leadCodigo, leadPatch, payload);
-      toast({ title: "Guardado" });
+      if (persistMode === "api") {
+        await updateLeadPatch(leadCodigo, leadPatch, payload);
+        toast({ title: "Guardado" });
+      } else {
+        toast({
+          title: "Listo para guardar",
+          description: "Este cambio se guardará al presionar “Guardar cambios”.",
+        });
+      }
       onSaved?.(next);
       return next;
     } catch (e: any) {
@@ -285,12 +294,9 @@ export function CallFlowManager({
   };
 
   const marcarNoShow = () => {
-    const existing = Array.isArray(call.reminders) ? call.reminders : [];
-    const appended = [...existing, ...scheduleNoShowFollowups()!];
     safeUpdate({
       outcome: "no_show",
       result_at: new Date().toISOString(),
-      reminders: appended,
       negotiation: { active: false, until: null },
     });
   };
@@ -349,7 +355,7 @@ export function CallFlowManager({
         <Badge className="bg-emerald-100 text-emerald-700">Asistencia</Badge>
       );
     if (s === "no_show")
-      return <Badge className="bg-rose-100 text-rose-700">No show</Badge>;
+      return <Badge className="bg-rose-100 text-rose-700">No asistió</Badge>;
     if (s === "cancelled")
       return <Badge className="bg-amber-100 text-amber-700">Cancelada</Badge>;
     return <Badge className="bg-slate-100 text-slate-700">Sin resultado</Badge>;
@@ -433,7 +439,7 @@ export function CallFlowManager({
                 : ""
             }
           >
-            <PhoneOff className="h-4 w-4 mr-1" /> No show
+            <PhoneOff className="h-4 w-4 mr-1" /> No asistió
           </Button>
           <Button
             type="button"
@@ -525,7 +531,7 @@ export function CallFlowManager({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-2 space-y-1.5">
             <Label className="text-xs">Fecha y hora</Label>
             <Input
               type="datetime-local"
@@ -534,7 +540,7 @@ export function CallFlowManager({
               onChange={(e) => setNewReminderAt(e.target.value)}
             />
           </div>
-          <div>
+          <div className="space-y-1.5">
             <Label className="text-xs">Etiqueta (opcional)</Label>
             <Input
               className={inputAccent}
@@ -579,7 +585,11 @@ export function CallFlowManager({
                         : "bg-amber-100 text-amber-700"
                     }
                   >
-                    {r.status}
+                    {r.status === "pending"
+                      ? "Pendiente"
+                      : r.status === "sent"
+                      ? "Enviado"
+                      : "Omitido"}
                   </Badge>
                 </div>
                 <div className="flex items-center gap-2">
@@ -683,11 +693,7 @@ export function CallFlowManager({
           className="min-h-24"
         />
         <div className="flex items-center justify-between mt-2 text-[11px] text-slate-500">
-          <div className="flex items-center gap-1">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Si hubo asistencia, procede con el formulario de venta
-            (HLite/Found.).
-          </div>
+          <div />
           <Button
             type="button"
             size="sm"

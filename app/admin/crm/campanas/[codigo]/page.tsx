@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { Copy } from "lucide-react";
+import { getPublicAppOrigin } from "@/lib/public-app-origin";
 
 function fmtDate(iso: unknown) {
   const s = typeof iso === "string" ? iso : "";
@@ -54,10 +55,7 @@ export default function CampanaDetailPage() {
     const fallbackCodigo = String(item?.codigo || codigo || "").trim();
     const code = eventCodigo || fallbackCodigo;
     if (!code) return "";
-    const origin =
-      typeof window !== "undefined" && window.location?.origin
-        ? window.location.origin
-        : "http://localhost:3000";
+    const origin = getPublicAppOrigin();
     return `${origin}/booking/${encodeURIComponent(code)}`;
   }, [codigo, item?.codigo, (item as any)?.event_codigo]);
 

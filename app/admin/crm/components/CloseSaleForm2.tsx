@@ -20,9 +20,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
-// Programa fijo de la oferta actual
-const STATIC_PROGRAM = "Hotselling Lite";
+// Producto por defecto (si el lead no trae uno)
+const STATIC_PROGRAM = "HOTSELLING PRO";
+
+type PaymentPlanType =
+  | "contado"
+  | "cuotas"
+  | "excepcion_2_cuotas"
+  | "reserva";
 
 export type PaymentPlatform =
   | "hotmart"
@@ -42,6 +55,27 @@ export interface CloseSaleInput {
   bonuses?: string[];
   paymentMode: string;
   paymentAmount: string;
+  paymentPaidAmount?: string;
+  paymentPlanType?: PaymentPlanType;
+  paymentInstallmentsCount?: number;
+  paymentInstallmentAmount?: string;
+  paymentFirstInstallmentAmount?: string;
+  paymentSecondInstallmentAmount?: string;
+  paymentSecondInstallmentDate?: string; // YYYY-MM-DD
+  paymentExceptionNotes?: string;
+
+  reservePaidDate?: string; // YYYY-MM-DD
+  reserveRemainingDueDate?: string; // YYYY-MM-DD
+  reserveNotes?: string;
+
+  paymentAttachments?: Array<{
+    id: string;
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl: string;
+    created_at: string;
+  }>;
   paymentHasReserve?: boolean;
   paymentReserveAmount?: string;
   paymentPlatform: PaymentPlatform;
@@ -84,6 +118,51 @@ function toLeadIsoDateOrNull(v?: string | null) {
   return s;
 }
 
+function inferProgramKey(program?: string | null) {
+  const v = String(program ?? "")
+    .trim()
+    .toLowerCase();
+  if (v.includes("foundation")) return "FOUNDATION" as const;
+  if (v.includes("pro")) return "PRO" as const;
+  return "UNKNOWN" as const;
+}
+
+const PRODUCT_OPTIONS = [
+  { value: "HOTSELLING PRO", label: "HOTSELLING PRO" },
+  { value: "HOTSELLING FOUNDATION", label: "HOTSELLING FOUNDATION" },
+] as const;
+
+const PRICING = {
+  PRO: {
+    list: { total: 5000, installments: { count: 3, amount: 1800 } },
+    discount: { cashTotal: 3990, installments: { count: 3, amount: 1600 } },
+  },
+  FOUNDATION: {
+    list: { total: 2000, installments: { count: 2, amount: 1100 } },
+    discount: { cashTotal: 1500, installments: { count: 2, amount: 825 } },
+  },
+} as const;
+
+function isoPlusDays(days: number) {
+  const d = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+function toNumberOrNull(v?: string | null) {
+  if (v === null || v === undefined) return null;
+  const n = Number(String(v).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
 function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
   const payment = salePayload?.payment ?? {};
   const contract = salePayload?.contract ?? {};
@@ -92,6 +171,11 @@ function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
   const closer = salePayload?.closer ?? null;
 
   return {
+    // También persistimos datos básicos del lead si se editaron desde este formulario.
+    name: salePayload?.name ?? null,
+    email: salePayload?.email ?? null,
+    phone: salePayload?.phone ?? null,
+
     program: salePayload?.program ?? null,
     bonuses: Array.isArray(salePayload?.bonuses) ? salePayload.bonuses : [],
 
@@ -127,6 +211,8 @@ function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
 export function CloseSaleForm({
   onDone,
   onChange,
+  onPaymentProofChange,
+  onSalePayloadChange,
   initial,
   mode = "create",
   recordId,
@@ -134,9 +220,21 @@ export function CloseSaleForm({
   entity = "sale",
   autoSave = false,
   autoSaveDelay = 600,
+  persistMode = "api",
 }: {
   onDone?: () => void;
   onChange?: (form: CloseSaleInput) => void;
+  onPaymentProofChange?: (
+    proof:
+      | {
+          dataUrl: string;
+          name?: string;
+          type?: string;
+          size?: number;
+        }
+      | null
+  ) => void;
+  onSalePayloadChange?: (payload: any) => void;
   initial?: Partial<CloseSaleInput> & { status?: string };
   mode?: Mode;
   recordId?: string | number;
@@ -144,18 +242,44 @@ export function CloseSaleForm({
   entity?: "sale" | "booking";
   autoSave?: boolean;
   autoSaveDelay?: number;
+  persistMode?: "api" | "local";
 }) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
+  const inferredInitialPlanType: PaymentPlanType = (() => {
+    const explicit = (initial as any)?.paymentPlanType as PaymentPlanType | undefined;
+    if (explicit) return explicit;
+    const m = String(initial?.paymentMode ?? "").toLowerCase();
+    if ((initial as any)?.paymentHasReserve) return "reserva";
+    if (m.includes("excepcion")) return "excepcion_2_cuotas";
+    if (m.includes("cuota") || m.includes("cuotas") || /\b\d+_cuotas\b/.test(m))
+      return "cuotas";
+    return "contado";
+  })();
+
   const [form, setForm] = useState<CloseSaleInput>({
     fullName: initial?.fullName || "",
     email: initial?.email || "",
     phone: initial?.phone || "",
-    program: STATIC_PROGRAM,
+    program: initial?.program || STATIC_PROGRAM,
     bonuses: (initial?.bonuses as string[] | undefined) || [],
     paymentMode: initial?.paymentMode || "",
     paymentAmount: initial?.paymentAmount || "",
+    paymentPaidAmount: (initial as any)?.paymentPaidAmount || "",
+    paymentPlanType: inferredInitialPlanType,
+    paymentInstallmentsCount: (initial as any)?.paymentInstallmentsCount,
+    paymentInstallmentAmount: (initial as any)?.paymentInstallmentAmount,
+    paymentFirstInstallmentAmount: (initial as any)?.paymentFirstInstallmentAmount,
+    paymentSecondInstallmentAmount: (initial as any)?.paymentSecondInstallmentAmount,
+    paymentSecondInstallmentDate: (initial as any)?.paymentSecondInstallmentDate,
+    paymentExceptionNotes: (initial as any)?.paymentExceptionNotes || "",
+    reservePaidDate: (initial as any)?.reservePaidDate,
+    reserveRemainingDueDate: (initial as any)?.reserveRemainingDueDate,
+    reserveNotes: (initial as any)?.reserveNotes || "",
+    paymentAttachments: Array.isArray((initial as any)?.paymentAttachments)
+      ? ((initial as any).paymentAttachments as any)
+      : [],
     paymentHasReserve: (initial as any)?.paymentHasReserve || false,
     paymentReserveAmount: (initial as any)?.paymentReserveAmount || "",
     paymentPlatform: (initial?.paymentPlatform as PaymentPlatform) || "hotmart",
@@ -195,6 +319,11 @@ export function CloseSaleForm({
     size?: number;
   } | null>(null);
 
+  const [productConfigOpen, setProductConfigOpen] = useState(false);
+  const [productConfigValue, setProductConfigValue] = useState<string>(
+    String(form.program || STATIC_PROGRAM)
+  );
+
   // Propagar cambios en vivo al padre para vista previa en tiempo real
   useEffect(() => {
     try {
@@ -212,6 +341,117 @@ export function CloseSaleForm({
           email: user.email ?? "",
         }
       : null;
+
+    const programKey = inferProgramKey(form.program);
+    const pricing =
+      programKey === "PRO"
+        ? PRICING.PRO
+        : programKey === "FOUNDATION"
+        ? PRICING.FOUNDATION
+        : null;
+
+    const planType: PaymentPlanType =
+      (form.paymentPlanType as PaymentPlanType | undefined) ?? "contado";
+
+    const defaultInstallments = pricing?.discount.installments;
+    const defaultCashTotal = pricing?.discount.cashTotal;
+
+    const installmentsCount =
+      planType === "cuotas"
+        ? Number(form.paymentInstallmentsCount ?? defaultInstallments?.count ?? 0)
+        : planType === "excepcion_2_cuotas"
+        ? 2
+        : 0;
+    const installmentAmount =
+      planType === "cuotas"
+        ? String(
+            form.paymentInstallmentAmount ??
+              defaultInstallments?.amount ??
+              ""
+          )
+        : "";
+
+    const firstAmountNum = toNumberOrNull(form.paymentFirstInstallmentAmount);
+    const secondAmountNum = toNumberOrNull(form.paymentSecondInstallmentAmount);
+
+    const computedTotalCommitted = (() => {
+      if (planType === "contado") {
+        return String(form.paymentAmount || defaultCashTotal || "");
+      }
+      if (planType === "cuotas") {
+        const a = toNumberOrNull(installmentAmount);
+        if (a !== null && installmentsCount > 0) return String(a * installmentsCount);
+        return String(form.paymentAmount || "");
+      }
+      if (planType === "excepcion_2_cuotas") {
+        if (firstAmountNum !== null && secondAmountNum !== null)
+          return String(firstAmountNum + secondAmountNum);
+        return String(form.paymentAmount || "");
+      }
+      // reserva
+      return String(form.paymentAmount || defaultCashTotal || "");
+    })();
+
+    const computedPaidAmount = (() => {
+      if (String(form.paymentPaidAmount || "").trim()) return String(form.paymentPaidAmount);
+      if (planType === "excepcion_2_cuotas") return String(form.paymentFirstInstallmentAmount || "");
+      if (planType === "reserva") return String(form.paymentReserveAmount || "");
+      if (planType === "contado") return computedTotalCommitted;
+      return "";
+    })();
+
+    const computedPaymentMode = (() => {
+      if (planType === "contado") return "pago_total";
+      if (planType === "cuotas") return `${installmentsCount}_cuotas`;
+      if (planType === "excepcion_2_cuotas") return "excepcion_2_cuotas";
+      return "reserva";
+    })();
+
+    const planEntry = (() => {
+      if (planType === "contado") {
+        return {
+          type: "contado" as const,
+          total: computedTotalCommitted || null,
+          paid_amount: computedPaidAmount || null,
+        };
+      }
+      if (planType === "cuotas") {
+        return {
+          type: "cuotas" as const,
+          installments: {
+            count: installmentsCount,
+            amount: installmentAmount || null,
+            period_days: 30,
+            next_due_date: form.paymentSecondInstallmentDate || isoPlusDays(30),
+          },
+          total: computedTotalCommitted || null,
+          paid_amount: computedPaidAmount || null,
+        };
+      }
+      if (planType === "excepcion_2_cuotas") {
+        return {
+          type: "excepcion_2_cuotas" as const,
+          first_amount: form.paymentFirstInstallmentAmount || null,
+          second_amount: form.paymentSecondInstallmentAmount || null,
+          second_due_date: form.paymentSecondInstallmentDate || null,
+          notes: form.paymentExceptionNotes || null,
+          total: computedTotalCommitted || null,
+          paid_amount: computedPaidAmount || null,
+        };
+      }
+      return {
+        type: "reserva" as const,
+        reserve: {
+          amount: form.paymentReserveAmount || null,
+          paid_date: form.reservePaidDate || null,
+          remaining_due_date: form.reserveRemainingDueDate || null,
+          notes: form.reserveNotes || null,
+        },
+        total: computedTotalCommitted || null,
+        paid_amount: computedPaidAmount || null,
+      };
+    })();
+
     const p: any = {
       type: "sale",
       name: form.fullName,
@@ -221,14 +461,57 @@ export function CloseSaleForm({
       bonuses: form.bonuses || [],
       closer,
       payment: {
-        mode: form.paymentMode,
-        amount: form.paymentAmount,
-        hasReserve: !!form.paymentHasReserve,
-        reserveAmount: form.paymentHasReserve
-          ? form.paymentReserveAmount || null
-          : null,
+        // Nuevo: array de configuraciones por tipo (para ordenar y soportar múltiples ejemplos)
+        plans: [planEntry],
+
+        // Compatibilidad: mantenemos los campos previos (el backend puede migrar cuando quiera)
+        plan_type: planType,
+        mode: computedPaymentMode,
+        amount: computedTotalCommitted,
+        paid_amount: computedPaidAmount || null,
+        installments:
+          planType === "cuotas"
+            ? {
+                count: installmentsCount,
+                amount: installmentAmount || null,
+                period_days: 30,
+                next_due_date:
+                  form.paymentSecondInstallmentDate || isoPlusDays(30),
+              }
+            : null,
+        exception_2_installments:
+          planType === "excepcion_2_cuotas"
+            ? {
+                first_amount: form.paymentFirstInstallmentAmount || null,
+                second_amount: form.paymentSecondInstallmentAmount || null,
+                second_due_date: form.paymentSecondInstallmentDate || null,
+                notes: form.paymentExceptionNotes || null,
+              }
+            : null,
+        reserve:
+          planType === "reserva"
+            ? {
+                amount: form.paymentReserveAmount || null,
+                paid_date: form.reservePaidDate || null,
+                remaining_due_date: form.reserveRemainingDueDate || null,
+                notes: form.reserveNotes || null,
+              }
+            : null,
+        attachments: Array.isArray(form.paymentAttachments)
+          ? form.paymentAttachments
+          : [],
+        hasReserve: planType === "reserva" || !!form.paymentHasReserve,
+        reserveAmount:
+          planType === "reserva" || form.paymentHasReserve
+            ? form.paymentReserveAmount || null
+            : null,
         platform: form.paymentPlatform,
-        nextChargeDate: form.nextChargeDate || null,
+        nextChargeDate:
+          planType === "excepcion_2_cuotas"
+            ? form.paymentSecondInstallmentDate || null
+            : planType === "cuotas"
+            ? form.paymentSecondInstallmentDate || isoPlusDays(30)
+            : form.nextChargeDate || null,
       },
       contract: {
         thirdParty: !!form.contractThirdParty,
@@ -269,8 +552,16 @@ export function CloseSaleForm({
     return p;
   };
 
+  useEffect(() => {
+    try {
+      onSalePayloadChange?.(buildSalePayload(true));
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(form), paymentProof?.dataUrl]);
+
   // Autosave: persistir cambios en modo edición sin recargar
   useEffect(() => {
+    if (persistMode === "local") return; // Skip autosave in local mode
     if (!autoSave) return;
     if (mode !== "edit") return;
     const handle = setTimeout(async () => {
@@ -309,11 +600,37 @@ export function CloseSaleForm({
         fullName: initial?.fullName ?? prev.fullName,
         email: initial?.email ?? prev.email,
         phone: initial?.phone ?? prev.phone,
-        // Programa siempre fijo a la oferta actual
-        program: STATIC_PROGRAM,
+        program: initial?.program ?? prev.program,
         bonuses: (initial?.bonuses as string[] | undefined) ?? prev.bonuses,
         paymentMode: initial?.paymentMode ?? prev.paymentMode,
         paymentAmount: initial?.paymentAmount ?? prev.paymentAmount,
+        paymentPaidAmount:
+          (initial as any)?.paymentPaidAmount ?? prev.paymentPaidAmount,
+        paymentPlanType:
+          (initial as any)?.paymentPlanType ?? prev.paymentPlanType,
+        paymentInstallmentsCount:
+          (initial as any)?.paymentInstallmentsCount ?? prev.paymentInstallmentsCount,
+        paymentInstallmentAmount:
+          (initial as any)?.paymentInstallmentAmount ?? prev.paymentInstallmentAmount,
+        paymentFirstInstallmentAmount:
+          (initial as any)?.paymentFirstInstallmentAmount ??
+          prev.paymentFirstInstallmentAmount,
+        paymentSecondInstallmentAmount:
+          (initial as any)?.paymentSecondInstallmentAmount ??
+          prev.paymentSecondInstallmentAmount,
+        paymentSecondInstallmentDate:
+          (initial as any)?.paymentSecondInstallmentDate ??
+          prev.paymentSecondInstallmentDate,
+        paymentExceptionNotes:
+          (initial as any)?.paymentExceptionNotes ?? prev.paymentExceptionNotes,
+        reservePaidDate:
+          (initial as any)?.reservePaidDate ?? prev.reservePaidDate,
+        reserveRemainingDueDate:
+          (initial as any)?.reserveRemainingDueDate ?? prev.reserveRemainingDueDate,
+        reserveNotes: (initial as any)?.reserveNotes ?? prev.reserveNotes,
+        paymentAttachments: Array.isArray((initial as any)?.paymentAttachments)
+          ? ((initial as any).paymentAttachments as any)
+          : prev.paymentAttachments,
         paymentHasReserve:
           (initial as any)?.paymentHasReserve ?? prev.paymentHasReserve,
         paymentReserveAmount:
@@ -355,6 +672,15 @@ export function CloseSaleForm({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (persistMode === "local") {
+      toast({
+        title: "Listo para guardar",
+        description: "Estos cambios se guardan al presionar “Guardar cambios”.",
+      });
+      return; // Prevent submission in local mode
+    }
+
     setSubmitting(true);
     try {
       if (mode === "edit" && (recordId || leadCodigo)) {
@@ -494,7 +820,8 @@ export function CloseSaleForm({
   // Paleta más neutra: remove azul y usa slate/neutral para inputs
   const inputAccent =
     "border-slate-300 focus-visible:ring-slate-200 focus-visible:border-slate-400";
-  const selectAccent = "focus-visible:ring-slate-200";
+  const selectAccent =
+    "bg-white border-slate-300 focus-visible:ring-slate-200 focus-visible:border-slate-400";
   const PAYMENT_MODE_OPTIONS = [
     { value: "pago_total", label: "Pago total" },
     { value: "2_cuotas", label: "2 cuotas" },
@@ -543,7 +870,7 @@ export function CloseSaleForm({
           <TabsContent value="datos" className="m-0">
             <Card className="p-4 border-indigo-100">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="space-y-1.5">
                   <Label>Nombre completo *</Label>
                   <Input
                     className={inputAccent}
@@ -554,7 +881,7 @@ export function CloseSaleForm({
                     required
                   />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label>Correo *</Label>
                   <Input
                     type="email"
@@ -566,7 +893,7 @@ export function CloseSaleForm({
                     required
                   />
                 </div>
-                <div>
+                <div className="space-y-1.5">
                   <Label>Teléfono *</Label>
                   <Input
                     className={inputAccent}
@@ -577,16 +904,103 @@ export function CloseSaleForm({
                     required
                   />
                 </div>
-                <div>
-                  <Label>Programa (fijo)</Label>
-                  <Input
-                    className={inputAccent}
-                    value={form.program}
-                    readOnly
-                  />
-                  <p className="text-xs text-slate-600 mt-1">
-                    Este programa es estático: Hotselling Lite
-                  </p>
+                <div className="space-y-1.5">
+                  <Label>Producto *</Label>
+                  {PRODUCT_OPTIONS.some((o) => o.value === form.program) ? (
+                    <Select
+                      value={form.program}
+                      onValueChange={(v) => setForm({ ...form, program: v })}
+                    >
+                      <SelectTrigger className={`w-full ${selectAccent}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PRODUCT_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <>
+                      <Input
+                        className={inputAccent}
+                        value={form.program}
+                        readOnly
+                      />
+                      <div className="mt-1 flex items-center justify-between gap-2">
+                        <p className="text-xs text-slate-600">
+                          Producto heredado del lead.
+                        </p>
+                        <Dialog
+                          open={productConfigOpen}
+                          onOpenChange={(open) => {
+                            setProductConfigOpen(open);
+                            if (open) setProductConfigValue(String(form.program || STATIC_PROGRAM));
+                          }}
+                        >
+                          <DialogTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setProductConfigOpen(true)}
+                            >
+                              Configurar
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-lg">
+                            <DialogHeader>
+                              <DialogTitle>Configurar producto</DialogTitle>
+                            </DialogHeader>
+                            <div className="space-y-3">
+                              <div className="text-sm text-slate-700">
+                                Selecciona el producto estándar para aplicar precios preconfigurados.
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label>Producto</Label>
+                                <Select
+                                  value={productConfigValue}
+                                  onValueChange={(v) => setProductConfigValue(v)}
+                                >
+                                  <SelectTrigger className={`w-full ${selectAccent}`}>
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {PRODUCT_OPTIONS.map((opt) => (
+                                      <SelectItem key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={() => setProductConfigOpen(false)}
+                                >
+                                  Cancelar
+                                </Button>
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    setForm({ ...form, program: productConfigValue });
+                                    setProductConfigOpen(false);
+                                  }}
+                                >
+                                  Aplicar
+                                </Button>
+                              </div>
+                            </div>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </Card>
@@ -742,153 +1156,497 @@ export function CloseSaleForm({
 
           <TabsContent value="pago" className="m-0">
             <Card className="p-4 border-indigo-100">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label>Modalidad de pago *</Label>
-                  <Select
-                    value={form.paymentMode}
-                    onValueChange={(v) => setForm({ ...form, paymentMode: v })}
-                  >
-                    <SelectTrigger className={`w-full ${selectAccent}`}>
-                      <SelectValue placeholder="Selecciona…" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_MODE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Monto de pago (USD) *</Label>
-                  <Input
-                    placeholder="$"
-                    className={inputAccent}
-                    value={form.paymentAmount}
-                    onChange={(e) =>
-                      setForm({ ...form, paymentAmount: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div>
-                  <Label>Plataforma de pago *</Label>
-                  <Select
-                    value={form.paymentPlatform}
-                    onValueChange={(v) =>
-                      setForm({
-                        ...form,
-                        paymentPlatform: v as PaymentPlatform,
-                      })
-                    }
-                  >
-                    <SelectTrigger className={`w-full ${selectAccent}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PAYMENT_PLATFORM_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="md:col-span-3">
-                  <Label>Fecha prevista de cobro futuro</Label>
-                  <Input
-                    type="date"
-                    className={inputAccent}
-                    value={form.nextChargeDate || ""}
-                    onChange={(e) =>
-                      setForm({ ...form, nextChargeDate: e.target.value })
-                    }
-                  />
-                </div>
+              {(() => {
+                const programKey = inferProgramKey(form.program);
+                const pricing =
+                  programKey === "PRO"
+                    ? PRICING.PRO
+                    : programKey === "FOUNDATION"
+                    ? PRICING.FOUNDATION
+                    : null;
 
-                <div className="md:col-span-3">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={!!form.paymentHasReserve}
-                      onCheckedChange={(v) => {
-                        const checked = v === true;
-                        setForm({
-                          ...form,
-                          paymentHasReserve: checked,
-                          paymentReserveAmount: checked
-                            ? form.paymentReserveAmount
-                            : "",
-                        });
-                      }}
-                      id="paymentHasReserve"
-                    />
-                    <Label htmlFor="paymentHasReserve">
-                      ¿Pago con reserva?
-                    </Label>
-                  </div>
-                  {form.paymentHasReserve ? (
-                    <div className="mt-2 max-w-xs">
-                      <Label>Monto de reserva (USD)</Label>
-                      <Input
-                        placeholder="$"
-                        className={inputAccent}
-                        value={form.paymentReserveAmount || ""}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            paymentReserveAmount: e.target.value,
-                          })
-                        }
-                      />
+                const plan = (form.paymentPlanType || "contado") as PaymentPlanType;
+                const stdInstallments = pricing?.discount.installments;
+                const stdCash = pricing?.discount.cashTotal;
+
+                const stdPlanLabel =
+                  programKey === "PRO"
+                    ? "PRO"
+                    : programKey === "FOUNDATION"
+                    ? "FOUNDATION"
+                    : "—";
+
+                const stdQuotaCount = stdInstallments?.count ?? 0;
+                const stdQuotaAmount = stdInstallments?.amount ?? 0;
+
+                return (
+                  <div className="space-y-4">
+                    <div className="rounded-md border border-slate-200 bg-white p-3 text-sm">
+                      <div className="font-semibold">Precios preconfigurados ({stdPlanLabel})</div>
+                      {pricing ? (
+                        <div className="mt-2 grid grid-cols-1 gap-1 text-slate-700">
+                          <div>
+                            <span className="text-slate-500">Precio lista:</span>{" "}
+                            USD {pricing.list.total.toLocaleString("en-US")}
+                            {" "}· {pricing.list.installments.count} cuotas de USD {pricing.list.installments.amount.toLocaleString("en-US")}
+                          </div>
+                          <div>
+                            <span className="text-slate-500">Descuento estándar:</span>{" "}
+                            Contado USD {pricing.discount.cashTotal.toLocaleString("en-US")} · {pricing.discount.installments.count} cuotas de USD {pricing.discount.installments.amount.toLocaleString("en-US")} (cada 30 días)
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-slate-600">Producto no reconocido para precios estándar.</div>
+                      )}
                     </div>
-                  ) : null}
-                </div>
 
-                <div className="md:col-span-3">
-                  <Label>Comprobante de pago (imagen)</Label>
-                  <Input
-                    type="file"
-                    accept="image/*"
-                    className={inputAccent}
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return setPaymentProof(null);
-                      const reader = new FileReader();
-                      reader.onload = () => {
-                        setPaymentProof({
-                          file,
-                          dataUrl: String(reader.result || ""),
-                          name: file.name,
-                          type: file.type,
-                          size: file.size,
-                        });
-                      };
-                      reader.readAsDataURL(file);
-                    }}
-                  />
-                  {paymentProof?.dataUrl ? (
-                    <div className="mt-2 space-y-2">
-                      <img
-                        src={paymentProof.dataUrl}
-                        alt="Comprobante"
-                        className="max-h-40 rounded border"
-                      />
-                      <div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setPaymentProof(null)}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>Tipo de pago *</Label>
+                        <Select
+                          value={plan}
+                          onValueChange={(v) => {
+                            const nextPlan = v as PaymentPlanType;
+                            // Preconfigurar valores estándar
+                            if (nextPlan === "contado" && stdCash) {
+                              setForm({
+                                ...form,
+                                paymentPlanType: nextPlan,
+                                paymentMode: "pago_total",
+                                paymentAmount: String(stdCash),
+                                paymentPaidAmount: String(stdCash),
+                              });
+                              return;
+                            }
+                            if (nextPlan === "cuotas" && stdInstallments) {
+                              const total = stdInstallments.count * stdInstallments.amount;
+                              setForm({
+                                ...form,
+                                paymentPlanType: nextPlan,
+                                paymentMode: `${stdInstallments.count}_cuotas`,
+                                paymentInstallmentsCount: stdInstallments.count,
+                                paymentInstallmentAmount: String(stdInstallments.amount),
+                                paymentAmount: String(total),
+                                paymentPaidAmount: "",
+                                paymentSecondInstallmentDate: isoPlusDays(30),
+                              });
+                              return;
+                            }
+                            if (nextPlan === "excepcion_2_cuotas") {
+                              setForm({
+                                ...form,
+                                paymentPlanType: nextPlan,
+                                paymentMode: "excepcion_2_cuotas",
+                                paymentFirstInstallmentAmount: "1995",
+                                paymentSecondInstallmentAmount: "",
+                                paymentSecondInstallmentDate: isoPlusDays(30),
+                                paymentExceptionNotes: "",
+                              });
+                              return;
+                            }
+                            // reserva
+                            setForm({
+                              ...form,
+                              paymentPlanType: nextPlan,
+                              paymentMode: "reserva",
+                              paymentHasReserve: true,
+                              paymentReserveAmount: form.paymentReserveAmount || "",
+                              reservePaidDate: form.reservePaidDate || isoPlusDays(0),
+                              reserveRemainingDueDate: form.reserveRemainingDueDate || "",
+                              reserveNotes: form.reserveNotes || "",
+                              paymentPaidAmount: form.paymentPaidAmount || "",
+                            });
+                          }}
                         >
-                          Quitar comprobante
-                        </Button>
+                          <SelectTrigger className={`w-full ${selectAccent}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="contado">Venta al contado</SelectItem>
+                            <SelectItem value="cuotas">Venta en cuotas (estándar)</SelectItem>
+                            <SelectItem value="excepcion_2_cuotas">Excepción: 2 cuotas personalizadas</SelectItem>
+                            <SelectItem value="reserva">Reserva</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Monto total comprometido (USD) *</Label>
+                        <Input
+                          placeholder="$"
+                          className={inputAccent}
+                          value={form.paymentAmount}
+                          onChange={(e) =>
+                            setForm({ ...form, paymentAmount: e.target.value })
+                          }
+                          required
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Monto efectivamente pagado (USD)</Label>
+                        <Input
+                          placeholder="$"
+                          className={inputAccent}
+                          value={form.paymentPaidAmount || ""}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              paymentPaidAmount: e.target.value,
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Plataforma de pago *</Label>
+                        <Select
+                          value={form.paymentPlatform}
+                          onValueChange={(v) =>
+                            setForm({
+                              ...form,
+                              paymentPlatform: v as PaymentPlatform,
+                            })
+                          }
+                        >
+                          <SelectTrigger className={`w-full ${selectAccent}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_PLATFORM_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="md:col-span-2 space-y-1.5">
+                        <Label>Fecha prevista del siguiente pago</Label>
+                        <Input
+                          type="date"
+                          className={inputAccent}
+                          value={form.paymentSecondInstallmentDate || form.nextChargeDate || ""}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              paymentSecondInstallmentDate: e.target.value,
+                              nextChargeDate: e.target.value,
+                            })
+                          }
+                        />
                       </div>
                     </div>
-                  ) : null}
-                </div>
-              </div>
+
+                    {plan === "cuotas" ? (
+                      <div className="rounded-md border border-slate-200 bg-white p-3 text-sm">
+                        <div className="font-semibold">Cuotas estándar</div>
+                        <div className="mt-1 text-xs text-slate-600">
+                          En “Cuotas estándar” el número de cuotas y el monto por cuota son fijos según el
+                          producto (plan preconfigurado). Si necesitas cambiar cuotas o montos, usa
+                          “Excepción: 2 cuotas personalizadas”.
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-1.5">
+                            <Label>Número de cuotas</Label>
+                            <Input
+                              className={inputAccent}
+                              value={String(form.paymentInstallmentsCount ?? stdQuotaCount)}
+                              readOnly
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Monto por cuota (USD)</Label>
+                            <Input
+                              className={inputAccent}
+                              value={String(form.paymentInstallmentAmount ?? stdQuotaAmount)}
+                              readOnly
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Periodicidad</Label>
+                            <Input className={inputAccent} value="Cada 30 días" readOnly />
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {plan === "excepcion_2_cuotas" ? (
+                      <div className="rounded-md border border-slate-200 bg-white p-3 text-sm space-y-3">
+                        <div className="font-semibold">Excepción: 2 cuotas personalizadas</div>
+                        <div className="text-xs text-slate-600">
+                          Condiciones: máximo 2 cuotas · 2da cuota dentro de 30 días · 1ra cuota mínimo 50% del valor con descuento (mínimo USD 1,995).
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-1.5">
+                            <Label>Monto primera cuota (USD) *</Label>
+                            <Input
+                              placeholder="$"
+                              className={inputAccent}
+                              value={form.paymentFirstInstallmentAmount || ""}
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  paymentFirstInstallmentAmount: e.target.value,
+                                  paymentPaidAmount: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Monto segunda cuota (USD) *</Label>
+                            <Input
+                              placeholder="$"
+                              className={inputAccent}
+                              value={form.paymentSecondInstallmentAmount || ""}
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  paymentSecondInstallmentAmount: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Fecha pago 2da cuota *</Label>
+                            <Input
+                              type="date"
+                              className={inputAccent}
+                              value={form.paymentSecondInstallmentDate || ""}
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  paymentSecondInstallmentDate: e.target.value,
+                                  nextChargeDate: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Observaciones (justificación) *</Label>
+                          <Textarea
+                            className={inputAccent}
+                            value={form.paymentExceptionNotes || ""}
+                            onChange={(e) =>
+                              setForm({
+                                ...form,
+                                paymentExceptionNotes: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {plan === "reserva" ? (
+                      <div className="rounded-md border border-slate-200 bg-white p-3 text-sm space-y-3">
+                        <div className="font-semibold">Reserva</div>
+                        <div className="text-xs text-slate-600">
+                          Sugerencias de mínimo: USD 300 / USD 500 (editable). La fecha del restante debe definirse lo antes posible.
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-1.5">
+                            <Label>Monto de reserva (USD) *</Label>
+                            <Input
+                              placeholder="$"
+                              className={inputAccent}
+                              value={form.paymentReserveAmount || ""}
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  paymentReserveAmount: e.target.value,
+                                  paymentHasReserve: true,
+                                  paymentPaidAmount: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Fecha de reserva</Label>
+                            <Input
+                              type="date"
+                              className={inputAccent}
+                              value={form.reservePaidDate || ""}
+                              onChange={(e) =>
+                                setForm({ ...form, reservePaidDate: e.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Fecha pago del restante</Label>
+                            <Input
+                              type="date"
+                              className={inputAccent}
+                              value={form.reserveRemainingDueDate || ""}
+                              onChange={(e) =>
+                                setForm({
+                                  ...form,
+                                  reserveRemainingDueDate: e.target.value,
+                                  nextChargeDate: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Observaciones</Label>
+                          <Textarea
+                            className={inputAccent}
+                            value={form.reserveNotes || ""}
+                            onChange={(e) =>
+                              setForm({ ...form, reserveNotes: e.target.value })
+                            }
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="rounded-md border border-slate-200 bg-white p-3 text-sm space-y-3">
+                      <div className="font-semibold">Comprobantes y adjuntos</div>
+                      <div className="space-y-1.5">
+                        <Label>Adjuntar comprobantes (PDF / imágenes)</Label>
+                        <Input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          multiple
+                          className={inputAccent}
+                          onChange={async (e) => {
+                            const files = e.target.files;
+                            if (!files || files.length === 0) return;
+                            const created_at = new Date().toISOString();
+                            const existing = Array.isArray(form.paymentAttachments)
+                              ? form.paymentAttachments
+                              : [];
+                            const nextItems: any[] = [];
+                            for (const file of Array.from(files)) {
+                              const dataUrl = await fileToDataUrl(file);
+                              nextItems.push({
+                                id:
+                                  (crypto as any)?.randomUUID?.() ||
+                                  `att-${Date.now()}-${file.name}`,
+                                name: file.name,
+                                type: file.type,
+                                size: file.size,
+                                dataUrl,
+                                created_at,
+                              });
+                            }
+                            setForm({
+                              ...form,
+                              paymentAttachments: [...existing, ...nextItems],
+                            });
+                          }}
+                        />
+                        {Array.isArray(form.paymentAttachments) &&
+                        form.paymentAttachments.length ? (
+                          <div className="mt-2 space-y-2">
+                            {form.paymentAttachments.map((a) => (
+                              <div
+                                key={a.id}
+                                className="flex items-center justify-between gap-2 rounded-md border border-slate-200 px-2 py-1"
+                              >
+                                <div className="min-w-0">
+                                  <div className="truncate text-xs text-slate-900">
+                                    {a.name || "archivo"}
+                                  </div>
+                                  <div className="text-[11px] text-slate-600">
+                                    {a.type || ""}{" "}
+                                    {a.size ? `· ${Math.round(a.size / 1024)} KB` : ""}
+                                  </div>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setForm({
+                                      ...form,
+                                      paymentAttachments: (Array.isArray(
+                                        form.paymentAttachments
+                                      )
+                                        ? form.paymentAttachments
+                                        : [])
+                                        .filter((x) => x.id !== a.id),
+                                    });
+                                  }}
+                                >
+                                  Quitar
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-xs text-slate-600">
+                            Sin adjuntos.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Comprobante principal (imagen)</Label>
+                        <div className="text-xs text-slate-600 mb-2">
+                          Se guarda como base64 en el snapshot.
+                        </div>
+                        <Input
+                          type="file"
+                          accept="image/*"
+                          className={inputAccent}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) {
+                              setPaymentProof(null);
+                              onPaymentProofChange?.(null);
+                              return;
+                            }
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              const next = {
+                                file,
+                                dataUrl: String(reader.result || ""),
+                                name: file.name,
+                                type: file.type,
+                                size: file.size,
+                              };
+                              setPaymentProof(next);
+                              onPaymentProofChange?.({
+                                dataUrl: next.dataUrl,
+                                name: next.name,
+                                type: next.type,
+                                size: next.size,
+                              });
+                            };
+                            reader.readAsDataURL(file);
+                          }}
+                        />
+                        {paymentProof?.dataUrl ? (
+                          <div className="mt-2 space-y-2">
+                            <img
+                              src={paymentProof.dataUrl}
+                              alt="Comprobante"
+                              className="max-h-40 rounded border"
+                            />
+                            <div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setPaymentProof(null);
+                                  onPaymentProofChange?.(null);
+                                }}
+                              >
+                                Quitar comprobante
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </Card>
           </TabsContent>
 
@@ -1194,11 +1952,13 @@ export function CloseSaleForm({
         </div>
       </Tabs>
 
-      <div className="flex justify-end">
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Guardando..." : submitLabel}
-        </Button>
-      </div>
+      {persistMode === "api" ? (
+        <div className="flex justify-end">
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Guardando..." : submitLabel}
+          </Button>
+        </div>
+      ) : null}
     </form>
   );
 }

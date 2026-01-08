@@ -50,6 +50,9 @@ export function BookingForm({
     textMessages: "",
   });
   const [submitting, setSubmitting] = useState(false);
+  const [submitPhase, setSubmitPhase] = useState<
+    null | "creating" | "finalizing"
+  >(null);
   const { toast } = useToast();
 
   const [campaignName, setCampaignName] = useState<string | null>(null);
@@ -72,7 +75,6 @@ export function BookingForm({
 
     (async () => {
       try {
-        const origins = await listLeadOrigins();
         const origin = Array.isArray(origins)
           ? origins.find(
               (o: any) => String(o?.event_codigo || "").trim() === eventCodigo
@@ -197,6 +199,7 @@ export function BookingForm({
     }
     if (!selectedDate || !selectedTime) return;
     setSubmitting(true);
+    setSubmitPhase("creating");
     const digits = (formData.whatsappNumber || "").replace(/\D+/g, "");
     const cc = (countryCode || "+").replace(/[^+\d]/g, "");
     const phone = digits.startsWith(cc.replace("+", ""))
@@ -219,6 +222,16 @@ export function BookingForm({
         ? parsedBudget
         : null;
 
+      // Para que el lead quede con los datos iniciales (no solo el "form"),
+      // enviamos también los campos con los nombres de columnas del lead.
+      const leadSelectedDateIso = (() => {
+        try {
+          return new Date(`${fecha}T00:00:00.000Z`).toISOString();
+        } catch {
+          return `${fecha}T00:00:00.000Z`;
+        }
+      })();
+
       const body = {
         origen: campaignOrigenCodigo || undefined,
         event_codigo: eventCodigo,
@@ -238,16 +251,34 @@ export function BookingForm({
             .trim()
             .toUpperCase() === "CONFIRMADO",
         enviar_mensajes: Boolean(String(formData.textMessages || "").trim()),
+
+        // Duplicados para el lead (best-effort: el backend puede ignorarlos si no aplica)
+        instagram_user: String(formData.instagramUser || "").trim() || null,
+        monthly_budget: meta_facturacion,
+        main_obstacle: String(formData.mainObstacle || "").trim() || null,
+        commitment: String(formData.commitment) === "yes" ? 1 : 0,
+        invite_others: String(formData.inviteOthers) === "yes" ? 1 : 0,
+        confirmado: 
+          String(formData.confirmado || "").trim().toUpperCase() === "CONFIRMADO" ? 1 : 0,
+        text_messages: String(formData.textMessages || "").trim() || null,
+        selected_date: leadSelectedDateIso,
+        selected_time: String(selectedTime),
+        origin_codigo: campaignOrigenCodigo || null,
+        country_code: (countryCode || "").trim() || null,
+        timezone: (timezone || "").trim() || null,
       };
 
-      console.log("POST /v1/leads/form ->", body);
-
       const saved = await createLeadFromForm(body);
+      setSubmitPhase("finalizing");
+
+      const leadCodigo =
+        (saved as any)?.lead?.codigo ||
+        (saved as any)?.form?.lead_codigo ||
+        (saved as any)?.lead_codigo ||
+        undefined;
       toast({
         title: "Registro creado",
-        description: `OK${
-          (saved as any)?.id ? ` · ID: ${String((saved as any).id)}` : ""
-        }`,
+        description: `OK${leadCodigo ? ` · Lead: ${String(leadCodigo)}` : ""}`,
       });
       // Opcional: reset y volver a calendario
       setFormData({
@@ -273,6 +304,7 @@ export function BookingForm({
       });
     } finally {
       setSubmitting(false);
+      setSubmitPhase(null);
     }
   };
 
@@ -744,7 +776,11 @@ export function BookingForm({
                   disabled={submitting}
                   className="w-full bg-blue-600 hover:bg-blue-700 h-11 text-base font-semibold shadow-sm"
                 >
-                  {submitting ? "Enviando..." : "Programar evento"}
+                  {submitting
+                    ? submitPhase === "finalizing"
+                      ? "Finalizando..."
+                      : "Creando..."
+                    : "Programar evento"}
                 </Button>
                 <p className="text-xs text-center text-gray-500">
                   Será redirigido a un sitio externo.

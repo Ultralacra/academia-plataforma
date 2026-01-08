@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
 import { Copy } from "lucide-react";
+import { getPublicAppOrigin } from "@/lib/public-app-origin";
 
 type EditorMode = "create" | "edit";
 
@@ -315,11 +316,7 @@ export function EventsOriginsManager() {
                             ).trim();
                             const code = eventCodigoRow || fallbackCodigo;
                             if (!code) return;
-                            const origin =
-                              typeof window !== "undefined" &&
-                              window.location?.origin
-                                ? window.location.origin
-                                : "http://localhost:3000";
+                            const origin = getPublicAppOrigin();
                             const url = `${origin}/booking/${encodeURIComponent(
                               code
                             )}`;

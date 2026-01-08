@@ -102,6 +102,27 @@ export async function apiFetch<T = unknown>(
       }
     }
     const text = await res.text().catch(() => "");
+    // Muchos endpoints devuelven JSON de error (p.ej. {code,status,message}).
+    // Si es parseable, mostramos un mensaje más humano.
+    try {
+      const parsed = text ? JSON.parse(text) : null;
+      if (parsed && typeof parsed === "object") {
+        const msg =
+          (parsed as any)?.message ||
+          (parsed as any)?.error ||
+          (parsed as any)?.details?.message;
+        if (msg && String(msg).trim()) {
+          throw new Error(String(msg));
+        }
+      }
+    } catch (e) {
+      // Si JSON.parse falla, seguimos con el texto tal cual.
+      // Si el throw fue el "Error(msg)", lo re-lanzamos.
+      if (e instanceof Error && e.message && e.message !== "Unexpected end of JSON input") {
+        throw e;
+      }
+    }
+
     throw new Error(text || `HTTP ${res.status} on ${path}`);
   }
   if (res.status === 204) return undefined as T;

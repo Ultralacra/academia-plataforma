@@ -5,13 +5,11 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import {
   createLeadSnapshot,
   getLead,
-  updateLead,
-  updateLeadPatch,
 } from "@/app/admin/crm/api";
 import {
   CloseSaleForm,
   type CloseSaleInput,
-} from "@/app/admin/crm/components/CloseSaleForm2";
+} from "../../components/CloseSaleForm2";
 import { CallFlowManager } from "@/app/admin/crm/components/CallFlowManager";
 import {
   Card,
@@ -24,6 +22,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -55,10 +60,443 @@ function Content({ id }: { id: string }) {
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
     null
   );
+  const [saleDraftPayload, setSaleDraftPayload] = React.useState<any | null>(
+    null
+  );
+  const [paymentProof, setPaymentProof] = React.useState<
+    | {
+        dataUrl: string;
+        name?: string;
+        type?: string;
+        size?: number;
+      }
+    | null
+  >(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
-  const [stageSaving, setStageSaving] = React.useState(false);
-  const [dispositionSaving, setDispositionSaving] = React.useState(false);
   const [snapshotSaving, setSnapshotSaving] = React.useState(false);
+
+  const truncateDataUrlTwoLines = React.useCallback((value: string) => {
+    const s = String(value || "");
+    if (!s.startsWith("data:")) return s;
+    if (s.length <= 180) return s;
+    const line1 = s.slice(0, 90);
+    const line2 = s.slice(90, 180);
+    return `${line1}\n${line2}…(truncado)`;
+  }, []);
+
+  const stringifyForBackendExample = React.useCallback(
+    (obj: any) =>
+      JSON.stringify(
+        obj,
+        (_k, v) => {
+          if (typeof v === "string" && v.startsWith("data:")) {
+            return truncateDataUrlTwoLines(v);
+          }
+          return v;
+        },
+        2
+      ),
+    [truncateDataUrlTwoLines]
+  );
+
+  const sanitizeForBackendExample = React.useCallback(
+    (obj: any) => {
+      try {
+        return JSON.parse(stringifyForBackendExample(obj));
+      } catch {
+        return obj;
+      }
+    },
+    [stringifyForBackendExample]
+  );
+
+  const buildSnapshotBodyForConsole = () => {
+    if (!record) return null;
+    const ctx = buildSnapshotContext();
+    if (!ctx) return null;
+
+    const capturedAt = new Date().toISOString();
+    const patch = draftToLeadPatch(draft);
+    const snapshotPayloadCurrentBase = {
+      ...(leadForUi || record),
+      ...(patch || {}),
+      ...(saleDraftPayload ? { sale: saleDraftPayload } : {}),
+      ...(paymentProof
+        ? {
+            payment_proof: {
+              dataUrl: paymentProof.dataUrl,
+              name: paymentProof.name,
+              type: paymentProof.type,
+              size: paymentProof.size,
+            },
+          }
+        : {}),
+    };
+
+    // Completar con data de prueba (solo para consola) si faltan campos clave.
+    const mkDataUrl = (mime: string) =>
+      `data:${mime};base64,` +
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    const nextPayloadCurrent = { ...snapshotPayloadCurrentBase } as any;
+    const sale = (nextPayloadCurrent.sale || {}) as any;
+    sale.payment = sale.payment || {};
+    sale.payment.plans = Array.isArray(sale.payment.plans)
+      ? sale.payment.plans
+      : [];
+
+    if (!sale.payment.proof) {
+      sale.payment.proof = {
+        name: "comprobante.png",
+        type: "image/png",
+        size: 123456,
+        dataUrl: mkDataUrl("image/png"),
+      };
+    }
+
+    if (!Array.isArray(sale.payment.attachments) || sale.payment.attachments.length === 0) {
+      sale.payment.attachments = [
+        {
+          id: "att-test-1",
+          name: "ticket.pdf",
+          type: "application/pdf",
+          size: 45678,
+          dataUrl: mkDataUrl("application/pdf"),
+          created_at: new Date().toISOString(),
+        },
+      ];
+    }
+
+    // Si no hay plan en el array, generar uno mínimo acorde a plan_type/mode.
+    if (!sale.payment.plans.length) {
+      const planType = String(sale.payment.plan_type || "").toLowerCase();
+      if (planType === "cuotas") {
+        sale.payment.plans = [
+          {
+            type: "cuotas",
+            installments: {
+              count: sale.payment.installments?.count ?? 3,
+              amount: sale.payment.installments?.amount ?? "1600",
+              period_days: 30,
+              next_due_date:
+                sale.payment.installments?.next_due_date ?? "2026-02-08",
+            },
+            total: sale.payment.amount ?? null,
+            paid_amount: sale.payment.paid_amount ?? null,
+          },
+        ];
+      } else if (planType === "excepcion_2_cuotas") {
+        sale.payment.plans = [
+          {
+            type: "excepcion_2_cuotas",
+            first_amount:
+              sale.payment.exception_2_installments?.first_amount ?? 1995,
+            second_amount:
+              sale.payment.exception_2_installments?.second_amount ?? 1995,
+            second_due_date:
+              sale.payment.exception_2_installments?.second_due_date ??
+              "2026-02-08",
+            notes:
+              sale.payment.exception_2_installments?.notes ??
+              "Justificación (test)",
+            total: sale.payment.amount ?? 3990,
+            paid_amount: sale.payment.paid_amount ?? 1995,
+          },
+        ];
+      } else if (planType === "reserva") {
+        sale.payment.plans = [
+          {
+            type: "reserva",
+            reserve: {
+              amount: sale.payment.reserve?.amount ?? 500,
+              paid_date: sale.payment.reserve?.paid_date ?? "2026-01-08",
+              remaining_due_date:
+                sale.payment.reserve?.remaining_due_date ?? "2026-01-20",
+              notes: sale.payment.reserve?.notes ?? "Reserva (test)",
+            },
+            total: sale.payment.amount ?? null,
+            paid_amount: sale.payment.paid_amount ?? 500,
+          },
+        ];
+      } else {
+        sale.payment.plans = [
+          {
+            type: "contado",
+            total: sale.payment.amount ?? 3990,
+            paid_amount: sale.payment.paid_amount ?? 3990,
+          },
+        ];
+      }
+    }
+
+    nextPayloadCurrent.sale = sale;
+
+    const snapshot = {
+      schema_version: 1 as const,
+      captured_at: capturedAt,
+      captured_by: {
+        id: (user as any)?.id ?? null,
+        name: (user as any)?.name ?? null,
+        email: (user as any)?.email ?? null,
+        role: (user as any)?.role ?? null,
+      },
+      source: {
+        record_id: ctx.recordId,
+        entity: ctx.entity,
+        entity_id: ctx.entityId,
+      },
+      route: {
+        pathname:
+          typeof window !== "undefined" ? window.location?.pathname : undefined,
+        url: typeof window !== "undefined" ? window.location?.href : undefined,
+        user_agent:
+          typeof navigator !== "undefined" ? navigator.userAgent : undefined,
+      },
+      record: {
+        id: ctx.recordId,
+        entity: ctx.entity,
+        entity_id: ctx.entityId,
+        created_at: (record as any)?.created_at ?? undefined,
+        updated_at: (record as any)?.updated_at ?? undefined,
+      },
+      payload_current: nextPayloadCurrent,
+      computed: {
+        lead: {
+          status: ctx.leadStatus,
+          stage_label: ctx.leadStageLabel,
+          disposition: ctx.leadDisposition,
+          disposition_label: ctx.leadDispositionLabel,
+        },
+        sale: {
+          status_raw: ctx.statusRaw,
+          status_label: ctx.statusLabel,
+          payment_mode: ctx.salePayload?.payment?.mode ?? "",
+          has_reserva: ctx.hasReserva,
+          reserve_amount_raw: String(ctx.reserveAmountRaw ?? ""),
+        },
+      },
+      options: {
+        lead_stage_options: ctx.leadStageOptions,
+        lead_disposition_options: ctx.leadDispositionOptions,
+      },
+      draft: draft ?? undefined,
+    };
+
+    return {
+      entity: "crm_lead_snapshot",
+      codigo: id,
+      entity_id: `${String(ctx.entity)}:${String(ctx.recordId)}:${capturedAt}`,
+      payload: snapshot,
+    };
+  };
+
+  const buildPaymentExamplesForConsole = () => {
+    const mkDataUrl = (mime: string) =>
+      `data:${mime};base64,` +
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
+      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    const proof =
+      paymentProof && paymentProof.dataUrl
+        ? {
+            name: paymentProof.name || "comprobante.png",
+            type: paymentProof.type || "image/png",
+            size: paymentProof.size || 123456,
+            dataUrl: paymentProof.dataUrl,
+          }
+        : {
+            name: "comprobante.png",
+            type: "image/png",
+            size: 123456,
+            dataUrl: mkDataUrl("image/png"),
+          };
+
+    const attachment = {
+      id: "att-test-1",
+      name: "ticket.pdf",
+      type: "application/pdf",
+      size: 45678,
+      dataUrl: mkDataUrl("application/pdf"),
+      created_at: new Date().toISOString(),
+    };
+
+    const program = String(
+      saleDraftPayload?.program || (leadForUi as any)?.program || (record as any)?.program || ""
+    ).trim();
+
+    return {
+      program,
+      payment_examples: [
+        {
+          type: "contado",
+          payment: {
+            platform: "hotmart",
+            proof,
+            attachments: [attachment],
+            plans: [
+              {
+                type: "contado",
+                total: 3990,
+                paid_amount: 3990,
+              },
+            ],
+          },
+        },
+        {
+          type: "cuotas",
+          payment: {
+            platform: "paypal",
+            proof,
+            attachments: [attachment],
+            plans: [
+              {
+                type: "cuotas",
+                installments: {
+                  count: 3,
+                  amount: 1600,
+                  period_days: 30,
+                  next_due_date: "2026-02-08",
+                },
+                total: 4800,
+                paid_amount: null,
+              },
+            ],
+          },
+        },
+        {
+          type: "excepcion_2_cuotas",
+          payment: {
+            platform: "binance",
+            proof,
+            attachments: [attachment],
+            plans: [
+              {
+                type: "excepcion_2_cuotas",
+                first_amount: 1995,
+                second_amount: 1995,
+                second_due_date: "2026-02-08",
+                notes: "Justificación (test)",
+                total: 3990,
+                paid_amount: 1995,
+              },
+            ],
+          },
+        },
+        {
+          type: "reserva",
+          payment: {
+            platform: "zelle",
+            proof,
+            attachments: [attachment],
+            plans: [
+              {
+                type: "reserva",
+                reserve: {
+                  amount: 500,
+                  paid_date: "2026-01-08",
+                  remaining_due_date: "2026-01-20",
+                  notes: "Reserva (test)",
+                },
+                total: 3990,
+                paid_amount: 500,
+              },
+            ],
+          },
+        },
+      ],
+    };
+  };
+
+  const buildFullSnapshotExampleForConsole = () => {
+    const base = buildSnapshotBodyForConsole();
+    if (!base) return null;
+
+    const mkPlan = (type: "contado" | "cuotas" | "excepcion_2_cuotas" | "reserva") => {
+      if (type === "contado") {
+        return { type, total: 3990, paid_amount: 3990 };
+      }
+      if (type === "cuotas") {
+        return {
+          type,
+          installments: {
+            count: 3,
+            amount: 1600,
+            period_days: 30,
+            next_due_date: "2026-02-08",
+          },
+          total: 4800,
+          paid_amount: null,
+        };
+      }
+      if (type === "excepcion_2_cuotas") {
+        return {
+          type,
+          first_amount: 1995,
+          second_amount: 1995,
+          second_due_date: "2026-02-08",
+          notes: "Justificación (test)",
+          total: 3990,
+          paid_amount: 1995,
+        };
+      }
+      return {
+        type,
+        reserve: {
+          amount: 500,
+          paid_date: "2026-01-08",
+          remaining_due_date: "2026-01-20",
+          notes: "Reserva (test)",
+        },
+        total: 3990,
+        paid_amount: 500,
+      };
+    };
+
+    const next: any = JSON.parse(JSON.stringify(base));
+    delete next.examples;
+    delete next.mock;
+
+    const pc = (next?.payload?.payload_current || {}) as any;
+    pc.call = pc.call || {
+      outcome: "no_answer",
+      result_at: "2026-01-08T15:00:00.000Z",
+      notes: "Notas de prueba",
+      reschedule: { requested: false, date: "", time: "" },
+      negotiation: { active: false, until: null },
+      reminders: [],
+    };
+
+    pc.sale = pc.sale || {};
+    pc.sale.payment = pc.sale.payment || {};
+
+    // Ejemplo: 4 tipos dentro del MISMO payment.plans.
+    // Producción enviará 1 plan (seleccionado), pero esto sirve como referencia.
+    const keep = pc.sale.payment;
+    pc.sale.payment = {
+      plan_type: keep.plan_type ?? "contado",
+      mode: keep.mode ?? "pago_total",
+      platform: keep.platform || "hotmart",
+      amount: keep.amount ?? null,
+      paid_amount: keep.paid_amount ?? null,
+      nextChargeDate: keep.nextChargeDate ?? null,
+      hasReserve: !!keep.hasReserve,
+      reserveAmount: keep.reserveAmount ?? null,
+      attachments: Array.isArray(keep.attachments) ? keep.attachments : [],
+      ...(keep.proof ? { proof: keep.proof } : {}),
+      plans: [
+        mkPlan("contado"),
+        mkPlan("cuotas"),
+        mkPlan("excepcion_2_cuotas"),
+        mkPlan("reserva"),
+      ],
+    };
+
+    next.payload.payload_current = pc;
+    return next;
+  };
 
   const applyRecordPatch = React.useCallback((patch: Record<string, any>) => {
     setRecord((prev: any | null) => {
@@ -82,7 +520,7 @@ function Content({ id }: { id: string }) {
       }
     };
 
-    const call = {
+    const callFromLead = {
       outcome: lead.call_outcome ?? null,
       result_at: lead.call_result_at ?? null,
       notes: lead.text_messages ?? null,
@@ -98,6 +536,11 @@ function Content({ id }: { id: string }) {
         until: lead.call_negotiation_until ?? null,
       },
       reminders: Array.isArray(lead.reminders) ? lead.reminders : [],
+    };
+
+    const call = {
+      ...callFromLead,
+      ...(lead?.call && typeof lead.call === "object" ? lead.call : {}),
     };
 
     const sale = {
@@ -174,51 +617,62 @@ function Content({ id }: { id: string }) {
     [id]
   );
 
-  const handlePrint = React.useCallback(() => {
-    if (!record) return;
-
-    const escapeHtml = (s: string) =>
-      s
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/\"/g, "&quot;")
-        .replace(/'/g, "&#39;");
-
-    const printable = record;
-    const json = JSON.stringify(printable, null, 2);
-
-    const w = window.open("", "_blank");
-    if (!w) {
-      toast({
-        title: "No se pudo abrir la impresión",
-        description: "Tu navegador bloqueó la ventana emergente.",
-        variant: "destructive",
-      });
-      return;
+  const toLeadIsoDateOrNull = (v?: string | null) => {
+    if (!v) return null;
+    const s = String(v);
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+      try {
+        return new Date(`${s}T00:00:00.000Z`).toISOString();
+      } catch {
+        return s;
+      }
     }
+    return s;
+  };
 
-    w.document.open();
-    w.document.write(`<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Lead ${String(record.id)} — JSON</title>
-    <style>
-      body { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; padding: 16px; }
-      h1 { font-size: 14px; margin: 0 0 12px; }
-      pre { white-space: pre-wrap; word-break: break-word; border: 1px solid #ddd; padding: 12px; border-radius: 8px; }
-      @media print { body { padding: 0; } pre { border: none; padding: 0; } }
-    </style>
-  </head>
-  <body>
-    <h1>Lead ${String(record.id)} (booking) — JSON</h1>
-    <pre>${escapeHtml(json)}</pre>
-    <script>window.focus(); window.print();</script>
-  </body>
-</html>`);
-    w.document.close();
-  }, [record]);
+  const draftToLeadPatch = React.useCallback(
+    (d?: Partial<CloseSaleInput> | null) => {
+      if (!d) return null;
+      return {
+        name: d.fullName ?? undefined,
+        email: d.email ?? undefined,
+        phone: d.phone ?? undefined,
+        program: d.program ?? undefined,
+        bonuses: Array.isArray(d.bonuses) ? d.bonuses : undefined,
+
+        payment_mode: d.paymentMode ?? undefined,
+        payment_amount: d.paymentAmount ?? undefined,
+        payment_platform: (d as any).paymentPlatform ?? undefined,
+        next_charge_date: toLeadIsoDateOrNull(
+          (d as any).nextChargeDate ?? null
+        ),
+        payment_has_reserve: (d as any).paymentHasReserve ? 1 : 0,
+        payment_reserve_amount: (d as any).paymentHasReserve
+          ? ((d as any).paymentReserveAmount || null)
+          : null,
+
+        sale_notes: (d as any).notes ?? undefined,
+
+        contract_third_party: (d as any).contractThirdParty ? 1 : 0,
+        contract_is_company: (d as any).contractIsCompany ? 1 : 0,
+        contract_parties: Array.isArray((d as any).contractParties)
+          ? (d as any).contractParties
+          : undefined,
+        contract_party_address: (d as any).contractPartyAddress ?? undefined,
+        contract_party_city: (d as any).contractPartyCity ?? undefined,
+        contract_party_country: (d as any).contractPartyCountry ?? undefined,
+        contract_company_name: (d as any).contractCompanyName ?? undefined,
+        contract_company_tax_id: (d as any).contractCompanyTaxId ?? undefined,
+        contract_company_address:
+          (d as any).contractCompanyAddress ?? undefined,
+        contract_company_city: (d as any).contractCompanyCity ?? undefined,
+        contract_company_country:
+          (d as any).contractCompanyCountry ?? undefined,
+      } as Record<string, any>;
+    },
+    []
+  );
 
   const buildSnapshotContext = () => {
     if (!record) return null;
@@ -285,9 +739,7 @@ function Content({ id }: { id: string }) {
       return v.replace(/_/g, " ");
     })();
 
-    const salePaymentMode = String(
-      salePayload?.payment?.mode || ""
-    ).toLowerCase();
+    const salePaymentMode = String(salePayload?.payment?.mode || "").toLowerCase();
     const draftPaymentHasReserve = (draft as any)?.paymentHasReserve;
     const draftPaymentReserveAmount = (draft as any)?.paymentReserveAmount;
     const reserveAmountRaw =
@@ -322,9 +774,10 @@ function Content({ id }: { id: string }) {
       (record as any)?.id ??
       (record as any)?.codigo ??
       id;
-    const entity = (record as any)?.record_entity ?? "booking";
-    const entityId =
-      (record as any)?.source_entity_id ?? (record as any)?.entity_id ?? "";
+    const entity = (record as any)?.record_entity ?? "crm_lead";
+    const entityIdRaw =
+      (record as any)?.source_entity_id ?? (record as any)?.entity_id ?? null;
+    const entityId = String(entityIdRaw ?? id).trim();
 
     const leadStageOptions = [
       { value: "new", label: "Nuevo" },
@@ -363,218 +816,36 @@ function Content({ id }: { id: string }) {
     } as const;
   };
 
-  const handleDebugConsole = React.useCallback(() => {
-    if (!record) return;
-
-    const ctx = buildSnapshotContext();
-    if (!ctx) return;
-
-    const placeholder = "(AQUÍ VA UNA IMAGEN)";
-
-    const looksLikeImageEntry = (v: any) =>
-      v &&
-      typeof v === "object" &&
-      typeof v.dataUrl === "string" &&
-      (typeof v.type === "string" || typeof v.name === "string");
-
-    const summarizeImageField = (v: any) => {
-      if (!v) return { hasImage: false, count: 0, placeholder };
-      if (Array.isArray(v)) {
-        const items = v.filter(looksLikeImageEntry);
-        return { hasImage: items.length > 0, count: items.length, placeholder };
-      }
-      if (looksLikeImageEntry(v))
-        return { hasImage: true, count: 1, placeholder };
-      return { hasImage: false, count: 0, placeholder };
-    };
-
-    const stripDataUrls = (v: any): any => {
-      if (v === null || v === undefined) return v;
-      if (typeof v !== "object") return v;
-      if (Array.isArray(v)) return v.map(stripDataUrls);
-      const out: Record<string, any> = {};
-      for (const [k, val] of Object.entries(v)) {
-        if (k === "dataUrl" && typeof val === "string") {
-          out[k] = `[dataUrl omitido len=${val.length}]`;
-          continue;
-        }
-        out[k] = stripDataUrls(val);
-      }
-      return out;
-    };
-
-    const collectDataUrlPaths = (root: any) => {
-      const paths: Array<{ path: string; len: number }> = [];
-      const seen = new Set<any>();
-
-      const walk = (node: any, path: string) => {
-        if (!node || typeof node !== "object") return;
-        if (seen.has(node)) return;
-        seen.add(node);
-
-        if (Array.isArray(node)) {
-          node.forEach((it, idx) => walk(it, `${path}[${idx}]`));
-          return;
-        }
-        for (const [k, val] of Object.entries(node)) {
-          const nextPath = path ? `${path}.${k}` : k;
-          if (k === "dataUrl" && typeof val === "string") {
-            paths.push({ path: nextPath, len: val.length });
-          } else {
-            walk(val, nextPath);
-          }
-        }
-      };
-
-      walk(root, "");
-      return paths;
-    };
-
-    const expected = {
-      "payment.proof": summarizeImageField((record as any)?.payment?.proof),
-      "call.evidence_images": summarizeImageField(
-        (record as any)?.call?.evidence_images
-      ),
-      "call.notes_images": summarizeImageField(
-        (record as any)?.call?.notes_images
-      ),
-    };
-    const found = collectDataUrlPaths(record);
-
-    const debug = {
-      codigo: (record as any)?.codigo,
-      updated_at: (record as any)?.updated_at,
-      imageFlags: {
-        expected,
-        foundDataUrls: found,
-      },
-      recordNoDataUrl: stripDataUrls(record),
-    };
-
-    const capturedAt = new Date().toISOString();
-    const snapshotPayloadCurrent = leadForUi || record;
-    const snapshotBody = {
-      entity: "crm_lead_snapshot",
-      entity_id: `${String(ctx.entity)}:${String(ctx.recordId)}:${capturedAt}`,
-      payload: {
-        schema_version: 1,
-        captured_at: capturedAt,
-        captured_by: {
-          id: (user as any)?.id ?? null,
-          name: (user as any)?.name ?? null,
-          email: (user as any)?.email ?? null,
-          role: (user as any)?.role ?? null,
-        },
-        source: {
-          record_id: ctx.recordId,
-          entity: ctx.entity,
-          entity_id: ctx.entityId,
-        },
-        route: {
-          pathname:
-            typeof window !== "undefined"
-              ? window.location?.pathname
-              : undefined,
-          url:
-            typeof window !== "undefined" ? window.location?.href : undefined,
-          user_agent:
-            typeof navigator !== "undefined" ? navigator.userAgent : undefined,
-        },
-        record: {
-          id: ctx.recordId,
-          entity: ctx.entity,
-          entity_id: ctx.entityId,
-          created_at: (record as any)?.created_at ?? undefined,
-          updated_at: (record as any)?.updated_at ?? undefined,
-        },
-        payload_current: snapshotPayloadCurrent,
-        computed: {
-          lead: {
-            status: ctx.leadStatus,
-            stage_label: ctx.leadStageLabel,
-            disposition: ctx.leadDisposition,
-            disposition_label: ctx.leadDispositionLabel,
-          },
-          sale: {
-            status_raw: ctx.statusRaw,
-            status_label: ctx.statusLabel,
-            payment_mode: ctx.salePayload?.payment?.mode ?? "",
-            has_reserva: ctx.hasReserva,
-            reserve_amount_raw: String(ctx.reserveAmountRaw ?? ""),
-          },
-        },
-        options: {
-          lead_stage_options: ctx.leadStageOptions,
-          lead_disposition_options: ctx.leadDispositionOptions,
-        },
-        draft: draft ?? undefined,
-      },
-    };
-
-    const snapshotForPrint = (() => {
-      const clone = JSON.parse(JSON.stringify(snapshotBody)) as any;
-      const ensureField = (obj: any, path: string, value: any) => {
-        const parts = path.split(".");
-        let curr = obj;
-        for (let i = 0; i < parts.length - 1; i++) {
-          const k = parts[i];
-          if (!curr[k] || typeof curr[k] !== "object") curr[k] = {};
-          curr = curr[k];
-        }
-        const last = parts[parts.length - 1];
-        if (
-          curr[last] === undefined ||
-          curr[last] === null ||
-          curr[last] === ""
-        ) {
-          curr[last] = value;
-        }
-      };
-
-      ensureField(clone.payload.payload_current, "payment.proof", placeholder);
-      ensureField(clone.payload.payload_current, "call.evidence_images", [
-        placeholder,
-      ]);
-      ensureField(clone.payload.payload_current, "call.notes_images", [
-        placeholder,
-      ]);
-      return clone;
-    })();
-
-    console.log("[CRM DEBUG] record (raw)", record);
-    console.log("[CRM DEBUG] debug", debug);
-    console.log(
-      "[CRM DEBUG] snapshot.body (POST /v1/leads/snapshot)",
-      snapshotBody
-    );
-    console.log(
-      "[CRM DEBUG] snapshot.body (con placeholders)",
-      snapshotForPrint
-    );
-    toast({
-      title: "Debug en consola",
-      description: "Se imprimió el lead completo y el body del snapshot.",
-    });
-  }, [draft, id, leadForUi, record, user]);
-
-  const handlePostSnapshot = React.useCallback(async () => {
+  const handleSaveChanges = React.useCallback(async () => {
     if (!record) return;
     if (snapshotSaving) return;
 
     const ctx = buildSnapshotContext();
     if (!ctx) return;
 
-    if (!ctx.entityId) {
-      toast({
-        title: "No se puede enviar snapshot",
-        description: "Falta source entity_id (UUID).",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Nota: algunos leads no traen source_entity_id/entity_id desde el backend.
+    // En ese caso usamos el `codigo` del lead como fallback para source.entity_id.
 
+    // Guardado centralizado: un solo POST /v1/leads/snapshot.
+    // El backend usa `codigo` + `payload.payload_current` para actualizar el lead
+    // y además registra el snapshot.
     const capturedAt = new Date().toISOString();
-    const snapshotPayloadCurrent = leadForUi || record;
+    const patch = draftToLeadPatch(draft);
+    const snapshotPayloadCurrent = {
+      ...(leadForUi || record),
+      ...(patch || {}),
+      ...(saleDraftPayload ? { sale: saleDraftPayload } : {}),
+      ...(paymentProof
+        ? {
+            payment_proof: {
+              dataUrl: paymentProof.dataUrl,
+              name: paymentProof.name,
+              type: paymentProof.type,
+              size: paymentProof.size,
+            },
+          }
+        : {}),
+    };
 
     setSnapshotSaving(true);
     try {
@@ -632,15 +903,8 @@ function Content({ id }: { id: string }) {
         draft: draft ?? undefined,
       };
 
-      console.log("[CRM SNAPSHOT] POST /v1/leads/snapshot body", {
-        entity: "crm_lead_snapshot",
-        entity_id: `${String(ctx.entity)}:${String(
-          ctx.recordId
-        )}:${capturedAt}`,
-        payload: snapshot,
-      });
-
       await createLeadSnapshot({
+        codigo: id,
         source: {
           record_id: ctx.recordId,
           entity: ctx.entity,
@@ -649,18 +913,18 @@ function Content({ id }: { id: string }) {
         snapshot,
       });
 
-      toast({ title: "Snapshot enviado" });
+      toast({ title: "Cambios guardados" });
       await load({ silent: true });
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err?.message || "No se pudo enviar el snapshot",
+        description: err?.message || "No se pudieron guardar los cambios",
         variant: "destructive",
       });
     } finally {
       setSnapshotSaving(false);
     }
-  }, [draft, id, leadForUi, load, record, snapshotSaving, user]);
+  }, [draft, draftToLeadPatch, id, leadForUi, load, paymentProof, record, saleDraftPayload, snapshotSaving, user]);
 
   React.useEffect(() => {
     load();
@@ -779,7 +1043,7 @@ function Content({ id }: { id: string }) {
       reserveAmountNum > 0) ||
     /reserva|apartado|señ?a|anticipo/i.test(salePaymentMode);
 
-  // NOTE: handleDebugConsole/handlePostSnapshot se definen arriba para respetar el orden de hooks.
+  // NOTE: handlers definidos arriba para respetar el orden de hooks.
 
   const initial: Partial<CloseSaleInput> = {
     fullName: p.name || salePayload?.name || "",
@@ -837,6 +1101,37 @@ function Content({ id }: { id: string }) {
         })
       : "—";
 
+  const callOutcomeLabel = (raw?: any) => {
+    const v = String(raw ?? "")
+      .trim()
+      .toLowerCase();
+    if (!v) return "—";
+    if (v === "attended") return "Asistencia";
+    if (v === "no_show" || v === "noshow") return "No asistió";
+    if (v === "cancelled" || v === "canceled") return "Cancelada";
+    return String(raw);
+  };
+
+  const paymentStatusLabel = (raw?: any) => {
+    const v = String(raw ?? "")
+      .trim()
+      .toLowerCase();
+    if (!v) return "—";
+    if (v === "payment_verification_pending") return "verificación de pago";
+    if (v === "payment_confirmed") return "pago confirmado";
+    if (v === "active" || v === "active_provisional") return "activo";
+    if (v === "cancelled" || v === "lost") return "cancelada";
+    if (v === "operational_closure") return "cierre operativo";
+    if (v === "contract_sent") return "contrato enviado";
+    if (v === "contract_signed") return "contrato firmado";
+    return v.replace(/_/g, " ");
+  };
+
+  const bonusesList: string[] = Array.isArray(initial?.bonuses)
+    ? (initial.bonuses as string[])
+    : [];
+
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -865,18 +1160,13 @@ function Content({ id }: { id: string }) {
           <Button asChild variant="outline">
             <Link href="/admin/crm">Volver al CRM</Link>
           </Button>
-          <Button variant="secondary" onClick={handlePrint}>
-            Imprimir
-          </Button>
           <Button
             variant="outline"
-            onClick={handlePostSnapshot}
+            onClick={handleSaveChanges}
             disabled={snapshotSaving}
+            className="bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-50 hover:text-teal-700 focus-visible:ring-teal-300"
           >
-            {snapshotSaving ? "Enviando..." : "Snapshot"}
-          </Button>
-          <Button variant="outline" onClick={handleDebugConsole}>
-            Debug consola
+            {snapshotSaving ? "Guardando..." : "Guardar cambios"}
           </Button>
         </div>
       </div>
@@ -925,6 +1215,20 @@ function Content({ id }: { id: string }) {
                       {p.program || salePayload?.program || "—"}
                     </span>
                   </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="text-muted-foreground">Bonos</span>
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {bonusesList.length ? (
+                        bonusesList.map((b) => (
+                          <Badge key={b} variant="secondary">
+                            {b}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="truncate">—</span>
+                      )}
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">
                       Presupuesto mensual
@@ -949,16 +1253,17 @@ function Content({ id }: { id: string }) {
                       Resultado llamada
                     </span>
                     <span className="truncate">
-                      {p.call_outcome ||
-                        p.callOutcome ||
-                        p.call?.outcome ||
-                        "—"}
+                      {callOutcomeLabel(
+                        p.call_outcome || p.callOutcome || p.call?.outcome
+                      )}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Pago</span>
                     <span className="truncate">
-                      {p.payment_status || statusLabel}
+                      {p.payment_status
+                        ? paymentStatusLabel(p.payment_status)
+                        : statusLabel}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
@@ -1012,91 +1317,59 @@ function Content({ id }: { id: string }) {
               <div className="grid gap-4">
                 <div className="grid gap-1">
                   <Label htmlFor="lead-stage">Etapa</Label>
-                  <select
-                    id="lead-stage"
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none"
+                  <Select
                     value={leadStatus}
-                    disabled={stageSaving}
-                    onChange={async (e) => {
-                      const next = e.target.value;
-                      const prev = record?.status;
+                    onValueChange={(next) => {
+                      // No persistir aquí: se guarda con el botón "Guardar cambios" (snapshot).
                       applyRecordPatch({ status: next });
-                      setStageSaving(true);
-                      try {
-                        await updateLead(id, { status: next }, record as any);
-                        toast({
-                          title: "Etapa actualizada",
-                          description: `Lead → ${next}`,
-                        });
-                      } catch (err: any) {
-                        applyRecordPatch({ status: prev });
-                        toast({
-                          title: "Error",
-                          description:
-                            err?.message || "No se pudo actualizar la etapa",
-                          variant: "destructive",
-                        });
-                        await load({ silent: true });
-                      } finally {
-                        setStageSaving(false);
-                      }
                     }}
                   >
-                    <option value="new">Nuevo</option>
-                    <option value="contacted">Contactado</option>
-                    <option value="qualified">Calificado</option>
-                    <option value="won">Ganado</option>
-                    <option value="lost">Perdido</option>
-                  </select>
+                    <SelectTrigger id="lead-stage" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">Nuevo</SelectItem>
+                      <SelectItem value="contacted">Contactado</SelectItem>
+                      <SelectItem value="qualified">Calificado</SelectItem>
+                      <SelectItem value="won">Ganado</SelectItem>
+                      <SelectItem value="lost">Perdido</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid gap-1">
                   <Label htmlFor="lead-disposition">Estado comercial</Label>
-                  <select
-                    id="lead-disposition"
-                    className="h-9 rounded-md border border-input bg-background px-2 text-sm focus:outline-none"
-                    value={leadDisposition}
-                    disabled={dispositionSaving}
-                    onChange={async (e) => {
-                      const next = e.target.value;
-                      const prev = record?.lead_disposition;
-                      applyRecordPatch({ lead_disposition: next || null });
-                      setDispositionSaving(true);
-                      try {
-                        await updateLeadPatch(
-                          id,
-                          {
-                            lead_disposition: next || null,
-                          },
-                          record as any
-                        );
-                        toast({ title: "Estado guardado" });
-                      } catch (err: any) {
-                        applyRecordPatch({ lead_disposition: prev ?? null });
-                        toast({
-                          title: "Error",
-                          description: err?.message || "No se pudo guardar",
-                          variant: "destructive",
-                        });
-                        await load({ silent: true });
-                      } finally {
-                        setDispositionSaving(false);
-                      }
+                  <Select
+                    value={leadDisposition || "__empty__"}
+                    onValueChange={(next) => {
+                      applyRecordPatch({
+                        lead_disposition: next === "__empty__" ? null : next,
+                      });
+                      // No persistir aquí: se guarda con el botón "Guardar cambios" (snapshot).
                     }}
                   >
-                    <option value="">—</option>
-                    <option value="interesado">Interesado</option>
-                    <option value="en_seguimiento">En seguimiento</option>
-                    <option value="pendiente_pago">Pendiente de pago</option>
-                    <option value="reagendar">Reagendar</option>
-                    <option value="no_responde">No responde</option>
-                    <option value="no_califica">No califica</option>
-                    <option value="no_interesado">No interesado</option>
-                  </select>
+                    <SelectTrigger id="lead-disposition" className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__empty__">—</SelectItem>
+                      <SelectItem value="interesado">Interesado</SelectItem>
+                      <SelectItem value="en_seguimiento">
+                        En seguimiento
+                      </SelectItem>
+                      <SelectItem value="pendiente_pago">
+                        Pendiente de pago
+                      </SelectItem>
+                      <SelectItem value="reagendar">Reagendar</SelectItem>
+                      <SelectItem value="no_responde">No responde</SelectItem>
+                      <SelectItem value="no_califica">No califica</SelectItem>
+                      <SelectItem value="no_interesado">No interesado</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="mt-3 text-xs text-muted-foreground">
-                Se guarda automáticamente.
+                Se guarda al presionar “Guardar cambios”.
               </div>
             </CardContent>
           </Card>
@@ -1106,6 +1379,7 @@ function Content({ id }: { id: string }) {
           <CallFlowManager
             leadCodigo={id}
             payload={p}
+            persistMode="local"
             onSaved={(nextCall) => {
               if (!nextCall) return;
 
@@ -1121,6 +1395,7 @@ function Content({ id }: { id: string }) {
               };
 
               applyRecordPatch({
+                call: nextCall,
                 call_outcome: nextCall?.outcome ?? null,
                 call_result_at: nextCall?.result_at ?? null,
                 call_reschedule_date: toMidnightIso(
@@ -1153,15 +1428,83 @@ function Content({ id }: { id: string }) {
                       <DialogTitle>Vista previa / contrato</DialogTitle>
                     </DialogHeader>
                     <SalePreview
-                      payload={salePayload}
+                      payload={saleDraftPayload || salePayload}
                       draft={draft || undefined}
                       leadCodigo={id}
                       entity="booking"
+                      persistMode="local"
                       title="Contrato / resumen"
                       onUpdated={() => load({ silent: true })}
                     />
                   </DialogContent>
                 </Dialog>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const body = buildSnapshotBodyForConsole();
+                    if (!body) {
+                      toast({
+                        title: "No disponible",
+                        description: "No se pudo construir el body en este momento.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    const sanitized = sanitizeForBackendExample(body);
+                    console.log("[CRM] Body snapshot (data test)", sanitized);
+                    toast({
+                      title: "Impreso en consola",
+                      description:
+                        "Se imprimió el body completo con data de prueba (base64 truncado).",
+                    });
+                  }}
+                >
+                  Imprimir body
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const examples = buildPaymentExamplesForConsole();
+                    const sanitized = sanitizeForBackendExample(examples);
+                    console.log("[CRM] Tipos de pago (data test)", sanitized);
+                    toast({
+                      title: "Impreso en consola",
+                      description:
+                        "Se imprimieron los tipos de pago con data de prueba (base64 truncado).",
+                    });
+                  }}
+                >
+                  Imprimir tipos de pago
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const full = buildFullSnapshotExampleForConsole();
+                    if (!full) {
+                      toast({
+                        title: "No disponible",
+                        description: "No se pudo construir el JSON completo.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    const sanitized = sanitizeForBackendExample(full);
+                    console.log("[CRM] Snapshot completo (payment.plans con 4 tipos, test)", sanitized);
+                    toast({
+                      title: "Impreso en consola",
+                      description:
+                        "Se imprimió 1 snapshot completo con 4 tipos en payment.plans (sin payment_examples; base64 truncado).",
+                    });
+                  }}
+                >
+                  Imprimir JSON completo (4 tipos)
+                </Button>
               </CardAction>
             </CardHeader>
             <CardContent>
@@ -1185,10 +1528,18 @@ function Content({ id }: { id: string }) {
                 leadCodigo={id}
                 entity="booking"
                 initial={initial}
-                autoSave
-                onChange={(f) => setDraft({ ...f })}
+                autoSave={false}
+                persistMode="local"
+                onChange={(f: CloseSaleInput) => setDraft({ ...f })}
+                onPaymentProofChange={setPaymentProof}
+                onSalePayloadChange={setSaleDraftPayload}
                 onDone={() => {
-                  load({ silent: true });
+                  // En modo local no persistimos aquí: se guarda con snapshot.
+                  toast({
+                    title: "Listo para guardar",
+                    description:
+                      "Estos cambios se guardarán al presionar “Guardar cambios”.",
+                  });
                 }}
               />
             </CardContent>
