@@ -60,6 +60,9 @@ function Content({ id }: { id: string }) {
   const [saleDraftPayload, setSaleDraftPayload] = React.useState<any | null>(
     null
   );
+  const [frozenSaleInitial, setFrozenSaleInitial] = React.useState<
+    Partial<CloseSaleInput> | null
+  >(null);
   const [paymentProof, setPaymentProof] = React.useState<{
     dataUrl: string;
     name?: string;
@@ -68,6 +71,11 @@ function Content({ id }: { id: string }) {
   } | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [snapshotSaving, setSnapshotSaving] = React.useState(false);
+
+  // Si cambia el lead, reseteamos el initial congelado.
+  React.useEffect(() => {
+    setFrozenSaleInitial(null);
+  }, [id]);
 
   // Guardado temporal en navegador (localStorage)
   // Backend desactivado por ahora.
@@ -207,6 +215,96 @@ function Content({ id }: { id: string }) {
       sale,
     };
   }, [record]);
+
+  // Congelamos los valores iniciales del formulario de venta UNA sola vez.
+  // Motivo: `draft` se actualiza con cada tecla (para vista previa) y si `initial`
+  // depende de `draft`, CloseSaleForm2 re-sincroniza su estado y se genera un loop.
+  React.useEffect(() => {
+    if (frozenSaleInitial) return;
+    if (!record) return;
+
+    const base = (leadForUi as any) || (record as any) || {};
+    const salePayload = (base as any).sale || {};
+
+    const toBonusesArray = (v: any) => {
+      if (Array.isArray(v)) return v;
+      if (typeof v === "string")
+        return v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      return [];
+    };
+
+    const initialBase: Partial<CloseSaleInput> = {
+      fullName: base.name || salePayload?.name || "",
+      email: base.email || salePayload?.email || "",
+      phone: base.phone || salePayload?.phone || "",
+      program: salePayload?.program ?? "",
+      bonuses: toBonusesArray(salePayload?.bonuses),
+      paymentMode: salePayload?.payment?.mode ?? "",
+      paymentAmount: salePayload?.payment?.amount ?? "",
+      paymentHasReserve: !!(
+        salePayload?.payment?.hasReserve ||
+        salePayload?.payment?.reserveAmount ||
+        salePayload?.payment?.reservationAmount ||
+        salePayload?.payment?.reserva ||
+        salePayload?.payment?.deposit ||
+        salePayload?.payment?.downPayment ||
+        salePayload?.payment?.anticipo ||
+        /reserva|apartado|señ?a|anticipo/i.test(
+          String(salePayload?.payment?.mode || "").toLowerCase()
+        )
+      ),
+      paymentReserveAmount:
+        (salePayload?.payment?.reserveAmount ??
+          salePayload?.payment?.reservationAmount ??
+          salePayload?.payment?.reserva ??
+          salePayload?.payment?.deposit ??
+          salePayload?.payment?.downPayment ??
+          salePayload?.payment?.anticipo ??
+          "") as any,
+      paymentPlatform: salePayload?.payment?.platform ?? "hotmart",
+      nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
+      contractThirdParty: !!salePayload?.contract?.thirdParty,
+      contractPartyName: salePayload?.contract?.party?.name || base.name || "",
+      contractPartyEmail:
+        salePayload?.contract?.party?.email || base.email || "",
+      contractPartyPhone:
+        salePayload?.contract?.party?.phone || base.phone || "",
+      notes: salePayload?.notes ?? "",
+      status: salePayload?.status ?? undefined,
+    };
+
+    // Si había un borrador hidratado desde localStorage, lo aplicamos una sola vez.
+    if (draft && typeof draft === "object") {
+      setFrozenSaleInitial({
+        ...initialBase,
+        fullName: (draft as any)?.fullName ?? initialBase.fullName,
+        email: (draft as any)?.email ?? initialBase.email,
+        phone: (draft as any)?.phone ?? initialBase.phone,
+        program: (draft as any)?.program ?? initialBase.program,
+        bonuses: Array.isArray((draft as any)?.bonuses)
+          ? (draft as any).bonuses
+          : initialBase.bonuses,
+        paymentMode: (draft as any)?.paymentMode ?? initialBase.paymentMode,
+        paymentAmount: (draft as any)?.paymentAmount ?? initialBase.paymentAmount,
+        paymentHasReserve:
+          (draft as any)?.paymentHasReserve ?? initialBase.paymentHasReserve,
+        paymentReserveAmount:
+          (draft as any)?.paymentReserveAmount ??
+          (initialBase as any).paymentReserveAmount,
+        paymentPlatform:
+          (draft as any)?.paymentPlatform ?? initialBase.paymentPlatform,
+        nextChargeDate: (draft as any)?.nextChargeDate ?? initialBase.nextChargeDate,
+        notes: (draft as any)?.notes ?? initialBase.notes,
+        status: (draft as any)?.status ?? initialBase.status,
+      });
+      return;
+    }
+
+    setFrozenSaleInitial(initialBase);
+  }, [draft, frozenSaleInitial, leadForUi, record]);
 
   const load = React.useCallback(
     async ({ silent }: { silent?: boolean } = {}) => {
@@ -681,63 +779,54 @@ function Content({ id }: { id: string }) {
 
   // NOTE: handlers definidos arriba para respetar el orden de hooks.
 
-  const initial: Partial<CloseSaleInput> = {
-    fullName: p.name || salePayload?.name || "",
-    email: p.email || salePayload?.email || "",
-    phone: p.phone || salePayload?.phone || "",
-    program: (draft as any)?.program ?? salePayload?.program ?? "",
-    bonuses: Array.isArray((draft as any)?.bonuses)
-      ? (draft as any).bonuses
-      : Array.isArray(salePayload?.bonuses)
-      ? salePayload.bonuses
-      : typeof salePayload?.bonuses === "string"
-      ? String(salePayload?.bonuses)
-          .split(",")
-          .map((s: string) => s.trim())
-          .filter(Boolean)
-      : [],
-    paymentMode:
-      (draft as any)?.paymentMode ?? salePayload?.payment?.mode ?? "",
-    paymentAmount:
-      (draft as any)?.paymentAmount ?? salePayload?.payment?.amount ?? "",
-    paymentHasReserve:
-      (draft as any)?.paymentHasReserve ??
-      (!!(
+  const initial: Partial<CloseSaleInput> =
+    frozenSaleInitial ??
+    ({
+      fullName: p.name || salePayload?.name || "",
+      email: p.email || salePayload?.email || "",
+      phone: p.phone || salePayload?.phone || "",
+      program: salePayload?.program ?? "",
+      bonuses: Array.isArray(salePayload?.bonuses)
+        ? salePayload.bonuses
+        : typeof salePayload?.bonuses === "string"
+        ? String(salePayload?.bonuses)
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : [],
+      paymentMode: salePayload?.payment?.mode ?? "",
+      paymentAmount: salePayload?.payment?.amount ?? "",
+      paymentHasReserve: !!(
         salePayload?.payment?.hasReserve ||
         salePayload?.payment?.reserveAmount ||
         salePayload?.payment?.reservationAmount ||
         salePayload?.payment?.reserva ||
         salePayload?.payment?.deposit ||
         salePayload?.payment?.downPayment ||
-        salePayload?.payment?.anticipo
-      ) ||
+        salePayload?.payment?.anticipo ||
         /reserva|apartado|señ?a|anticipo/i.test(
           String(salePayload?.payment?.mode || "").toLowerCase()
-        )),
-    paymentReserveAmount:
-      (draft as any)?.paymentReserveAmount ??
-      ((salePayload?.payment?.reserveAmount ??
-        salePayload?.payment?.reservationAmount ??
-        salePayload?.payment?.reserva ??
-        salePayload?.payment?.deposit ??
-        salePayload?.payment?.downPayment ??
-        salePayload?.payment?.anticipo ??
-        "") as any),
-    paymentPlatform:
-      (draft as any)?.paymentPlatform ??
-      salePayload?.payment?.platform ??
-      "hotmart",
-    nextChargeDate:
-      (draft as any)?.nextChargeDate ??
-      salePayload?.payment?.nextChargeDate ??
-      "",
-    contractThirdParty: !!salePayload?.contract?.thirdParty,
-    contractPartyName: salePayload?.contract?.party?.name || p.name || "",
-    contractPartyEmail: salePayload?.contract?.party?.email || p.email || "",
-    contractPartyPhone: salePayload?.contract?.party?.phone || p.phone || "",
-    notes: (draft as any)?.notes ?? salePayload?.notes ?? "",
-    status: (draft as any)?.status ?? salePayload?.status ?? undefined,
-  } as any;
+        )
+      ),
+      paymentReserveAmount:
+        (salePayload?.payment?.reserveAmount ??
+          salePayload?.payment?.reservationAmount ??
+          salePayload?.payment?.reserva ??
+          salePayload?.payment?.deposit ??
+          salePayload?.payment?.downPayment ??
+          salePayload?.payment?.anticipo ??
+          "") as any,
+      paymentPlatform: salePayload?.payment?.platform ?? "hotmart",
+      nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
+      contractThirdParty: !!salePayload?.contract?.thirdParty,
+      contractPartyName: salePayload?.contract?.party?.name || p.name || "",
+      contractPartyEmail:
+        salePayload?.contract?.party?.email || p.email || "",
+      contractPartyPhone:
+        salePayload?.contract?.party?.phone || p.phone || "",
+      notes: salePayload?.notes ?? "",
+      status: salePayload?.status ?? undefined,
+    } as any);
 
   const fmtDate = (iso?: string) =>
     iso
