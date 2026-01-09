@@ -74,7 +74,9 @@ export default function AdminBonosPage() {
     try {
       const list = await alumnosApi.getAllBonos({ includeInactivos: true });
       const normalized = Array.isArray(list) ? list : [];
-      normalized.sort((a, b) => String(a.codigo).localeCompare(String(b.codigo)));
+      normalized.sort((a, b) =>
+        String(a.codigo).localeCompare(String(b.codigo))
+      );
       setRows(normalized);
     } catch (e: any) {
       console.error(e);
@@ -172,7 +174,10 @@ export default function AdminBonosPage() {
         inactivado: editInactivado ? 1 : 0,
       });
 
-      toast({ title: "Bono actualizado", description: "Se guardó correctamente." });
+      toast({
+        title: "Bono actualizado",
+        description: "Se guardó correctamente.",
+      });
       setEditOpen(false);
       setEditCodigo(null);
       await refresh();
@@ -194,7 +199,10 @@ export default function AdminBonosPage() {
     setDeleting(true);
     try {
       await alumnosApi.deleteBono(deleteCodigo);
-      toast({ title: "Bono eliminado", description: "Se eliminó correctamente." });
+      toast({
+        title: "Bono eliminado",
+        description: "Se eliminó correctamente.",
+      });
       setDeleteOpen(false);
       setDeleteCodigo(null);
       await refresh();
@@ -293,7 +301,10 @@ export default function AdminBonosPage() {
           )}
 
           {/* Crear */}
-          <Dialog open={createOpen} onOpenChange={(v) => (!creating ? setCreateOpen(v) : null)}>
+          <Dialog
+            open={createOpen}
+            onOpenChange={(v) => (!creating ? setCreateOpen(v) : null)}
+          >
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Nuevo bono</DialogTitle>
@@ -352,7 +363,10 @@ export default function AdminBonosPage() {
           </Dialog>
 
           {/* Editar */}
-          <Dialog open={editOpen} onOpenChange={(v) => (!saving ? setEditOpen(v) : null)}>
+          <Dialog
+            open={editOpen}
+            onOpenChange={(v) => (!saving ? setEditOpen(v) : null)}
+          >
             <DialogContent className="sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Editar bono</DialogTitle>
@@ -436,11 +450,14 @@ export default function AdminBonosPage() {
                 </AlertDialogTitle>
                 <AlertDialogDescription className="text-sm">
                   ¿Seguro que quieres eliminar este bono
-                  {deleteNombre ? `: ${deleteNombre}` : ""}?\nEsta acción no se puede deshacer.
+                  {deleteNombre ? `: ${deleteNombre}` : ""}?\nEsta acción no se
+                  puede deshacer.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+                <AlertDialogCancel disabled={deleting}>
+                  Cancelar
+                </AlertDialogCancel>
                 <AlertDialogAction
                   disabled={deleting || !deleteCodigo}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

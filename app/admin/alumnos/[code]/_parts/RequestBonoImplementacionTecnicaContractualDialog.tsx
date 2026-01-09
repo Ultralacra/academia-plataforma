@@ -244,7 +244,10 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => (!loading ? onOpenChange(v) : null)}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => (!loading ? onOpenChange(v) : null)}
+    >
       <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Solicitud de Montaje de Embudo</DialogTitle>
@@ -273,7 +276,9 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
           </div>
 
           <div className="rounded-md border border-border bg-card p-3 space-y-2">
-            <div className="text-sm font-semibold text-foreground">Pre-requisitos</div>
+            <div className="text-sm font-semibold text-foreground">
+              Pre-requisitos
+            </div>
             <div className="text-sm text-muted-foreground">
               Para poder iniciar necesitamos saber que cumples con estos
               pre-requisitos. De no poseerlos solo sigue las instrucciones de
@@ -286,21 +291,30 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
             <div className="space-y-2">
               <CheckItem>
                 Creación de cuenta en Systeme. (si no la has hecho cliquea{" "}
-                <Link href="https://www.skool.com/hotselling-pro/about" label="Tutorial Systeme">
+                <Link
+                  href="https://www.skool.com/hotselling-pro/about"
+                  label="Tutorial Systeme"
+                >
                   aquí
                 </Link>
                 )
               </CheckItem>
               <CheckItem>
                 Adquirir dominio en Hostinger. (si no la has hecho cliquea{" "}
-                <Link href="https://www.skool.com/hotselling-pro/about" label="Tutorial Hostinger">
+                <Link
+                  href="https://www.skool.com/hotselling-pro/about"
+                  label="Tutorial Hostinger"
+                >
                   aquí
                 </Link>
                 )
               </CheckItem>
               <CheckItem>
                 Adquirir cuenta en Hotmart. (si no tienes cuenta cliquea{" "}
-                <Link href="https://www.skool.com/hotselling-pro/about" label="Tutorial Hotmart">
+                <Link
+                  href="https://www.skool.com/hotselling-pro/about"
+                  label="Tutorial Hotmart"
+                >
                   aquí
                 </Link>
                 )
@@ -314,7 +328,10 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
               </CheckItem>
               <CheckItem>
                 Adquirir cuenta en Bunny. (si no tienes cuenta cliquea{" "}
-                <Link href="https://www.skool.com/hotselling-pro/about" label="Tutorial Bunny">
+                <Link
+                  href="https://www.skool.com/hotselling-pro/about"
+                  label="Tutorial Bunny"
+                >
                   aquí
                 </Link>
                 )
@@ -362,7 +379,10 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
           <div className="grid grid-cols-1 gap-3">
             <div className="space-y-2">
               <Label>Tu nombre *</Label>
-              <Input value={nombre} onChange={(e) => setNombre(e.target.value)} />
+              <Input
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+              />
             </div>
 
             <div className="space-y-2">
@@ -376,7 +396,10 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
 
             <div className="space-y-2">
               <Label>Producto *</Label>
-              <Select value={productoTipo} onValueChange={(v) => setProductoTipo(v as any)}>
+              <Select
+                value={productoTipo}
+                onValueChange={(v) => setProductoTipo(v as any)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecciona" />
                 </SelectTrigger>
@@ -407,7 +430,11 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
             </div>
             <div className="space-y-2">
               <Label>Credenciales Hotmart *</Label>
-              <Textarea value={credHotmart} onChange={(e) => setCredHotmart(e.target.value)} rows={3} />
+              <Textarea
+                value={credHotmart}
+                onChange={(e) => setCredHotmart(e.target.value)}
+                rows={3}
+              />
             </div>
             <div className="space-y-2">
               <Label>Credenciales Hostinger *</Label>
@@ -419,11 +446,19 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
             </div>
             <div className="space-y-2">
               <Label>Credenciales VTURB *</Label>
-              <Textarea value={credVturb} onChange={(e) => setCredVturb(e.target.value)} rows={3} />
+              <Textarea
+                value={credVturb}
+                onChange={(e) => setCredVturb(e.target.value)}
+                rows={3}
+              />
             </div>
             <div className="space-y-2">
               <Label>Credenciales Bunny *</Label>
-              <Textarea value={credBunny} onChange={(e) => setCredBunny(e.target.value)} rows={3} />
+              <Textarea
+                value={credBunny}
+                onChange={(e) => setCredBunny(e.target.value)}
+                rows={3}
+              />
             </div>
           </div>
 
@@ -431,13 +466,22 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
             <div className="space-y-2">
               <Label>
                 Nombre producto carnada *
-                <span className="text-xs text-muted-foreground"> (si es en vivo: General y VIP)</span>
+                <span className="text-xs text-muted-foreground">
+                  {" "}
+                  (si es en vivo: General y VIP)
+                </span>
               </Label>
-              <Input value={prodCarnada} onChange={(e) => setProdCarnada(e.target.value)} />
+              <Input
+                value={prodCarnada}
+                onChange={(e) => setProdCarnada(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Nombre producto OTO *</Label>
-              <Input value={prodOto} onChange={(e) => setProdOto(e.target.value)} />
+              <Input
+                value={prodOto}
+                onChange={(e) => setProdOto(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Nombre producto Order Bumps *</Label>
@@ -467,7 +511,10 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
             <div className="space-y-2">
               <Label>
                 Link Drive contenido para Hotmart
-                <span className="text-xs text-muted-foreground"> (Carnada, OTO, Order bumps)</span>
+                <span className="text-xs text-muted-foreground">
+                  {" "}
+                  (Carnada, OTO, Order bumps)
+                </span>
               </Label>
               <div className="text-xs text-muted-foreground">
                 Recuerda que los productos deben estar separados por carpetas y
@@ -490,18 +537,30 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
               de "Cualquier persona con el enlace puede ver".
             </div>
             <div className="space-y-2">
-              <CheckItem>Tu paleta de colores (códigos HEX, ej: #FFFFFF).</CheckItem>
-              <CheckItem>Tu logo en alta calidad (ideal fondo transparente).</CheckItem>
+              <CheckItem>
+                Tu paleta de colores (códigos HEX, ej: #FFFFFF).
+              </CheckItem>
+              <CheckItem>
+                Tu logo en alta calidad (ideal fondo transparente).
+              </CheckItem>
               <CheckItem>
                 El copy final de tus páginas: Carnada, OTO (Oferta Única),
                 Downsell y Gracias.
               </CheckItem>
               <CheckItem>Mockup (imagen visual) de tu Carnada.</CheckItem>
               <CheckItem>Mockup (imagen visual) de tu Downsell.</CheckItem>
-              <CheckItem>Mínimo 12 capturas de testimonios (ideal 25).</CheckItem>
-              <CheckItem>4 fotos tuyas en alta calidad para la página.</CheckItem>
-              <CheckItem>Material visual de los Módulos de tu Carnada (guía de Canva).</CheckItem>
-              <CheckItem>Material visual de los Bonos (guía de Canva).</CheckItem>
+              <CheckItem>
+                Mínimo 12 capturas de testimonios (ideal 25).
+              </CheckItem>
+              <CheckItem>
+                4 fotos tuyas en alta calidad para la página.
+              </CheckItem>
+              <CheckItem>
+                Material visual de los Módulos de tu Carnada (guía de Canva).
+              </CheckItem>
+              <CheckItem>
+                Material visual de los Bonos (guía de Canva).
+              </CheckItem>
               <CheckItem>Mínimo 3 testimonios en video (ideal 6).</CheckItem>
             </div>
             <div className="text-xs text-muted-foreground">
@@ -533,23 +592,39 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
               de "Cualquier persona con el enlace puede ver".
             </div>
             <div className="space-y-2">
-              <CheckItem>Tu paleta de colores (códigos HEX, ej: #FFFFFF).</CheckItem>
-              <CheckItem>Tu logo en alta calidad (ideal fondo transparente).</CheckItem>
+              <CheckItem>
+                Tu paleta de colores (códigos HEX, ej: #FFFFFF).
+              </CheckItem>
+              <CheckItem>
+                Tu logo en alta calidad (ideal fondo transparente).
+              </CheckItem>
               <CheckItem>
                 El copy final de tus páginas: Carnada, OTO (Oferta Única),
                 Downsell y Gracias.
               </CheckItem>
-              <CheckItem>Material visual de los Módulos de tu Carnada (guía de Canva).</CheckItem>
-              <CheckItem>Material visual de los Bonos (guía de Canva).</CheckItem>
+              <CheckItem>
+                Material visual de los Módulos de tu Carnada (guía de Canva).
+              </CheckItem>
+              <CheckItem>
+                Material visual de los Bonos (guía de Canva).
+              </CheckItem>
               <CheckItem>Mockup (imagen visual) de tu Carnada.</CheckItem>
               <CheckItem>
                 Un mockup por cada uno de tus bonos (ej: si son 3 bonos, 3
                 mockups).
               </CheckItem>
-              <CheckItem>Fotos personales: 1 foto horizontal y 3 fotos verticales.</CheckItem>
-              <CheckItem>Fotos de evolución y resultados (5 fotos según instrucción).</CheckItem>
-              <CheckItem>Testimonios escritos: mínimo 13 capturas (ideal 20).</CheckItem>
-              <CheckItem>Testimonios en video: mínimo 3 videos (ideal 6).</CheckItem>
+              <CheckItem>
+                Fotos personales: 1 foto horizontal y 3 fotos verticales.
+              </CheckItem>
+              <CheckItem>
+                Fotos de evolución y resultados (5 fotos según instrucción).
+              </CheckItem>
+              <CheckItem>
+                Testimonios escritos: mínimo 13 capturas (ideal 20).
+              </CheckItem>
+              <CheckItem>
+                Testimonios en video: mínimo 3 videos (ideal 6).
+              </CheckItem>
             </div>
             <div className="text-xs text-muted-foreground">
               (Asegúrate de que todo esté en su versión final aprobado por tu
@@ -580,7 +655,11 @@ export default function RequestBonoImplementacionTecnicaContractualDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={loading}
+          >
             Cancelar
           </Button>
           <Button onClick={submit} disabled={loading || !canSubmit}>

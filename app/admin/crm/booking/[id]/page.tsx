@@ -82,7 +82,8 @@ function Content({ id }: { id: string }) {
       const parsed = JSON.parse(raw);
       if (parsed?.record) setRecord(parsed.record);
       if (parsed?.draft) setDraft(parsed.draft);
-      if (parsed?.saleDraftPayload) setSaleDraftPayload(parsed.saleDraftPayload);
+      if (parsed?.saleDraftPayload)
+        setSaleDraftPayload(parsed.saleDraftPayload);
       if (parsed?.paymentProof) setPaymentProof(parsed.paymentProof);
     } catch {}
   }, [localStorageKey]);
@@ -701,20 +702,18 @@ function Content({ id }: { id: string }) {
       (draft as any)?.paymentAmount ?? salePayload?.payment?.amount ?? "",
     paymentHasReserve:
       (draft as any)?.paymentHasReserve ??
-      (
-        !!(
-          salePayload?.payment?.hasReserve ||
-          salePayload?.payment?.reserveAmount ||
-          salePayload?.payment?.reservationAmount ||
-          salePayload?.payment?.reserva ||
-          salePayload?.payment?.deposit ||
-          salePayload?.payment?.downPayment ||
-          salePayload?.payment?.anticipo
-        ) ||
+      (!!(
+        salePayload?.payment?.hasReserve ||
+        salePayload?.payment?.reserveAmount ||
+        salePayload?.payment?.reservationAmount ||
+        salePayload?.payment?.reserva ||
+        salePayload?.payment?.deposit ||
+        salePayload?.payment?.downPayment ||
+        salePayload?.payment?.anticipo
+      ) ||
         /reserva|apartado|señ?a|anticipo/i.test(
           String(salePayload?.payment?.mode || "").toLowerCase()
-        )
-      ),
+        )),
     paymentReserveAmount:
       (draft as any)?.paymentReserveAmount ??
       ((salePayload?.payment?.reserveAmount ??
@@ -803,7 +802,7 @@ function Content({ id }: { id: string }) {
       const a = plan0?.first_amount;
       const b = plan0?.second_amount;
       const due = plan0?.second_due_date;
-      const parts = ["Excepción 2 cuotas"]; 
+      const parts = ["Excepción 2 cuotas"];
       if (a || b) parts.push(`(${String(a ?? "?")} + ${String(b ?? "?")})`);
       if (due) parts.push(`vence ${fmtDate(due)}`);
       return parts.join(" ");
@@ -811,7 +810,7 @@ function Content({ id }: { id: string }) {
     if (type === "reserva") {
       const amount = plan0?.reserve?.amount;
       const due = plan0?.reserve?.remaining_due_date;
-      const parts = ["Reserva"]; 
+      const parts = ["Reserva"];
       if (amount) parts.push(`(${String(amount)})`);
       if (due) parts.push(`resto vence ${fmtDate(due)}`);
       return parts.join(" ");
@@ -960,10 +959,10 @@ function Content({ id }: { id: string }) {
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Monto</span>
                     <span className="truncate">
-                      {(p.payment_amount ?? effectiveSalePayload?.payment?.amount) ===
-                        null ||
-                      (p.payment_amount ?? effectiveSalePayload?.payment?.amount) ===
-                        undefined
+                      {(p.payment_amount ??
+                        effectiveSalePayload?.payment?.amount) === null ||
+                      (p.payment_amount ??
+                        effectiveSalePayload?.payment?.amount) === undefined
                         ? "—"
                         : String(
                             p.payment_amount ??

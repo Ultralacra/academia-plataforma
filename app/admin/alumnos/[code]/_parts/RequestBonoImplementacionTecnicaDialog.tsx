@@ -228,7 +228,10 @@ export default function RequestBonoImplementacionTecnicaDialog({
     };
 
     // eslint-disable-next-line no-console
-    console.log("[Bonos] Solicitud Implementación técnica - formulario JSON:", payload);
+    console.log(
+      "[Bonos] Solicitud Implementación técnica - formulario JSON:",
+      payload
+    );
 
     setLoading(true);
     try {
