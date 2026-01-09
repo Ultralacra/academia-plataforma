@@ -69,436 +69,47 @@ function Content({ id }: { id: string }) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [snapshotSaving, setSnapshotSaving] = React.useState(false);
 
-  const truncateDataUrlTwoLines = React.useCallback((value: string) => {
-    const s = String(value || "");
-    if (!s.startsWith("data:")) return s;
-    if (s.length <= 180) return s;
-    const line1 = s.slice(0, 90);
-    const line2 = s.slice(90, 180);
-    return `${line1}\n${line2}…(truncado)`;
-  }, []);
+  // Guardado temporal en navegador (localStorage)
+  // Backend desactivado por ahora.
+  void createLeadSnapshot;
+  const localStorageKey = React.useMemo(() => `crm:booking:${id}`, [id]);
+  const hydratedRef = React.useRef<string | null>(null);
 
-  const stringifyForBackendExample = React.useCallback(
-    (obj: any) =>
-      JSON.stringify(
-        obj,
-        (_k, v) => {
-          if (typeof v === "string" && v.startsWith("data:")) {
-            return truncateDataUrlTwoLines(v);
-          }
-          return v;
-        },
-        2
-      ),
-    [truncateDataUrlTwoLines]
-  );
+  const hydrateFromLocalStorage = React.useCallback(() => {
+    try {
+      const raw = localStorage.getItem(localStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (parsed?.record) setRecord(parsed.record);
+      if (parsed?.draft) setDraft(parsed.draft);
+      if (parsed?.saleDraftPayload) setSaleDraftPayload(parsed.saleDraftPayload);
+      if (parsed?.paymentProof) setPaymentProof(parsed.paymentProof);
+    } catch {}
+  }, [localStorageKey]);
 
-  const sanitizeForBackendExample = React.useCallback(
-    (obj: any) => {
+  React.useEffect(() => {
+    if (hydratedRef.current === id) return;
+    hydratedRef.current = id;
+    hydrateFromLocalStorage();
+  }, [hydrateFromLocalStorage, id]);
+
+  React.useEffect(() => {
+    if (!record) return;
+    const t = window.setTimeout(() => {
       try {
-        return JSON.parse(stringifyForBackendExample(obj));
-      } catch {
-        return obj;
-      }
-    },
-    [stringifyForBackendExample]
-  );
-
-  const buildSnapshotBodyForConsole = () => {
-    if (!record) return null;
-    const ctx = buildSnapshotContext();
-    if (!ctx) return null;
-
-    const capturedAt = new Date().toISOString();
-    const patch = draftToLeadPatch(draft);
-    const snapshotPayloadCurrentBase = {
-      ...(leadForUi || record),
-      ...(patch || {}),
-      ...(saleDraftPayload ? { sale: saleDraftPayload } : {}),
-      ...(paymentProof
-        ? {
-            payment_proof: {
-              dataUrl: paymentProof.dataUrl,
-              name: paymentProof.name,
-              type: paymentProof.type,
-              size: paymentProof.size,
-            },
-          }
-        : {}),
-    };
-
-    // Completar con data de prueba (solo para consola) si faltan campos clave.
-    const mkDataUrl = (mime: string) =>
-      `data:${mime};base64,` +
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-
-    const nextPayloadCurrent = { ...snapshotPayloadCurrentBase } as any;
-    const sale = (nextPayloadCurrent.sale || {}) as any;
-    sale.payment = sale.payment || {};
-    sale.payment.plans = Array.isArray(sale.payment.plans)
-      ? sale.payment.plans
-      : [];
-
-    if (!sale.payment.proof) {
-      sale.payment.proof = {
-        name: "comprobante.png",
-        type: "image/png",
-        size: 123456,
-        dataUrl: mkDataUrl("image/png"),
-      };
-    }
-
-    if (
-      !Array.isArray(sale.payment.attachments) ||
-      sale.payment.attachments.length === 0
-    ) {
-      sale.payment.attachments = [
-        {
-          id: "att-test-1",
-          name: "ticket.pdf",
-          type: "application/pdf",
-          size: 45678,
-          dataUrl: mkDataUrl("application/pdf"),
-          created_at: new Date().toISOString(),
-        },
-      ];
-    }
-
-    // Si no hay plan en el array, generar uno mínimo acorde a plan_type/mode.
-    if (!sale.payment.plans.length) {
-      const planType = String(sale.payment.plan_type || "").toLowerCase();
-      if (planType === "cuotas") {
-        sale.payment.plans = [
-          {
-            type: "cuotas",
-            installments: {
-              count: sale.payment.installments?.count ?? 3,
-              amount: sale.payment.installments?.amount ?? "1600",
-              period_days: 30,
-              next_due_date:
-                sale.payment.installments?.next_due_date ?? "2026-02-08",
-            },
-            total: sale.payment.amount ?? null,
-            paid_amount: sale.payment.paid_amount ?? null,
-          },
-        ];
-      } else if (planType === "excepcion_2_cuotas") {
-        sale.payment.plans = [
-          {
-            type: "excepcion_2_cuotas",
-            first_amount:
-              sale.payment.exception_2_installments?.first_amount ?? 1995,
-            second_amount:
-              sale.payment.exception_2_installments?.second_amount ?? 1995,
-            second_due_date:
-              sale.payment.exception_2_installments?.second_due_date ??
-              "2026-02-08",
-            notes:
-              sale.payment.exception_2_installments?.notes ??
-              "Justificación (test)",
-            total: sale.payment.amount ?? 3990,
-            paid_amount: sale.payment.paid_amount ?? 1995,
-          },
-        ];
-      } else if (planType === "reserva") {
-        sale.payment.plans = [
-          {
-            type: "reserva",
-            reserve: {
-              amount: sale.payment.reserve?.amount ?? 500,
-              paid_date: sale.payment.reserve?.paid_date ?? "2026-01-08",
-              remaining_due_date:
-                sale.payment.reserve?.remaining_due_date ?? "2026-01-20",
-              notes: sale.payment.reserve?.notes ?? "Reserva (test)",
-            },
-            total: sale.payment.amount ?? null,
-            paid_amount: sale.payment.paid_amount ?? 500,
-          },
-        ];
-      } else {
-        sale.payment.plans = [
-          {
-            type: "contado",
-            total: sale.payment.amount ?? 3990,
-            paid_amount: sale.payment.paid_amount ?? 3990,
-          },
-        ];
-      }
-    }
-
-    nextPayloadCurrent.sale = sale;
-
-    const snapshot = {
-      schema_version: 1 as const,
-      captured_at: capturedAt,
-      captured_by: {
-        id: (user as any)?.id ?? null,
-        name: (user as any)?.name ?? null,
-        email: (user as any)?.email ?? null,
-        role: (user as any)?.role ?? null,
-      },
-      source: {
-        record_id: ctx.recordId,
-        entity: ctx.entity,
-        entity_id: ctx.entityId,
-      },
-      route: {
-        pathname:
-          typeof window !== "undefined" ? window.location?.pathname : undefined,
-        url: typeof window !== "undefined" ? window.location?.href : undefined,
-        user_agent:
-          typeof navigator !== "undefined" ? navigator.userAgent : undefined,
-      },
-      record: {
-        id: ctx.recordId,
-        entity: ctx.entity,
-        entity_id: ctx.entityId,
-        created_at: (record as any)?.created_at ?? undefined,
-        updated_at: (record as any)?.updated_at ?? undefined,
-      },
-      payload_current: nextPayloadCurrent,
-      computed: {
-        lead: {
-          status: ctx.leadStatus,
-          stage_label: ctx.leadStageLabel,
-          disposition: ctx.leadDisposition,
-          disposition_label: ctx.leadDispositionLabel,
-        },
-        sale: {
-          status_raw: ctx.statusRaw,
-          status_label: ctx.statusLabel,
-          payment_mode: ctx.salePayload?.payment?.mode ?? "",
-          has_reserva: ctx.hasReserva,
-          reserve_amount_raw: String(ctx.reserveAmountRaw ?? ""),
-        },
-      },
-      options: {
-        lead_stage_options: ctx.leadStageOptions,
-        lead_disposition_options: ctx.leadDispositionOptions,
-      },
-      draft: draft ?? undefined,
-    };
-
-    return {
-      entity: "crm_lead_snapshot",
-      codigo: id,
-      entity_id: `${String(ctx.entity)}:${String(ctx.recordId)}:${capturedAt}`,
-      payload: snapshot,
-    };
-  };
-
-  const buildPaymentExamplesForConsole = () => {
-    const mkDataUrl = (mime: string) =>
-      `data:${mime};base64,` +
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-
-    const proof =
-      paymentProof && paymentProof.dataUrl
-        ? {
-            name: paymentProof.name || "comprobante.png",
-            type: paymentProof.type || "image/png",
-            size: paymentProof.size || 123456,
-            dataUrl: paymentProof.dataUrl,
-          }
-        : {
-            name: "comprobante.png",
-            type: "image/png",
-            size: 123456,
-            dataUrl: mkDataUrl("image/png"),
-          };
-
-    const attachment = {
-      id: "att-test-1",
-      name: "ticket.pdf",
-      type: "application/pdf",
-      size: 45678,
-      dataUrl: mkDataUrl("application/pdf"),
-      created_at: new Date().toISOString(),
-    };
-
-    const program = String(
-      saleDraftPayload?.program ||
-        (leadForUi as any)?.program ||
-        (record as any)?.program ||
-        ""
-    ).trim();
-
-    return {
-      program,
-      payment_examples: [
-        {
-          type: "contado",
-          payment: {
-            platform: "hotmart",
-            proof,
-            attachments: [attachment],
-            plans: [
-              {
-                type: "contado",
-                total: 3990,
-                paid_amount: 3990,
-              },
-            ],
-          },
-        },
-        {
-          type: "cuotas",
-          payment: {
-            platform: "paypal",
-            proof,
-            attachments: [attachment],
-            plans: [
-              {
-                type: "cuotas",
-                installments: {
-                  count: 3,
-                  amount: 1600,
-                  period_days: 30,
-                  next_due_date: "2026-02-08",
-                },
-                total: 4800,
-                paid_amount: null,
-              },
-            ],
-          },
-        },
-        {
-          type: "excepcion_2_cuotas",
-          payment: {
-            platform: "binance",
-            proof,
-            attachments: [attachment],
-            plans: [
-              {
-                type: "excepcion_2_cuotas",
-                first_amount: 1995,
-                second_amount: 1995,
-                second_due_date: "2026-02-08",
-                notes: "Justificación (test)",
-                total: 3990,
-                paid_amount: 1995,
-              },
-            ],
-          },
-        },
-        {
-          type: "reserva",
-          payment: {
-            platform: "zelle",
-            proof,
-            attachments: [attachment],
-            plans: [
-              {
-                type: "reserva",
-                reserve: {
-                  amount: 500,
-                  paid_date: "2026-01-08",
-                  remaining_due_date: "2026-01-20",
-                  notes: "Reserva (test)",
-                },
-                total: 3990,
-                paid_amount: 500,
-              },
-            ],
-          },
-        },
-      ],
-    };
-  };
-
-  const buildFullSnapshotExampleForConsole = () => {
-    const base = buildSnapshotBodyForConsole();
-    if (!base) return null;
-
-    const mkPlan = (
-      type: "contado" | "cuotas" | "excepcion_2_cuotas" | "reserva"
-    ) => {
-      if (type === "contado") {
-        return { type, total: 3990, paid_amount: 3990 };
-      }
-      if (type === "cuotas") {
-        return {
-          type,
-          installments: {
-            count: 3,
-            amount: 1600,
-            period_days: 30,
-            next_due_date: "2026-02-08",
-          },
-          total: 4800,
-          paid_amount: null,
+        const next = {
+          version: 1,
+          saved_at: new Date().toISOString(),
+          record,
+          draft,
+          saleDraftPayload,
+          paymentProof,
         };
-      }
-      if (type === "excepcion_2_cuotas") {
-        return {
-          type,
-          first_amount: 1995,
-          second_amount: 1995,
-          second_due_date: "2026-02-08",
-          notes: "Justificación (test)",
-          total: 3990,
-          paid_amount: 1995,
-        };
-      }
-      return {
-        type,
-        reserve: {
-          amount: 500,
-          paid_date: "2026-01-08",
-          remaining_due_date: "2026-01-20",
-          notes: "Reserva (test)",
-        },
-        total: 3990,
-        paid_amount: 500,
-      };
-    };
-
-    const next: any = JSON.parse(JSON.stringify(base));
-    delete next.examples;
-    delete next.mock;
-
-    const pc = (next?.payload?.payload_current || {}) as any;
-    pc.call = pc.call || {
-      outcome: "no_answer",
-      result_at: "2026-01-08T15:00:00.000Z",
-      notes: "Notas de prueba",
-      reschedule: { requested: false, date: "", time: "" },
-      negotiation: { active: false, until: null },
-      reminders: [],
-    };
-
-    pc.sale = pc.sale || {};
-    pc.sale.payment = pc.sale.payment || {};
-
-    // Ejemplo: 4 tipos dentro del MISMO payment.plans.
-    // Producción enviará 1 plan (seleccionado), pero esto sirve como referencia.
-    const keep = pc.sale.payment;
-    pc.sale.payment = {
-      plan_type: keep.plan_type ?? "contado",
-      mode: keep.mode ?? "pago_total",
-      platform: keep.platform || "hotmart",
-      amount: keep.amount ?? null,
-      paid_amount: keep.paid_amount ?? null,
-      nextChargeDate: keep.nextChargeDate ?? null,
-      hasReserve: !!keep.hasReserve,
-      reserveAmount: keep.reserveAmount ?? null,
-      attachments: Array.isArray(keep.attachments) ? keep.attachments : [],
-      ...(keep.proof ? { proof: keep.proof } : {}),
-      plans: [
-        mkPlan("contado"),
-        mkPlan("cuotas"),
-        mkPlan("excepcion_2_cuotas"),
-        mkPlan("reserva"),
-      ],
-    };
-
-    next.payload.payload_current = pc;
-    return next;
-  };
+        localStorage.setItem(localStorageKey, JSON.stringify(next));
+      } catch {}
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [draft, localStorageKey, paymentProof, record, saleDraftPayload]);
 
   const applyRecordPatch = React.useCallback((patch: Record<string, any>) => {
     setRecord((prev: any | null) => {
@@ -604,7 +215,8 @@ function Content({ id }: { id: string }) {
         setRecord(lead as any);
       } catch (e) {
         if (!silent) {
-          setRecord(null);
+          // Si falla el backend, intentamos usar el borrador local.
+          hydrateFromLocalStorage();
         } else {
           toast({
             title: "Error",
@@ -616,7 +228,7 @@ function Content({ id }: { id: string }) {
         if (!silent) setLoading(false);
       }
     },
-    [id]
+    [hydrateFromLocalStorage, id]
   );
 
   const toLeadIsoDateOrNull = (v?: string | null) => {
@@ -907,18 +519,25 @@ function Content({ id }: { id: string }) {
         draft: draft ?? undefined,
       };
 
-      await createLeadSnapshot({
-        codigo: id,
-        source: {
-          record_id: ctx.recordId,
-          entity: ctx.entity,
-          entity_id: ctx.entityId,
-        },
-        snapshot,
-      });
+      // Guardado backend desactivado temporalmente.
+      // await createLeadSnapshot({ codigo: id, source: {...}, snapshot })
+      try {
+        const next = {
+          version: 1,
+          saved_at: new Date().toISOString(),
+          record,
+          draft,
+          saleDraftPayload,
+          paymentProof,
+          last_snapshot: snapshot,
+        };
+        localStorage.setItem(localStorageKey, JSON.stringify(next));
+      } catch {}
 
-      toast({ title: "Cambios guardados" });
-      await load({ silent: true });
+      toast({
+        title: "Guardado local",
+        description: "Se guardó en tu navegador (localStorage).",
+      });
     } catch (err: any) {
       toast({
         title: "Error",
@@ -933,7 +552,7 @@ function Content({ id }: { id: string }) {
     draftToLeadPatch,
     id,
     leadForUi,
-    load,
+    localStorageKey,
     paymentProof,
     record,
     saleDraftPayload,
@@ -966,6 +585,7 @@ function Content({ id }: { id: string }) {
 
   const p = (leadForUi as any) || (record as any) || {};
   const salePayload = (p as any).sale || {};
+  const effectiveSalePayload = saleDraftPayload || salePayload;
 
   const normalizeLeadStatus = (raw?: any) => {
     const v = String(raw ?? "")
@@ -1064,8 +684,10 @@ function Content({ id }: { id: string }) {
     fullName: p.name || salePayload?.name || "",
     email: p.email || salePayload?.email || "",
     phone: p.phone || salePayload?.phone || "",
-    program: salePayload?.program || "",
-    bonuses: Array.isArray(salePayload?.bonuses)
+    program: (draft as any)?.program ?? salePayload?.program ?? "",
+    bonuses: Array.isArray((draft as any)?.bonuses)
+      ? (draft as any).bonuses
+      : Array.isArray(salePayload?.bonuses)
       ? salePayload.bonuses
       : typeof salePayload?.bonuses === "string"
       ? String(salePayload?.bonuses)
@@ -1073,36 +695,49 @@ function Content({ id }: { id: string }) {
           .map((s: string) => s.trim())
           .filter(Boolean)
       : [],
-    paymentMode: salePayload?.payment?.mode || "",
-    paymentAmount: salePayload?.payment?.amount || "",
+    paymentMode:
+      (draft as any)?.paymentMode ?? salePayload?.payment?.mode ?? "",
+    paymentAmount:
+      (draft as any)?.paymentAmount ?? salePayload?.payment?.amount ?? "",
     paymentHasReserve:
-      !!(
-        salePayload?.payment?.hasReserve ||
-        salePayload?.payment?.reserveAmount ||
-        salePayload?.payment?.reservationAmount ||
-        salePayload?.payment?.reserva ||
-        salePayload?.payment?.deposit ||
-        salePayload?.payment?.downPayment ||
-        salePayload?.payment?.anticipo
-      ) ||
-      /reserva|apartado|señ?a|anticipo/i.test(
-        String(salePayload?.payment?.mode || "").toLowerCase()
+      (draft as any)?.paymentHasReserve ??
+      (
+        !!(
+          salePayload?.payment?.hasReserve ||
+          salePayload?.payment?.reserveAmount ||
+          salePayload?.payment?.reservationAmount ||
+          salePayload?.payment?.reserva ||
+          salePayload?.payment?.deposit ||
+          salePayload?.payment?.downPayment ||
+          salePayload?.payment?.anticipo
+        ) ||
+        /reserva|apartado|señ?a|anticipo/i.test(
+          String(salePayload?.payment?.mode || "").toLowerCase()
+        )
       ),
-    paymentReserveAmount: (salePayload?.payment?.reserveAmount ??
-      salePayload?.payment?.reservationAmount ??
-      salePayload?.payment?.reserva ??
-      salePayload?.payment?.deposit ??
-      salePayload?.payment?.downPayment ??
-      salePayload?.payment?.anticipo ??
-      "") as any,
-    paymentPlatform: salePayload?.payment?.platform || "hotmart",
-    nextChargeDate: salePayload?.payment?.nextChargeDate || "",
+    paymentReserveAmount:
+      (draft as any)?.paymentReserveAmount ??
+      ((salePayload?.payment?.reserveAmount ??
+        salePayload?.payment?.reservationAmount ??
+        salePayload?.payment?.reserva ??
+        salePayload?.payment?.deposit ??
+        salePayload?.payment?.downPayment ??
+        salePayload?.payment?.anticipo ??
+        "") as any),
+    paymentPlatform:
+      (draft as any)?.paymentPlatform ??
+      salePayload?.payment?.platform ??
+      "hotmart",
+    nextChargeDate:
+      (draft as any)?.nextChargeDate ??
+      salePayload?.payment?.nextChargeDate ??
+      "",
     contractThirdParty: !!salePayload?.contract?.thirdParty,
     contractPartyName: salePayload?.contract?.party?.name || p.name || "",
     contractPartyEmail: salePayload?.contract?.party?.email || p.email || "",
     contractPartyPhone: salePayload?.contract?.party?.phone || p.phone || "",
-    notes: salePayload?.notes || "",
-    status: salePayload?.status || undefined,
+    notes: (draft as any)?.notes ?? salePayload?.notes ?? "",
+    status: (draft as any)?.status ?? salePayload?.status ?? undefined,
   } as any;
 
   const fmtDate = (iso?: string) =>
@@ -1142,9 +777,47 @@ function Content({ id }: { id: string }) {
     return v.replace(/_/g, " ");
   };
 
-  const bonusesList: string[] = Array.isArray(initial?.bonuses)
+  const bonusesList: string[] = Array.isArray((draft as any)?.bonuses)
+    ? ((draft as any).bonuses as string[])
+    : Array.isArray(initial?.bonuses)
     ? (initial.bonuses as string[])
     : [];
+
+  const planSummary = (() => {
+    const plan0 = (effectiveSalePayload as any)?.payment?.plans?.[0];
+    const type = String(
+      plan0?.type || (effectiveSalePayload as any)?.payment?.plan_type || ""
+    )
+      .trim()
+      .toLowerCase();
+
+    if (!type) return "—";
+    if (type === "contado") return "Contado";
+    if (type === "cuotas") {
+      const count = plan0?.installments?.count;
+      const amount = plan0?.installments?.amount;
+      if (count && amount) return `Cuotas: ${count} x ${amount}`;
+      return "Cuotas";
+    }
+    if (type === "excepcion_2_cuotas") {
+      const a = plan0?.first_amount;
+      const b = plan0?.second_amount;
+      const due = plan0?.second_due_date;
+      const parts = ["Excepción 2 cuotas"]; 
+      if (a || b) parts.push(`(${String(a ?? "?")} + ${String(b ?? "?")})`);
+      if (due) parts.push(`vence ${fmtDate(due)}`);
+      return parts.join(" ");
+    }
+    if (type === "reserva") {
+      const amount = plan0?.reserve?.amount;
+      const due = plan0?.reserve?.remaining_due_date;
+      const parts = ["Reserva"]; 
+      if (amount) parts.push(`(${String(amount)})`);
+      if (due) parts.push(`resto vence ${fmtDate(due)}`);
+      return parts.join(" ");
+    }
+    return type;
+  })();
 
   return (
     <div className="p-6 space-y-6">
@@ -1214,7 +887,7 @@ function Content({ id }: { id: string }) {
                 </div>
 
                 <div className="pt-2 border-t border-border text-xs text-muted-foreground">
-                  Detalle (API)
+                  Detalle
                 </div>
                 <div className="grid grid-cols-1 gap-2 text-sm">
                   <div className="flex items-center justify-between gap-3">
@@ -1226,7 +899,11 @@ function Content({ id }: { id: string }) {
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Programa</span>
                     <span className="truncate">
-                      {p.program || salePayload?.program || "—"}
+                      {(draft as any)?.program ||
+                        effectiveSalePayload?.program ||
+                        p.program ||
+                        salePayload?.program ||
+                        "—"}
                     </span>
                   </div>
                   <div className="flex items-start justify-between gap-3">
@@ -1283,13 +960,14 @@ function Content({ id }: { id: string }) {
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Monto</span>
                     <span className="truncate">
-                      {(p.payment_amount ?? salePayload?.payment?.amount) ===
+                      {(p.payment_amount ?? effectiveSalePayload?.payment?.amount) ===
                         null ||
-                      (p.payment_amount ?? salePayload?.payment?.amount) ===
+                      (p.payment_amount ?? effectiveSalePayload?.payment?.amount) ===
                         undefined
                         ? "—"
                         : String(
-                            p.payment_amount ?? salePayload?.payment?.amount
+                            p.payment_amount ??
+                              effectiveSalePayload?.payment?.amount
                           )}
                     </span>
                   </div>
@@ -1297,13 +975,17 @@ function Content({ id }: { id: string }) {
                     <span className="text-muted-foreground">Próximo cobro</span>
                     <span className="truncate">
                       {p.next_charge_date ||
-                      salePayload?.payment?.nextChargeDate
+                      effectiveSalePayload?.payment?.nextChargeDate
                         ? fmtDate(
                             p.next_charge_date ||
-                              salePayload?.payment?.nextChargeDate
+                              effectiveSalePayload?.payment?.nextChargeDate
                           )
                         : "—"}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Plan</span>
+                    <span className="truncate">{planSummary}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">Recordatorios</span>
@@ -1444,87 +1126,15 @@ function Content({ id }: { id: string }) {
                       <DialogTitle>Vista previa / contrato</DialogTitle>
                     </DialogHeader>
                     <SalePreview
-                      payload={saleDraftPayload || salePayload}
+                      payload={effectiveSalePayload}
                       draft={draft || undefined}
                       leadCodigo={id}
                       entity="booking"
                       persistMode="local"
                       title="Contrato / resumen"
-                      onUpdated={() => load({ silent: true })}
                     />
                   </DialogContent>
                 </Dialog>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const body = buildSnapshotBodyForConsole();
-                    if (!body) {
-                      toast({
-                        title: "No disponible",
-                        description:
-                          "No se pudo construir el body en este momento.",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    const sanitized = sanitizeForBackendExample(body);
-                    console.log("[CRM] Body snapshot (data test)", sanitized);
-                    toast({
-                      title: "Impreso en consola",
-                      description:
-                        "Se imprimió el body completo con data de prueba (base64 truncado).",
-                    });
-                  }}
-                >
-                  Imprimir body
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const examples = buildPaymentExamplesForConsole();
-                    const sanitized = sanitizeForBackendExample(examples);
-                    console.log("[CRM] Tipos de pago (data test)", sanitized);
-                    toast({
-                      title: "Impreso en consola",
-                      description:
-                        "Se imprimieron los tipos de pago con data de prueba (base64 truncado).",
-                    });
-                  }}
-                >
-                  Imprimir tipos de pago
-                </Button>
-
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    const full = buildFullSnapshotExampleForConsole();
-                    if (!full) {
-                      toast({
-                        title: "No disponible",
-                        description: "No se pudo construir el JSON completo.",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    const sanitized = sanitizeForBackendExample(full);
-                    console.log(
-                      "[CRM] Snapshot completo (payment.plans con 4 tipos, test)",
-                      sanitized
-                    );
-                    toast({
-                      title: "Impreso en consola",
-                      description:
-                        "Se imprimió 1 snapshot completo con 4 tipos en payment.plans (sin payment_examples; base64 truncado).",
-                    });
-                  }}
-                >
-                  Imprimir JSON completo (4 tipos)
-                </Button>
               </CardAction>
             </CardHeader>
             <CardContent>

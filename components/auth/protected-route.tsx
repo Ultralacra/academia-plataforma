@@ -95,6 +95,7 @@ export function ProtectedRoute({
       segments[0] === "admin" && segments[1] === "tickets-board";
     const isTickets = segments[0] === "admin" && segments[1] === "tickets";
     const isPayments = segments[0] === "admin" && segments[1] === "payments";
+    const isBonos = segments[0] === "admin" && segments[1] === "bonos";
     const isCrm = segments[0] === "admin" && segments[1] === "crm";
     // Permitir métricas de equipos
     const isTeamsMetrics =
@@ -129,6 +130,7 @@ export function ProtectedRoute({
       !isTicketsBoard &&
       !isTickets &&
       !isPayments &&
+      !isBonos &&
       !isCrm &&
       !isTeamsMetrics &&
       !isStudentsMetrics

@@ -58,6 +58,7 @@ const adminItems: MenuItem[] = [
   { title: "Coachs", url: "/admin/teamsv2", icon: Users },
   { title: "Alumnos", url: "/admin/alumnos", icon: GraduationCap },
   { title: "Tickets", url: "/admin/tickets-board", icon: MessageSquare },
+  { title: "Bonos", url: "/admin/bonos", icon: Users },
   { title: "Pagos", url: "/admin/payments", icon: CreditCard },
   { title: "Chat Beta", url: "/chat/beta", icon: MessageSquare },
   { title: "Usuarios sistema", url: "/admin/users", icon: Users },
@@ -224,6 +225,7 @@ export function AppSidebar() {
                     url: "/coach/tickets",
                     icon: MessageSquare,
                   },
+                  { title: "Bonos", url: "/admin/bonos", icon: Users },
                   { title: "Pagos", url: "/admin/payments", icon: CreditCard },
                 ] as MenuItem[];
               })()
@@ -274,6 +276,7 @@ export function AppSidebar() {
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
               },
+              { title: "Bonos", url: "/admin/bonos", icon: Users },
               { title: "Pagos", url: "/admin/payments", icon: CreditCard },
               { title: "CRM", url: "/admin/crm", icon: Users },
             ]
@@ -310,6 +313,7 @@ export function AppSidebar() {
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
               },
+              { title: "Bonos", url: "/admin/bonos", icon: Users },
               { title: "Pagos", url: "/admin/payments", icon: CreditCard },
               { title: "CRM", url: "/admin/crm", icon: Users },
             ];

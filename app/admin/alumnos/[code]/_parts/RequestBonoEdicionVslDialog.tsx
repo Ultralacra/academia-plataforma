@@ -14,7 +14,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/use-toast";
-import * as alumnosApi from "@/app/admin/alumnos/api";
 import { CheckCircle2, ExternalLink } from "lucide-react";
 
 const HEADER_IMAGE_URL =
@@ -58,9 +57,10 @@ export default function RequestBonoEdicionVslDialog({
   onOpenChange,
   studentCode,
 }: Props) {
+  const bonoCodigo = "BONO_EDICION_VSL" as const;
+  const bonoNombre = "Bono Edición de VSL" as const;
+
   const [loading, setLoading] = React.useState(false);
-  const [tipoTicket, setTipoTicket] = React.useState<string>("");
-  const [tipos, setTipos] = React.useState<alumnosApi.OpcionItem[]>([]);
 
   const [confirmPrerequisitos, setConfirmPrerequisitos] = React.useState(false);
 
@@ -96,42 +96,10 @@ export default function RequestBonoEdicionVslDialog({
     if (!open) return;
 
     reset();
-    setTipoTicket("");
-    setTipos([]);
-
-    (async () => {
-      try {
-        const tiposRes = await alumnosApi.getOpciones("tipo_ticket");
-        setTipos(tiposRes);
-
-        const preferred =
-          tiposRes.find((t) =>
-            String(t.value || "")
-              .toLowerCase()
-              .includes("vsl")
-          ) ??
-          tiposRes.find((t) =>
-            String(t.value || "")
-              .toLowerCase()
-              .includes("bono")
-          ) ??
-          tiposRes[0];
-
-        if (preferred?.key) setTipoTicket(preferred.key);
-      } catch (e: any) {
-        console.error(e);
-        toast({
-          title: "No se pudieron cargar tipos de ticket",
-          description: e?.message ?? "Error desconocido",
-          variant: "destructive",
-        });
-      }
-    })();
   }, [open, reset]);
 
   const canSubmit =
     Boolean(studentCode) &&
-    Boolean(tipoTicket) &&
     confirmPrerequisitos &&
     nombreCompleto.trim().length > 0 &&
     correoEntrega.trim().length > 0 &&
@@ -186,27 +154,33 @@ export default function RequestBonoEdicionVslDialog({
       recomendaciones.trim(),
     ].join("\n");
 
+    const payload = {
+      bonoCodigo,
+      bonoNombre,
+      studentCode,
+      confirmPrerequisitos,
+      nombreCompleto: nombreCompleto.trim(),
+      correoEntrega: correoEntrega.trim(),
+      productoCarnada: productoCarnada.trim(),
+      linkGuionVsl: linkGuionVsl.trim(),
+      driveVideoBrutoYVariaciones: driveVideoBrutoYVariaciones.trim(),
+      driveTestimonios: driveTestimonios.trim(),
+      driveRecursos: driveRecursos.trim(),
+      driveIdentidadMarca: driveIdentidadMarca.trim(),
+      recomendaciones: recomendaciones.trim(),
+      descripcion,
+    };
+
+    // eslint-disable-next-line no-console
+    console.log("[Bonos] Solicitud Edición de VSL - formulario JSON:", payload);
+
     setLoading(true);
     try {
-      await alumnosApi.createTicket({
-        nombre: "Solicitud Bono Edición de VSL",
-        id_alumno: studentCode,
-        tipo: tipoTicket,
-        descripcion,
-      });
-
       toast({
-        title: "Solicitud enviada",
-        description: "Se creó el ticket de solicitud del bono.",
+        title: "Datos impresos en consola",
+        description: "Se imprimió el JSON del formulario (no se creó ticket).",
       });
       onOpenChange(false);
-    } catch (e: any) {
-      console.error(e);
-      toast({
-        title: "No se pudo enviar la solicitud",
-        description: e?.message ?? "Error desconocido",
-        variant: "destructive",
-      });
     } finally {
       setLoading(false);
     }

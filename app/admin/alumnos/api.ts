@@ -422,10 +422,11 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   }
   if (descripcion) fd.set('descripcion', descripcion);
   (form.archivos ?? []).forEach((file) => fd.append('archivos', file));
-  // Log de depuración (solo en desarrollo) para verificar que realmente se envían los campos
-  // Log diagnóstico SIEMPRE para confirmar qué se está enviando (puedes quitarlo cuando verifiques)
+  // Log diagnóstico para confirmar qué se está enviando (FormData no es serializable)
   try {
     const entries = Array.from(fd.entries());
+    // eslint-disable-next-line no-console
+    console.debug('[createTicket] POST', url);
     // eslint-disable-next-line no-console
     console.debug('[createTicket] Enviando FormData (debug):', entries);
     // eslint-disable-next-line no-console
@@ -435,9 +436,18 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    try {
+      // eslint-disable-next-line no-console
+      console.error('[createTicket] ERROR', res.status, url, text);
+    } catch {}
     throw new Error(text || `HTTP ${res.status} on ${url}`);
   }
-  return await res.json().catch(() => ({}));
+  const json = await res.json().catch(() => ({}));
+  try {
+    // eslint-disable-next-line no-console
+    console.log('[createTicket] OK response:', json);
+  } catch {}
+  return json;
 }
 
 // 6) Actualizar ticket por ID (JSON). No enviar alumno_url ni equipo en el body.

@@ -31,6 +31,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Eye, Send, UserMinus } from "lucide-react";
 import * as alumnosApi from "@/app/admin/alumnos/api";
 import RequestBonoImplementacionTecnicaDialog from "./RequestBonoImplementacionTecnicaDialog";
+import RequestBonoImplementacionTecnicaContractualDialog from "./RequestBonoImplementacionTecnicaContractualDialog";
 import RequestBonoEdicionVslDialog from "./RequestBonoEdicionVslDialog";
 
 function pad2(n: number) {
@@ -71,8 +72,34 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
   const [detail, setDetail] = useState<alumnosApi.Bono | null>(null);
 
   const [requestModal, setRequestModal] = useState<
-    "implementacion" | "vsl" | null
+    "implementacion" | "implementacion_contractual" | "vsl" | null
   >(null);
+
+  const isBonoImplementacionTecnicaContractual = (
+    b: alumnosApi.BonoAssignment
+  ) => {
+    const norm = (v: unknown) =>
+      String(v ?? "")
+        .trim()
+        .toUpperCase();
+    const normName = (v: unknown) =>
+      String(v ?? "")
+        .trim()
+        .toLowerCase();
+    const codeA = norm((b as any)?.bono_codigo);
+    const codeB = norm((b as any)?.codigo);
+    const name = normName((b as any)?.nombre);
+    return (
+      codeA === "BONO_IMPLEMENTACION_TECNICA_CONTRACTUAL" ||
+      codeB === "BONO_IMPLEMENTACION_TECNICA_CONTRACTUAL" ||
+      (name.includes("implementación") &&
+        name.includes("técnica") &&
+        name.includes("contractual")) ||
+      (name.includes("implementacion") &&
+        name.includes("tecnica") &&
+        name.includes("contractual"))
+    );
+  };
 
   const isBonoImplementacionTecnica = (b: alumnosApi.BonoAssignment) => {
     const norm = (v: unknown) =>
@@ -86,6 +113,16 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
     const codeA = norm((b as any)?.bono_codigo);
     const codeB = norm((b as any)?.codigo);
     const name = normName((b as any)?.nombre);
+    // Si es el bono contractual, debe abrir su propio formulario.
+    if (
+      codeA === "BONO_IMPLEMENTACION_TECNICA_CONTRACTUAL" ||
+      codeB === "BONO_IMPLEMENTACION_TECNICA_CONTRACTUAL" ||
+      (name.includes("contractual") &&
+        (name.includes("implementación") || name.includes("implementacion")) &&
+        (name.includes("técnica") || name.includes("tecnica")))
+    ) {
+      return false;
+    }
     return (
       codeA === "BONO_IMPLEMENTACION_TECNICA" ||
       codeB === "BONO_IMPLEMENTACION_TECNICA" ||
@@ -313,6 +350,8 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
         ) : (
           assigned.map((b) => {
             const canRequestImpl = isBonoImplementacionTecnica(b);
+            const canRequestImplContractual =
+              isBonoImplementacionTecnicaContractual(b);
             const canRequestVsl = isBonoEdicionVsl(b);
             return (
               <div
@@ -331,6 +370,27 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {canRequestImplContractual ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            aria-label="Solicitar bono"
+                            onClick={() => {
+                              setRequestModal("implementacion_contractual");
+                            }}
+                          >
+                            <Send className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent sideOffset={6}>
+                          Solicitar bono
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : null}
+
                     {canRequestImpl ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -604,6 +664,15 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
       <RequestBonoImplementacionTecnicaDialog
         open={requestModal === "implementacion"}
         onOpenChange={(v) => setRequestModal(v ? "implementacion" : null)}
+        studentCode={studentCode}
+      />
+
+      {/* Modal: Solicitar bono (Implementación técnica contractual) */}
+      <RequestBonoImplementacionTecnicaContractualDialog
+        open={requestModal === "implementacion_contractual"}
+        onOpenChange={(v) =>
+          setRequestModal(v ? "implementacion_contractual" : null)
+        }
         studentCode={studentCode}
       />
 

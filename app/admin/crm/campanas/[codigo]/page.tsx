@@ -94,9 +94,6 @@ export default function CampanaDetailPage() {
                     {item?.name || "Campaña"}
                   </h1>
                 </div>
-                <div className="text-sm text-muted-foreground">
-                  Detalle de /v1/leads/origins/:codigo
-                </div>
               </div>
               <Button asChild variant="outline">
                 <Link href="/admin/crm">Volver al CRM</Link>
