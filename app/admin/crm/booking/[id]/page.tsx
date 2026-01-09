@@ -60,9 +60,8 @@ function Content({ id }: { id: string }) {
   const [saleDraftPayload, setSaleDraftPayload] = React.useState<any | null>(
     null
   );
-  const [frozenSaleInitial, setFrozenSaleInitial] = React.useState<
-    Partial<CloseSaleInput> | null
-  >(null);
+  const [frozenSaleInitial, setFrozenSaleInitial] =
+    React.useState<Partial<CloseSaleInput> | null>(null);
   const [paymentProof, setPaymentProof] = React.useState<{
     dataUrl: string;
     name?: string;
@@ -256,14 +255,13 @@ function Content({ id }: { id: string }) {
           String(salePayload?.payment?.mode || "").toLowerCase()
         )
       ),
-      paymentReserveAmount:
-        (salePayload?.payment?.reserveAmount ??
-          salePayload?.payment?.reservationAmount ??
-          salePayload?.payment?.reserva ??
-          salePayload?.payment?.deposit ??
-          salePayload?.payment?.downPayment ??
-          salePayload?.payment?.anticipo ??
-          "") as any,
+      paymentReserveAmount: (salePayload?.payment?.reserveAmount ??
+        salePayload?.payment?.reservationAmount ??
+        salePayload?.payment?.reserva ??
+        salePayload?.payment?.deposit ??
+        salePayload?.payment?.downPayment ??
+        salePayload?.payment?.anticipo ??
+        "") as any,
       paymentPlatform: salePayload?.payment?.platform ?? "hotmart",
       nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
       contractThirdParty: !!salePayload?.contract?.thirdParty,
@@ -288,7 +286,8 @@ function Content({ id }: { id: string }) {
           ? (draft as any).bonuses
           : initialBase.bonuses,
         paymentMode: (draft as any)?.paymentMode ?? initialBase.paymentMode,
-        paymentAmount: (draft as any)?.paymentAmount ?? initialBase.paymentAmount,
+        paymentAmount:
+          (draft as any)?.paymentAmount ?? initialBase.paymentAmount,
         paymentHasReserve:
           (draft as any)?.paymentHasReserve ?? initialBase.paymentHasReserve,
         paymentReserveAmount:
@@ -296,7 +295,8 @@ function Content({ id }: { id: string }) {
           (initialBase as any).paymentReserveAmount,
         paymentPlatform:
           (draft as any)?.paymentPlatform ?? initialBase.paymentPlatform,
-        nextChargeDate: (draft as any)?.nextChargeDate ?? initialBase.nextChargeDate,
+        nextChargeDate:
+          (draft as any)?.nextChargeDate ?? initialBase.nextChargeDate,
         notes: (draft as any)?.notes ?? initialBase.notes,
         status: (draft as any)?.status ?? initialBase.status,
       });
@@ -808,22 +808,19 @@ function Content({ id }: { id: string }) {
           String(salePayload?.payment?.mode || "").toLowerCase()
         )
       ),
-      paymentReserveAmount:
-        (salePayload?.payment?.reserveAmount ??
-          salePayload?.payment?.reservationAmount ??
-          salePayload?.payment?.reserva ??
-          salePayload?.payment?.deposit ??
-          salePayload?.payment?.downPayment ??
-          salePayload?.payment?.anticipo ??
-          "") as any,
+      paymentReserveAmount: (salePayload?.payment?.reserveAmount ??
+        salePayload?.payment?.reservationAmount ??
+        salePayload?.payment?.reserva ??
+        salePayload?.payment?.deposit ??
+        salePayload?.payment?.downPayment ??
+        salePayload?.payment?.anticipo ??
+        "") as any,
       paymentPlatform: salePayload?.payment?.platform ?? "hotmart",
       nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
       contractThirdParty: !!salePayload?.contract?.thirdParty,
       contractPartyName: salePayload?.contract?.party?.name || p.name || "",
-      contractPartyEmail:
-        salePayload?.contract?.party?.email || p.email || "",
-      contractPartyPhone:
-        salePayload?.contract?.party?.phone || p.phone || "",
+      contractPartyEmail: salePayload?.contract?.party?.email || p.email || "",
+      contractPartyPhone: salePayload?.contract?.party?.phone || p.phone || "",
       notes: salePayload?.notes ?? "",
       status: salePayload?.status ?? undefined,
     } as any);
