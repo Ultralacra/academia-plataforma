@@ -768,7 +768,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         await updateClientLastTask(student.code || code, iso);
                         setLastTaskAt(iso);
                         try {
-                          const th = await getClienteTareas(student.code || code);
+                          const th = await getClienteTareas(
+                            student.code || code
+                          );
                           setTasksHistory(th);
                         } catch {}
                         toast({ title: "Última tarea actualizada" });
