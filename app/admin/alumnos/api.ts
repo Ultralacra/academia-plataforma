@@ -658,12 +658,29 @@ export async function getClienteTareas(alumnoCode: string): Promise<ClienteTarea
     : Array.isArray(json)
     ? json
     : [];
-  return rows.map((r) => ({
+  const mapped = rows.map((r) => ({
     id: r.id ?? r.tarea_id ?? `${key}-${r.created_at ?? ''}`,
     codigo_cliente: r.codigo_cliente ?? r.alumno ?? null,
     descripcion: r.descripcion ?? r.tarea ?? null,
     created_at: r.created_at ?? r.fecha ?? r.updated_at ?? new Date().toISOString(),
   }));
+
+  // Asegurar que la última actualización quede primero, aunque el backend devuelva desordenado.
+  const toTime = (iso: string) => {
+    const t = Date.parse(iso);
+    return Number.isFinite(t) ? t : 0;
+  };
+  mapped.sort((a, b) => {
+    const dt = toTime(b.created_at) - toTime(a.created_at);
+    if (dt !== 0) return dt;
+    // desempate estable por id (si ambos son numéricos)
+    const ai = typeof a.id === 'number' ? a.id : Number(a.id);
+    const bi = typeof b.id === 'number' ? b.id : Number(b.id);
+    if (Number.isFinite(ai) && Number.isFinite(bi)) return bi - ai;
+    return String(b.id).localeCompare(String(a.id));
+  });
+
+  return mapped;
 }
 
 // 13) Historial de estatus del cliente
