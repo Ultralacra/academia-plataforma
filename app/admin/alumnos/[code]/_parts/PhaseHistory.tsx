@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { fmtES } from "./detail-utils";
+import { fmtES, getOptionBadgeClass } from "./detail-utils";
+import { Badge } from "@/components/ui/badge";
 
 export default function PhaseHistory({
   history,
@@ -67,7 +68,12 @@ export default function PhaseHistory({
                   <li key={h.id} className="relative pl-8">
                     <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-background" />
                     <div className="rounded-md border border-border bg-muted/50 p-3">
-                      <div className="text-sm font-medium text-foreground">{`Cambio a ${h.etapa_id}`}</div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <span>Cambio a</span>
+                        <Badge className={getOptionBadgeClass("etapa", h.etapa_id)}>
+                          {String(h.etapa_id).toUpperCase()}
+                        </Badge>
+                      </div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {fmtES(h.created_at)}
                       </div>
@@ -96,9 +102,12 @@ export default function PhaseHistory({
                   <li key={h.id} className="relative pl-8">
                     <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-background" />
                     <div className="rounded-md border border-border bg-muted/50 p-3">
-                      <div className="text-sm font-medium text-foreground">{`Cambio a ${String(
-                        h.estado_id
-                      ).toUpperCase()}`}</div>
+                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                        <span>Cambio a</span>
+                        <Badge className={getOptionBadgeClass("estado", h.estado_id)}>
+                          {String(h.estado_id).toUpperCase()}
+                        </Badge>
+                      </div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {fmtES(h.created_at)}
                       </div>

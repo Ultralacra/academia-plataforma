@@ -1,7 +1,8 @@
 "use client";
 
 import React from "react";
-import { fmtES } from "./detail-utils";
+import { fmtES, getOptionBadgeClass } from "./detail-utils";
+import { Badge } from "@/components/ui/badge";
 
 export type StatusHistItem = {
   id: number | string;
@@ -45,8 +46,11 @@ export default function StatusHistory({
               <div className="rounded-md border border-border bg-muted/50 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground">
-                      {`Cambio a ${String(h.estado_id).toUpperCase()}`}
+                    <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                      <span>Cambio a</span>
+                      <Badge className={getOptionBadgeClass("estado", h.estado_id)}>
+                        {String(h.estado_id).toUpperCase()}
+                      </Badge>
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {fmtES(h.created_at)}
