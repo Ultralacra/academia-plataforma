@@ -70,7 +70,9 @@ export default function PhaseHistory({
                     <div className="rounded-md border border-border bg-muted/50 p-3">
                       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                         <span>Cambio a</span>
-                        <Badge className={getOptionBadgeClass("etapa", h.etapa_id)}>
+                        <Badge
+                          className={getOptionBadgeClass("etapa", h.etapa_id)}
+                        >
                           {String(h.etapa_id).toUpperCase()}
                         </Badge>
                       </div>
@@ -104,7 +106,9 @@ export default function PhaseHistory({
                     <div className="rounded-md border border-border bg-muted/50 p-3">
                       <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                         <span>Cambio a</span>
-                        <Badge className={getOptionBadgeClass("estado", h.estado_id)}>
+                        <Badge
+                          className={getOptionBadgeClass("estado", h.estado_id)}
+                        >
                           {String(h.estado_id).toUpperCase()}
                         </Badge>
                       </div>
