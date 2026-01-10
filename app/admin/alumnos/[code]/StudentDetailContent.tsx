@@ -372,7 +372,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
         rows
           .map((r: any, idx: number) => ({
             id: r.id ?? r.etapa_hist_id ?? `${codeToFetch}-${idx}`,
-            codigo_cliente: r.codigo_cliente ?? r.codigo ?? r.alumno ?? codeToFetch,
+            codigo_cliente:
+              r.codigo_cliente ?? r.codigo ?? r.alumno ?? codeToFetch,
             etapa_id: String(r.etapa_id ?? r.etapa ?? r.fase ?? r.stage ?? ""),
             created_at: String(
               r.created_at ?? r.fecha ?? r.createdAt ?? r.updated_at ?? ""
@@ -843,32 +844,55 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   <div className="mt-3 space-y-2 text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">Ingreso</span>
-                      <span className="font-medium">{fmtES(accessStats.startDay.toISOString())}</span>
+                      <span className="font-medium">
+                        {fmtES(accessStats.startDay.toISOString())}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">Días desde ingreso</span>
-                      <span className="font-medium">{accessStats.daysSinceStart}</span>
+                      <span className="text-muted-foreground">
+                        Días desde ingreso
+                      </span>
+                      <span className="font-medium">
+                        {accessStats.daysSinceStart}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">Días en pausa (no cuentan)</span>
-                      <span className="font-medium">{accessStats.pausedDaysElapsed}</span>
+                      <span className="text-muted-foreground">
+                        Días en pausa (no cuentan)
+                      </span>
+                      <span className="font-medium">
+                        {accessStats.pausedDaysElapsed}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">Días efectivos</span>
-                      <span className="font-medium">{accessStats.effectiveDays} / {accessStats.programDays}</span>
+                      <span className="text-muted-foreground">
+                        Días efectivos
+                      </span>
+                      <span className="font-medium">
+                        {accessStats.effectiveDays} / {accessStats.programDays}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">Vence (estimado)</span>
-                      <span className="font-medium">{fmtES(accessStats.estimatedEnd.toISOString())}</span>
+                      <span className="text-muted-foreground">
+                        Vence (estimado)
+                      </span>
+                      <span className="font-medium">
+                        {fmtES(accessStats.estimatedEnd.toISOString())}
+                      </span>
                     </div>
                     {!accessStats.isExpired ? (
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">Días restantes</span>
-                        <span className="font-medium">{Math.max(0, accessStats.remainingDays)}</span>
+                        <span className="text-muted-foreground">
+                          Días restantes
+                        </span>
+                        <span className="font-medium">
+                          {Math.max(0, accessStats.remainingDays)}
+                        </span>
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        * El vencimiento se calcula descontando días de pausa registrados.
+                        * El vencimiento se calcula descontando días de pausa
+                        registrados.
                       </p>
                     )}
 
@@ -877,16 +901,21 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         Historial de pausas
                       </div>
                       {mergedPauseIntervals.length === 0 ? (
-                        <p className="mt-2 text-sm text-muted-foreground">Sin pausas registradas.</p>
+                        <p className="mt-2 text-sm text-muted-foreground">
+                          Sin pausas registradas.
+                        </p>
                       ) : (
                         <div className="mt-2 space-y-2">
                           {mergedPauseIntervals
                             .slice()
-                            .sort((a, b) => b.start.getTime() - a.start.getTime())
+                            .sort(
+                              (a, b) => b.start.getTime() - a.start.getTime()
+                            )
                             .map((r, idx) => {
                               const days = daysBetweenInclusive(r.start, r.end);
                               const today = toDayDate(new Date());
-                              const isActive = today >= r.start && today <= r.end;
+                              const isActive =
+                                today >= r.start && today <= r.end;
                               return (
                                 <div
                                   key={`${r.start.toISOString()}-${r.end.toISOString()}-${idx}`}
@@ -894,13 +923,21 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="text-sm font-medium">
-                                      {fmtES(r.start.toISOString())} → {fmtES(r.end.toISOString())}
+                                      {fmtES(r.start.toISOString())} →{" "}
+                                      {fmtES(r.end.toISOString())}
                                     </div>
                                     <div className="flex items-center gap-2">
                                       {isActive ? (
-                                        <Badge variant="secondary" className="h-5">Activa</Badge>
+                                        <Badge
+                                          variant="secondary"
+                                          className="h-5"
+                                        >
+                                          Activa
+                                        </Badge>
                                       ) : null}
-                                      <span className="text-xs text-muted-foreground">{days} días</span>
+                                      <span className="text-xs text-muted-foreground">
+                                        {days} días
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
@@ -908,7 +945,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
                             })}
                           {pauseHistory.length > mergedPauseIntervals.length ? (
                             <p className="text-[11px] text-muted-foreground">
-                              * Algunas pausas se consolidan si fueron extensiones/solapes.
+                              * Algunas pausas se consolidan si fueron
+                              extensiones/solapes.
                             </p>
                           ) : null}
                         </div>

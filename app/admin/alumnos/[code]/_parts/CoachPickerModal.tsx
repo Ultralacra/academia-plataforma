@@ -261,9 +261,7 @@ export default function CoachPickerModal({
                 }}
                 disabled={selectedCount === 0}
               >
-                {mode === "single"
-                  ? "Confirmar"
-                  : `Asignar (${selectedCount})`}
+                {mode === "single" ? "Confirmar" : `Asignar (${selectedCount})`}
               </Button>
             </div>
           </div>

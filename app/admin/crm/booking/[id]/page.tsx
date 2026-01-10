@@ -60,9 +60,8 @@ function Content({ id }: { id: string }) {
   // Congelamos los valores iniciales del formulario para evitar loops.
   // Motivo: `draft` se actualiza con cada tecla para la vista previa; si `initial`
   // depende de `draft`, CloseSaleForm2 re-sincroniza su estado y se genera un loop.
-  const [frozenSaleInitial, setFrozenSaleInitial] = React.useState<
-    Partial<CloseSaleInput> | null
-  >(null);
+  const [frozenSaleInitial, setFrozenSaleInitial] =
+    React.useState<Partial<CloseSaleInput> | null>(null);
   const [saleDraftPayload, setSaleDraftPayload] = React.useState<any | null>(
     null
   );
@@ -631,10 +630,8 @@ function Content({ id }: { id: string }) {
       nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
       contractThirdParty: !!salePayload?.contract?.thirdParty,
       contractPartyName: salePayload?.contract?.party?.name || p.name || "",
-      contractPartyEmail:
-        salePayload?.contract?.party?.email || p.email || "",
-      contractPartyPhone:
-        salePayload?.contract?.party?.phone || p.phone || "",
+      contractPartyEmail: salePayload?.contract?.party?.email || p.email || "",
+      contractPartyPhone: salePayload?.contract?.party?.phone || p.phone || "",
       notes: salePayload?.notes ?? "",
       status: salePayload?.status ?? undefined,
     } as any;
@@ -680,7 +677,6 @@ function Content({ id }: { id: string }) {
       </div>
     );
   }
-
 
   const normalizeLeadStatus = (raw?: any) => {
     const v = String(raw ?? "")
