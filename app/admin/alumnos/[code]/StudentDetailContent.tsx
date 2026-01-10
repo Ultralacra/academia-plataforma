@@ -16,8 +16,10 @@ import {
   buildPhasesFor,
   buildLifecycleFor,
   isoDay,
+  addDays,
   parseMaybe,
   diffDays,
+  fmtES,
   type Stage,
   type StatusSint,
 } from "./_parts/detail-utils";
@@ -25,6 +27,7 @@ import TicketsPanel from "./_parts/TicketsPanel";
 import SessionsStudentPanel from "./_parts/SessionsStudentPanel";
 import BonosPanel from "./_parts/BonosPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
+import { Badge } from "@/components/ui/badge";
 import { getStudentTickets } from "../api";
 import Link from "next/link";
 import { MessageSquare } from "lucide-react";
@@ -45,7 +48,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -82,6 +84,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
     daysElapsed: number;
     totalDays: number;
   } | null>(null);
+
+  const [pauseHistory, setPauseHistory] = useState<
+    Array<{ start: string; end: string; setAt: string | null }>
+  >([]);
 
   useEffect(() => {
     let alive = true;
@@ -261,15 +267,39 @@ export default function StudentDetailContent({ code }: { code: string }) {
         typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
       if (!raw) {
         setPauseInfo(null);
+        setPauseHistory([]);
         return;
       }
-      const { start, end } = JSON.parse(raw) || {};
-      if (!start || !end) {
+      const parsed = JSON.parse(raw) || {};
+
+      // Compatibilidad: formato antiguo {start, end}
+      const currentStart =
+        parsed?.current?.start ?? parsed?.start ?? parsed?.currentStart ?? null;
+      const currentEnd =
+        parsed?.current?.end ?? parsed?.end ?? parsed?.currentEnd ?? null;
+
+      const historyRaw: any[] = Array.isArray(parsed?.history)
+        ? parsed.history
+        : parsed?.start && parsed?.end
+        ? [{ start: parsed.start, end: parsed.end, setAt: null }]
+        : [];
+
+      const history = historyRaw
+        .map((h) => ({
+          start: String(h?.start ?? ""),
+          end: String(h?.end ?? ""),
+          setAt: h?.setAt ? String(h.setAt) : null,
+        }))
+        .filter((h) => Boolean(h.start) && Boolean(h.end));
+      setPauseHistory(history);
+
+      if (!currentStart || !currentEnd) {
         setPauseInfo(null);
         return;
       }
-      const s = new Date(start);
-      const e = new Date(end);
+
+      const s = new Date(String(currentStart));
+      const e = new Date(String(currentEnd));
       s.setHours(0, 0, 0, 0);
       e.setHours(0, 0, 0, 0);
       const today = new Date();
@@ -291,6 +321,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       });
     } catch {
       setPauseInfo(null);
+      setPauseHistory([]);
     }
   }
 
@@ -327,14 +358,27 @@ export default function StudentDetailContent({ code }: { code: string }) {
         codeToFetch
       )}`;
       const jh = await apiFetch<any>(histUrl);
-      const rows = Array.isArray(jh?.data) ? jh.data : [];
+      const rows: any[] = Array.isArray(jh?.data)
+        ? jh.data
+        : Array.isArray(jh?.data?.data)
+        ? jh.data.data
+        : Array.isArray(jh?.rows)
+        ? jh.rows
+        : Array.isArray(jh)
+        ? jh
+        : [];
+
       setPhaseHistory(
-        rows.map((r: any) => ({
-          id: r.id,
-          codigo_cliente: r.codigo_cliente,
-          etapa_id: r.etapa_id,
-          created_at: r.created_at,
-        }))
+        rows
+          .map((r: any, idx: number) => ({
+            id: r.id ?? r.etapa_hist_id ?? `${codeToFetch}-${idx}`,
+            codigo_cliente: r.codigo_cliente ?? r.codigo ?? r.alumno ?? codeToFetch,
+            etapa_id: String(r.etapa_id ?? r.etapa ?? r.fase ?? r.stage ?? ""),
+            created_at: String(
+              r.created_at ?? r.fecha ?? r.createdAt ?? r.updated_at ?? ""
+            ),
+          }))
+          .filter((x) => Boolean(x.etapa_id))
       );
     } catch (e) {
       setPhaseHistory(null);
@@ -368,19 +412,43 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
   async function assignCoaches(codes: string[]) {
     if (!student?.code) return;
+    const unique = Array.from(
+      new Set((codes || []).map((c) => String(c ?? "").trim()).filter(Boolean))
+    );
+    if (unique.length === 0) return;
+
     try {
-      const body = {
-        codigo_cliente: student.code,
-        equipos: codes,
-      };
-      await apiFetch("/team/associate/team-client", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      // refresh coaches
+      setLoading(true);
+
+      // IMPORTANT: hacemos cola (1 POST por coach) porque el backend suele dejar solo el último
+      // cuando mandamos varios a la vez.
+      for (const code of unique) {
+        const body = {
+          codigo_cliente: student.code,
+          equipos: [code],
+        };
+        await apiFetch("/team/associate/team-client", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+      }
+
       await loadCoaches(student.code);
+      toast({
+        title: unique.length === 1 ? "Coach asignado" : "Coaches asignados",
+        description:
+          unique.length === 1
+            ? undefined
+            : `${unique.length} coaches se asignaron correctamente.`,
+      });
     } catch (e) {
       console.error("Error assigning coaches", e);
+      toast({
+        title: "No se pudo asignar coach",
+        description: "Revisa la conexión o permisos e inténtalo de nuevo.",
+      });
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -506,7 +574,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     "estado" | "etapa" | "nicho" | "all"
   >("all");
   const [phaseHistory, setPhaseHistory] = useState<Array<{
-    id: number;
+    id: number | string;
     codigo_cliente: string;
     etapa_id: string;
     created_at: string;
@@ -523,6 +591,96 @@ export default function StudentDetailContent({ code }: { code: string }) {
     descripcion?: string | null;
     created_at: string;
   }> | null>(null);
+
+  function toDayDate(d: Date) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    return x;
+  }
+
+  function daysBetweenInclusive(a: Date, b: Date) {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const aa = toDayDate(a).getTime();
+    const bb = toDayDate(b).getTime();
+    if (bb < aa) return 0;
+    return Math.round((bb - aa) / msPerDay) + 1;
+  }
+
+  const mergedPauseIntervals = useMemo(() => {
+    const allRanges: Array<{ start: Date; end: Date }> = [];
+    for (const h of pauseHistory || []) {
+      const s = parseMaybe(h.start);
+      const e = parseMaybe(h.end);
+      if (!s || !e) continue;
+      allRanges.push({ start: toDayDate(s), end: toDayDate(e) });
+    }
+    // Asegurar que la pausa actual esté incluida (aunque no esté en history por algún motivo)
+    if (pauseInfo?.start && pauseInfo?.end) {
+      const s = parseMaybe(pauseInfo.start);
+      const e = parseMaybe(pauseInfo.end);
+      if (s && e) allRanges.push({ start: toDayDate(s), end: toDayDate(e) });
+    }
+    if (allRanges.length === 0) return [] as Array<{ start: Date; end: Date }>;
+
+    allRanges.sort((a, b) => a.start.getTime() - b.start.getTime());
+    const merged: Array<{ start: Date; end: Date }> = [];
+    for (const r of allRanges) {
+      const last = merged[merged.length - 1];
+      if (!last) {
+        merged.push({ start: r.start, end: r.end });
+        continue;
+      }
+      // Solape o contiguo
+      const lastEnd = last.end.getTime();
+      const rStart = r.start.getTime();
+      const oneDay = 24 * 60 * 60 * 1000;
+      if (rStart <= lastEnd + oneDay) {
+        if (r.end.getTime() > lastEnd) last.end = r.end;
+      } else {
+        merged.push({ start: r.start, end: r.end });
+      }
+    }
+    return merged;
+  }, [pauseHistory, pauseInfo]);
+
+  const accessStats = useMemo(() => {
+    const ingresoIso = pIngreso || student?.ingreso || student?.raw?.ingreso;
+    const start = parseMaybe(ingresoIso);
+    if (!start) return null;
+
+    const startDay = toDayDate(start);
+    const today = toDayDate(new Date());
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const daysSinceStart = Math.max(
+      0,
+      Math.round((today.getTime() - startDay.getTime()) / msPerDay)
+    );
+
+    // Días pausados acumulados hasta hoy (sin doble conteo)
+    let pausedDaysElapsed = 0;
+    for (const r of mergedPauseIntervals) {
+      const a = r.start < startDay ? startDay : r.start;
+      const b = r.end > today ? today : r.end;
+      pausedDaysElapsed += daysBetweenInclusive(a, b);
+    }
+
+    const effectiveDays = Math.max(0, daysSinceStart - pausedDaysElapsed);
+    const PROGRAM_DAYS = 120; // 4 meses ~ 120 días (regla operativa)
+    const remaining = PROGRAM_DAYS - effectiveDays;
+    const isExpired = remaining <= 0;
+    const estEnd = addDays(startDay, PROGRAM_DAYS + pausedDaysElapsed);
+    return {
+      startDay,
+      today,
+      daysSinceStart,
+      pausedDaysElapsed,
+      effectiveDays,
+      programDays: PROGRAM_DAYS,
+      remainingDays: remaining,
+      isExpired,
+      estimatedEnd: estEnd,
+    };
+  }, [pIngreso, student?.ingreso, student?.raw?.ingreso, mergedPauseIntervals]);
 
   // Vista simplificada: solo "Mi perfil" (detalle). Otras secciones van en rutas aparte.
 
@@ -551,6 +709,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
       </div>
     );
   }
+
+  const canSeeAdminAccessInfo = ["admin", "equipo", "atc"].includes(
+    String((user as any)?.role ?? "").toLowerCase()
+  );
 
   return (
     <div className="space-y-6">
@@ -658,6 +820,105 @@ export default function StudentDetailContent({ code }: { code: string }) {
           </div>
           {/* Columna lateral: equipo y contrato (sticky) */}
           <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24 self-start">
+            {canSeeAdminAccessInfo && (
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-medium">Acceso (4 meses)</h3>
+                  {accessStats ? (
+                    accessStats.isExpired ? (
+                      <Badge variant="destructive">Vencido</Badge>
+                    ) : (
+                      <Badge variant="secondary">Vigente</Badge>
+                    )
+                  ) : (
+                    <Badge variant="secondary">Sin ingreso</Badge>
+                  )}
+                </div>
+
+                {!accessStats ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    No hay fecha de ingreso registrada para calcular el acceso.
+                  </p>
+                ) : (
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Ingreso</span>
+                      <span className="font-medium">{fmtES(accessStats.startDay.toISOString())}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Días desde ingreso</span>
+                      <span className="font-medium">{accessStats.daysSinceStart}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Días en pausa (no cuentan)</span>
+                      <span className="font-medium">{accessStats.pausedDaysElapsed}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Días efectivos</span>
+                      <span className="font-medium">{accessStats.effectiveDays} / {accessStats.programDays}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Vence (estimado)</span>
+                      <span className="font-medium">{fmtES(accessStats.estimatedEnd.toISOString())}</span>
+                    </div>
+                    {!accessStats.isExpired ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Días restantes</span>
+                        <span className="font-medium">{Math.max(0, accessStats.remainingDays)}</span>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        * El vencimiento se calcula descontando días de pausa registrados.
+                      </p>
+                    )}
+
+                    <div className="pt-2 border-t border-border">
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Historial de pausas
+                      </div>
+                      {mergedPauseIntervals.length === 0 ? (
+                        <p className="mt-2 text-sm text-muted-foreground">Sin pausas registradas.</p>
+                      ) : (
+                        <div className="mt-2 space-y-2">
+                          {mergedPauseIntervals
+                            .slice()
+                            .sort((a, b) => b.start.getTime() - a.start.getTime())
+                            .map((r, idx) => {
+                              const days = daysBetweenInclusive(r.start, r.end);
+                              const today = toDayDate(new Date());
+                              const isActive = today >= r.start && today <= r.end;
+                              return (
+                                <div
+                                  key={`${r.start.toISOString()}-${r.end.toISOString()}-${idx}`}
+                                  className="rounded-md border border-border bg-muted/30 p-2"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="text-sm font-medium">
+                                      {fmtES(r.start.toISOString())} → {fmtES(r.end.toISOString())}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {isActive ? (
+                                        <Badge variant="secondary" className="h-5">Activa</Badge>
+                                      ) : null}
+                                      <span className="text-xs text-muted-foreground">{days} días</span>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          {pauseHistory.length > mergedPauseIntervals.length ? (
+                            <p className="text-[11px] text-muted-foreground">
+                              * Algunas pausas se consolidan si fueron extensiones/solapes.
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div id="coaches-card">
               <CoachesCard
                 coaches={coaches}

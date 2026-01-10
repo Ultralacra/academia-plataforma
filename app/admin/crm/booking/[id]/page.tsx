@@ -57,11 +57,15 @@ function Content({ id }: { id: string }) {
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
     null
   );
+  // Congelamos los valores iniciales del formulario para evitar loops.
+  // Motivo: `draft` se actualiza con cada tecla para la vista previa; si `initial`
+  // depende de `draft`, CloseSaleForm2 re-sincroniza su estado y se genera un loop.
+  const [frozenSaleInitial, setFrozenSaleInitial] = React.useState<
+    Partial<CloseSaleInput> | null
+  >(null);
   const [saleDraftPayload, setSaleDraftPayload] = React.useState<any | null>(
     null
   );
-  const [frozenSaleInitial, setFrozenSaleInitial] =
-    React.useState<Partial<CloseSaleInput> | null>(null);
   const [paymentProof, setPaymentProof] = React.useState<{
     dataUrl: string;
     name?: string;
@@ -71,22 +75,19 @@ function Content({ id }: { id: string }) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [snapshotSaving, setSnapshotSaving] = React.useState(false);
 
-  // Si cambia el lead, reseteamos el initial congelado.
-  React.useEffect(() => {
-    setFrozenSaleInitial(null);
-  }, [id]);
-
   // Guardado temporal en navegador (localStorage)
   // Backend desactivado por ahora.
   void createLeadSnapshot;
   const localStorageKey = React.useMemo(() => `crm:booking:${id}`, [id]);
   const hydratedRef = React.useRef<string | null>(null);
+  const didHydrateFromLocalStorageRef = React.useRef(false);
 
   const hydrateFromLocalStorage = React.useCallback(() => {
     try {
       const raw = localStorage.getItem(localStorageKey);
       if (!raw) return;
       const parsed = JSON.parse(raw);
+      didHydrateFromLocalStorageRef.current = true;
       if (parsed?.record) setRecord(parsed.record);
       if (parsed?.draft) setDraft(parsed.draft);
       if (parsed?.saleDraftPayload)
@@ -98,6 +99,8 @@ function Content({ id }: { id: string }) {
   React.useEffect(() => {
     if (hydratedRef.current === id) return;
     hydratedRef.current = id;
+    didHydrateFromLocalStorageRef.current = false;
+    setFrozenSaleInitial(null);
     hydrateFromLocalStorage();
   }, [hydrateFromLocalStorage, id]);
 
@@ -214,97 +217,6 @@ function Content({ id }: { id: string }) {
       sale,
     };
   }, [record]);
-
-  // Congelamos los valores iniciales del formulario de venta UNA sola vez.
-  // Motivo: `draft` se actualiza con cada tecla (para vista previa) y si `initial`
-  // depende de `draft`, CloseSaleForm2 re-sincroniza su estado y se genera un loop.
-  React.useEffect(() => {
-    if (frozenSaleInitial) return;
-    if (!record) return;
-
-    const base = (leadForUi as any) || (record as any) || {};
-    const salePayload = (base as any).sale || {};
-
-    const toBonusesArray = (v: any) => {
-      if (Array.isArray(v)) return v;
-      if (typeof v === "string")
-        return v
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-      return [];
-    };
-
-    const initialBase: Partial<CloseSaleInput> = {
-      fullName: base.name || salePayload?.name || "",
-      email: base.email || salePayload?.email || "",
-      phone: base.phone || salePayload?.phone || "",
-      program: salePayload?.program ?? "",
-      bonuses: toBonusesArray(salePayload?.bonuses),
-      paymentMode: salePayload?.payment?.mode ?? "",
-      paymentAmount: salePayload?.payment?.amount ?? "",
-      paymentHasReserve: !!(
-        salePayload?.payment?.hasReserve ||
-        salePayload?.payment?.reserveAmount ||
-        salePayload?.payment?.reservationAmount ||
-        salePayload?.payment?.reserva ||
-        salePayload?.payment?.deposit ||
-        salePayload?.payment?.downPayment ||
-        salePayload?.payment?.anticipo ||
-        /reserva|apartado|señ?a|anticipo/i.test(
-          String(salePayload?.payment?.mode || "").toLowerCase()
-        )
-      ),
-      paymentReserveAmount: (salePayload?.payment?.reserveAmount ??
-        salePayload?.payment?.reservationAmount ??
-        salePayload?.payment?.reserva ??
-        salePayload?.payment?.deposit ??
-        salePayload?.payment?.downPayment ??
-        salePayload?.payment?.anticipo ??
-        "") as any,
-      paymentPlatform: salePayload?.payment?.platform ?? "hotmart",
-      nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
-      contractThirdParty: !!salePayload?.contract?.thirdParty,
-      contractPartyName: salePayload?.contract?.party?.name || base.name || "",
-      contractPartyEmail:
-        salePayload?.contract?.party?.email || base.email || "",
-      contractPartyPhone:
-        salePayload?.contract?.party?.phone || base.phone || "",
-      notes: salePayload?.notes ?? "",
-      status: salePayload?.status ?? undefined,
-    };
-
-    // Si había un borrador hidratado desde localStorage, lo aplicamos una sola vez.
-    if (draft && typeof draft === "object") {
-      setFrozenSaleInitial({
-        ...initialBase,
-        fullName: (draft as any)?.fullName ?? initialBase.fullName,
-        email: (draft as any)?.email ?? initialBase.email,
-        phone: (draft as any)?.phone ?? initialBase.phone,
-        program: (draft as any)?.program ?? initialBase.program,
-        bonuses: Array.isArray((draft as any)?.bonuses)
-          ? (draft as any).bonuses
-          : initialBase.bonuses,
-        paymentMode: (draft as any)?.paymentMode ?? initialBase.paymentMode,
-        paymentAmount:
-          (draft as any)?.paymentAmount ?? initialBase.paymentAmount,
-        paymentHasReserve:
-          (draft as any)?.paymentHasReserve ?? initialBase.paymentHasReserve,
-        paymentReserveAmount:
-          (draft as any)?.paymentReserveAmount ??
-          (initialBase as any).paymentReserveAmount,
-        paymentPlatform:
-          (draft as any)?.paymentPlatform ?? initialBase.paymentPlatform,
-        nextChargeDate:
-          (draft as any)?.nextChargeDate ?? initialBase.nextChargeDate,
-        notes: (draft as any)?.notes ?? initialBase.notes,
-        status: (draft as any)?.status ?? initialBase.status,
-      });
-      return;
-    }
-
-    setFrozenSaleInitial(initialBase);
-  }, [draft, frozenSaleInitial, leadForUi, record]);
 
   const load = React.useCallback(
     async ({ silent }: { silent?: boolean } = {}) => {
@@ -664,6 +576,93 @@ function Content({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // --- Derivados del lead/venta (hooks SIEMPRE se ejecutan, antes de returns) ---
+  const p = React.useMemo(
+    () => (leadForUi as any) || (record as any) || {},
+    [leadForUi, record]
+  );
+  const salePayload = React.useMemo(() => (p as any).sale || {}, [p]);
+  const effectiveSalePayload = React.useMemo(
+    () => saleDraftPayload || salePayload,
+    [saleDraftPayload, salePayload]
+  );
+
+  const initialBase: Partial<CloseSaleInput> = React.useMemo(() => {
+    if (!record) return {} as any;
+
+    const toBonusesArray = (v: any) => {
+      if (Array.isArray(v)) return v;
+      if (typeof v === "string")
+        return v
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      return [];
+    };
+
+    return {
+      fullName: p.name || salePayload?.name || "",
+      email: p.email || salePayload?.email || "",
+      phone: p.phone || salePayload?.phone || "",
+      program: salePayload?.program ?? "",
+      bonuses: toBonusesArray(salePayload?.bonuses),
+      paymentMode: salePayload?.payment?.mode ?? "",
+      paymentAmount: salePayload?.payment?.amount ?? "",
+      paymentHasReserve: !!(
+        salePayload?.payment?.hasReserve ||
+        salePayload?.payment?.reserveAmount ||
+        salePayload?.payment?.reservationAmount ||
+        salePayload?.payment?.reserva ||
+        salePayload?.payment?.deposit ||
+        salePayload?.payment?.downPayment ||
+        salePayload?.payment?.anticipo ||
+        /reserva|apartado|señ?a|anticipo/i.test(
+          String(salePayload?.payment?.mode || "").toLowerCase()
+        )
+      ),
+      paymentReserveAmount: (salePayload?.payment?.reserveAmount ??
+        salePayload?.payment?.reservationAmount ??
+        salePayload?.payment?.reserva ??
+        salePayload?.payment?.deposit ??
+        salePayload?.payment?.downPayment ??
+        salePayload?.payment?.anticipo ??
+        "") as any,
+      paymentPlatform: salePayload?.payment?.platform ?? "hotmart",
+      nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
+      contractThirdParty: !!salePayload?.contract?.thirdParty,
+      contractPartyName: salePayload?.contract?.party?.name || p.name || "",
+      contractPartyEmail:
+        salePayload?.contract?.party?.email || p.email || "",
+      contractPartyPhone:
+        salePayload?.contract?.party?.phone || p.phone || "",
+      notes: salePayload?.notes ?? "",
+      status: salePayload?.status ?? undefined,
+    } as any;
+  }, [p, record, salePayload]);
+
+  React.useEffect(() => {
+    if (frozenSaleInitial) return;
+    if (!record) return;
+
+    // Si el draft viene de localStorage (hidratación), lo aplicamos UNA sola vez.
+    if (
+      didHydrateFromLocalStorageRef.current &&
+      draft &&
+      typeof draft === "object"
+    ) {
+      setFrozenSaleInitial({
+        ...initialBase,
+        ...draft,
+        bonuses: Array.isArray((draft as any).bonuses)
+          ? (draft as any).bonuses
+          : (initialBase as any).bonuses,
+      });
+      return;
+    }
+
+    setFrozenSaleInitial(initialBase);
+  }, [draft, frozenSaleInitial, initialBase, record]);
+
   if (loading) {
     return (
       <div className="p-6">
@@ -682,9 +681,6 @@ function Content({ id }: { id: string }) {
     );
   }
 
-  const p = (leadForUi as any) || (record as any) || {};
-  const salePayload = (p as any).sale || {};
-  const effectiveSalePayload = saleDraftPayload || salePayload;
 
   const normalizeLeadStatus = (raw?: any) => {
     const v = String(raw ?? "")
@@ -779,51 +775,7 @@ function Content({ id }: { id: string }) {
 
   // NOTE: handlers definidos arriba para respetar el orden de hooks.
 
-  const initial: Partial<CloseSaleInput> =
-    frozenSaleInitial ??
-    ({
-      fullName: p.name || salePayload?.name || "",
-      email: p.email || salePayload?.email || "",
-      phone: p.phone || salePayload?.phone || "",
-      program: salePayload?.program ?? "",
-      bonuses: Array.isArray(salePayload?.bonuses)
-        ? salePayload.bonuses
-        : typeof salePayload?.bonuses === "string"
-        ? String(salePayload?.bonuses)
-            .split(",")
-            .map((s: string) => s.trim())
-            .filter(Boolean)
-        : [],
-      paymentMode: salePayload?.payment?.mode ?? "",
-      paymentAmount: salePayload?.payment?.amount ?? "",
-      paymentHasReserve: !!(
-        salePayload?.payment?.hasReserve ||
-        salePayload?.payment?.reserveAmount ||
-        salePayload?.payment?.reservationAmount ||
-        salePayload?.payment?.reserva ||
-        salePayload?.payment?.deposit ||
-        salePayload?.payment?.downPayment ||
-        salePayload?.payment?.anticipo ||
-        /reserva|apartado|señ?a|anticipo/i.test(
-          String(salePayload?.payment?.mode || "").toLowerCase()
-        )
-      ),
-      paymentReserveAmount: (salePayload?.payment?.reserveAmount ??
-        salePayload?.payment?.reservationAmount ??
-        salePayload?.payment?.reserva ??
-        salePayload?.payment?.deposit ??
-        salePayload?.payment?.downPayment ??
-        salePayload?.payment?.anticipo ??
-        "") as any,
-      paymentPlatform: salePayload?.payment?.platform ?? "hotmart",
-      nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
-      contractThirdParty: !!salePayload?.contract?.thirdParty,
-      contractPartyName: salePayload?.contract?.party?.name || p.name || "",
-      contractPartyEmail: salePayload?.contract?.party?.email || p.email || "",
-      contractPartyPhone: salePayload?.contract?.party?.phone || p.phone || "",
-      notes: salePayload?.notes ?? "",
-      status: salePayload?.status ?? undefined,
-    } as any);
+  const initial: Partial<CloseSaleInput> = frozenSaleInitial ?? initialBase;
 
   const fmtDate = (iso?: string) =>
     iso

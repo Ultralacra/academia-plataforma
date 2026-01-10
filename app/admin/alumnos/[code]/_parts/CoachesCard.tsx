@@ -195,9 +195,7 @@ export default function CoachesCard({
         <CoachPickerModal
           open={open}
           onOpenChange={setOpen}
-          onPick={(p: CoachCandidate) => {
-            if (currentIndex != null) onChangeMember(currentIndex, p);
-          }}
+          mode={currentIndex != null ? "single" : "multi"}
           onConfirm={(selected) => {
             if (currentIndex != null) {
               const first =

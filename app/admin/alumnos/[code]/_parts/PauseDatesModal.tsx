@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { es } from "date-fns/locale";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type DateRange = { from?: Date; to?: Date };
 
@@ -26,6 +27,7 @@ export default function PauseDatesModal({
   initialRange?: { start?: string; end?: string } | null;
 }) {
   const [range, setRange] = useState<DateRange>({});
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (!open) return;
@@ -54,7 +56,7 @@ export default function PauseDatesModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="w-[92vw] sm:max-w-2xl max-h-[85vh] overflow-auto">
         <DialogHeader>
           <DialogTitle>Selecciona fechas de pausa</DialogTitle>
         </DialogHeader>
@@ -62,13 +64,15 @@ export default function PauseDatesModal({
           <p className="text-xs text-muted-foreground">
             Define el rango en el que el alumno permanecerá en estado pausado.
           </p>
-          <Calendar
-            mode="range"
-            numberOfMonths={2}
-            selected={range as any}
-            onSelect={(r: any) => setRange(r)}
-            locale={es}
-          />
+          <div className="flex justify-center">
+            <Calendar
+              mode="range"
+              numberOfMonths={isMobile ? 1 : 2}
+              selected={range as any}
+              onSelect={(r: any) => setRange(r)}
+              locale={es}
+            />
+          </div>
         </div>
         <DialogFooter className="gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

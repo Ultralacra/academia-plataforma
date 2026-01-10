@@ -128,36 +128,61 @@ export default function EditOptionModal({
       // Guardar en localStorage el rango si estamos en pausado y existe rango
       try {
         const key = `student-pause:${clientCode}`;
-        if (
-          isPaused &&
-          pauseRange?.start &&
-          pauseRange?.end &&
-          typeof window !== "undefined"
-        ) {
-          window.localStorage.setItem(
-            key,
-            JSON.stringify({ start: pauseRange.start, end: pauseRange.end })
-          );
-          try {
-            // Notificar a la vista para actualizar en tiempo real
-            const detail: any = {
-              code: clientCode,
-              start: pauseRange.start,
-              end: pauseRange.end,
+        if (typeof window !== "undefined") {
+          const nowIso = new Date().toISOString();
+          const readExisting = () => {
+            try {
+              const raw = window.localStorage.getItem(key);
+              if (!raw) return null;
+              return JSON.parse(raw);
+            } catch {
+              return null;
+            }
+          };
+
+          const existing = readExisting();
+          const existingHistory: any[] = Array.isArray(existing?.history)
+            ? existing.history
+            : existing && existing.start && existing.end
+            ? [{ start: existing.start, end: existing.end, setAt: nowIso }]
+            : [];
+
+          if (isPaused && pauseRange?.start && pauseRange?.end) {
+            const next = {
+              current: { start: pauseRange.start, end: pauseRange.end },
+              history: [
+                ...existingHistory,
+                { start: pauseRange.start, end: pauseRange.end, setAt: nowIso },
+              ],
             };
-            window.dispatchEvent(
-              new CustomEvent("student:pause-changed", { detail })
-            );
-          } catch {}
-        } else if (!isPaused && typeof window !== "undefined") {
-          // si se sale de PAUSADO, limpiar rango
-          window.localStorage.removeItem(key);
-          try {
-            const detail: any = { code: clientCode, start: null, end: null };
-            window.dispatchEvent(
-              new CustomEvent("student:pause-changed", { detail })
-            );
-          } catch {}
+            window.localStorage.setItem(key, JSON.stringify(next));
+            try {
+              window.dispatchEvent(
+                new CustomEvent("student:pause-changed", {
+                  detail: {
+                    code: clientCode,
+                    current: next.current,
+                    historyCount: next.history.length,
+                  },
+                })
+              );
+            } catch {}
+          } else if (!isPaused) {
+            // si se sale de PAUSADO, mantener historial pero quitar 'current'
+            const next =
+              existingHistory.length > 0
+                ? { current: null, history: existingHistory }
+                : null;
+            if (next) window.localStorage.setItem(key, JSON.stringify(next));
+            else window.localStorage.removeItem(key);
+            try {
+              window.dispatchEvent(
+                new CustomEvent("student:pause-changed", {
+                  detail: { code: clientCode, current: null },
+                })
+              );
+            } catch {}
+          }
         }
       } catch {}
 

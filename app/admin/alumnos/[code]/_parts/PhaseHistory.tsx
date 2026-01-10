@@ -9,7 +9,7 @@ export default function PhaseHistory({
   tasksHistory,
 }: {
   history: Array<{
-    id: number;
+    id: number | string;
     codigo_cliente: string;
     etapa_id: string;
     created_at: string;

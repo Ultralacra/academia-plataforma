@@ -11,11 +11,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Search } from "lucide-react";
 import { apiFetch } from "@/lib/api-config";
 
 /** Estructura que mostrará el modal */
 export type CoachCandidate = TeamMember & {
+  key: string;
   teamCode: string; // codigo from team endpoint
   teamId?: number;
   teamName?: string;
@@ -34,18 +37,23 @@ function normalize(s: string) {
 export default function CoachPickerModal({
   open,
   onOpenChange,
-  onPick,
   onConfirm,
+  mode = "multi",
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onPick?: (c: CoachCandidate) => void;
   onConfirm?: (selected: CoachCandidate[]) => void;
+  mode?: "single" | "multi";
 }) {
   const [loading, setLoading] = useState(false);
   const [teamsRaw, setTeamsRaw] = useState<any[]>([]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
+
+  const selectedCount = useMemo(
+    () => Object.values(selected).filter(Boolean).length,
+    [selected]
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -73,15 +81,22 @@ export default function CoachPickerModal({
 
   // Mapear rows del endpoint team -> candidatos (cada team es un coach)
   const candidates: CoachCandidate[] = useMemo(() => {
-    return (teamsRaw || []).map((t: any) => ({
-      name: t.nombre ?? t.name ?? "",
-      teamCode: t.codigo ?? String(t.id ?? ""),
-      teamId: t.id ?? undefined,
-      teamName: t.nombre ?? undefined,
-      puesto: t.puesto ?? null,
-      area: t.area ?? null,
-      url: undefined,
-    }));
+    return (teamsRaw || []).map((t: any, idx: number) => {
+      const name = t.nombre ?? t.name ?? "";
+      const teamCode = t.codigo ?? (t.id != null ? String(t.id) : "");
+      const teamId = t.id ?? undefined;
+      const key = String(teamCode || teamId || `${name}-${idx}`);
+      return {
+        key,
+        name,
+        teamCode,
+        teamId,
+        teamName: t.nombre ?? undefined,
+        puesto: t.puesto ?? null,
+        area: t.area ?? null,
+        url: undefined,
+      };
+    });
   }, [teamsRaw]);
 
   const filtered = useMemo(() => {
@@ -93,13 +108,34 @@ export default function CoachPickerModal({
     });
   }, [candidates, query]);
 
+  const selectedCandidates = useMemo(() => {
+    const keys = Object.keys(selected).filter((k) => selected[k]);
+    if (keys.length === 0) return [] as CoachCandidate[];
+    const keySet = new Set(keys);
+    return candidates.filter((c) => keySet.has(c.key));
+  }, [candidates, selected]);
+
+  function toggleKey(k: string) {
+    setSelected((prev) => {
+      const isOn = !!prev[k];
+      if (mode === "single") {
+        return isOn ? {} : { [k]: true };
+      }
+      return { ...prev, [k]: !isOn };
+    });
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[92vw] sm:max-w-3xl max-h-[85vh] overflow-hidden rounded-xl border border-border bg-card shadow-none">
         <DialogHeader>
-          <DialogTitle>Seleccionar integrante</DialogTitle>
+          <DialogTitle>
+            {mode === "single" ? "Cambiar coach" : "Asignar coaches"}
+          </DialogTitle>
           <DialogDescription>
-            Busca y elige un miembro del equipo.
+            {mode === "single"
+              ? "Busca y selecciona un coach para reemplazar el actual."
+              : "Busca y selecciona uno o varios coaches para asignarlos al alumno."}
           </DialogDescription>
         </DialogHeader>
 
@@ -120,10 +156,6 @@ export default function CoachPickerModal({
         ) : candidates.length === 0 ? (
           <div className="text-sm text-muted-foreground py-10 text-center">
             No se encontraron integrantes en los equipos.
-            <div className="mt-2">
-              Verifica que el endpoint <code>/team/get/team</code> devuelva
-              <code> alumnos </code> (en el formato antiguo “Nombre (url)”).
-            </div>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-sm text-muted-foreground py-10 text-center">
@@ -133,7 +165,7 @@ export default function CoachPickerModal({
           <div className="mt-2 max-h-[50vh] overflow-auto pr-2">
             <ul className="space-y-2">
               {filtered.map((c, idx) => {
-                const key = c.teamCode ?? `${c.name}-${idx}`;
+                const key = c.key;
                 const isSelected = !!selected[key];
                 return (
                   <li
@@ -142,23 +174,15 @@ export default function CoachPickerModal({
                       isSelected ? "ring-2 ring-primary/30" : ""
                     }`}
                     onClick={() => {
-                      // toggle selection
-                      setSelected((s) => ({ ...s, [key]: !s[key] }));
+                      toggleKey(key);
                     }}
                     title="Seleccionar este integrante"
                   >
                     <div className="flex items-center gap-3 w-full">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={isSelected}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          setSelected((s) => ({
-                            ...s,
-                            [key]: e.target.checked,
-                          }));
-                        }}
-                        className="h-4 w-4"
+                        onCheckedChange={() => toggleKey(key)}
+                        onClick={(e) => e.stopPropagation()}
                       />
                       <div className="min-w-0">
                         <div className="font-medium truncate">{c.name}</div>
@@ -200,22 +224,48 @@ export default function CoachPickerModal({
 
         {/* Footer con botón Asignar para confirmar selección múltiple */}
         <div className="border-t border-border px-4 py-3">
-          <div className="flex items-center justify-end gap-2">
-            <div className="text-sm text-muted-foreground">
-              {Object.values(selected).filter(Boolean).length} seleccionados
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm text-muted-foreground">
+                {selectedCount} seleccionados
+              </div>
+              {selectedCount > 0 ? (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {selectedCandidates.slice(0, 3).map((c) => (
+                    <Badge key={c.key} variant="secondary" className="h-5">
+                      {c.name}
+                    </Badge>
+                  ))}
+                  {selectedCandidates.length > 3 ? (
+                    <Badge variant="secondary" className="h-5">
+                      +{selectedCandidates.length - 3}
+                    </Badge>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-            <button
-              onClick={() => {
-                const keys = Object.keys(selected).filter((k) => selected[k]);
-                const sel = filtered.filter((c) => keys.includes(c.teamCode));
-                if (onConfirm) onConfirm(sel);
-                onOpenChange(false);
-              }}
-              disabled={Object.values(selected).filter(Boolean).length === 0}
-              className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-            >
-              Asignar
-            </button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  if (onConfirm) onConfirm(selectedCandidates);
+                  onOpenChange(false);
+                }}
+                disabled={selectedCount === 0}
+              >
+                {mode === "single"
+                  ? "Confirmar"
+                  : `Asignar (${selectedCount})`}
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>

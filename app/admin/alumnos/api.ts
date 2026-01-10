@@ -648,7 +648,15 @@ export async function getClienteTareas(alumnoIdOrCode: string | number): Promise
   const key = String(alumnoIdOrCode);
   const path = `/client/get/cliente-tareas/${encodeURIComponent(key)}`;
   const json = await fetchJson<any>(path);
-  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+  const rows: any[] = Array.isArray(json?.data)
+    ? json.data
+    : Array.isArray(json?.data?.data)
+    ? json.data.data
+    : Array.isArray(json?.rows)
+    ? json.rows
+    : Array.isArray(json)
+    ? json
+    : [];
   return rows.map((r) => ({
     id: r.id ?? r.tarea_id ?? `${key}-${r.created_at ?? ''}`,
     codigo_cliente: r.codigo_cliente ?? r.alumno ?? null,
@@ -668,7 +676,15 @@ export type ClienteEstatusHist = {
 export async function getClienteEstatus(alumnoCode: string): Promise<ClienteEstatusHist[]> {
   const path = `/client/get/cliente-estatus/${encodeURIComponent(alumnoCode)}`;
   const json = await fetchJson<any>(path);
-  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+  const rows: any[] = Array.isArray(json?.data)
+    ? json.data
+    : Array.isArray(json?.data?.data)
+    ? json.data.data
+    : Array.isArray(json?.rows)
+    ? json.rows
+    : Array.isArray(json)
+    ? json
+    : [];
   return rows.map((r) => ({
     id: r.id ?? r.estatus_id ?? `${alumnoCode}-${r.created_at ?? ''}`,
     codigo_cliente: r.codigo_cliente ?? r.alumno ?? null,

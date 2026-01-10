@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "coach" | "student" | "equipo";
+export type UserRole = "admin" | "coach" | "student" | "equipo" | "atc";
 
 export interface User {
   id: string | number;
@@ -29,14 +29,18 @@ class AuthService {
     const isAdmin = (s: string) => ["admin", "administrator", "superadmin"].includes(s);
     const isEquipo = (s: string) => ["equipo", "team"].includes(s);
     const isStudent = (s: string) => ["alumno", "student", "cliente", "usuario", "user"].includes(s);
+    const isAtc = (s: string) =>
+      ["atc", "support", "soporte", "atencion", "atención", "customer_support"].includes(s);
 
     if (isAdmin(v)) return "admin";
     if (isEquipo(v)) return "equipo";
+    if (isAtc(v)) return "atc";
     if (isStudent(v)) return "student";
     if (v === "coach") return "coach";
 
     if (isAdmin(t)) return "admin";
     if (isEquipo(t)) return "equipo";
+    if (isAtc(t)) return "atc";
     if (isStudent(t)) return "student";
     if (t === "coach") return "coach";
 
