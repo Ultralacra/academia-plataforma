@@ -36,6 +36,9 @@ export default function TasksHistory({
       <h3 className="mb-3 text-sm font-semibold text-foreground">
         Historial de tareas
       </h3>
+      <div className="mb-3 text-xs text-muted-foreground">
+        Última actualización: {fmtES(sorted[0].created_at)}
+      </div>
       <div className="relative ml-2">
         <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
         <ol className="space-y-6">

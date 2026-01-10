@@ -128,6 +128,11 @@ export default function PhaseHistory({
           <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Tareas
           </h4>
+          {tasksSorted.length > 0 ? (
+            <div className="mb-2 text-xs text-muted-foreground">
+              Última actualización: {fmtES(tasksSorted[0].created_at)}
+            </div>
+          ) : null}
           {tasksSorted.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Sin tareas registradas.

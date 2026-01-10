@@ -644,8 +644,9 @@ export type ClienteTareaHist = {
   created_at: string;
 };
 
-export async function getClienteTareas(alumnoIdOrCode: string | number): Promise<ClienteTareaHist[]> {
-  const key = String(alumnoIdOrCode);
+export async function getClienteTareas(alumnoCode: string): Promise<ClienteTareaHist[]> {
+  if (!alumnoCode) return [];
+  const key = String(alumnoCode);
   const path = `/client/get/cliente-tareas/${encodeURIComponent(key)}`;
   const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data)

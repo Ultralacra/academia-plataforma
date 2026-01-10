@@ -159,12 +159,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
             setPhaseHistory(null);
           }
 
-          // Cargar historial de estatus y tareas
+          // Cargar historial de estatus y tareas (tareas por CÓDIGO, no por id)
           try {
-            const alumnoIdOrCode = (s as any)?.id ?? s.code;
             const [eh, th] = await Promise.all([
               getClienteEstatus(s.code),
-              getClienteTareas(alumnoIdOrCode),
+              getClienteTareas(s.code),
             ]);
             setStatusHistory(eh);
             setTasksHistory(th);
@@ -769,9 +768,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         await updateClientLastTask(student.code || code, iso);
                         setLastTaskAt(iso);
                         try {
-                          const th = await getClienteTareas(
-                            (student as any)?.id ?? student.code ?? code
-                          );
+                          const th = await getClienteTareas(student.code || code);
                           setTasksHistory(th);
                         } catch {}
                         toast({ title: "Última tarea actualizada" });
@@ -1080,10 +1077,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
               const targetCode = (s as any)?.code || code;
               await fetchPhaseHistory(targetCode);
               try {
-                const alumnoIdOrCode = (s as any)?.id || targetCode;
                 const [eh, th] = await Promise.all([
                   getClienteEstatus(targetCode),
-                  getClienteTareas(alumnoIdOrCode),
+                  getClienteTareas(targetCode),
                 ]);
                 setStatusHistory(eh);
                 setTasksHistory(th);
