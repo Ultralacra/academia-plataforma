@@ -48,6 +48,38 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
   const { user } = useAuth();
   const isStudent = (user?.role || "").toLowerCase() === "student";
 
+  const getBonoOverrideForStudent = (codigoRaw: unknown) => {
+    const code = String(codigoRaw ?? "")
+      .trim()
+      .toUpperCase();
+    if (code === "BONO2025-02") {
+      return {
+        nombre: "Bono Kit Corporativo",
+        descripcion:
+          "Se libera al habilitar accesos al cliente. Brinda herramientas y contactos para escalar su negocio.",
+      };
+    }
+    return null;
+  };
+
+  const displayBonoName = (b: alumnosApi.BonoAssignment) => {
+    const code = String((b as any)?.bono_codigo ?? (b as any)?.codigo ?? "")
+      .trim()
+      .toUpperCase();
+    const ovr = getBonoOverrideForStudent(code);
+    if (ovr?.nombre) return ovr.nombre;
+    return String((b as any)?.nombre ?? "");
+  };
+
+  const displayBonoDescription = (b: alumnosApi.BonoAssignment) => {
+    const code = String((b as any)?.bono_codigo ?? (b as any)?.codigo ?? "")
+      .trim()
+      .toUpperCase();
+    const ovr = getBonoOverrideForStudent(code);
+    if (ovr?.descripcion) return ovr.descripcion;
+    return (b as any)?.descripcion ? String((b as any)?.descripcion) : "";
+  };
+
   const actorId = useMemo(() => {
     const u: any = user as any;
     return String(u?.id ?? u?.user_id ?? u?.codigo ?? u?.email ?? "unknown");
@@ -361,11 +393,11 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-foreground truncate">
-                      {b.nombre}
+                      {displayBonoName(b)}
                     </div>
-                    {b.descripcion ? (
+                    {displayBonoDescription(b) ? (
                       <div className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                        {b.descripcion}
+                        {displayBonoDescription(b)}
                       </div>
                     ) : null}
                   </div>
@@ -598,13 +630,24 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
             <div className="space-y-3">
               <div className="rounded-md border border-border bg-muted/40 p-3">
                 <div className="text-sm font-medium text-foreground">
-                  {detail.nombre}
+                  {(() => {
+                    const ovr = getBonoOverrideForStudent(
+                      (detail as any)?.codigo ?? detailCodigo
+                    );
+                    return ovr?.nombre ?? detail.nombre;
+                  })()}
                 </div>
-                {detail.descripcion ? (
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {detail.descripcion}
-                  </div>
-                ) : null}
+                {(() => {
+                  const ovr = getBonoOverrideForStudent(
+                    (detail as any)?.codigo ?? detailCodigo
+                  );
+                  const desc = ovr?.descripcion ?? detail.descripcion;
+                  return desc ? (
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {desc}
+                    </div>
+                  ) : null;
+                })()}
               </div>
             </div>
           )}
