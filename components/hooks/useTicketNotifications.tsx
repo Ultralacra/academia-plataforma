@@ -50,11 +50,14 @@ export function useTicketNotifications(opts?: { room?: string }) {
             previous: d.previous,
             current: d.current,
             title: (() => {
-              const base = d.title ?? `Ticket ${d.ticketId} cambió a ${d.current}`;
+              const base =
+                d.title ?? `Ticket ${d.ticketId} cambió a ${d.current}`;
               try {
                 const st = authService.getAuthState();
                 const isStudent = st?.user?.role === "student";
-                return isStudent ? base.replace(/\bTicket\b/gi, "Revisión") : base;
+                return isStudent
+                  ? base.replace(/\bTicket\b/gi, "Revisión")
+                  : base;
               } catch {
                 return base;
               }
@@ -123,21 +126,23 @@ export function useTicketNotifications(opts?: { room?: string }) {
           ticketId: d.ticketId,
           previous: d.previous,
           current: d.current,
-          title:
-            (() => {
-              const base =
-                d.title ||
-                (d.current && d.ticketId
-                  ? `Ticket ${d.ticketId} → ${d.current}`
-                  : `Nuevo evento de ticket`);
-              return isStudent ? base.replace(/\bTicket\b/gi, "Revisión") : base;
-            })(),
+          title: (() => {
+            const base =
+              d.title ||
+              (d.current && d.ticketId
+                ? `Ticket ${d.ticketId} → ${d.current}`
+                : `Nuevo evento de ticket`);
+            return isStudent ? base.replace(/\bTicket\b/gi, "Revisión") : base;
+          })(),
           at,
         };
         setItems((s) => [note, ...s].slice(0, 50));
         setUnread((u) => u + 1);
         try {
-          toast({ title: isStudent ? "Notificación" : "Notificación", description: note.title });
+          toast({
+            title: isStudent ? "Notificación" : "Notificación",
+            description: note.title,
+          });
         } catch {}
       } catch {}
     };

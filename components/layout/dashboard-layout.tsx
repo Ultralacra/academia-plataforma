@@ -63,7 +63,8 @@ function NotificationsBadge() {
     if (!isStudent) return false;
     const t = String(n?.type || "");
     const curr = String(n?.current || "").toUpperCase();
-    if (t.includes("ticket.deleted") || t.includes("ticket.delete")) return true;
+    if (t.includes("ticket.deleted") || t.includes("ticket.delete"))
+      return true;
     if (curr.includes("ELIMINAD")) return true;
     return false;
   };

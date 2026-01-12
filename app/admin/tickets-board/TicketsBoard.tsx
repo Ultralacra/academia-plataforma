@@ -2016,15 +2016,17 @@ export default function TicketsBoard({
                         >
                           {STATUS_LABEL[estado]}
                         </span>
-                        {isStudent && isFeedbackMode && estado === "PAUSADO" && (
-                          <div className="mt-3 flex w-fit items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-200">
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                            <span>
-                              Esta revisión requiere atención, por favor
-                              comunícate con el equipo de soporte.
-                            </span>
-                          </div>
-                        )}
+                        {isStudent &&
+                          isFeedbackMode &&
+                          estado === "PAUSADO" && (
+                            <div className="mt-3 flex w-fit items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-200">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              <span>
+                                Esta revisión requiere atención, por favor
+                                comunícate con el equipo de soporte.
+                              </span>
+                            </div>
+                          )}
                       </TableCell>
                       <TableCell className="font-medium">
                         {subjectLabel}
@@ -2169,7 +2171,8 @@ export default function TicketsBoard({
                                 <h3 className="flex-1 text-sm font-medium leading-snug text-foreground">
                                   {(() => {
                                     const base = String(t.nombre ?? uiTicket);
-                                    if (!isStudent || !isFeedbackMode) return base;
+                                    if (!isStudent || !isFeedbackMode)
+                                      return base;
                                     return base
                                       .replace(/\btickets\b/gi, "revisiones")
                                       .replace(/\bticket\b/gi, "revisión");

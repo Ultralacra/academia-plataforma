@@ -84,7 +84,8 @@ export function SseTicketSnackbar() {
     try {
       const onAuthChanged = () => refreshStudentMode();
       window.addEventListener("auth:changed", onAuthChanged as any);
-      return () => window.removeEventListener("auth:changed", onAuthChanged as any);
+      return () =>
+        window.removeEventListener("auth:changed", onAuthChanged as any);
     } catch {}
   }, []);
 
@@ -124,12 +125,17 @@ export function SseTicketSnackbar() {
     // Filtrar notificación de borrado para alumnos.
     try {
       const isStudent = studentModeRef.current;
-      const isDeleteType = type.includes("ticket.deleted") || type.includes("ticket.delete");
+      const isDeleteType =
+        type.includes("ticket.deleted") || type.includes("ticket.delete");
       const rawEnvelope = lastReceived.raw as any;
       const rawInner = (rawEnvelope?.raw ?? rawEnvelope) as any;
       const payloadObj = parsePayload(rawInner) ?? parsePayload(rawEnvelope);
       const st = String(
-        payloadObj?.current || payloadObj?.status || payloadObj?.estado || payloadObj?.ticket?.status || ""
+        payloadObj?.current ||
+          payloadObj?.status ||
+          payloadObj?.estado ||
+          payloadObj?.ticket?.status ||
+          ""
       ).toUpperCase();
       const isDeletedStatus = st.includes("ELIMINAD") || st.includes("DELETED");
       if (isStudent && (isDeleteType || isDeletedStatus)) {

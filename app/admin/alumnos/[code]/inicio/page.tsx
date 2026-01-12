@@ -129,7 +129,9 @@ export default function StudentInicioPage() {
 
           <InternalCard
             title="Bonos"
-            description={isStudent ? "Ver mis bonos" : "Bonos asignados y extra"}
+            description={
+              isStudent ? "Ver mis bonos" : "Bonos asignados y extra"
+            }
             href={`/admin/alumnos/${code}/bonos`}
             icon={Gift}
           />
