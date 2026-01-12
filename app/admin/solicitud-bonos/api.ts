@@ -41,6 +41,13 @@ export type BonoSolicitudDeleteResponse = {
   data?: any;
 };
 
+export type BonoSolicitudCreateResponse = {
+  code: number;
+  status: string;
+  message?: string;
+  data: BonoSolicitud;
+};
+
 export async function getBonoSolicitudes(params?: {
   page?: number;
   pageSize?: number;
@@ -76,6 +83,22 @@ export async function deleteBonoSolicitudById(
   return await fetchJson<BonoSolicitudDeleteResponse>(
     `/bonos-solicitudes/delete/solicitud/${encodeURIComponent(String(id))}`,
     { method: "DELETE" }
+  );
+}
+
+// Crear solicitud: POST /v1/bonos-solicitudes/create/solicitud
+export async function createBonoSolicitud(
+  body: Record<string, any>
+): Promise<BonoSolicitudCreateResponse> {
+  if (!body || typeof body !== "object") {
+    throw new Error("Body inválido");
+  }
+  return await fetchJson<BonoSolicitudCreateResponse>(
+    `/bonos-solicitudes/create/solicitud`,
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    }
   );
 }
 

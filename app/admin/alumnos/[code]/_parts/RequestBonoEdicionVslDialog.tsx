@@ -15,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/use-toast";
 import { CheckCircle2, ExternalLink } from "lucide-react";
+import { createBonoSolicitud } from "@/app/admin/solicitud-bonos/api";
 
 const HEADER_IMAGE_URL =
   "https://lh7-rt.googleusercontent.com/formsz/AN7BsVB-Wa3fKYj_AvJ3YeN6LgBoJR_7Z_naS38QtK0tFYWUdxcttbfYAyX9imwGo2SxxvDo_i2YTHf1cNor7YHJ7k-0UybCeFOolee50-XsCtfAcjzdQts9YycLL6BNWAnMeSDEQ9q8ayR2_H8v3Rl1XxvXbYMFs2at8Yn7MQ1ezf5Vl9I4etpXtbPqddQLwzvs_aYae0RHyqTYs8Dg=w1917?key=vtGBMFfrQpztwyEWSjKe0Q";
@@ -171,16 +172,23 @@ export default function RequestBonoEdicionVslDialog({
       descripcion,
     };
 
-    // eslint-disable-next-line no-console
-    console.log("[Bonos] Solicitud Edición de VSL - formulario JSON:", payload);
-
     setLoading(true);
     try {
+      const res = await createBonoSolicitud(payload);
       toast({
-        title: "Datos impresos en consola",
-        description: "Se imprimió el JSON del formulario (no se creó ticket).",
+        title: "Solicitud enviada",
+        description: res?.message ?? "Solicitud de bono creada correctamente.",
       });
       onOpenChange(false);
+      reset();
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error(e);
+      toast({
+        title: "No se pudo enviar",
+        description: e?.message ?? "Error desconocido",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }

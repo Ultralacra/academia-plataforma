@@ -25,16 +25,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Eye, Trash2 } from "lucide-react";
 import * as bonosSolicitudesApi from "./api";
 import * as alumnosApi from "@/app/admin/alumnos/api";
+import SolicitudBonoDetailDialog from "./SolicitudBonoDetailDialog";
 
 function SolicitudBonosContent() {
   const { user } = useAuth();
@@ -83,7 +77,15 @@ function SolicitudBonosContent() {
   const getBonoNombre = (bonoCodigo: unknown) => {
     const c = normCode(bonoCodigo);
     const b = bonosByCodigo.get(c);
-    return b?.nombre ? String(b.nombre) : "";
+    const n = (b as any)?.nombre ?? (b as any)?.name ?? (b as any)?.bono_nombre;
+    return n ? String(n) : "";
+  };
+
+  const getSolicitudBonoNombre = (row: any) => {
+    const byMap = getBonoNombre(row?.bono_codigo);
+    if (byMap) return byMap;
+    const byData = row?.data?.bonoNombre ?? row?.data?.bono_nombre;
+    return byData ? String(byData) : "";
   };
 
   const renderPairs = (pairs: Array<[string, unknown]>) => {
@@ -137,8 +139,16 @@ function SolicitudBonosContent() {
       const list = await alumnosApi.getAllBonos({ includeInactivos: true });
       const m = new Map<string, alumnosApi.Bono>();
       for (const b of list ?? []) {
-        const c = normCode((b as any)?.codigo);
-        if (c) m.set(c, b);
+        const rawCodes = [
+          (b as any)?.codigo,
+          (b as any)?.bono_codigo,
+          (b as any)?.code,
+          (b as any)?.bonoCodigo,
+        ];
+        for (const rc of rawCodes) {
+          const c = normCode(rc);
+          if (c && !m.has(c)) m.set(c, b);
+        }
       }
       setBonosByCodigo(m);
     } catch (e: any) {
@@ -317,7 +327,7 @@ function SolicitudBonosContent() {
               ) : (
                 rows.map((r) => {
                   const bonoCodigo = normCode((r as any)?.bono_codigo);
-                  const bonoNombre = getBonoNombre(bonoCodigo);
+                  const bonoNombre = getSolicitudBonoNombre(r);
                   const created = formatDateTime((r as any)?.created_at);
                   const estado = String((r as any)?.estado ?? "").trim();
 
@@ -479,7 +489,7 @@ function SolicitudBonosContent() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog
+      <SolicitudBonoDetailDialog
         open={detailOpen}
         onOpenChange={(v) => {
           setDetailOpen(v);
@@ -488,69 +498,13 @@ function SolicitudBonosContent() {
             setDetailRow(null);
           }
         }}
-      >
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Detalle de solicitud</DialogTitle>
-          </DialogHeader>
-
-          {detailLoading ? (
-            <div className="text-sm text-muted-foreground">Cargando...</div>
-          ) : detailError ? (
-            <div className="text-sm text-red-600">{detailError}</div>
-          ) : !detailRow ? (
-            <div className="text-sm text-muted-foreground">
-              No se pudo cargar el detalle.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="rounded-md border bg-muted/30 p-3">
-                {(() => {
-                  const codigo = normCode((detailRow as any)?.bono_codigo);
-                  const nombre = getBonoNombre(codigo);
-                  return (
-                    <div className="space-y-1">
-                      {nombre ? (
-                        <div className="font-medium">{nombre}</div>
-                      ) : null}
-                      <div className="text-xs text-muted-foreground font-mono">
-                        {codigo}
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {renderPairs([
-                ["Alumno", (detailRow as any)?.student_code],
-                ["Nombre alumno", (detailRow as any)?.alumno_nombre],
-                ["Fase alumno", (detailRow as any)?.alumno_fase],
-                ["Estado", (detailRow as any)?.estado],
-                ["Nombre solicitante", (detailRow as any)?.nombre_solicitante],
-                ["Correo entrega", (detailRow as any)?.correo_entrega],
-                ["Descripción", (detailRow as any)?.descripcion],
-                ["Creado", formatDateTime((detailRow as any)?.created_at)],
-                ["Actualizado", formatDateTime((detailRow as any)?.updated_at)],
-              ])}
-
-              {(detailRow as any)?.data ? (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground mb-2">
-                    Data
-                  </div>
-                  {renderDataSummary((detailRow as any)?.data)}
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDetailOpen(false)}>
-              Cerrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        loading={detailLoading}
+        error={detailError}
+        row={detailRow as any}
+        bonoCodigo={normCode((detailRow as any)?.bono_codigo)}
+        bonoNombre={detailRow ? getSolicitudBonoNombre(detailRow as any) : ""}
+        formatDateTime={formatDateTime}
+      />
 
       <div className="flex items-center justify-between gap-3">
         <div className="text-xs text-muted-foreground">
