@@ -391,7 +391,7 @@ export default function AdminBonosPage() {
                     <Input
                       value={createTipo}
                       onChange={(e) => setCreateTipo(e.target.value)}
-                      placeholder='porcentaje'
+                      placeholder="porcentaje"
                     />
                   </div>
                   <div className="space-y-2">
@@ -467,7 +467,7 @@ export default function AdminBonosPage() {
                     <Input
                       value={editTipo}
                       onChange={(e) => setEditTipo(e.target.value)}
-                      placeholder='porcentaje'
+                      placeholder="porcentaje"
                     />
                   </div>
                   <div className="space-y-2">
