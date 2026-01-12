@@ -46,7 +46,10 @@ function toSqlDatetimeLocal(d: Date) {
 
 export default function BonosPanel({ studentCode }: { studentCode: string }) {
   const { user } = useAuth();
-  const isStudent = (user?.role || "").toLowerCase() === "student";
+  const roleLower = String(user?.role || "").toLowerCase();
+  const isStudent = roleLower === "student";
+  const canUnassign =
+    !isStudent && !["admin", "coach", "equipo"].includes(roleLower);
 
   const getBonoOverrideForStudent = (codigoRaw: unknown) => {
     const code = String(codigoRaw ?? "")
@@ -336,6 +339,18 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
 
   async function unassignOne(codigo: string) {
     if (!codigo) return;
+
+    // Temporal: deshabilitado para admin/coach/equipo.
+    if (["admin", "coach", "equipo"].includes(roleLower)) {
+      toast({
+        title: "Acción deshabilitada",
+        description:
+          "Temporalmente no se puede desasignar bonos desde admin/coach/equipo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setUnassigning(true);
     try {
       await alumnosApi.unassignBonoFromAlumno(codigo);
@@ -465,7 +480,7 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                       </Tooltip>
                     ) : null}
 
-                    {!isStudent ? (
+                    {canUnassign ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
