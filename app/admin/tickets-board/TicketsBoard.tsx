@@ -1984,8 +1984,8 @@ export default function TicketsBoard({
                     const s = String(base);
                     if (s === "—") return s;
                     return s
-                      .replace(/\btickets\b/gi, "revisiones")
-                      .replace(/\bticket\b/gi, "revisión");
+                      .replace(/\btickets\b/gi, "Feedback")
+                      .replace(/\bticket\b/gi, "Feedback");
                   })();
                   const createdLabel = (() => {
                     const raw =
@@ -2022,7 +2022,7 @@ export default function TicketsBoard({
                             <div className="mt-3 flex w-fit items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-200">
                               <AlertTriangle className="h-3.5 w-3.5" />
                               <span>
-                                Esta revisión requiere atención, por favor
+                                Este Feedback requiere atención, por favor
                                 comunícate con el equipo de soporte.
                               </span>
                             </div>
@@ -2174,8 +2174,8 @@ export default function TicketsBoard({
                                     if (!isStudent || !isFeedbackMode)
                                       return base;
                                     return base
-                                      .replace(/\btickets\b/gi, "revisiones")
-                                      .replace(/\bticket\b/gi, "revisión");
+                                      .replace(/\btickets\b/gi, "Feedback")
+                                      .replace(/\bticket\b/gi, "Feedback");
                                   })()}
                                 </h3>
                                 <span
@@ -2191,7 +2191,7 @@ export default function TicketsBoard({
                                 <div className="flex items-center gap-2 rounded-md border border-amber-300/40 bg-amber-50/70 px-2 py-1 text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-200">
                                   <AlertTriangle className="h-3.5 w-3.5" />
                                   <span className="text-[11px] font-medium">
-                                    Esta revisión requiere atención, por favor
+                                    Este Feedback requiere atención, por favor
                                     comunícate con el equipo de soporte.
                                   </span>
                                 </div>

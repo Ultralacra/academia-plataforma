@@ -56,7 +56,7 @@ function NotificationsBadge() {
   const replaceTicketWord = (s: unknown) => {
     const str = String(s ?? "");
     if (!isStudent) return str;
-    return str.replace(/\bTicket\b/gi, "Revisión");
+    return str.replace(/\bTicket\b/gi, "Feedback");
   };
 
   const shouldHideForStudent = (n: any) => {

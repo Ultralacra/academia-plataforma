@@ -44,6 +44,12 @@ function parseOptionalNumber(value: string): number | undefined {
   return n;
 }
 
+function parseOptionalInt(value: string): number | undefined {
+  const n = parseOptionalNumber(value);
+  if (n === undefined) return undefined;
+  return Number.isFinite(n) ? Math.trunc(n) : undefined;
+}
+
 export default function AdminBonosPage() {
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<alumnosApi.Bono[]>([]);
@@ -60,12 +66,16 @@ export default function AdminBonosPage() {
   const [createNombre, setCreateNombre] = useState("");
   const [createDescripcion, setCreateDescripcion] = useState("");
   const [createValor, setCreateValor] = useState("");
+  const [createTipo, setCreateTipo] = useState("");
+  const [createMaxUsos, setCreateMaxUsos] = useState("");
 
   const [editCodigo, setEditCodigo] = useState<string | null>(null);
   const [editNombre, setEditNombre] = useState("");
   const [editDescripcion, setEditDescripcion] = useState("");
   const [editValor, setEditValor] = useState("");
   const [editInactivado, setEditInactivado] = useState(false);
+  const [editTipo, setEditTipo] = useState("");
+  const [editMaxUsos, setEditMaxUsos] = useState("");
 
   const [deleteCodigo, setDeleteCodigo] = useState<string | null>(null);
 
@@ -109,6 +119,12 @@ export default function AdminBonosPage() {
       b.valor === null || b.valor === undefined ? "" : String(b.valor)
     );
     setEditInactivado(Boolean(b.inactivado));
+    setEditTipo(String(b.metadata?.tipo ?? ""));
+    setEditMaxUsos(
+      b.metadata?.max_usos === null || b.metadata?.max_usos === undefined
+        ? ""
+        : String(b.metadata.max_usos)
+    );
     setEditOpen(true);
   }
 
@@ -126,11 +142,21 @@ export default function AdminBonosPage() {
 
     setCreating(true);
     try {
+      const tipo = createTipo.trim();
+      const maxUsos = parseOptionalInt(createMaxUsos);
+      const metadata =
+        tipo || maxUsos !== undefined
+          ? {
+              tipo: tipo || undefined,
+              max_usos: maxUsos,
+            }
+          : undefined;
       await alumnosApi.createBono({
         codigo,
         nombre,
         descripcion: createDescripcion.trim() || undefined,
         valor: parseOptionalNumber(createValor),
+        metadata,
       });
 
       toast({ title: "Bono creado", description: "Se creó correctamente." });
@@ -139,6 +165,8 @@ export default function AdminBonosPage() {
       setCreateNombre("");
       setCreateDescripcion("");
       setCreateValor("");
+      setCreateTipo("");
+      setCreateMaxUsos("");
       await refresh();
     } catch (e: any) {
       console.error(e);
@@ -167,10 +195,20 @@ export default function AdminBonosPage() {
 
     setSaving(true);
     try {
+      const tipo = editTipo.trim();
+      const maxUsos = parseOptionalInt(editMaxUsos);
+      const metadata =
+        tipo || maxUsos !== undefined
+          ? {
+              tipo: tipo || undefined,
+              max_usos: maxUsos,
+            }
+          : undefined;
       await alumnosApi.updateBono(editCodigo, {
         nombre,
         descripcion: editDescripcion.trim() || "",
         valor: parseOptionalNumber(editValor) ?? 0,
+        metadata,
         inactivado: editInactivado ? 1 : 0,
       });
 
@@ -180,6 +218,8 @@ export default function AdminBonosPage() {
       });
       setEditOpen(false);
       setEditCodigo(null);
+      setEditTipo("");
+      setEditMaxUsos("");
       await refresh();
     } catch (e: any) {
       console.error(e);
@@ -344,6 +384,25 @@ export default function AdminBonosPage() {
                     placeholder="(opcional)"
                   />
                 </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Tipo (metadata.tipo)</Label>
+                    <Input
+                      value={createTipo}
+                      onChange={(e) => setCreateTipo(e.target.value)}
+                      placeholder='porcentaje'
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Max usos (metadata.max_usos)</Label>
+                    <Input
+                      value={createMaxUsos}
+                      onChange={(e) => setCreateMaxUsos(e.target.value)}
+                      placeholder="(opcional)"
+                    />
+                  </div>
+                </div>
               </div>
 
               <DialogFooter>
@@ -400,6 +459,25 @@ export default function AdminBonosPage() {
                     value={editValor}
                     onChange={(e) => setEditValor(e.target.value)}
                   />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Tipo (metadata.tipo)</Label>
+                    <Input
+                      value={editTipo}
+                      onChange={(e) => setEditTipo(e.target.value)}
+                      placeholder='porcentaje'
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Max usos (metadata.max_usos)</Label>
+                    <Input
+                      value={editMaxUsos}
+                      onChange={(e) => setEditMaxUsos(e.target.value)}
+                      placeholder="(opcional)"
+                    />
+                  </div>
                 </div>
 
                 <label className="flex items-start gap-3 rounded-md border border-border bg-muted/30 p-3">

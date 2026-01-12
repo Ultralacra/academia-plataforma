@@ -56,7 +56,7 @@ export function useTicketNotifications(opts?: { room?: string }) {
                 const st = authService.getAuthState();
                 const isStudent = st?.user?.role === "student";
                 return isStudent
-                  ? base.replace(/\bTicket\b/gi, "Revisión")
+                  ? base.replace(/\bTicket\b/gi, "Feedback")
                   : base;
               } catch {
                 return base;
@@ -70,7 +70,7 @@ export function useTicketNotifications(opts?: { room?: string }) {
             const st = authService.getAuthState();
             const isStudent = st?.user?.role === "student";
             toast({
-              title: isStudent ? "Revisión actualizada" : "Ticket actualizado",
+              title: isStudent ? "Feedback actualizado" : "Ticket actualizado",
               description: note.title,
               variant: "default",
             });
@@ -132,7 +132,7 @@ export function useTicketNotifications(opts?: { room?: string }) {
               (d.current && d.ticketId
                 ? `Ticket ${d.ticketId} → ${d.current}`
                 : `Nuevo evento de ticket`);
-            return isStudent ? base.replace(/\bTicket\b/gi, "Revisión") : base;
+            return isStudent ? base.replace(/\bTicket\b/gi, "Feedback") : base;
           })(),
           at,
         };

@@ -182,7 +182,7 @@ export function SseTicketSnackbar() {
           ? titleRaw
           : titleForType(type);
       if (!isStudent) return base;
-      return base.replace(/\bTicket\b/gi, "Revisión");
+      return base.replace(/\bTicket\b/gi, "Feedback");
     })();
 
     // Sonido por cada evento nuevo (si el navegador lo permite)
@@ -219,7 +219,7 @@ export function SseTicketSnackbar() {
         return nombre
           ? nombre
           : isStudent
-          ? "Se creó una nueva revisión"
+          ? "Se creó un nuevo Feedback"
           : "Se creó un nuevo ticket";
       }
       if (type === "ticket.files.added") {
@@ -235,9 +235,9 @@ export function SseTicketSnackbar() {
         const ticketLabel = nombre
           ? nombre
           : codigo
-          ? `${isStudent ? "Revisión" : "Ticket"} ${codigo}`
+          ? `${isStudent ? "Feedback" : "Ticket"} ${codigo}`
           : isStudent
-          ? "Revisión"
+          ? "Feedback"
           : "Ticket";
         return `${ticketLabel} · ${filesText}`;
       }
@@ -251,15 +251,15 @@ export function SseTicketSnackbar() {
         const ticketLabel = nombre
           ? nombre
           : codigo
-          ? `${isStudent ? "Revisión" : "Ticket"} ${codigo}`
+          ? `${isStudent ? "Feedback" : "Ticket"} ${codigo}`
           : isStudent
-          ? "Revisión"
+          ? "Feedback"
           : "Ticket";
         return `${ticketLabel} · ${who}`;
       }
       // updated y otros
       if (nombre) return nombre;
-      if (codigo) return `${isStudent ? "Revisión" : "Ticket"} ${codigo}`;
+      if (codigo) return `${isStudent ? "Feedback" : "Ticket"} ${codigo}`;
       return "";
     })();
 
@@ -275,7 +275,7 @@ export function SseTicketSnackbar() {
       description,
       action: codigo ? (
         <ToastAction
-          altText={isStudent ? "Ver revisión" : "Ver ticket"}
+          altText={isStudent ? "Ver feedback" : "Ver ticket"}
           onClick={() => {
             try {
               if (typeof window === "undefined") return;
@@ -306,7 +306,7 @@ export function SseTicketSnackbar() {
             } catch {}
           }}
         >
-          {isStudent ? "Ver revisión" : "Ver ticket"}
+          {isStudent ? "Ver feedback" : "Ver ticket"}
         </ToastAction>
       ) : undefined,
     });

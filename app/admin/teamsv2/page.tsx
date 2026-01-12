@@ -99,6 +99,31 @@ function getPuestoColorClass(puesto?: string | null) {
   return colors[h % colors.length];
 }
 
+const HIDDEN_COACH_KEYS = new Set(["12kEEDTSGfeHEcu4", "UcqQyVwOZHyaJFm3"]);
+
+function isHiddenCoach(row: TeamWithCounts) {
+  const id = String(row.id ?? "");
+  const codigo = String(row.codigo ?? "");
+  return HIDDEN_COACH_KEYS.has(id) || HIDDEN_COACH_KEYS.has(codigo);
+}
+
+function normalizeText(v: unknown) {
+  return String(v ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
+
+function matchesQuery(row: TeamWithCounts, q: string) {
+  if (!q) return true;
+  const qq = normalizeText(q);
+  if (!qq) return true;
+  const nombre = normalizeText(row.nombre);
+  const codigo = normalizeText(row.codigo);
+  return nombre.includes(qq) || codigo.includes(qq);
+}
+
 function toCsv(rows: TeamWithCounts[]) {
   const header = [
     "id",
@@ -137,7 +162,7 @@ export default function TeamsPage() {
   const [page, setPage] = useState<number>(
     Number(searchParams.get("page") ?? 1)
   );
-  const [pageSize, setPageSize] = useState<number>(12);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   // Data
   const [loading, setLoading] = useState<boolean>(true);
@@ -197,7 +222,9 @@ export default function TeamsPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await dataService.getTeamsV2({ page, pageSize, search: q });
+      // La búsqueda se hace en cliente (case-insensitive + partial match),
+      // para no depender del comportamiento del backend.
+      const res = await dataService.getTeamsV2({ page, pageSize, search: "" });
       setRows(res.data as TeamWithCounts[]);
       setTotal(res.total);
     } catch (e: any) {
@@ -227,7 +254,7 @@ export default function TeamsPage() {
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, q]);
+  }, [page, pageSize]);
 
   useEffect(() => {
     fetchOptionsData();
@@ -280,12 +307,23 @@ export default function TeamsPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [optionRows]);
 
-  // Filtros + sort en la página actual
+  const normalizedQ = useMemo(() => normalizeText(q), [q]);
+
+  // Base de datos:
+  // - si hay búsqueda: usamos optionRows (dataset grande) para que sea "contains" real
+  // - si no: usamos rows (paginado del backend)
+  const viewBaseRows = useMemo(() => {
+    const base = normalizedQ ? optionRows : rows;
+    return base.filter((r) => !isHiddenCoach(r));
+  }, [normalizedQ, optionRows, rows]);
+
+  // Filtros + sort (y búsqueda en cliente)
   const filteredSorted = useMemo(() => {
-    const base = rows.filter((r) => {
+    const base = viewBaseRows.filter((r) => {
+      const okSearch = normalizedQ ? matchesQuery(r, normalizedQ) : true;
       const okPuesto = puesto ? (r.puesto ?? "") === puesto : true;
       const okArea = area ? (r.area ?? "") === area : true;
-      return okPuesto && okArea;
+      return okSearch && okPuesto && okArea;
     });
     const sorted = [...base].sort((a, b) => {
       const A = a[sortKey] as any;
@@ -307,12 +345,38 @@ export default function TeamsPage() {
       return sortDir === "asc" ? x : -x;
     });
     return sorted;
-  }, [rows, puesto, area, sortKey, sortDir]);
+  }, [viewBaseRows, normalizedQ, puesto, area, sortKey, sortDir]);
 
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(total / pageSize)),
-    [total, pageSize]
+  const effectiveTotal = useMemo(
+    () => (normalizedQ ? filteredSorted.length : total),
+    [normalizedQ, filteredSorted.length, total]
   );
+
+  const effectiveTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(effectiveTotal / pageSize)),
+    [effectiveTotal, pageSize]
+  );
+
+  const visibleRows = useMemo(() => {
+    // Con búsqueda: paginación client-side
+    if (!normalizedQ) return filteredSorted;
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return filteredSorted.slice(start, end);
+  }, [filteredSorted, normalizedQ, page, pageSize]);
+
+  function exportCsv() {
+    const csv = toCsv(visibleRows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "equipos.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const totalPages = effectiveTotalPages;
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -326,17 +390,6 @@ export default function TeamsPage() {
     setPuesto("");
     setArea("");
     setPage(1);
-  }
-
-  function exportCsv() {
-    const csv = toCsv(filteredSorted);
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "equipos.csv";
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   return (
@@ -366,10 +419,6 @@ export default function TeamsPage() {
             <Button variant="outline" size="sm" onClick={fetchData}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refrescar
-            </Button>
-            <Button variant="outline" size="sm" onClick={exportCsv}>
-              <Download className="mr-2 h-4 w-4" />
-              CSV
             </Button>
           </div>
         </div>
@@ -455,13 +504,20 @@ export default function TeamsPage() {
                     setPage(1);
                   }}
                 >
-                  {[10, 12, 25, 50, 100].map((n) => (
+                  {[10, 20, 50, 100].map((n) => (
                     <option key={n} value={n}>
                       {n}/pág
                     </option>
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div className="mt-3 flex items-center justify-end">
+              <Button size="sm" onClick={exportCsv}>
+                <Download className="mr-2 h-4 w-4" />
+                Descargar CSV
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -538,7 +594,7 @@ export default function TeamsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredSorted.map((t) => (
+                  visibleRows.map((t) => (
                     <TableRow key={t.id} className="hover:bg-neutral-50/60">
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -628,7 +684,7 @@ export default function TeamsPage() {
         {/* Paginación */}
         <div className="mt-4 flex items-center justify-between">
           <p className="text-xs text-neutral-500">
-            Página {page} de {totalPages} — {total} registros
+            Página {page} de {totalPages} — {effectiveTotal} registros
           </p>
           <div className="flex items-center gap-2">
             <Button
