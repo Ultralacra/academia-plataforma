@@ -386,6 +386,11 @@ export function AppSidebar() {
             url: `/admin/alumnos/${code}/feedback`,
             icon: ThumbsUp,
           },
+          {
+            title: "Bonos",
+            url: `/admin/alumnos/${code}/bonos`,
+            icon: Users,
+          },
         ] as MenuItem[];
       }
       default:

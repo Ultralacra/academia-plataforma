@@ -34,6 +34,8 @@ interface DashboardLayoutProps {
 }
 
 function NotificationsBadge() {
+  const { user } = useAuth();
+  const isStudent = user?.role === "student";
   const {
     items: ticketItems,
     unread: ticketUnread,
@@ -50,6 +52,22 @@ function NotificationsBadge() {
   } = useSseNotifications();
   const [open, setOpen] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(20);
+
+  const replaceTicketWord = (s: unknown) => {
+    const str = String(s ?? "");
+    if (!isStudent) return str;
+    return str.replace(/\bTicket\b/gi, "Revisión");
+  };
+
+  const shouldHideForStudent = (n: any) => {
+    if (!isStudent) return false;
+    const t = String(n?.type || "");
+    const curr = String(n?.current || "").toUpperCase();
+    if (t.includes("ticket.deleted") || t.includes("ticket.delete")) return true;
+    if (curr.includes("ELIMINAD")) return true;
+    return false;
+  };
+
   // Fusionar notificaciones: primero las SSE (más recientes directas), luego tickets por orden de fecha
   const merged = useMemo(() => {
     const parseAt = (x: any) => {
@@ -68,9 +86,10 @@ function NotificationsBadge() {
       _t: parseAt(it),
     }));
     return [...normSse, ...normTicket]
+      .filter((n) => !shouldHideForStudent(n))
       .sort((a, b) => b._t - a._t)
       .slice(0, visibleLimit);
-  }, [ticketItems, sseItems, visibleLimit]);
+  }, [ticketItems, sseItems, visibleLimit, isStudent]);
   const totalUnread = ticketUnread + sseUnread;
 
   return (
@@ -168,7 +187,7 @@ function NotificationsBadge() {
                           className="text-sm font-medium leading-snug truncate"
                           title={n.title}
                         >
-                          {n.title}
+                          {replaceTicketWord(n.title)}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {n.at ? new Date(n.at).toLocaleString() : ""}

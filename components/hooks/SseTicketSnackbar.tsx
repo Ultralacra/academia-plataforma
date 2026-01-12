@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useSseNotifications } from "@/components/hooks/useSseNotifications";
 import { initNotificationSound, playNotificationSound } from "@/lib/utils";
 import { ToastAction } from "@/components/ui/toast";
+import { authService } from "@/lib/auth";
 
 export function SseTicketSnackbar() {
   const { toast } = useToast();
@@ -12,6 +13,16 @@ export function SseTicketSnackbar() {
   const processedIdsRef = useRef<Set<string>>(new Set());
   const lastToastIdRef = useRef<string | null>(null);
   const bootstrappedRef = useRef(false);
+  const studentModeRef = useRef(false);
+
+  function refreshStudentMode() {
+    try {
+      const st = authService.getAuthState();
+      studentModeRef.current = st?.user?.role === "student";
+    } catch {
+      studentModeRef.current = false;
+    }
+  }
 
   function parsePayload(raw: any): any | null {
     try {
@@ -67,6 +78,14 @@ export function SseTicketSnackbar() {
       lastToastIdRef.current =
         window.sessionStorage.getItem("sse:lastToastId") || null;
     } catch {}
+
+    // Determinar rol actual (para textos/filtrado) y escuchar cambios de sesión.
+    refreshStudentMode();
+    try {
+      const onAuthChanged = () => refreshStudentMode();
+      window.addEventListener("auth:changed", onAuthChanged as any);
+      return () => window.removeEventListener("auth:changed", onAuthChanged as any);
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -102,6 +121,22 @@ export function SseTicketSnackbar() {
     const type = String(lastReceived.type || "");
     const titleRaw = String(lastReceived.title || "").trim();
 
+    // Filtrar notificación de borrado para alumnos.
+    try {
+      const isStudent = studentModeRef.current;
+      const isDeleteType = type.includes("ticket.deleted") || type.includes("ticket.delete");
+      const rawEnvelope = lastReceived.raw as any;
+      const rawInner = (rawEnvelope?.raw ?? rawEnvelope) as any;
+      const payloadObj = parsePayload(rawInner) ?? parsePayload(rawEnvelope);
+      const st = String(
+        payloadObj?.current || payloadObj?.status || payloadObj?.estado || payloadObj?.ticket?.status || ""
+      ).toUpperCase();
+      const isDeletedStatus = st.includes("ELIMINAD") || st.includes("DELETED");
+      if (isStudent && (isDeleteType || isDeletedStatus)) {
+        return;
+      }
+    } catch {}
+
     const rawEnvelope = lastReceived.raw as any;
     const rawInner = (rawEnvelope?.raw ?? rawEnvelope) as any;
     const payloadObj = parsePayload(rawInner) ?? parsePayload(rawEnvelope);
@@ -133,10 +168,16 @@ export function SseTicketSnackbar() {
       return s || "";
     })();
 
-    const title =
-      titleRaw && titleRaw.toLowerCase() !== "notificación"
-        ? titleRaw
-        : titleForType(type);
+    const isStudent = studentModeRef.current;
+
+    const title = (() => {
+      const base =
+        titleRaw && titleRaw.toLowerCase() !== "notificación"
+          ? titleRaw
+          : titleForType(type);
+      if (!isStudent) return base;
+      return base.replace(/\bTicket\b/gi, "Revisión");
+    })();
 
     // Sonido por cada evento nuevo (si el navegador lo permite)
     try {
@@ -169,7 +210,11 @@ export function SseTicketSnackbar() {
 
     const baseDescription = (() => {
       if (type === "ticket.created") {
-        return nombre ? nombre : "Se creó un nuevo ticket";
+        return nombre
+          ? nombre
+          : isStudent
+          ? "Se creó una nueva revisión"
+          : "Se creó un nuevo ticket";
       }
       if (type === "ticket.files.added") {
         const nRaw = payloadObj?.archivosRegistrados;
@@ -184,7 +229,9 @@ export function SseTicketSnackbar() {
         const ticketLabel = nombre
           ? nombre
           : codigo
-          ? `Ticket ${codigo}`
+          ? `${isStudent ? "Revisión" : "Ticket"} ${codigo}`
+          : isStudent
+          ? "Revisión"
           : "Ticket";
         return `${ticketLabel} · ${filesText}`;
       }
@@ -198,13 +245,15 @@ export function SseTicketSnackbar() {
         const ticketLabel = nombre
           ? nombre
           : codigo
-          ? `Ticket ${codigo}`
+          ? `${isStudent ? "Revisión" : "Ticket"} ${codigo}`
+          : isStudent
+          ? "Revisión"
           : "Ticket";
         return `${ticketLabel} · ${who}`;
       }
       // updated y otros
       if (nombre) return nombre;
-      if (codigo) return `Ticket ${codigo}`;
+      if (codigo) return `${isStudent ? "Revisión" : "Ticket"} ${codigo}`;
       return "";
     })();
 
@@ -220,7 +269,7 @@ export function SseTicketSnackbar() {
       description,
       action: codigo ? (
         <ToastAction
-          altText="Ver ticket"
+          altText={isStudent ? "Ver revisión" : "Ver ticket"}
           onClick={() => {
             try {
               if (typeof window === "undefined") return;
@@ -251,7 +300,7 @@ export function SseTicketSnackbar() {
             } catch {}
           }}
         >
-          Ver ticket
+          {isStudent ? "Ver revisión" : "Ver ticket"}
         </ToastAction>
       ) : undefined,
     });

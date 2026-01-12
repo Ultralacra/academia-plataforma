@@ -1977,6 +1977,16 @@ export default function TicketsBoard({
                 displayTickets.map((t) => {
                   const estado = coerceStatus(t.estado);
                   const canOpen = !isStudent || estado === "RESUELTO";
+                  const subjectLabel = (() => {
+                    const base =
+                      t.nombre || (t.codigo ? `${uiTicket} ${t.codigo}` : "—");
+                    if (!isStudent || !isFeedbackMode) return base;
+                    const s = String(base);
+                    if (s === "—") return s;
+                    return s
+                      .replace(/\btickets\b/gi, "revisiones")
+                      .replace(/\bticket\b/gi, "revisión");
+                  })();
                   const createdLabel = (() => {
                     const raw =
                       (t as any)?.created_at ?? (t as any)?.fecha ?? null;
@@ -2006,10 +2016,18 @@ export default function TicketsBoard({
                         >
                           {STATUS_LABEL[estado]}
                         </span>
+                        {isStudent && isFeedbackMode && estado === "PAUSADO" && (
+                          <div className="mt-3 flex w-fit items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[11px] font-medium text-amber-900 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-200">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            <span>
+                              Esta revisión requiere atención, por favor
+                              comunícate con el equipo de soporte.
+                            </span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="font-medium">
-                        {t.nombre ||
-                          (t.codigo ? `${uiTicket} ${t.codigo}` : "—")}
+                        {subjectLabel}
                       </TableCell>
                       {isFeedbackMode && (
                         <TableCell>{(t as any)?.tipo || "—"}</TableCell>
@@ -2149,7 +2167,13 @@ export default function TicketsBoard({
                             <div className="space-y-3">
                               <div className="flex items-start justify-between gap-3">
                                 <h3 className="flex-1 text-sm font-medium leading-snug text-foreground">
-                                  {t.nombre ?? uiTicket}
+                                  {(() => {
+                                    const base = String(t.nombre ?? uiTicket);
+                                    if (!isStudent || !isFeedbackMode) return base;
+                                    return base
+                                      .replace(/\btickets\b/gi, "revisiones")
+                                      .replace(/\bticket\b/gi, "revisión");
+                                  })()}
                                 </h3>
                                 <span
                                   className={`inline-flex shrink-0 items-center rounded-md px-2 py-0.5 text-xs font-medium ${
@@ -2161,10 +2185,11 @@ export default function TicketsBoard({
                               </div>
 
                               {coerceStatus(t.estado) === "PAUSADO" && (
-                                <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-200">
-                                  <span className="inline-block h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                                <div className="flex items-center gap-2 rounded-md border border-amber-300/40 bg-amber-50/70 px-2 py-1 text-amber-800 dark:border-amber-400/30 dark:bg-amber-950/30 dark:text-amber-200">
+                                  <AlertTriangle className="h-3.5 w-3.5" />
                                   <span className="text-[11px] font-medium">
-                                    Requiere atención
+                                    Esta revisión requiere atención, por favor
+                                    comunícate con el equipo de soporte.
                                   </span>
                                 </div>
                               )}

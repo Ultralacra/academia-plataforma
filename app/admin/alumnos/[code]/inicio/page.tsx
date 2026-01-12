@@ -117,24 +117,22 @@ export default function StudentInicioPage() {
             icon={ThumbsUp}
           />
 
-          {/* Ocultar Sesiones y Bonos para alumnos */}
+          {/* Ocultar Sesiones para alumnos */}
           {!isStudent && (
-            <>
-              <InternalCard
-                title="Sesiones"
-                description="Gestiona y solicita sesiones"
-                href={`/admin/alumnos/${code}/sesiones`}
-                icon={CalendarClock}
-              />
-
-              <InternalCard
-                title="Bonos"
-                description="Bonos asignados y extra"
-                href={`/admin/alumnos/${code}/bonos`}
-                icon={Gift}
-              />
-            </>
+            <InternalCard
+              title="Sesiones"
+              description="Gestiona y solicita sesiones"
+              href={`/admin/alumnos/${code}/sesiones`}
+              icon={CalendarClock}
+            />
           )}
+
+          <InternalCard
+            title="Bonos"
+            description={isStudent ? "Ver mis bonos" : "Bonos asignados y extra"}
+            href={`/admin/alumnos/${code}/bonos`}
+            icon={Gift}
+          />
 
           {/* Para no alumnos: Mi perfil en su posición original */}
           {!isStudent && (

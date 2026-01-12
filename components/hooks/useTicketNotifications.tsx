@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "@/components/ui/use-toast";
+import { authService } from "@/lib/auth";
 
 type TicketNotif = {
   id: string;
@@ -32,6 +33,15 @@ export function useTicketNotifications(opts?: { room?: string }) {
         const payload = JSON.parse(String(ev.data));
         if (payload?.type === "ticket:status_changed" && payload.data) {
           const d = payload.data as TicketNotif;
+
+          // Alumno: no mostrar notificaciones de borrado / estado eliminado
+          try {
+            const st = authService.getAuthState();
+            const isStudent = st?.user?.role === "student";
+            const current = String(d.current || "").toUpperCase();
+            if (isStudent && current.includes("ELIMINAD")) return;
+          } catch {}
+
           const at = d.at ?? new Date().toISOString();
           const note: TicketNotif = {
             id:
@@ -39,14 +49,25 @@ export function useTicketNotifications(opts?: { room?: string }) {
             ticketId: d.ticketId,
             previous: d.previous,
             current: d.current,
-            title: d.title ?? `Ticket ${d.ticketId} cambió a ${d.current}`,
+            title: (() => {
+              const base = d.title ?? `Ticket ${d.ticketId} cambió a ${d.current}`;
+              try {
+                const st = authService.getAuthState();
+                const isStudent = st?.user?.role === "student";
+                return isStudent ? base.replace(/\bTicket\b/gi, "Revisión") : base;
+              } catch {
+                return base;
+              }
+            })(),
             at,
           };
           setItems((s) => [note, ...s].slice(0, 50));
           setUnread((u) => u + 1);
           try {
+            const st = authService.getAuthState();
+            const isStudent = st?.user?.role === "student";
             toast({
-              title: "Ticket actualizado",
+              title: isStudent ? "Revisión actualizada" : "Ticket actualizado",
               description: note.title,
               variant: "default",
             });
@@ -79,23 +100,44 @@ export function useTicketNotifications(opts?: { room?: string }) {
       try {
         const anyEv = ev as CustomEvent<any>;
         const d = anyEv.detail || {};
+
+        // Alumno: no mostrar notificaciones de borrado / estado eliminado
+        try {
+          const st = authService.getAuthState();
+          const isStudent = st?.user?.role === "student";
+          const current = String(d.current || "").toUpperCase();
+          if (isStudent && current.includes("ELIMINAD")) return;
+        } catch {}
+
         const at = d.at ?? new Date().toISOString();
+        const isStudent = (() => {
+          try {
+            const st = authService.getAuthState();
+            return st?.user?.role === "student";
+          } catch {
+            return false;
+          }
+        })();
         const note: TicketNotif = {
           id: String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8),
           ticketId: d.ticketId,
           previous: d.previous,
           current: d.current,
           title:
-            d.title ||
-            (d.current && d.ticketId
-              ? `Ticket ${d.ticketId} → ${d.current}`
-              : `Nuevo evento de ticket`),
+            (() => {
+              const base =
+                d.title ||
+                (d.current && d.ticketId
+                  ? `Ticket ${d.ticketId} → ${d.current}`
+                  : `Nuevo evento de ticket`);
+              return isStudent ? base.replace(/\bTicket\b/gi, "Revisión") : base;
+            })(),
           at,
         };
         setItems((s) => [note, ...s].slice(0, 50));
         setUnread((u) => u + 1);
         try {
-          toast({ title: "Notificación", description: note.title });
+          toast({ title: isStudent ? "Notificación" : "Notificación", description: note.title });
         } catch {}
       } catch {}
     };

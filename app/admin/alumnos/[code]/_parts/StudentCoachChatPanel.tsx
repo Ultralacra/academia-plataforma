@@ -491,10 +491,6 @@ export default function StudentCoachChatPanel({
           <h3 className="text-sm font-semibold text-foreground">
             Chat del alumno
           </h3>
-          <p className="text-xs text-muted-foreground">
-            El alumno chatea solo con sus coaches asignados de Atención al
-            Cliente
-          </p>
           {selectedCoach && (
             <div className="mt-1">
               <Badge
