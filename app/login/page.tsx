@@ -26,6 +26,10 @@ export default function LoginPage() {
           router.push(`/admin/alumnos/${code}`);
           break;
         }
+        case "equipo": {
+          router.push("/admin/solicitud-bonos");
+          break;
+        }
         default:
           router.push("/");
       }

@@ -56,8 +56,7 @@ export function useAuth() {
           router.push("/admin/alumnos")
           break
         case "equipo": {
-          const code = (user as any)?.codigo || "";
-          router.push(code ? `/admin/teamsv2/${code}` : "/admin/teamsv2");
+          router.push("/admin/solicitud-bonos");
           break
         }
         case "student": {

@@ -46,8 +46,7 @@ export function ProtectedRoute({
       return null;
     }
     if (user?.role === "equipo") {
-      const myCode = (user as any)?.codigo || "";
-      const target = myCode ? `/admin/teamsv2/${myCode}` : "/admin/teamsv2";
+      const target = "/admin/solicitud-bonos";
       if (pathname !== target) {
         router.replace(target);
       }
@@ -96,6 +95,8 @@ export function ProtectedRoute({
     const isTickets = segments[0] === "admin" && segments[1] === "tickets";
     const isPayments = segments[0] === "admin" && segments[1] === "payments";
     const isBonos = segments[0] === "admin" && segments[1] === "bonos";
+    const isSolicitudBonos =
+      segments[0] === "admin" && segments[1] === "solicitud-bonos";
     const isCrm = segments[0] === "admin" && segments[1] === "crm";
     // Permitir métricas de equipos
     const isTeamsMetrics =
@@ -120,8 +121,7 @@ export function ProtectedRoute({
       segments[1] === "teamsv2" &&
       segments.length >= 3;
     const codeFromPath = isTeamDetail ? segments[2] : null;
-    const myCode = (user as any)?.codigo || "";
-    const target = myCode ? `/admin/teamsv2/${myCode}` : "/admin/teamsv2";
+    const target = "/admin/solicitud-bonos";
 
     if (
       !isTeamDetail &&
@@ -131,6 +131,7 @@ export function ProtectedRoute({
       !isTickets &&
       !isPayments &&
       !isBonos &&
+      !isSolicitudBonos &&
       !isCrm &&
       !isTeamsMetrics &&
       !isStudentsMetrics
