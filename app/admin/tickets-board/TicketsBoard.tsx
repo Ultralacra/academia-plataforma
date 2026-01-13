@@ -319,9 +319,7 @@ export default function TicketsBoard({
   );
 
   const visibleDesc = useMemo(() => {
-    return filterDescriptionForStudent(
-      String(ticketDetail?.descripcion || "")
-    );
+    return filterDescriptionForStudent(String(ticketDetail?.descripcion || ""));
   }, [ticketDetail?.descripcion, isStudent]);
 
   // Los alumnos solo pueden ver: bloquear pestañas/acciones privadas
@@ -2208,7 +2206,9 @@ export default function TicketsBoard({
                               <div className="flex items-start justify-between gap-3">
                                 <h3 className="flex-1 text-sm font-medium leading-snug text-foreground">
                                   {(() => {
-                                    return formatTitleForUi(t.nombre ?? uiTicket);
+                                    return formatTitleForUi(
+                                      t.nombre ?? uiTicket
+                                    );
                                   })()}
                                 </h3>
                                 <span
