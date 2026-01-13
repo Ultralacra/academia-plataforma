@@ -760,6 +760,16 @@ export function AppSidebar() {
               </div>
             </div>
           ) : null}
+          {!isMobile ? (
+            <div className="w-full max-w-[260px] rounded-md border border-sidebar-border bg-sidebar-accent/20 px-2.5 py-2 text-[11px] text-muted-foreground">
+              <div className="font-medium text-sidebar-foreground">
+                Tip: úsala desde tu teléfono
+              </div>
+              <div className="mt-0.5">
+                En móvil puedes instalarla (Agregar a pantalla de inicio).
+              </div>
+            </div>
+          ) : null}
           <p className="text-[11px] text-muted-foreground text-center">
             {new Date().getFullYear()} • Workspace
           </p>

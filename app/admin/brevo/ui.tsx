@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthToken } from "@/lib/auth";
 
@@ -24,6 +25,24 @@ function isEmail(s: string) {
 }
 
 type BrevoRow = Record<string, unknown>;
+
+const STATIC_BREVO_EMAIL = "cesaramuroc@gmail.com";
+
+const STATIC_BREVO_ROW: BrevoRow = {
+  "Nombre JSON": "Cesar Muro",
+  "Nombre CSV": "Cesar Muro",
+  Correo: STATIC_BREVO_EMAIL,
+  name_key: "cesar muro",
+  best_df2_name_key: "cesar muro",
+  match_score: 100,
+  first_match: true,
+  match_ok: true,
+  "Usuario App": STATIC_BREVO_EMAIL,
+  "Contraseña App": "5i__xhQPt-_C",
+  app_row_index: null,
+};
+
+const SENT_EMAILS_STORAGE_KEY = "brevo.sentEmails.v1";
 
 type Creds = {
   username?: string;
@@ -53,12 +72,22 @@ function mergeCreds(a: Creds | undefined, b: Creds | undefined): Creds {
   };
 }
 
-function rowEmail(row: BrevoRow): string | null {
+// El destinatario del correo SIEMPRE es "Correo".
+function rowRecipientEmail(row: BrevoRow): string | null {
   const correo = extractEmails(row["Correo"]);
-  if (correo[0]) return correo[0];
-  const usuarioApp = extractEmails(row["Usuario App"]);
-  if (usuarioApp[0]) return usuarioApp[0];
-  return null;
+  return correo[0] ?? null;
+}
+
+// Credenciales: el usuario de acceso puede venir en "Usuario App".
+function rowAppUsername(row: BrevoRow): string | undefined {
+  const raw = String(row["Usuario App"] ?? "").trim();
+  if (!raw) return undefined;
+  if (isEmail(raw)) return raw.toLowerCase();
+  return extractEmails(raw)[0];
+}
+
+function rowAppPassword(row: BrevoRow): string | undefined {
+  return String(row["Contraseña App"] ?? "").trim() || undefined;
 }
 
 function rowName(row: BrevoRow): string {
@@ -84,6 +113,9 @@ export function BrevoClientPage() {
   const [rows, setRows] = useState<BrevoRow[]>([]);
   const [rowsLoading, setRowsLoading] = useState<boolean>(false);
 
+  const [listTab, setListTab] = useState<"pending" | "sent">("pending");
+  const [sentEmails, setSentEmails] = useState<Set<string>>(() => new Set());
+
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(
     () => new Set()
   );
@@ -102,6 +134,66 @@ export function BrevoClientPage() {
   const [sending, setSending] = useState<boolean>(false);
   const [lastResult, setLastResult] = useState<any>(null);
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SENT_EMAILS_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setSentEmails(
+          new Set(
+            parsed
+              .map((x) =>
+                String(x ?? "")
+                  .trim()
+                  .toLowerCase()
+              )
+              .filter((x) => isEmail(x))
+          )
+        );
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        SENT_EMAILS_STORAGE_KEY,
+        JSON.stringify(Array.from(sentEmails))
+      );
+    } catch {
+      // ignore
+    }
+  }, [sentEmails]);
+
+  function markEmailsAsSent(emails: string[]) {
+    setSentEmails((prev) => {
+      const next = new Set(prev);
+      for (const email of emails) {
+        const normalized = String(email ?? "")
+          .trim()
+          .toLowerCase();
+        if (isEmail(normalized)) next.add(normalized);
+      }
+      return next;
+    });
+  }
+
+  function markEmailsAsPending(emails: string[]) {
+    setSentEmails((prev) => {
+      const next = new Set(prev);
+      for (const email of emails) {
+        const normalized = String(email ?? "")
+          .trim()
+          .toLowerCase();
+        if (isEmail(normalized)) next.delete(normalized);
+      }
+      return next;
+    });
+  }
+
   const selectedList = useMemo(() => {
     return Array.from(selectedEmails).filter((x) => isEmail(x));
   }, [selectedEmails]);
@@ -116,7 +208,7 @@ export function BrevoClientPage() {
     });
 
     const pageWithCreds = visibleRows.reduce((acc, r) => {
-      const email = rowEmail(r);
+      const email = rowRecipientEmail(r);
       if (!email) return acc;
       return acc + (credsByEmail[email]?.password ? 1 : 0);
     }, 0);
@@ -129,7 +221,7 @@ export function BrevoClientPage() {
     return { pageWithCreds, selectedWithCreds, totalCreds };
   }, [credsByEmail, rows, search, selectedList]);
 
-  const visibleRows = useMemo(() => {
+  const rowsFilteredBySearch = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return rows;
     return rows.filter((r) => {
@@ -140,14 +232,38 @@ export function BrevoClientPage() {
     });
   }, [rows, search]);
 
+  const visibleRows = useMemo(() => {
+    return rowsFilteredBySearch.filter((r) => {
+      const email = rowRecipientEmail(r);
+      if (!email) return false;
+      const isSent = sentEmails.has(email);
+      return listTab === "sent" ? isSent : !isSent;
+    });
+  }, [listTab, rowsFilteredBySearch, sentEmails]);
+
   const visibleEmails = useMemo(() => {
     const out: string[] = [];
     for (const r of visibleRows) {
-      const email = rowEmail(r);
+      const email = rowRecipientEmail(r);
       if (email) out.push(email);
     }
     return out;
   }, [visibleRows]);
+
+  const listCounts = useMemo(() => {
+    const emailsInDataset = new Set<string>();
+    for (const r of rows) {
+      const email = rowRecipientEmail(r);
+      if (email) emailsInDataset.add(email);
+    }
+    let sent = 0;
+    let pending = 0;
+    for (const email of emailsInDataset) {
+      if (sentEmails.has(email)) sent += 1;
+      else pending += 1;
+    }
+    return { sent, pending, total: emailsInDataset.size };
+  }, [rows, sentEmails]);
 
   const pageSelectionState = useMemo<boolean | "indeterminate">(() => {
     if (visibleEmails.length === 0) return false;
@@ -169,25 +285,28 @@ export function BrevoClientPage() {
         ? json.cruce_completo
         : [];
 
-      setRows(loaded);
+      const alreadyHasStatic = loaded.some(
+        (r) => (rowRecipientEmail(r) ?? "") === STATIC_BREVO_EMAIL
+      );
+
+      const loadedWithStatic = alreadyHasStatic
+        ? loaded
+        : [STATIC_BREVO_ROW, ...loaded];
+
+      setRows(loadedWithStatic);
 
       // Deriva nombres/credenciales por email desde el dataset
       const nextNames: Record<string, string> = {};
       const nextCreds: Record<string, Creds> = {};
-      for (const r of loaded) {
-        const email = rowEmail(r);
+      for (const r of loadedWithStatic) {
+        const email = rowRecipientEmail(r);
         if (!email) continue;
 
         const name = rowName(r);
         if (name && name !== "(sin nombre)") nextNames[email] = name;
 
-        const usernameRaw = String(r["Usuario App"] ?? "").trim();
-        const username = isEmail(usernameRaw)
-          ? usernameRaw.toLowerCase()
-          : extractEmails(usernameRaw)[0];
-
-        const passwordValue =
-          String(r["Contraseña App"] ?? "").trim() || undefined;
+        const username = rowAppUsername(r);
+        const passwordValue = rowAppPassword(r);
 
         if (username || passwordValue) {
           nextCreds[email] = mergeCreds(nextCreds[email], {
@@ -230,31 +349,28 @@ export function BrevoClientPage() {
         ? parsed.cruce_completo
         : [];
 
-      setRows(rows);
+      const alreadyHasStatic = rows.some(
+        (r) => (rowRecipientEmail(r as BrevoRow) ?? "") === STATIC_BREVO_EMAIL
+      );
+      const rowsWithStatic = alreadyHasStatic
+        ? rows
+        : [STATIC_BREVO_ROW, ...rows];
+
+      setRows(rowsWithStatic as BrevoRow[]);
 
       const next: Record<string, Creds> = {};
 
-      for (const row of rows) {
+      for (const row of rowsWithStatic) {
         if (!row || typeof row !== "object") continue;
 
-        const correoEmails = extractEmails((row as any)["Correo"]);
-        const usuarioAppRaw = String((row as any)["Usuario App"] ?? "").trim();
-        const usuarioAppEmails = extractEmails(usuarioAppRaw);
-        const passRaw = String((row as any)["Contraseña App"] ?? "").trim();
+        const recipientEmail = rowRecipientEmail(row as BrevoRow);
+        if (!recipientEmail) continue;
 
-        const username =
-          usuarioAppRaw && isEmail(usuarioAppRaw)
-            ? usuarioAppRaw.toLowerCase()
-            : usuarioAppEmails[0];
-        const passwordValue = passRaw || undefined;
+        const username = rowAppUsername(row as BrevoRow);
+        const passwordValue = rowAppPassword(row as BrevoRow);
 
-        const keys = Array.from(
-          new Set([...correoEmails, ...usuarioAppEmails])
-        );
-        if (keys.length === 0) continue;
-
-        for (const emailKey of keys) {
-          next[emailKey] = mergeCreds(next[emailKey], {
+        if (username || passwordValue) {
+          next[recipientEmail] = mergeCreds(next[recipientEmail], {
             ...(username ? { username } : {}),
             ...(passwordValue ? { password: passwordValue } : {}),
           });
@@ -300,7 +416,7 @@ export function BrevoClientPage() {
         >();
 
         for (const r of rows) {
-          const email = rowEmail(r);
+          const email = rowRecipientEmail(r);
           if (!email) continue;
           const creds = credsByEmail[email];
           const name = knownNamesByEmail[email] || rowName(r);
@@ -375,6 +491,8 @@ export function BrevoClientPage() {
           json?.toCount ?? recipients.length
         } correo(s).`,
       });
+
+      markEmailsAsSent(recipients.map((r) => r.email));
     } finally {
       setSending(false);
     }
@@ -452,7 +570,8 @@ export function BrevoClientPage() {
               />
               <div className="text-xs text-muted-foreground">
                 Carga automática desde el servidor + opción de subir un archivo.
-                Se cruza por email usando <b>Correo</b> y/o <b>Usuario App</b>.
+                Se envía al email de <b>Correo</b>. <b>Usuario App</b> es solo
+                el acceso.
                 {credsStats.totalCreds ? (
                   <>
                     {" "}
@@ -501,6 +620,17 @@ export function BrevoClientPage() {
 
           {!useAllUsers ? (
             <div className="space-y-3">
+              <Tabs value={listTab} onValueChange={(v) => setListTab(v as any)}>
+                <TabsList>
+                  <TabsTrigger value="pending">
+                    Pendientes ({listCounts.pending})
+                  </TabsTrigger>
+                  <TabsTrigger value="sent">
+                    Enviados ({listCounts.sent})
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
               <div className="flex flex-wrap items-end gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="search">Buscar (dataset Brevo)</Label>
@@ -512,7 +642,20 @@ export function BrevoClientPage() {
                   />
                 </div>
 
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={selectedList.length === 0}
+                    onClick={() => {
+                      if (listTab === "pending") markEmailsAsSent(selectedList);
+                      else markEmailsAsPending(selectedList);
+                    }}
+                  >
+                    {listTab === "pending"
+                      ? "Mover seleccionados a enviados"
+                      : "Mover seleccionados a pendientes"}
+                  </Button>
                   <Button
                     type="button"
                     variant="outline"
@@ -556,13 +699,14 @@ export function BrevoClientPage() {
                       <TableHead>Contraseña App</TableHead>
                       <TableHead>Match</TableHead>
                       <TableHead>Score</TableHead>
+                      <TableHead className="w-[180px]">Acción</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {rowsLoading ? (
                       <TableRow>
                         <TableCell
-                          colSpan={7}
+                          colSpan={8}
                           className="py-6 text-center text-sm text-muted-foreground"
                         >
                           Cargando dataset...
@@ -571,7 +715,7 @@ export function BrevoClientPage() {
                     ) : visibleRows.length === 0 ? (
                       <TableRow>
                         <TableCell
-                          colSpan={7}
+                          colSpan={8}
                           className="py-6 text-center text-sm text-muted-foreground"
                         >
                           No hay registros para mostrar.
@@ -579,7 +723,7 @@ export function BrevoClientPage() {
                       </TableRow>
                     ) : (
                       visibleRows.map((r, idx) => {
-                        const email = rowEmail(r);
+                        const email = rowRecipientEmail(r);
                         if (!email) return null;
                         const displayName = rowName(r);
                         const checked = selectedEmails.has(email);
@@ -649,6 +793,22 @@ export function BrevoClientPage() {
                             </TableCell>
                             <TableCell className="text-sm">
                               {Number.isFinite(score) ? score.toFixed(2) : "-"}
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (listTab === "pending")
+                                    markEmailsAsSent([email]);
+                                  else markEmailsAsPending([email]);
+                                }}
+                              >
+                                {listTab === "pending"
+                                  ? "Marcar como enviado"
+                                  : "Volver a pendientes"}
+                              </Button>
                             </TableCell>
                           </TableRow>
                         );
