@@ -76,8 +76,6 @@ export function InstallPwaButton() {
     };
   }, []);
 
-  if (installed) return null;
-
   // Mostramos el botón si hay prompt disponible; si no, igual lo mostramos pero con ayuda.
   // (Útil en iOS donde no existe beforeinstallprompt)
   const canPrompt = Boolean(deferred);
@@ -137,6 +135,8 @@ export function InstallPwaButton() {
       });
     }
   }, [deferred, installed, isIOS, onClick, toast]);
+
+  if (installed) return null;
 
   return (
     <Button
