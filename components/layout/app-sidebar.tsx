@@ -16,6 +16,7 @@ import {
   CreditCard,
   ThumbsUp,
   ClipboardList,
+  Mail,
 } from "lucide-react";
 import {
   Sidebar,
@@ -68,6 +69,7 @@ const adminItems: MenuItem[] = [
   { title: "Pagos", url: "/admin/payments", icon: CreditCard },
   { title: "Chat Beta", url: "/chat/beta", icon: MessageSquare },
   { title: "Usuarios sistema", url: "/admin/users", icon: Users },
+  { title: "Brevo", url: "/admin/brevo", icon: Mail },
   { title: "Roles", url: "/admin/access/roles", icon: Settings },
   { title: "CRM", url: "/admin/crm", icon: Users },
 

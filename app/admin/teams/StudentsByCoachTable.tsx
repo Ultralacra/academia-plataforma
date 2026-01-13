@@ -58,8 +58,8 @@ export default function StudentsByCoachTable({
     onChange: (val: string) => void;
     maxVisible?: number;
   }) {
-    if (!items.length) return null;
     const [showAll, setShowAll] = useState(false);
+    if (!items.length) return null;
     const visible = showAll ? items : items.slice(0, maxVisible);
     const hiddenCount = Math.max(0, items.length - visible.length);
     return (

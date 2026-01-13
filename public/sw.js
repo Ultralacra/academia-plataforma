@@ -9,6 +9,16 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+// Para instalabilidad (Chrome/Lighthouse): tener handler de fetch.
+// Passthrough: no cachea, solo delega a la red.
+self.addEventListener("fetch", (event) => {
+  try {
+    event.respondWith(fetch(event.request));
+  } catch {
+    // no-op
+  }
+});
+
 self.addEventListener("push", (event) => {
   if (!event) return;
 

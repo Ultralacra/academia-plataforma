@@ -15,17 +15,17 @@ export const metadata: Metadata = {
   description: "Plataforma de gestión para academia",
   generator: "",
   manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Academia X",
+    statusBarStyle: "black-translucent",
+  },
   // Favicon e iconos. Coloca tu archivo en public/ (p. ej. /favicon.png o /favicon.ico)
   // o agrega app/icon.png para que Next lo detecte automáticamente.
   icons: {
-    icon: [
-      { url: "/favicon.ico", type: "image/x-icon" },
-      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
-      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
-      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
-    ],
-    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
-    shortcut: ["/favicon.ico"],
+    icon: [{ url: "/api/pwa/icon/32", type: "image/png" }],
+    apple: [{ url: "/api/pwa/icon/180", type: "image/png" }],
+    shortcut: ["/api/pwa/icon/32"],
   },
 };
 
@@ -117,6 +117,14 @@ export default function RootLayout({
     window.addEventListener('touchstart', unlock, { once: true, passive: true });
     window.addEventListener('click', unlock, { once: true, passive: true });
     window.addEventListener('keydown', unlock, { once: true });
+  } catch(e){}
+})();`}</Script>
+
+        <Script id="sw-register" strategy="afterInteractive">{`(function(){
+  try {
+    if (typeof window === 'undefined') return;
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
   } catch(e){}
 })();`}</Script>
       </head>

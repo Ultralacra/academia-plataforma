@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Apple, Download, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +11,16 @@ import { cn } from "@/lib/utils";
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
+async function registerServiceWorker() {
+  if (typeof window === "undefined") return null;
+  if (!("serviceWorker" in navigator)) return null;
+  try {
+    return await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  } catch {
+    return null;
+  }
 }
 
 function isStandaloneMode() {
@@ -28,12 +39,16 @@ export function InstallPwaButton() {
   const [deferred, setDeferred] =
     React.useState<BeforeInstallPromptEvent | null>(null);
   const [installed, setInstalled] = React.useState(false);
+  const suggestedRef = React.useRef(false);
 
   const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
   const isIOS = /iPhone|iPad|iPod/i.test(ua);
 
   React.useEffect(() => {
     setInstalled(isStandaloneMode());
+
+    // Aumenta la probabilidad de que el navegador habilite la instalación.
+    registerServiceWorker();
 
     const onBeforeInstallPrompt = (e: Event) => {
       // Evita el mini-infobar automático
@@ -67,7 +82,7 @@ export function InstallPwaButton() {
   // (Útil en iOS donde no existe beforeinstallprompt)
   const canPrompt = Boolean(deferred);
 
-  const onClick = async () => {
+  const onClick = React.useCallback(async () => {
     if (deferred) {
       try {
         await deferred.prompt();
@@ -90,7 +105,38 @@ export function InstallPwaButton() {
         ? "En iPhone: botón Compartir → “Añadir a pantalla de inicio”."
         : "En Android/Chrome: menú ⋮ → “Instalar aplicación” / “Añadir a pantalla de inicio”.",
     });
-  };
+  }, [deferred, isIOS, toast]);
+
+  // Auto-sugerencia dentro de la app (no puede auto-ejecutar el prompt nativo sin gesto del usuario).
+  React.useEffect(() => {
+    if (installed) return;
+    if (suggestedRef.current) return;
+
+    // Android/Chrome/Edge: cuando ya tenemos deferred, podemos sugerir instalación.
+    if (deferred) {
+      suggestedRef.current = true;
+      toast({
+        title: "Instalar la app",
+        description:
+          "Instálala para abrir más rápido y recibir notificaciones.",
+        action: (
+          <ToastAction altText="Instalar" onClick={onClick}>
+            Instalar
+          </ToastAction>
+        ),
+      });
+      return;
+    }
+
+    // iOS Safari: no existe beforeinstallprompt, pero podemos guiar.
+    if (isIOS) {
+      suggestedRef.current = true;
+      toast({
+        title: "Instalar en iPhone",
+        description: "Compartir → “Añadir a pantalla de inicio”.",
+      });
+    }
+  }, [deferred, installed, isIOS, onClick, toast]);
 
   return (
     <Button
@@ -105,8 +151,8 @@ export function InstallPwaButton() {
         canPrompt
           ? "Instalar Academia X"
           : isIOS
-            ? "iPhone: Compartir → Añadir a pantalla de inicio"
-            : "Android: menú ⋮ → Instalar aplicación"
+          ? "iPhone: Compartir → Añadir a pantalla de inicio"
+          : "Android: menú ⋮ → Instalar aplicación"
       }
     >
       <span className="inline-flex items-center gap-2">
