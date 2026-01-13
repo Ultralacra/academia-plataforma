@@ -10,6 +10,12 @@ type CheckItem = {
   detail?: string;
 };
 
+// Chrome/Edge Android: beforeinstallprompt
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
 async function safeFetch(url: string, init?: RequestInit) {
   try {
     const res = await fetch(url, init);
@@ -26,11 +32,36 @@ function boolLabel(v: boolean) {
 export function PwaDiagnostics() {
   const [checks, setChecks] = React.useState<CheckItem[]>([]);
   const [running, setRunning] = React.useState(false);
+  const [bip, setBip] = React.useState<BeforeInstallPromptEvent | null>(null);
+  const [bipChoice, setBipChoice] = React.useState<string>("");
+
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isAndroid = /Android/i.test(ua);
+  const isInAppBrowser =
+    /Instagram|FBAN|FBAV|FB_IAB|Line\/|Twitter|TikTok|wv\b/i.test(ua);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onBip = (e: Event) => {
+      // Evita el mini-infobar automático y guarda el evento para poder mostrar el prompt.
+      e.preventDefault?.();
+      setBip(e as BeforeInstallPromptEvent);
+    };
+    window.addEventListener("beforeinstallprompt", onBip as any);
+    return () => window.removeEventListener("beforeinstallprompt", onBip as any);
+  }, []);
 
   const run = React.useCallback(async () => {
     setRunning(true);
     try {
       const next: CheckItem[] = [];
+
+      next.push({
+        label: "Dispositivo / navegador",
+        ok: true,
+        detail: `ios=${boolLabel(isIOS)}; android=${boolLabel(isAndroid)}; in-app-browser=${boolLabel(isInAppBrowser)}`,
+      });
 
       const isSecure =
         typeof window !== "undefined" ? window.isSecureContext : false;
@@ -151,18 +182,29 @@ export function PwaDiagnostics() {
       )?.matches;
       const isIOSStandalone = (window.navigator as any)?.standalone === true;
       next.push({
-        label: "Standalone mode (detectado)",
+        label: "Modo app (solo si abres desde el icono instalado)",
         ok: Boolean(isStandaloneDisplay || isIOSStandalone),
-        detail: `display-mode=${boolLabel(
+        detail: `Esto será NO si estás en una pestaña del navegador. display-mode=${boolLabel(
           Boolean(isStandaloneDisplay)
         )}; iosStandalone=${boolLabel(Boolean(isIOSStandalone))}`,
       });
+
+      // Android: evento de instalación
+      if (isAndroid && !isInAppBrowser) {
+        next.push({
+          label: "Android: evento beforeinstallprompt disponible",
+          ok: Boolean(bip),
+          detail: bip
+            ? `Listo para mostrar el prompt.${bipChoice ? ` último resultado=${bipChoice}` : ""}`
+            : "Si esto es NO, normalmente es porque ya está instalada, o porque el navegador no considera la app instalable en esa sesión.",
+        });
+      }
 
       setChecks(next);
     } finally {
       setRunning(false);
     }
-  }, []);
+  }, [bip, bipChoice, isAndroid, isInAppBrowser, isIOS]);
 
   React.useEffect(() => {
     run();
@@ -174,6 +216,27 @@ export function PwaDiagnostics() {
         <Button onClick={run} disabled={running}>
           {running ? "Comprobando..." : "Recomprobar"}
         </Button>
+        {bip ? (
+          <Button
+            variant="outline"
+            disabled={running}
+            onClick={async () => {
+              try {
+                await bip.prompt();
+                const choice = await bip.userChoice;
+                setBipChoice(`${choice.outcome} (${choice.platform})`);
+                // Tras usarlo, el browser suele invalidar el evento
+                setBip(null);
+                // Recalcular
+                run();
+              } catch {
+                // noop
+              }
+            }}
+          >
+            Probar “Instalar”
+          </Button>
+        ) : null}
         <span className="text-xs text-muted-foreground">
           Abre esta URL en el celular y revisa qué marca NO.
         </span>
