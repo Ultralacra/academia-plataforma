@@ -134,6 +134,23 @@ export async function unassignBonoFromAlumno(codigo: string): Promise<boolean> {
   return true;
 }
 
+// Desasignar un bono de un alumno (endpoint correcto por body).
+// Backend: DELETE /v1/bonos/unassign/bono (con body JSON)
+export async function unassignBonoFromAlumnoByBody(payload: {
+  bono_codigo: string;
+  alumno_codigo: string;
+}): Promise<any> {
+  const bonoCodigo = String(payload?.bono_codigo ?? "").trim();
+  const alumnoCodigo = String(payload?.alumno_codigo ?? "").trim();
+  if (!bonoCodigo || !alumnoCodigo) {
+    throw new Error("Faltan datos: bono_codigo y alumno_codigo");
+  }
+  return await fetchJson<any>(`/bonos/unassign/bono`, {
+    method: "DELETE",
+    body: JSON.stringify({ bono_codigo: bonoCodigo, alumno_codigo: alumnoCodigo }),
+  });
+}
+
 export async function assignBonoToAlumno(payload: {
   bono_codigo: string;
   alumno_codigo: string;
