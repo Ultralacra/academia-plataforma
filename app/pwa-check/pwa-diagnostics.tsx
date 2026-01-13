@@ -49,7 +49,8 @@ export function PwaDiagnostics() {
       setBip(e as BeforeInstallPromptEvent);
     };
     window.addEventListener("beforeinstallprompt", onBip as any);
-    return () => window.removeEventListener("beforeinstallprompt", onBip as any);
+    return () =>
+      window.removeEventListener("beforeinstallprompt", onBip as any);
   }, []);
 
   const run = React.useCallback(async () => {
@@ -60,7 +61,9 @@ export function PwaDiagnostics() {
       next.push({
         label: "Dispositivo / navegador",
         ok: true,
-        detail: `ios=${boolLabel(isIOS)}; android=${boolLabel(isAndroid)}; in-app-browser=${boolLabel(isInAppBrowser)}`,
+        detail: `ios=${boolLabel(isIOS)}; android=${boolLabel(
+          isAndroid
+        )}; in-app-browser=${boolLabel(isInAppBrowser)}`,
       });
 
       const isSecure =
@@ -195,7 +198,9 @@ export function PwaDiagnostics() {
           label: "Android: evento beforeinstallprompt disponible",
           ok: Boolean(bip),
           detail: bip
-            ? `Listo para mostrar el prompt.${bipChoice ? ` último resultado=${bipChoice}` : ""}`
+            ? `Listo para mostrar el prompt.${
+                bipChoice ? ` último resultado=${bipChoice}` : ""
+              }`
             : "Si esto es NO, normalmente es porque ya está instalada, o porque el navegador no considera la app instalable en esa sesión.",
         });
       }
