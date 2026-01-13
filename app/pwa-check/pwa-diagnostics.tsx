@@ -32,14 +32,18 @@ export function PwaDiagnostics() {
     try {
       const next: CheckItem[] = [];
 
-      const isSecure = typeof window !== "undefined" ? window.isSecureContext : false;
+      const isSecure =
+        typeof window !== "undefined" ? window.isSecureContext : false;
       next.push({
         label: "Contexto seguro (HTTPS / localhost)",
         ok: isSecure,
-        detail: `isSecureContext=${boolLabel(isSecure)}; origin=${typeof window !== "undefined" ? window.location.origin : ""}`,
+        detail: `isSecureContext=${boolLabel(isSecure)}; origin=${
+          typeof window !== "undefined" ? window.location.origin : ""
+        }`,
       });
 
-      const hasSW = typeof navigator !== "undefined" && "serviceWorker" in navigator;
+      const hasSW =
+        typeof navigator !== "undefined" && "serviceWorker" in navigator;
       next.push({
         label: "Soporte de Service Worker",
         ok: hasSW,
@@ -47,12 +51,17 @@ export function PwaDiagnostics() {
       });
 
       // manifest
-      const manifestRes = await safeFetch("/manifest.webmanifest", { cache: "no-store" });
-      const manifestCt = (manifestRes as Response).headers?.get?.("content-type") ?? "";
+      const manifestRes = await safeFetch("/manifest.webmanifest", {
+        cache: "no-store",
+      });
+      const manifestCt =
+        (manifestRes as Response).headers?.get?.("content-type") ?? "";
       next.push({
         label: "Manifest accesible (/manifest.webmanifest)",
         ok: (manifestRes as Response).ok,
-        detail: `status=${(manifestRes as Response).status} ${(manifestRes as Response).statusText}; content-type=${manifestCt}`,
+        detail: `status=${(manifestRes as Response).status} ${
+          (manifestRes as Response).statusText
+        }; content-type=${manifestCt}`,
       });
 
       let manifestJson: any = null;
@@ -75,7 +84,9 @@ export function PwaDiagnostics() {
           detail: `display=${manifestJson.display}`,
         });
 
-        const icons: any[] = Array.isArray(manifestJson.icons) ? manifestJson.icons : [];
+        const icons: any[] = Array.isArray(manifestJson.icons)
+          ? manifestJson.icons
+          : [];
         next.push({
           label: "Manifest: tiene iconos",
           ok: icons.length > 0,
@@ -91,7 +102,9 @@ export function PwaDiagnostics() {
           next.push({
             label: `Icono: ${src}`,
             ok: (r as Response).ok && ct.includes("image"),
-            detail: `status=${(r as Response).status}; content-type=${ct}; sizes=${icon?.sizes ?? ""}`,
+            detail: `status=${
+              (r as Response).status
+            }; content-type=${ct}; sizes=${icon?.sizes ?? ""}`,
           });
         }
       }
@@ -119,7 +132,9 @@ export function PwaDiagnostics() {
           next.push({
             label: "La página está controlada por el SW",
             ok: controlled,
-            detail: controlled ? "controller=present" : "controller=null (recarga la página)" ,
+            detail: controlled
+              ? "controller=present"
+              : "controller=null (recarga la página)",
           });
         } catch (e: any) {
           next.push({
@@ -131,12 +146,16 @@ export function PwaDiagnostics() {
       }
 
       // iOS standalone flag
-      const isStandaloneDisplay = window.matchMedia?.("(display-mode: standalone)")?.matches;
+      const isStandaloneDisplay = window.matchMedia?.(
+        "(display-mode: standalone)"
+      )?.matches;
       const isIOSStandalone = (window.navigator as any)?.standalone === true;
       next.push({
         label: "Standalone mode (detectado)",
         ok: Boolean(isStandaloneDisplay || isIOSStandalone),
-        detail: `display-mode=${boolLabel(Boolean(isStandaloneDisplay))}; iosStandalone=${boolLabel(Boolean(isIOSStandalone))}`,
+        detail: `display-mode=${boolLabel(
+          Boolean(isStandaloneDisplay)
+        )}; iosStandalone=${boolLabel(Boolean(isIOSStandalone))}`,
       });
 
       setChecks(next);
@@ -167,13 +186,17 @@ export function PwaDiagnostics() {
               <div className="space-y-1">
                 <div className="text-sm font-medium">{c.label}</div>
                 {c.detail ? (
-                  <div className="text-xs text-muted-foreground break-all">{c.detail}</div>
+                  <div className="text-xs text-muted-foreground break-all">
+                    {c.detail}
+                  </div>
                 ) : null}
               </div>
               <div
                 className={
                   "text-xs font-semibold px-2 py-1 rounded " +
-                  (c.ok ? "bg-emerald-500/15 text-emerald-700" : "bg-red-500/15 text-red-700")
+                  (c.ok
+                    ? "bg-emerald-500/15 text-emerald-700"
+                    : "bg-red-500/15 text-red-700")
                 }
               >
                 {c.ok ? "OK" : "NO"}
@@ -184,8 +207,9 @@ export function PwaDiagnostics() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Si en Android no aparece instalable, normalmente fallan: contexto seguro,
-        manifest, o alguno de los iconos (status 200 + content-type image/*).
+        Si en Android no aparece instalable, normalmente fallan: contexto
+        seguro, manifest, o alguno de los iconos (status 200 + content-type
+        image/*).
       </p>
     </div>
   );
