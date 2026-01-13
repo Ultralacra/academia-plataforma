@@ -46,7 +46,7 @@ export function ProtectedRoute({
       return null;
     }
     if (user?.role === "equipo") {
-      const target = "/admin/solicitud-bonos";
+      const target = "/admin/tickets-board";
       if (pathname !== target) {
         router.replace(target);
       }
@@ -108,6 +108,8 @@ export function ProtectedRoute({
       segments[0] === "admin" &&
       segments[1] === "teamsv2" &&
       segments.length === 2;
+    // Permitir /admin como inicio
+    const isAdminRoot = segments[0] === "admin" && segments.length === 1;
     // Permitir sección de alumnos (lista y detalle)
     const isAlumnosPath = segments[0] === "admin" && segments[1] === "alumnos";
     // Permitir métricas de alumnos
@@ -121,11 +123,12 @@ export function ProtectedRoute({
       segments[1] === "teamsv2" &&
       segments.length >= 3;
     const codeFromPath = isTeamDetail ? segments[2] : null;
-    const target = "/admin/solicitud-bonos";
+    const target = "/admin/tickets-board";
 
     if (
       !isTeamDetail &&
       !isTeamsV2Root &&
+      !isAdminRoot &&
       !isAlumnosPath &&
       !isTicketsBoard &&
       !isTickets &&

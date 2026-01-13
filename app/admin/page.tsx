@@ -65,7 +65,7 @@ function AdminDashboard() {
 
 export default function AdminPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <AdminDashboard />
       </DashboardLayout>

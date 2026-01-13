@@ -227,6 +227,39 @@ export default function TicketsBoard({
   const uiTicketLower = isFeedbackMode ? "feedback" : "ticket";
   const uiTicketsLower = isFeedbackMode ? "feedback" : "tickets";
 
+  const formatTitleForUi = (value?: string | null) => {
+    const base = String(value ?? "");
+    if (!isFeedbackMode) return base;
+    return base
+      .replace(/\btickets\b/gi, "Feedback")
+      .replace(/\bticket\b/gi, "Feedback");
+  };
+
+  const filterDescriptionForStudent = (raw: string) => {
+    if (!isStudent) return raw;
+    const text = String(raw || "").replace(/\r\n/g, "\n");
+    if (!text.trim()) return text;
+
+    const startRe = /---\s*Mensaje\s+Original\s+del\s+Alumno\s*---/i;
+    const endRe = /\n\s*Recomendaci[oó]n(?:\s+o\s+siguiente\s+paso)?\s*:/i;
+
+    const startMatch = startRe.exec(text);
+    if (startMatch) {
+      const start = startMatch.index;
+      const afterStart = text.slice(start);
+      const endMatch = endRe.exec(afterStart);
+      const sliced = endMatch
+        ? afterStart.slice(0, endMatch.index)
+        : afterStart;
+      return sliced.trim();
+    }
+
+    // Fallback: si no hay marcador, al menos ocultar recomendación si viene.
+    const endMatchGlobal = endRe.exec(text);
+    if (endMatchGlobal) return text.slice(0, endMatchGlobal.index).trim();
+    return text;
+  };
+
   // Permisos especiales: además de admin, permitir reasignar/eliminar a usuarios puntuales
   const privilegedTicketManagerCodes = new Set<string>([
     "PKBT2jVtzKzN7TpnLZkPj", // Katherine
@@ -284,6 +317,12 @@ export default function TicketsBoard({
   const [ticketDetailError, setTicketDetailError] = useState<string | null>(
     null
   );
+
+  const visibleDesc = useMemo(() => {
+    return filterDescriptionForStudent(
+      String(ticketDetail?.descripcion || "")
+    );
+  }, [ticketDetail?.descripcion, isStudent]);
 
   // Los alumnos solo pueden ver: bloquear pestañas/acciones privadas
   useEffect(() => {
@@ -1270,7 +1309,7 @@ export default function TicketsBoard({
   function openTicketDetail(ticket: TicketBoardItem) {
     if (isStudent && coerceStatus(ticket.estado) !== "RESUELTO") {
       toast({
-        title: "Solo puedes ver el detalle de tickets resueltos",
+        title: `Solo puedes ver el detalle de ${uiTicketsLower} resueltos`,
       });
       return;
     }
@@ -1721,11 +1760,13 @@ export default function TicketsBoard({
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(t);
     });
-    return Array.from(map.entries()).map(([date, items]) => ({ date, items }));
+    return Array.from(map.entries()).map(([date, groupedItems]) => {
+      return { date, items: groupedItems };
+    });
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className={"space-y-6 p-6"}>
       {/* Modal de estado de descarga */}
       <Dialog open={downloadModalOpen} onOpenChange={setDownloadModalOpen}>
         <DialogContent className="sm:max-w-[360px]">
@@ -1950,7 +1991,7 @@ export default function TicketsBoard({
 
       {loading ? (
         <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
-          Cargando tickets...
+          Cargando {uiTicketsLower}...
         </div>
       ) : viewMode === "table" ? (
         <div className="rounded-xl border border-border bg-background overflow-hidden">
@@ -1970,7 +2011,7 @@ export default function TicketsBoard({
                     colSpan={(studentCode ? 3 : 4) + (isFeedbackMode ? 1 : 0)}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
-                    No hay tickets para mostrar.
+                    No hay {uiTicketsLower} para mostrar.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -1980,12 +2021,9 @@ export default function TicketsBoard({
                   const subjectLabel = (() => {
                     const base =
                       t.nombre || (t.codigo ? `${uiTicket} ${t.codigo}` : "—");
-                    if (!isStudent || !isFeedbackMode) return base;
-                    const s = String(base);
-                    if (s === "—") return s;
-                    return s
-                      .replace(/\btickets\b/gi, "Feedback")
-                      .replace(/\bticket\b/gi, "Feedback");
+                    if (!isFeedbackMode) return base;
+                    if (base === "—") return base;
+                    return formatTitleForUi(base);
                   })();
                   const createdLabel = (() => {
                     const raw =
@@ -2170,12 +2208,7 @@ export default function TicketsBoard({
                               <div className="flex items-start justify-between gap-3">
                                 <h3 className="flex-1 text-sm font-medium leading-snug text-foreground">
                                   {(() => {
-                                    const base = String(t.nombre ?? uiTicket);
-                                    if (!isStudent || !isFeedbackMode)
-                                      return base;
-                                    return base
-                                      .replace(/\btickets\b/gi, "Feedback")
-                                      .replace(/\bticket\b/gi, "Feedback");
+                                    return formatTitleForUi(t.nombre ?? uiTicket);
                                   })()}
                                 </h3>
                                 <span
@@ -2469,7 +2502,7 @@ export default function TicketsBoard({
               Archivos adjuntos
             </DialogTitle>
             <DialogDescription>
-              Lista de archivos vinculados al ticket seleccionado.
+              Lista de archivos vinculados al {uiTicketLower} seleccionado.
             </DialogDescription>
           </DialogHeader>
           {filesLoading ? (
@@ -2615,7 +2648,7 @@ export default function TicketsBoard({
               {previewFile?.nombre_archivo || "Previsualización"}
             </DialogTitle>
             <DialogDescription>
-              Vista previa del archivo seleccionado del ticket.
+              Vista previa del archivo seleccionado de {uiTicketLower}.
             </DialogDescription>
           </DialogHeader>
           {previewLoading ? (
@@ -2774,10 +2807,11 @@ export default function TicketsBoard({
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1">
                 <SheetTitle className="text-lg">
-                  {editForm.nombre || `Detalle del ${uiTicketLower}`}
+                  {formatTitleForUi(editForm.nombre) ||
+                    `Detalle del ${uiTicketLower}`}
                 </SheetTitle>
                 <SheetDescription className="mt-1">
-                  {selectedTicket?.codigo && (
+                  {!isStudent && selectedTicket?.codigo && (
                     <span className="text-xs text-slate-500">
                       Código: {selectedTicket.codigo}
                     </span>
@@ -2869,17 +2903,22 @@ export default function TicketsBoard({
                     )}
 
                     {/* Título editable */}
-                    <div className="space-y-1">
-                      <Input
-                        className="text-lg font-semibold border-transparent hover:border-slate-200 px-0 h-auto py-1 focus:ring-0 focus:border-slate-300 bg-transparent shadow-none"
-                        value={editForm.nombre ?? ""}
-                        onChange={(e) =>
-                          setEditForm((f) => ({ ...f, nombre: e.target.value }))
-                        }
-                        placeholder={`Título del ${uiTicketLower}`}
-                        disabled={!canEdit}
-                      />
-                    </div>
+                    {canEdit && (
+                      <div className="space-y-1">
+                        <Input
+                          className="text-lg font-semibold border-transparent hover:border-slate-200 px-0 h-auto py-1 focus:ring-0 focus:border-slate-300 bg-transparent shadow-none"
+                          value={editForm.nombre ?? ""}
+                          onChange={(e) =>
+                            setEditForm((f) => ({
+                              ...f,
+                              nombre: e.target.value,
+                            }))
+                          }
+                          placeholder={`Título del ${uiTicketLower}`}
+                          disabled={!canEdit}
+                        />
+                      </div>
+                    )}
 
                     {/* Coaches (Movido desde Detalle) */}
                     {(() => {
@@ -3308,7 +3347,7 @@ export default function TicketsBoard({
                       </div>
                       {!descEditing ? (
                         <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
-                          {ticketDetail?.descripcion || "—"}
+                          {visibleDesc || "—"}
                         </div>
                       ) : (
                         <div className="space-y-2">
@@ -3362,9 +3401,7 @@ export default function TicketsBoard({
                       )}
                       {(() => {
                         const urlList: string[] = [
-                          ...extractUrlsFromDescription(
-                            ticketDetail?.descripcion
-                          ),
+                          ...extractUrlsFromDescription(visibleDesc),
                           ...(
                             (Array.isArray((ticketDetail as any)?.links)
                               ? (ticketDetail as any).links

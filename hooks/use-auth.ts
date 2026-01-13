@@ -46,7 +46,7 @@ export function useAuth() {
 
       switch (user.role) {
         case "admin":
-          router.push("/admin/students")
+          router.push("/admin/tickets-board")
           break
         case "coach":
           // Ruta existente y útil para coaches
@@ -56,7 +56,7 @@ export function useAuth() {
           router.push("/admin/alumnos")
           break
         case "equipo": {
-          router.push("/admin/solicitud-bonos");
+          router.push("/admin/tickets-board");
           break
         }
         case "student": {
