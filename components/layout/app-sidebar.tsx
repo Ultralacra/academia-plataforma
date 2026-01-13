@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
 import { toast } from "@/components/ui/use-toast";
@@ -107,6 +108,7 @@ export function AppSidebar() {
   const { user } = useAuth();
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const isMobile = useIsMobile();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -751,9 +753,13 @@ export function AppSidebar() {
         {/* Footer minimal — Notion-like */}
         <Separator className="mx-3 mt-2" />
         <div className="px-3 py-2 flex flex-col items-center gap-2">
-          <div className="w-full max-w-[260px]">
-            <InstallPwaButton />
-          </div>
+          {isMobile ? (
+            <div className="w-full max-w-[260px]">
+              <div className="flex items-center justify-center">
+                <InstallPwaButton compact />
+              </div>
+            </div>
+          ) : null}
           <p className="text-[11px] text-muted-foreground text-center">
             {new Date().getFullYear()} • Workspace
           </p>

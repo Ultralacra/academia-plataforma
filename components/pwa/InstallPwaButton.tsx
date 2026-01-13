@@ -34,7 +34,13 @@ function isStandaloneMode() {
   return Boolean(isStandaloneDisplay || isIOSStandalone);
 }
 
-export function InstallPwaButton() {
+export function InstallPwaButton({
+  compact = false,
+  className,
+}: {
+  compact?: boolean;
+  className?: string;
+}) {
   const { toast } = useToast();
   const [deferred, setDeferred] =
     React.useState<BeforeInstallPromptEvent | null>(null);
@@ -50,15 +56,29 @@ export function InstallPwaButton() {
     // Aumenta la probabilidad de que el navegador habilite la instalación.
     registerServiceWorker();
 
+    // Si el layout capturó beforeinstallprompt antes de hidratar React, usarlo.
+    try {
+      const w = window as any;
+      if (w.__deferredInstallPrompt) {
+        setDeferred(w.__deferredInstallPrompt as BeforeInstallPromptEvent);
+      }
+    } catch {}
+
     const onBeforeInstallPrompt = (e: Event) => {
       // Evita el mini-infobar automático
       e.preventDefault?.();
+      try {
+        (window as any).__deferredInstallPrompt = e;
+      } catch {}
       setDeferred(e as BeforeInstallPromptEvent);
     };
 
     const onAppInstalled = () => {
       setInstalled(true);
       setDeferred(null);
+      try {
+        (window as any).__deferredInstallPrompt = null;
+      } catch {}
     };
 
     window.addEventListener(
@@ -138,6 +158,28 @@ export function InstallPwaButton() {
 
   if (installed) return null;
 
+  if (compact) {
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        onClick={onClick}
+        className={cn(className)}
+        title={
+          canPrompt
+            ? "Instalar Academia X"
+            : isIOS
+            ? "iPhone: Compartir → Añadir a pantalla de inicio"
+            : "Android: menú ⋮ → Instalar aplicación"
+        }
+        aria-label="Instalar app"
+      >
+        <Download className="h-5 w-5" />
+      </Button>
+    );
+  }
+
   return (
     <Button
       variant="default"
@@ -145,7 +187,8 @@ export function InstallPwaButton() {
       onClick={onClick}
       className={cn(
         "w-full h-auto py-2 flex-col items-center justify-center gap-1",
-        isIOS ? "" : ""
+        isIOS ? "" : "",
+        className
       )}
       title={
         canPrompt

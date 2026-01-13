@@ -120,6 +120,24 @@ export default function RootLayout({
   } catch(e){}
 })();`}</Script>
 
+        <Script id="bip-capture" strategy="beforeInteractive">{`(function(){
+  try {
+    if (typeof window === 'undefined') return;
+    // Captura beforeinstallprompt lo antes posible para no perder el evento.
+    window.__deferredInstallPrompt = window.__deferredInstallPrompt || null;
+    window.addEventListener('beforeinstallprompt', function(e){
+      try {
+        if (!e) return;
+        if (e.preventDefault) e.preventDefault();
+        window.__deferredInstallPrompt = e;
+      } catch(_){}
+    });
+    window.addEventListener('appinstalled', function(){
+      try { window.__deferredInstallPrompt = null; } catch(_){}
+    });
+  } catch(e){}
+})();`}</Script>
+
         <Script id="sw-register" strategy="afterInteractive">{`(function(){
   try {
     if (typeof window === 'undefined') return;
