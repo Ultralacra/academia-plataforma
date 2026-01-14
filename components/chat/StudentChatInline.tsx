@@ -106,13 +106,35 @@ export default function StudentChatInline({
           .filter((x) => x.codigo);
         const preferred = assigned.find((x) => isAC(x.area)) || assigned[0];
         const codeEquipo = preferred?.codigo ? String(preferred.codigo) : null;
-        try {
-          console.log("[StudentChatInline] resolvedEquipo (codigo)", {
-            alumno,
-            codeEquipo,
-            preferred,
-          });
-        } catch {}
+
+        // LOG CRÍTICO: Mostrar proceso de resolución del coach
+        console.log("═══════════════════════════════════════════");
+        console.log("🔎 [CHAT ALUMNO] RESOLUCIÓN DE COACH");
+        console.log("═══════════════════════════════════════════");
+        console.log("👤 Alumno:", alumno);
+        console.log("📊 Coaches asignados encontrados:", assigned.length);
+        assigned.forEach((a, i) => {
+          console.log(
+            `  ${i + 1}. ${a.nombre || "(sin nombre)"} [${a.codigo}]`,
+            {
+              area: a.area || "(sin área)",
+              es_atencion_cliente: isAC(a.area) ? "✅ SÍ" : "❌ NO",
+            }
+          );
+        });
+        console.log("⭐ Coach seleccionado:", {
+          codigo: codeEquipo || "(NINGUNO)",
+          nombre: preferred?.nombre || "(sin nombre)",
+          area: preferred?.area || "(sin área)",
+          es_atencion_cliente:
+            preferred?.area && isAC(preferred.area) ? "✅ SÍ" : "❌ NO",
+          criterio:
+            preferred?.area && isAC(preferred.area)
+              ? "Área = Atención al Cliente"
+              : "Primer coach disponible (fallback)",
+        });
+        console.log("═══════════════════════════════════════════");
+
         setResolvedEquipoId(codeEquipo);
         setCoachResolution(codeEquipo ? "ready" : "missing");
         try {
@@ -151,11 +173,32 @@ export default function StudentChatInline({
         id_equipo: String(resolvedEquipoId),
       } as any);
     }
-    try {
-      console.log("[StudentChatInline] participants", base);
-    } catch {}
+
+    // LOG CRÍTICO: Imprimir con quién está intentando chatear el alumno
+    console.log("═══════════════════════════════════════════");
+    console.log("🔍 [CHAT ALUMNO] CONFIGURACIÓN DE PARTICIPANTES");
+    console.log("═══════════════════════════════════════════");
+    console.log("📋 Alumno (cliente):", {
+      codigo: code,
+      nombre: alumnoName || "(sin nombre)",
+    });
+    console.log("👥 Destinatario (equipo):", {
+      codigo_equipo: resolvedEquipoId || "(NO RESUELTO)",
+      nombre_equipo: resolvedEquipoName || "(sin nombre)",
+      area:
+        resolvedEquipoId && coachMap[resolvedEquipoId]?.area
+          ? coachMap[resolvedEquipoId].area
+          : "(sin área)",
+      puesto:
+        resolvedEquipoId && coachMap[resolvedEquipoId]?.puesto
+          ? coachMap[resolvedEquipoId].puesto
+          : "(sin puesto)",
+    });
+    console.log("📝 Participantes enviados al servidor:", base);
+    console.log("═══════════════════════════════════════════");
+
     return base as any[];
-  }, [code, resolvedEquipoId]);
+  }, [code, resolvedEquipoId, alumnoName, resolvedEquipoName, coachMap]);
 
   const resolveName = React.useCallback(
     (tipo: "equipo" | "cliente" | "admin", id: string) => {

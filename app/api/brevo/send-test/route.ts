@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { buildUrl } from "@/lib/api-config";
 import { buildWelcomeEmail } from "@/lib/email-templates/welcome";
+import { buildReminderEmail } from "@/lib/email-templates/reminder";
 
 export const dynamic = "force-dynamic";
 
@@ -128,7 +129,7 @@ export async function POST(req: Request) {
   const defaultPassword = String(body?.password ?? "").trim();
 
   const template = String(body?.template ?? "welcome");
-  if (template !== "welcome") {
+  if (template !== "welcome" && template !== "reminder") {
     return json({ status: "error", message: "Template no soportada" }, 400);
   }
 
@@ -154,15 +155,24 @@ export async function POST(req: Request) {
     const resolvedPortalLink = String(portalLink ?? "").trim();
     const resolvedUsername = String(r.username ?? "").trim();
 
-    const email = buildWelcomeEmail({
-      appName,
-      origin,
-      recipientName: r.name ?? null,
-      recipientEmail: r.email,
-      recipientUsername: resolvedUsername || null,
-      recipientPassword: resolvedPassword || null,
-      portalLink: resolvedPortalLink || null,
-    });
+    const email = template === "reminder"
+      ? buildReminderEmail({
+          appName,
+          origin,
+          recipientName: r.name ?? null,
+          recipientEmail: r.email,
+          portalLink: resolvedPortalLink || null,
+        })
+      : buildWelcomeEmail({
+          appName,
+          origin,
+          recipientName: r.name ?? null,
+          recipientEmail: r.email,
+          recipientUsername: resolvedUsername || null,
+          recipientPassword: resolvedPassword || null,
+          portalLink: resolvedPortalLink || null,
+        });
+
     const resolvedSubject = renderSubject(r.name) || email.subject;
 
     const brevoPayload = {

@@ -2945,10 +2945,65 @@ export default function StudentChatFriendly({
             const assigned = rows
               .map((r) => ({
                 codigo: r.codigo_equipo ?? r.codigo_coach ?? r.codigo ?? null,
+                nombre: r.nombre ?? r.nombre_equipo ?? r.nombre_coach ?? null,
                 area: r.area ?? null,
+                puesto: r.puesto ?? null,
               }))
               .filter((x) => x.codigo);
+
+            console.log(
+              "═══════════════════════════════════════════════════════"
+            );
+            console.log("🔍 [CHAT ALUMNO] RESOLUCIÓN DE EQUIPO ASIGNADO");
+            console.log(
+              "═══════════════════════════════════════════════════════"
+            );
+            console.log(`📋 Alumno: ${alumnoCode}`);
+            console.log(
+              `📊 Total coaches asignados encontrados: ${assigned.length}`
+            );
+            console.log("");
+            console.log("👥 COACHES ASIGNADOS:");
+            assigned.forEach((c, idx) => {
+              const esAC = isAC(c.area);
+              console.log(
+                `  ${idx + 1}. ${esAC ? "✅" : "❌"} Código: ${c.codigo}`
+              );
+              console.log(`     Nombre: ${c.nombre || "N/A"}`);
+              console.log(`     Área: ${c.area || "N/A"}`);
+              console.log(`     Puesto: ${c.puesto || "N/A"}`);
+              console.log(
+                `     ${
+                  esAC
+                    ? "👉 ES ATENCIÓN AL CLIENTE"
+                    : "No es Atención al Cliente"
+                }`
+              );
+              console.log("");
+            });
+
             const preferred = assigned.find((x) => isAC(x.area)) || assigned[0];
+
+            console.log("🎯 COACH SELECCIONADO:");
+            if (preferred) {
+              console.log(`  ✅ Código: ${preferred.codigo}`);
+              console.log(`     Nombre: ${preferred.nombre || "N/A"}`);
+              console.log(`     Área: ${preferred.area || "N/A"}`);
+              console.log(`     Puesto: ${preferred.puesto || "N/A"}`);
+              console.log(
+                `     Criterio: ${
+                  isAC(preferred.area)
+                    ? "Prioridad Atención al Cliente"
+                    : "Primer coach disponible (no hay AC)"
+                }`
+              );
+            } else {
+              console.log("  ❌ NO SE ENCONTRÓ NINGÚN COACH ASIGNADO");
+            }
+            console.log(
+              "═══════════════════════════════════════════════════════"
+            );
+
             const codeEquipo = preferred?.codigo
               ? String(preferred.codigo)
               : null;

@@ -132,6 +132,11 @@ export default function CoachDetailPage({
     string | number | null
   >(null);
 
+  // Duplicados: guardar lista de chat IDs duplicados para la conversación actual
+  const [duplicateChatIds, setDuplicateChatIds] = useState<(string | number)[]>(
+    []
+  );
+
   // Pestañas de conversaciones abiertas (solo nombres, sin IDs)
   type OpenTab = {
     key: string; // team:CODE o student:CODE
@@ -742,6 +747,20 @@ export default function CoachDetailPage({
         return acc + (cid ? getUnreadCountByChatId(cid) : 0);
       }, 0);
 
+      // Obtener timestamp de cuándo se leyó por última vez
+      const readAt =
+        topChatId != null
+          ? (() => {
+              try {
+                const k = `chatReadAt:coach:${String(topChatId)}`;
+                const v = localStorage.getItem(k);
+                return v ? Number.parseInt(v, 10) || 0 : 0;
+              } catch {
+                return 0;
+              }
+            })()
+          : 0;
+
       const lastRead = topChatId != null ? getLastReadByChatId(topChatId) : 0;
       const hasUnread = lastAt > (lastRead || 0);
 
@@ -753,6 +772,7 @@ export default function CoachDetailPage({
         ...group,
         topChatId,
         lastAt,
+        readAt,
         lastAtLabel,
         lastText: (last.text || "").trim(),
         hasUnread,
@@ -826,6 +846,25 @@ export default function CoachDetailPage({
         );
       });
     }
+
+    // 5. ORDENAR por última actividad (más reciente primero)
+    // CRÍTICO: Esto garantiza que cuando llega un mensaje nuevo, la conversación sube al tope
+    finalResult.sort((a, b) => {
+      // Priorizar conversaciones con mensajes no leídos
+      if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
+      if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
+
+      // Si ambas son NO leídas, ordenar por timestamp de mensaje más reciente
+      if (a.unreadCount > 0 && b.unreadCount > 0) {
+        return (b.lastAt || 0) - (a.lastAt || 0);
+      }
+
+      // Si ambas son LEÍDAS, ordenar por timestamp de lectura (más recientemente leída primero)
+      // Si no hay readAt, usar lastAt como fallback
+      const aSort = a.readAt || a.lastAt || 0;
+      const bSort = b.readAt || b.lastAt || 0;
+      return bSort - aSort;
+    });
 
     return finalResult;
   }, [
@@ -1055,10 +1094,19 @@ export default function CoachDetailPage({
     };
     const onUnreadCountUpdated = (e: any) => {
       try {
-        if (e?.detail?.role === "coach") setUnreadBump((n) => n + 1);
+        if (e?.detail?.role === "coach") {
+          console.log(
+            "[CoachDetailPage] Contador de no leídos actualizado:",
+            e?.detail
+          );
+          setUnreadBump((n) => n + 1);
+          // Forzar refresco de lista para reordenar
+          setRequestListSignal((n) => (n ?? 0) + 1);
+        }
       } catch {}
     };
     const onListRefresh = () => {
+      console.log("[CoachDetailPage] Refrescando lista de chats");
       setChatsLoading(true);
       setRequestListSignal((n) => (n ?? 0) + 1);
     };
@@ -1319,6 +1367,10 @@ export default function CoachDetailPage({
                                     <button
                                       className={`w-full flex items-center gap-3 p-3 hover:bg-slate-50 text-left transition-colors group ${
                                         isActive ? "bg-slate-100" : ""
+                                      } ${
+                                        item.unreadCount > 0
+                                          ? "border-l-4 border-l-emerald-500"
+                                          : ""
                                       }`}
                                       onClick={() => {
                                         try {
@@ -1379,15 +1431,23 @@ export default function CoachDetailPage({
                                         });
                                         setActiveChatTab(tabKey);
 
-                                        // Clear unread
+                                        // Clear unread y guardar timestamp de lectura
                                         try {
+                                          const readTimestamp = Date.now();
                                           for (const it of item.chats || []) {
                                             const id = it?.id_chat ?? it?.id;
                                             if (id == null) continue;
                                             const uKey = `chatUnreadById:coach:${String(
                                               id
                                             )}`;
+                                            const readKey = `chatReadAt:coach:${String(
+                                              id
+                                            )}`;
                                             localStorage.setItem(uKey, "0");
+                                            localStorage.setItem(
+                                              readKey,
+                                              String(readTimestamp)
+                                            );
                                             window.dispatchEvent(
                                               new CustomEvent(
                                                 "chat:unread-count-updated",
@@ -1417,11 +1477,8 @@ export default function CoachDetailPage({
                                       {/* Content */}
                                       <div className="min-w-0 flex-1 border-b border-slate-50 pb-3 group-hover:border-transparent transition-colors h-full flex flex-col justify-center">
                                         <div className="flex items-baseline justify-between gap-2">
-                                          <div className="text-[15px] font-medium truncate text-slate-900 flex items-center gap-2">
-                                            <span>{item.name}</span>
-                                            <span className="text-[10px] text-slate-400 font-mono bg-slate-100 px-1 rounded">
-                                              {item.id}
-                                            </span>
+                                          <div className="text-[15px] font-medium truncate text-slate-900">
+                                            {item.name}
                                           </div>
                                           <div
                                             className={`text-[11px] flex-shrink-0 ${
@@ -1515,409 +1572,504 @@ export default function CoachDetailPage({
                   </div>
 
                   <div
-                    className={`col-span-12 md:col-span-8 lg:col-span-9 h-full overflow-hidden flex flex-col min-h-0 ${
+                    className={`col-span-12 md:col-span-8 lg:col-span-9 h-full overflow-hidden flex flex-col min-h-0 relative ${
                       mobileChatOpen ? "flex" : "hidden md:flex"
                     }`}
                   >
+                    {/* Estado vacío estilo WhatsApp - Solo visible cuando no hay conversación seleccionada */}
+                    {!targetTeamCode && !targetStudentCode && (
+                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-8 text-center pointer-events-auto">
+                        <div className="max-w-md space-y-6">
+                          {/* Ilustración */}
+                          <div className="relative mx-auto w-64 h-48 mb-4">
+                            <svg
+                              viewBox="0 0 300 200"
+                              className="w-full h-full drop-shadow-lg"
+                              fill="none"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              {/* Pantalla de laptop */}
+                              <rect
+                                x="50"
+                                y="30"
+                                width="200"
+                                height="120"
+                                rx="8"
+                                fill="#10b981"
+                                opacity="0.9"
+                              />
+                              <rect
+                                x="60"
+                                y="40"
+                                width="180"
+                                height="100"
+                                rx="4"
+                                fill="white"
+                              />
+
+                              {/* Burbujas de chat */}
+                              <rect
+                                x="75"
+                                y="55"
+                                width="80"
+                                height="20"
+                                rx="10"
+                                fill="#e0e7ff"
+                              />
+                              <rect
+                                x="145"
+                                y="85"
+                                width="80"
+                                height="20"
+                                rx="10"
+                                fill="#dcfce7"
+                              />
+                              <rect
+                                x="75"
+                                y="115"
+                                width="60"
+                                height="15"
+                                rx="8"
+                                fill="#e0e7ff"
+                              />
+
+                              {/* Base del laptop */}
+                              <path
+                                d="M30 150 L270 150 L280 165 L20 165 Z"
+                                fill="#64748b"
+                              />
+
+                              {/* Check mark */}
+                              <circle cx="240" cy="60" r="18" fill="#10b981" />
+                              <path
+                                d="M233 60 L238 65 L247 55"
+                                stroke="white"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </div>
+
+                          {/* Texto */}
+                          <div className="space-y-2">
+                            <h2 className="text-2xl font-bold text-slate-800">
+                              Chat de Academia X
+                            </h2>
+                            <p className="text-slate-600 leading-relaxed">
+                              Selecciona una conversación de la lista para
+                              comenzar a chatear con tus alumnos o colegas.
+                            </p>
+                          </div>
+
+                          {/* Información adicional */}
+                          <div className="pt-4 border-t border-slate-200">
+                            <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                                />
+                              </svg>
+                              <span>Tus mensajes están cifrados y seguros</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Pestañas de contactos/alumnos abiertos (ELIMINADAS POR SOLICITUD) */}
 
                     <CoachChatInline
-                      onBack={() => setMobileChatOpen(false)}
-                      key={`chat-${code}-${
-                        targetTeamCode ?? targetStudentCode ?? "inbox"
-                      }`}
-                      room={`${code}:equipo:${
-                        targetTeamCode ?? targetStudentCode ?? "inbox"
-                      }`}
-                      role="coach"
-                      // Mostrar el nombre del contacto de la conversación (no el coach)
-                      title={
-                        targetStudentCode
-                          ? targetStudentName || targetStudentCode
-                          : targetTeamCode
-                          ? targetTeamName || targetTeamCode
-                          : coach?.nombre
-                          ? `Equipo: ${coach?.nombre}`
-                          : `Equipo ${code}`
-                      }
-                      subtitle={
-                        targetStudentCode
-                          ? coach?.nombre
-                            ? `con ${coach?.nombre}`
-                            : `Equipo ${code}`
-                          : targetTeamCode
-                          ? coach?.nombre
+                        onBack={() => setMobileChatOpen(false)}
+                        key={`chat-${code}-${
+                          targetTeamCode ?? targetStudentCode ?? "inbox"
+                        }`}
+                        room={`${code}:equipo:${
+                          targetTeamCode ?? targetStudentCode ?? "inbox"
+                        }`}
+                        role="coach"
+                        // Mostrar el nombre del contacto de la conversación (no el coach)
+                        title={
+                          targetStudentCode
+                            ? targetStudentName || targetStudentCode
+                            : targetTeamCode
+                            ? targetTeamName || targetTeamCode
+                            : coach?.nombre
                             ? `Equipo: ${coach?.nombre}`
                             : `Equipo ${code}`
-                          : undefined
-                      }
-                      variant="card"
-                      className="h-full"
-                      precreateOnParticipants
-                      socketio={{
-                        url: chatServerUrl,
-                        idEquipo: String(code),
-                        participants: targetTeamCode
-                          ? [
-                              {
-                                participante_tipo: "equipo",
-                                id_equipo: String(code),
-                              },
-                              {
-                                participante_tipo: "equipo",
-                                id_equipo: String(targetTeamCode),
-                              },
-                            ]
-                          : targetStudentCode
-                          ? [
-                              {
-                                participante_tipo: "equipo",
-                                id_equipo: String(code),
-                              },
-                              {
-                                participante_tipo: "cliente",
-                                id_cliente: String(targetStudentCode),
-                              },
-                            ]
-                          : undefined,
-                        autoCreate: true,
-                        autoJoin: chatInfo.chatId != null,
-                        chatId: chatInfo.chatId ?? undefined,
-                      }}
-                      joinSignal={sessionsOfferSignal}
-                      resolveName={(tipo, id) => {
-                        const key = String(id || "").toLowerCase();
-                        if (tipo === "equipo") {
-                          const t = teamsMap.get(key);
-                          return t?.nombre || String(id || "");
                         }
-                        if (tipo === "cliente") {
-                          const s = studentsMap.get(key);
-                          return s?.name || String(id || "");
+                        subtitle={
+                          targetStudentCode
+                            ? coach?.nombre
+                              ? `con ${coach?.nombre}`
+                              : `Equipo ${code}`
+                            : targetTeamCode
+                            ? coach?.nombre
+                              ? `Equipo: ${coach?.nombre}`
+                              : `Equipo ${code}`
+                            : undefined
                         }
-                        return String(id || "");
-                      }}
-                      onConnectionChange={setChatConnected}
-                      onChatInfo={(info) => {
-                        setChatInfo(info);
-                        setChatsLoading(false);
-                        setCurrentOpenChatId(info?.chatId ?? null);
-                        if (!chatInfo.chatId && info.chatId) {
-                          setChatsLoading(true);
-                          setRequestListSignal((n) => (n ?? 0) + 1);
-                        }
-                        try {
-                          const parts = Array.isArray(info.participants)
-                            ? info.participants
-                            : [];
-                          if (targetTeamCode) {
-                            const setEq = new Set<string>();
-                            for (const p of parts) {
-                              const tipo = String(
-                                p?.participante_tipo || ""
-                              ).toLowerCase();
-                              if (tipo === "equipo" && p?.id_equipo)
-                                setEq.add(String(p.id_equipo).toLowerCase());
-                            }
-                            const hasPair =
-                              info.chatId != null &&
-                              setEq.has(String(code).toLowerCase()) &&
-                              setEq.has(String(targetTeamCode).toLowerCase());
-                            if (
-                              hasPair &&
-                              decisionStamp !== `exist:${targetTeamCode}`
-                            ) {
-                              setDecisionStamp(`exist:${targetTeamCode}`);
-                            }
-                          } else if (targetStudentCode) {
-                            let okCli = false;
-                            let okEq = false;
-                            for (const p of parts) {
-                              const tipo = String(
-                                p?.participante_tipo || ""
-                              ).toLowerCase();
-                              if (tipo === "cliente" && p?.id_cliente) {
-                                if (
-                                  String(p.id_cliente).toLowerCase() ===
-                                  String(targetStudentCode).toLowerCase()
-                                )
-                                  okCli = true;
-                              }
-                              if (tipo === "equipo" && p?.id_equipo) {
-                                if (
-                                  String(p.id_equipo).toLowerCase() ===
-                                  String(code).toLowerCase()
-                                )
-                                  okEq = true;
-                              }
-                            }
-                            const hasPair =
-                              info.chatId != null && okCli && okEq;
-                            if (
-                              hasPair &&
-                              decisionStamp !== `exist-stu:${targetStudentCode}`
-                            ) {
-                              setDecisionStamp(
-                                `exist-stu:${targetStudentCode}`
-                              );
-                            }
+                        variant="card"
+                        className="h-full"
+                        precreateOnParticipants
+                        socketio={{
+                          url: chatServerUrl,
+                          idEquipo: String(code),
+                          participants: targetTeamCode
+                            ? [
+                                {
+                                  participante_tipo: "equipo",
+                                  id_equipo: String(code),
+                                },
+                                {
+                                  participante_tipo: "equipo",
+                                  id_equipo: String(targetTeamCode),
+                                },
+                              ]
+                            : targetStudentCode
+                            ? [
+                                {
+                                  participante_tipo: "equipo",
+                                  id_equipo: String(code),
+                                },
+                                {
+                                  participante_tipo: "cliente",
+                                  id_cliente: String(targetStudentCode),
+                                },
+                              ]
+                            : undefined,
+                          autoCreate: true,
+                          autoJoin: chatInfo.chatId != null,
+                          chatId: chatInfo.chatId ?? undefined,
+                        }}
+                        joinSignal={sessionsOfferSignal}
+                        resolveName={(tipo, id) => {
+                          const key = String(id || "").toLowerCase();
+                          if (tipo === "equipo") {
+                            const t = teamsMap.get(key);
+                            return t?.nombre || String(id || "");
                           }
-                        } catch {}
-                      }}
-                      requestListSignal={requestListSignal}
-                      listParams={{
-                        participante_tipo: "equipo",
-                        id_equipo: String(code),
-                        include_participants: true,
-                        with_participants: true,
-                      }}
-                      onChatsList={(list) => {
-                        try {
-                          console.log("=== ON CHATS LIST (PAGE) ===");
-                          console.log("Total:", list?.length);
-                          console.log("ALL CHATS ARRAY:", list);
-                          if (Array.isArray(list)) {
-                            // Imprimir ID y nombre resuelto del contacto (equipo o alumno)
-                            list.forEach((it: any, i: number) => {
-                              const id = it?.id_chat ?? it?.id ?? null;
-                              const otherTeam = chatOtherTeamCode(it, code);
-                              const otherStudent = chatOtherStudentCode(it);
-                              let contactName: string | null = null;
-                              const arr = Array.isArray(
-                                (it as any)?.otros_participantes
-                              )
-                                ? (it as any).otros_participantes
-                                : [];
-                              if (otherStudent) {
-                                const matchClient = arr.find(
-                                  (p: any) =>
-                                    normalizeTipo(p?.participante_tipo) ===
-                                      "cliente" &&
-                                    String(
-                                      p?.id_cliente ??
-                                        p?.id_alumno ??
-                                        p?.client_id
-                                    ).toLowerCase() ===
-                                      String(otherStudent).toLowerCase()
-                                );
-                                contactName =
-                                  matchClient?.nombre_participante ||
-                                  String(otherStudent);
-                              } else if (otherTeam) {
-                                const matchTeam = arr.find(
-                                  (p: any) =>
-                                    normalizeTipo(p?.participante_tipo) ===
-                                      "equipo" &&
-                                    String(p?.id_equipo).toLowerCase() ===
-                                      String(otherTeam).toLowerCase()
-                                );
-                                contactName =
-                                  matchTeam?.nombre_participante ||
-                                  String(otherTeam);
-                              }
-                              console.log(`Chat ${i}:`, {
-                                id,
-                                contactName: contactName ?? "(sin nombre)",
-                                otherTeam: otherTeam ?? null,
-                                otherStudent: otherStudent ?? null,
-                              });
-                            });
+                          if (tipo === "cliente") {
+                            const s = studentsMap.get(key);
+                            return s?.name || String(id || "");
                           }
-                          console.log("[CoachDetailPage] listParams =>", {
-                            participante_tipo: "equipo",
-                            id_equipo: String(code),
-                            include_participants: true,
-                            with_participants: true,
-                          });
-                          const sample =
-                            Array.isArray(list) && list.length > 0
-                              ? list[0]
-                              : null;
-                          console.log("[CoachDetailPage] onChatsList", {
-                            count: Array.isArray(list) ? list.length : 0,
-                            sample: sample
-                              ? {
-                                  id: sample?.id_chat ?? sample?.id ?? null,
-                                  last_message_at:
-                                    sample?.last_message_at ||
-                                    sample?.fecha_ultimo_mensaje ||
-                                    sample?.updated_at ||
-                                    sample?.fecha_actualizacion ||
-                                    sample?.created_at ||
-                                    sample?.fecha_creacion ||
-                                    null,
-                                  participants: Array.isArray(
-                                    sample?.participants ||
-                                      sample?.participantes
-                                  )
-                                    ? (
-                                        sample?.participants ||
-                                        sample?.participantes
-                                      ).length
-                                    : 0,
-                                }
-                              : null,
-                          });
-                          // Listar todas las conversaciones creadas (en español)
-                          const toLine = (it: any) => {
-                            const id = it?.id_chat ?? it?.id ?? null;
-                            const parts =
-                              it?.participants || it?.participantes || [];
-                            const equipos = (Array.isArray(parts) ? parts : [])
-                              .filter(
-                                (p: any) =>
-                                  String(
-                                    p?.participante_tipo || ""
-                                  ).toLowerCase() === "equipo"
-                              )
-                              .map((p: any) => {
-                                const codeEq = String(p?.id_equipo ?? "");
-                                const t = teamsList.find(
-                                  (x) =>
-                                    (x.codigo || "").toLowerCase() ===
-                                    codeEq.toLowerCase()
-                                );
-                                return t?.nombre || codeEq;
-                              })
-                              .filter(Boolean);
-                            const clientes = (Array.isArray(parts) ? parts : [])
-                              .filter(
-                                (p: any) =>
-                                  String(
-                                    p?.participante_tipo || ""
-                                  ).toLowerCase() === "cliente"
-                              )
-                              .map((p: any) => {
-                                const codeSt = String(p?.id_cliente ?? "");
-                                const s = studentsList.find(
-                                  (x) =>
-                                    (x.code || "").toLowerCase() ===
-                                    codeSt.toLowerCase()
-                                );
-                                return s?.name || codeSt;
-                              })
-                              .filter(Boolean);
-                            return `id=${id} | equipos=[${equipos.join(
-                              ", "
-                            )}] | clientes=[${clientes.join(", ")}]`;
-                          };
-                          console.log(
-                            "[CoachDetailPage] comversaciones del usuario — equipo:",
-                            String(code),
-                            "(total:",
-                            Array.isArray(list) ? list.length : 0,
-                            ")"
-                          );
-                          (Array.isArray(list) ? list : []).forEach(
-                            (it: any) => {
-                              console.log(" -", toLine(it));
-                              const id = it?.id_chat ?? it?.id ?? null;
-                              const otherTeam = chatOtherTeamCode(it, code);
-                              const otherStudent = chatOtherStudentCode(it);
-                              let contactName: string | null = null;
-                              const arr = Array.isArray(
-                                (it as any)?.otros_participantes
-                              )
-                                ? (it as any).otros_participantes
-                                : [];
-                              if (otherStudent) {
-                                const matchClient = arr.find(
-                                  (p: any) =>
-                                    normalizeTipo(p?.participante_tipo) ===
-                                      "cliente" &&
-                                    String(
-                                      p?.id_cliente ??
-                                        p?.id_alumno ??
-                                        p?.client_id
-                                    ).toLowerCase() ===
-                                      String(otherStudent).toLowerCase()
-                                );
-                                contactName =
-                                  matchClient?.nombre_participante ||
-                                  String(otherStudent);
-                              } else if (otherTeam) {
-                                const matchTeam = arr.find(
-                                  (p: any) =>
-                                    normalizeTipo(p?.participante_tipo) ===
-                                      "equipo" &&
-                                    String(p?.id_equipo).toLowerCase() ===
-                                      String(otherTeam).toLowerCase()
-                                );
-                                contactName =
-                                  matchTeam?.nombre_participante ||
-                                  String(otherTeam);
+                          return String(id || "");
+                        }}
+                        onConnectionChange={setChatConnected}
+                        onChatInfo={(info) => {
+                          setChatInfo(info);
+                          setChatsLoading(false);
+                          setCurrentOpenChatId(info?.chatId ?? null);
+                          if (!chatInfo.chatId && info.chatId) {
+                            setChatsLoading(true);
+                            setRequestListSignal((n) => (n ?? 0) + 1);
+                          }
+                          try {
+                            const parts = Array.isArray(info.participants)
+                              ? info.participants
+                              : [];
+                            if (targetTeamCode) {
+                              const setEq = new Set<string>();
+                              for (const p of parts) {
+                                const tipo = String(
+                                  p?.participante_tipo || ""
+                                ).toLowerCase();
+                                if (tipo === "equipo" && p?.id_equipo)
+                                  setEq.add(String(p.id_equipo).toLowerCase());
                               }
-                              console.log(
-                                "   contacto:",
-                                contactName ?? "(sin nombre)",
-                                "id=",
-                                id
-                              );
-                            }
-                          );
-
-                          // --- ANÁLISIS DE DUPLICADOS ---
-                          const studentCounts = new Map<string, any[]>();
-                          (Array.isArray(list) ? list : []).forEach(
-                            (chat: any) => {
-                              const parts =
-                                chat.participants || chat.participantes || [];
-                              const student = parts.find(
-                                (p: any) =>
-                                  String(p.participante_tipo).toLowerCase() ===
-                                  "cliente"
-                              );
-                              if (student && student.id_cliente) {
-                                const id = String(student.id_cliente);
-                                if (!studentCounts.has(id))
-                                  studentCounts.set(id, []);
-                                studentCounts.get(id)?.push(chat);
-                              }
-                            }
-                          );
-
-                          // (Reporte de duplicados removido para limpiar consola)
-                        } catch {}
-
-                        // Mostrar TODAS las conversaciones tal como vienen del servidor.
-                        const fullList = Array.isArray(list) ? list : [];
-
-                        setChatList(fullList);
-                        setChatsLoading(false);
-                        try {
-                          if (targetTeamCode) {
-                            const existing =
-                              pickExistingChatIdForTarget(targetTeamCode);
-                            if (existing != null) {
-                              if (decisionStamp !== `exist:${targetTeamCode}`) {
+                              const hasPair =
+                                info.chatId != null &&
+                                setEq.has(String(code).toLowerCase()) &&
+                                setEq.has(String(targetTeamCode).toLowerCase());
+                              if (
+                                hasPair &&
+                                decisionStamp !== `exist:${targetTeamCode}`
+                              ) {
                                 setDecisionStamp(`exist:${targetTeamCode}`);
                               }
-                              setChatInfo({
-                                chatId: existing,
-                                myParticipantId: null,
-                              });
-                            }
-                          } else if (targetStudentCode) {
-                            const existingStu =
-                              pickExistingChatIdForStudent(targetStudentCode);
-                            if (existingStu != null) {
+                            } else if (targetStudentCode) {
+                              let okCli = false;
+                              let okEq = false;
+                              for (const p of parts) {
+                                const tipo = String(
+                                  p?.participante_tipo || ""
+                                ).toLowerCase();
+                                if (tipo === "cliente" && p?.id_cliente) {
+                                  if (
+                                    String(p.id_cliente).toLowerCase() ===
+                                    String(targetStudentCode).toLowerCase()
+                                  )
+                                    okCli = true;
+                                }
+                                if (tipo === "equipo" && p?.id_equipo) {
+                                  if (
+                                    String(p.id_equipo).toLowerCase() ===
+                                    String(code).toLowerCase()
+                                  )
+                                    okEq = true;
+                                }
+                              }
+                              const hasPair =
+                                info.chatId != null && okCli && okEq;
                               if (
+                                hasPair &&
                                 decisionStamp !==
-                                `exist-stu:${targetStudentCode}`
+                                  `exist-stu:${targetStudentCode}`
                               ) {
                                 setDecisionStamp(
                                   `exist-stu:${targetStudentCode}`
                                 );
                               }
-                              setChatInfo({
-                                chatId: existingStu,
-                                myParticipantId: null,
+                            }
+                          } catch {}
+                        }}
+                        requestListSignal={requestListSignal}
+                        listParams={{
+                          participante_tipo: "equipo",
+                          id_equipo: String(code),
+                          include_participants: true,
+                          with_participants: true,
+                        }}
+                        onChatsList={(list) => {
+                          try {
+                            console.log("=== ON CHATS LIST (PAGE) ===");
+                            console.log("Total:", list?.length);
+                            console.log("ALL CHATS ARRAY:", list);
+                            if (Array.isArray(list)) {
+                              // Imprimir ID y nombre resuelto del contacto (equipo o alumno)
+                              list.forEach((it: any, i: number) => {
+                                const id = it?.id_chat ?? it?.id ?? null;
+                                const otherTeam = chatOtherTeamCode(it, code);
+                                const otherStudent = chatOtherStudentCode(it);
+                                let contactName: string | null = null;
+                                const arr = Array.isArray(
+                                  (it as any)?.otros_participantes
+                                )
+                                  ? (it as any).otros_participantes
+                                  : [];
+                                if (otherStudent) {
+                                  const matchClient = arr.find(
+                                    (p: any) =>
+                                      normalizeTipo(p?.participante_tipo) ===
+                                        "cliente" &&
+                                      String(
+                                        p?.id_cliente ??
+                                          p?.id_alumno ??
+                                          p?.client_id
+                                      ).toLowerCase() ===
+                                        String(otherStudent).toLowerCase()
+                                  );
+                                  contactName =
+                                    matchClient?.nombre_participante ||
+                                    String(otherStudent);
+                                } else if (otherTeam) {
+                                  const matchTeam = arr.find(
+                                    (p: any) =>
+                                      normalizeTipo(p?.participante_tipo) ===
+                                        "equipo" &&
+                                      String(p?.id_equipo).toLowerCase() ===
+                                        String(otherTeam).toLowerCase()
+                                  );
+                                  contactName =
+                                    matchTeam?.nombre_participante ||
+                                    String(otherTeam);
+                                }
+                                console.log(`Chat ${i}:`, {
+                                  id,
+                                  contactName: contactName ?? "(sin nombre)",
+                                  otherTeam: otherTeam ?? null,
+                                  otherStudent: otherStudent ?? null,
+                                });
                               });
                             }
-                          }
-                        } catch {}
-                      }}
-                    />
+                            console.log("[CoachDetailPage] listParams =>", {
+                              participante_tipo: "equipo",
+                              id_equipo: String(code),
+                              include_participants: true,
+                              with_participants: true,
+                            });
+                            const sample =
+                              Array.isArray(list) && list.length > 0
+                                ? list[0]
+                                : null;
+                            console.log("[CoachDetailPage] onChatsList", {
+                              count: Array.isArray(list) ? list.length : 0,
+                              sample: sample
+                                ? {
+                                    id: sample?.id_chat ?? sample?.id ?? null,
+                                    last_message_at:
+                                      sample?.last_message_at ||
+                                      sample?.fecha_ultimo_mensaje ||
+                                      sample?.updated_at ||
+                                      sample?.fecha_actualizacion ||
+                                      sample?.created_at ||
+                                      sample?.fecha_creacion ||
+                                      null,
+                                    participants: Array.isArray(
+                                      sample?.participants ||
+                                        sample?.participantes
+                                    )
+                                      ? (
+                                          sample?.participants ||
+                                          sample?.participantes
+                                        ).length
+                                      : 0,
+                                  }
+                                : null,
+                            });
+                            // Listar todas las conversaciones creadas (en español)
+                            const toLine = (it: any) => {
+                              const id = it?.id_chat ?? it?.id ?? null;
+                              const parts =
+                                it?.participants || it?.participantes || [];
+                              const equipos = (
+                                Array.isArray(parts) ? parts : []
+                              )
+                                .filter(
+                                  (p: any) =>
+                                    String(
+                                      p?.participante_tipo || ""
+                                    ).toLowerCase() === "equipo"
+                                )
+                                .map((p: any) => {
+                                  const codeEq = String(p?.id_equipo ?? "");
+                                  const t = teamsList.find(
+                                    (x) =>
+                                      (x.codigo || "").toLowerCase() ===
+                                      codeEq.toLowerCase()
+                                  );
+                                  return t?.nombre || codeEq;
+                                })
+                                .filter(Boolean);
+                              const clientes = (
+                                Array.isArray(parts) ? parts : []
+                              )
+                                .filter(
+                                  (p: any) =>
+                                    String(
+                                      p?.participante_tipo || ""
+                                    ).toLowerCase() === "cliente"
+                                )
+                                .map((p: any) => {
+                                  const codeSt = String(p?.id_cliente ?? "");
+                                  const s = studentsList.find(
+                                    (x) =>
+                                      (x.code || "").toLowerCase() ===
+                                      codeSt.toLowerCase()
+                                  );
+                                  return s?.name || codeSt;
+                                })
+                                .filter(Boolean);
+                              return `id=${id} | equipos=[${equipos.join(
+                                ", "
+                              )}] | clientes=[${clientes.join(", ")}]`;
+                            };
+                            console.log(
+                              "[CoachDetailPage] comversaciones del usuario — equipo:",
+                              String(code),
+                              "(total:",
+                              Array.isArray(list) ? list.length : 0,
+                              ")"
+                            );
+                            (Array.isArray(list) ? list : []).forEach(
+                              (it: any) => {
+                                console.log(" -", toLine(it));
+                                const id = it?.id_chat ?? it?.id ?? null;
+                                const otherTeam = chatOtherTeamCode(it, code);
+                                const otherStudent = chatOtherStudentCode(it);
+                                let contactName: string | null = null;
+                                const arr = Array.isArray(
+                                  (it as any)?.otros_participantes
+                                )
+                                  ? (it as any).otros_participantes
+                                  : [];
+                                if (otherStudent) {
+                                  const matchClient = arr.find(
+                                    (p: any) =>
+                                      normalizeTipo(p?.participante_tipo) ===
+                                        "cliente" &&
+                                      String(
+                                        p?.id_cliente ??
+                                          p?.id_alumno ??
+                                          p?.client_id
+                                      ).toLowerCase() ===
+                                        String(otherStudent).toLowerCase()
+                                  );
+                                  contactName =
+                                    matchClient?.nombre_participante ||
+                                    String(otherStudent);
+                                } else if (otherTeam) {
+                                  const matchTeam = arr.find(
+                                    (p: any) =>
+                                      normalizeTipo(p?.participante_tipo) ===
+                                        "equipo" &&
+                                      String(p?.id_equipo).toLowerCase() ===
+                                        String(otherTeam).toLowerCase()
+                                  );
+                                  contactName =
+                                    matchTeam?.nombre_participante ||
+                                    String(otherTeam);
+                                }
+                                console.log(
+                                  "   contacto:",
+                                  contactName ?? "(sin nombre)",
+                                  "id=",
+                                  id
+                                );
+                              }
+                            );
+                          } catch {}
+
+                          // Mostrar TODAS las conversaciones tal como vienen del servidor.
+                          const fullList = Array.isArray(list) ? list : [];
+
+                          setChatList(fullList);
+                          setChatsLoading(false);
+                          try {
+                            if (targetTeamCode) {
+                              const existing =
+                                pickExistingChatIdForTarget(targetTeamCode);
+                              if (existing != null) {
+                                if (
+                                  decisionStamp !== `exist:${targetTeamCode}`
+                                ) {
+                                  setDecisionStamp(`exist:${targetTeamCode}`);
+                                }
+                                setChatInfo({
+                                  chatId: existing,
+                                  myParticipantId: null,
+                                });
+                              }
+                            } else if (targetStudentCode) {
+                              const existingStu =
+                                pickExistingChatIdForStudent(targetStudentCode);
+                              if (existingStu != null) {
+                                if (
+                                  decisionStamp !==
+                                  `exist-stu:${targetStudentCode}`
+                                ) {
+                                  setDecisionStamp(
+                                    `exist-stu:${targetStudentCode}`
+                                  );
+                                }
+                                setChatInfo({
+                                  chatId: existingStu,
+                                  myParticipantId: null,
+                                });
+                              }
+                            }
+                          } catch {}
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
               </div>

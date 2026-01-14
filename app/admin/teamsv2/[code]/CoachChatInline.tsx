@@ -4075,48 +4075,51 @@ export default function CoachChatInline({
               )}
             </button>
 
-            <AlertDialog
-              open={confirmDeleteOpen}
-              onOpenChange={setConfirmDeleteOpen}
-            >
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="p-2 rounded-full hover:bg-black/5 focus:outline-none"
-                    title="Más opciones"
-                  >
-                    <MoreVertical className="h-5 w-5" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                  <AlertDialogTrigger asChild>
-                    <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
-                      <Trash2 className="h-4 w-4 mr-2" /> Eliminar chat
-                    </DropdownMenuItem>
-                  </AlertDialogTrigger>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    ¿Eliminar esta conversación?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Se eliminarán los mensajes del chat. Esta acción no se puede
-                    deshacer.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleDeleteChat}
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    Eliminar
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            {/* Botón eliminar chat: solo para admin */}
+            {role === "admin" && (
+              <AlertDialog
+                open={confirmDeleteOpen}
+                onOpenChange={setConfirmDeleteOpen}
+              >
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="p-2 rounded-full hover:bg-black/5 focus:outline-none"
+                      title="Más opciones"
+                    >
+                      <MoreVertical className="h-5 w-5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <AlertDialogTrigger asChild>
+                      <DropdownMenuItem className="text-rose-600 focus:text-rose-700">
+                        <Trash2 className="h-4 w-4 mr-2" /> Eliminar chat
+                      </DropdownMenuItem>
+                    </AlertDialogTrigger>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      ¿Eliminar esta conversación?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Se eliminarán los mensajes del chat. Esta acción no se
+                      puede deshacer.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteChat}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Eliminar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
           </div>
         </div>
 

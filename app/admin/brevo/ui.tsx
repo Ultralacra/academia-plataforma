@@ -17,6 +17,13 @@ import {
 } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthToken } from "@/lib/auth";
 
@@ -99,6 +106,7 @@ function rowName(row: BrevoRow): string {
 export function BrevoClientPage() {
   const { toast } = useToast();
 
+  const [template, setTemplate] = useState<"welcome" | "reminder">("welcome");
   const [origin, setOrigin] = useState<string>(
     "https://academia.valinkgroup.com"
   );
@@ -133,6 +141,74 @@ export function BrevoClientPage() {
 
   const [sending, setSending] = useState<boolean>(false);
   const [lastResult, setLastResult] = useState<any>(null);
+
+  const exportVisibleRowsToExcel = async () => {
+    try {
+      if (rowsLoading) return;
+      if (rowsFilteredBySearch.length === 0) return;
+
+      const exportRows = rowsFilteredBySearch
+        .map((r) => {
+          const email = rowRecipientEmail(r);
+          if (!email) return null;
+
+          const displayName = rowName(r);
+          const creds = credsByEmail[email];
+          const matchOk = Boolean(r["match_ok"]);
+          const score = Number(r["match_score"] ?? 0);
+
+          return {
+            Nombre: displayName,
+            Email: email,
+            "Usuario App": creds?.username ?? "-",
+            "Contraseña App": creds?.password ?? "-",
+            Match: matchOk ? "OK" : "Revisar",
+            Score: Number.isFinite(score) ? Number(score.toFixed(2)) : "-",
+          };
+        })
+        .filter(Boolean);
+
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      const filename = `brevo_usuarios_${stamp}.xlsx`;
+
+      let token: string | null = null;
+      try {
+        token = await Promise.resolve(getAuthToken());
+      } catch {
+        token = null;
+      }
+      const res = await fetch("/api/brevo/export", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ rows: exportRows, filename }),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || "No se pudo generar el Excel");
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error exportando";
+      toast({
+        title: "No se pudo exportar",
+        description: msg,
+        variant: "destructive",
+      });
+    }
+  };
 
   useEffect(() => {
     try {
@@ -463,7 +539,7 @@ export function BrevoClientPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          template: "welcome",
+          template,
           recipients,
           origin,
           appName,
@@ -502,9 +578,34 @@ export function BrevoClientPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Brevo · Envío de bienvenida</CardTitle>
+          <CardTitle>Brevo · Envío de correos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="template">Plantilla de correo</Label>
+            <Select
+              value={template}
+              onValueChange={(v) => setTemplate(v as "welcome" | "reminder")}
+            >
+              <SelectTrigger id="template">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="welcome">
+                  Día 1 - Bienvenida (con credenciales)
+                </SelectItem>
+                <SelectItem value="reminder">
+                  Día 2 - Recordatorio del Portal
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="text-xs text-muted-foreground">
+              {template === "welcome"
+                ? "Correo inicial con credenciales de acceso al portal"
+                : "Recordatorio para usar el portal como canal principal"}
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-2">
               <Label htmlFor="origin">Origen (para links)</Label>
@@ -545,15 +646,17 @@ export function BrevoClientPage() {
                 placeholder="(si vacío, usa Origen + /login)"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Contraseña (opcional)</Label>
-              <Input
-                id="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="(se incluirá en el correo si la completas)"
-              />
-            </div>
+            {template === "welcome" && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Contraseña (opcional)</Label>
+                <Input
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="(se incluirá en el correo si la completas)"
+                />
+              </div>
+            )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -643,6 +746,14 @@ export function BrevoClientPage() {
                 </div>
 
                 <div className="ml-auto flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="default"
+                    disabled={rowsLoading || rowsFilteredBySearch.length === 0}
+                    onClick={exportVisibleRowsToExcel}
+                  >
+                    Exportar Excel ({rowsFilteredBySearch.length})
+                  </Button>
                   <Button
                     type="button"
                     variant="secondary"

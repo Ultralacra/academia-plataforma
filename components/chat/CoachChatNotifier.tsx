@@ -433,11 +433,31 @@ export function CoachChatNotifier() {
             const current = parseInt(localStorage.getItem(key) || "0", 10);
             const next = (isNaN(current) ? 0 : current) + 1;
             localStorage.setItem(key, String(next));
+
+            // Disparar evento para actualizar contadores
             window.dispatchEvent(
               new CustomEvent("chat:unread-count-updated", {
                 detail: { chatId: msg.id_chat, role: "coach", count: next },
               })
             );
+
+            // CRÍTICO: Disparar evento para refrescar lista completa y reordenar
+            // Esto garantiza que cuando llega un mensaje, la conversación sube al tope
+            window.dispatchEvent(
+              new CustomEvent("chat:list-refresh", {
+                detail: {
+                  reason: "new-message",
+                  chatId: msg.id_chat,
+                  role: "coach",
+                },
+              })
+            );
+
+            console.log("[CoachChatNotifier] Eventos disparados:", {
+              unread_count_updated: true,
+              list_refresh: true,
+              chatId: msg.id_chat,
+            });
           } catch {}
         }
       }
