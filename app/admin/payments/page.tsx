@@ -317,34 +317,23 @@ function PaymentsContent() {
     setIsLoading(true);
     setError(null);
     try {
-      const p = next?.page ?? page;
-      const ps = next?.pageSize ?? pageSize;
+      // Cargar TODOS los registros de una vez (hasta 10000)
       const json = await getPayments({
-        page: p,
-        pageSize: ps,
-        search: debouncedSearch.trim() || undefined,
-        cliente_codigo: debouncedClienteCodigo.trim() || undefined,
-        estatus: estatus || undefined,
-        metodo: debouncedMetodo.trim() || undefined,
-        fechaDesde: fechaDesde || undefined,
-        fechaHasta: fechaHasta || undefined,
-        montoMin: debouncedMontoMin.trim()
-          ? Number(debouncedMontoMin)
-          : undefined,
-        montoMax: debouncedMontoMax.trim()
-          ? Number(debouncedMontoMax)
-          : undefined,
+        page: 1,
+        pageSize: 10000,
+        // No enviamos filtros al backend porque no los soporta
+        // El filtrado se hace localmente
       });
       setRows(Array.isArray(json?.data) ? json.data : []);
       setTotal(Number(json?.total ?? 0));
-      setPage(Number(json?.page ?? p));
-      setPageSize(Number(json?.pageSize ?? ps));
-      setTotalPages(Number(json?.totalPages ?? 1));
+      // La paginación ahora es solo visual (frontend)
+      const ps = next?.pageSize ?? pageSize;
+      setPage(1);
+      setPageSize(ps);
     } catch (e: any) {
       setError(e?.message || "No se pudo cargar pagos");
       setRows([]);
       setTotal(0);
-      setTotalPages(1);
     } finally {
       setIsLoading(false);
     }
@@ -440,32 +429,156 @@ function PaymentsContent() {
 
   const filtered = useMemo(() => {
     const base = Array.isArray(rows) ? rows.slice() : [];
-    const min = debouncedReservaMin.trim() ? Number(debouncedReservaMin) : null;
-    const max = debouncedReservaMax.trim() ? Number(debouncedReservaMax) : null;
 
-    const withReserva = base.filter((r) => {
-      if (min === null && max === null) return true;
-      const amount = r.monto_reserva ?? null;
-      if (amount === null || Number.isNaN(Number(amount))) return false;
-      if (min !== null && Number(amount) < min) return false;
-      if (max !== null && Number(amount) > max) return false;
+    // 1. Filtro por búsqueda de texto
+    const searchTerm = debouncedSearch.trim().toLowerCase();
+    const withSearch = searchTerm
+      ? base.filter((r) => {
+          const codigo = String(r?.codigo ?? "").toLowerCase();
+          const clienteCodigo = String(r?.cliente_codigo ?? "").toLowerCase();
+          const clienteNombre = fixMojibake(
+            r?.cliente_nombre ?? ""
+          ).toLowerCase();
+          const estatus = String(r?.estatus ?? "").toLowerCase();
+          const metodo = String(r?.metodo ?? "").toLowerCase();
+          const moneda = String(r?.moneda ?? "").toLowerCase();
+          const notas = fixMojibake(r?.notas ?? "").toLowerCase();
+          const concepto = fixMojibake(r?.concepto ?? "").toLowerCase();
+
+          return (
+            codigo.includes(searchTerm) ||
+            clienteCodigo.includes(searchTerm) ||
+            clienteNombre.includes(searchTerm) ||
+            estatus.includes(searchTerm) ||
+            metodo.includes(searchTerm) ||
+            moneda.includes(searchTerm) ||
+            notas.includes(searchTerm) ||
+            concepto.includes(searchTerm)
+          );
+        })
+      : base;
+
+    // 2. Filtro por cliente_codigo
+    const clienteCodigoTerm = debouncedClienteCodigo.trim().toLowerCase();
+    const withClienteCodigo = clienteCodigoTerm
+      ? withSearch.filter((r) => {
+          const cc = String(r?.cliente_codigo ?? "").toLowerCase();
+          return cc.includes(clienteCodigoTerm);
+        })
+      : withSearch;
+
+    // 3. Filtro por estatus
+    const withEstatus = estatus
+      ? withClienteCodigo.filter((r) => {
+          const est = String(r?.estatus ?? "").toLowerCase();
+          return est === estatus.toLowerCase();
+        })
+      : withClienteCodigo;
+
+    // 4. Filtro por método
+    const metodoTerm = debouncedMetodo.trim().toLowerCase();
+    const withMetodo = metodoTerm
+      ? withEstatus.filter((r) => {
+          const met = String(r?.metodo ?? "").toLowerCase();
+          return met.includes(metodoTerm);
+        })
+      : withEstatus;
+
+    // 5. Filtro por fechas
+    const withFechas = withMetodo.filter((r) => {
+      if (!fechaDesde && !fechaHasta) return true;
+      const fecha = r?.created_at || r?.fecha_pago;
+      if (!fecha) return false;
+      const d = new Date(fecha);
+      if (Number.isNaN(d.getTime())) return false;
+      if (fechaDesde) {
+        const desde = new Date(fechaDesde);
+        if (d < desde) return false;
+      }
+      if (fechaHasta) {
+        const hasta = new Date(fechaHasta);
+        hasta.setHours(23, 59, 59, 999);
+        if (d > hasta) return false;
+      }
       return true;
     });
 
+    // 6. Filtro por monto
+    const minMonto = debouncedMontoMin.trim()
+      ? Number(debouncedMontoMin)
+      : null;
+    const maxMonto = debouncedMontoMax.trim()
+      ? Number(debouncedMontoMax)
+      : null;
+    const withMonto = withFechas.filter((r) => {
+      if (minMonto === null && maxMonto === null) return true;
+      const monto = r?.monto ?? null;
+      if (monto === null || Number.isNaN(Number(monto))) return false;
+      if (minMonto !== null && Number(monto) < minMonto) return false;
+      if (maxMonto !== null && Number(monto) > maxMonto) return false;
+      return true;
+    });
+
+    // 7. Filtro por reserva
+    const minReserva = debouncedReservaMin.trim()
+      ? Number(debouncedReservaMin)
+      : null;
+    const maxReserva = debouncedReservaMax.trim()
+      ? Number(debouncedReservaMax)
+      : null;
+    const withReserva = withMonto.filter((r) => {
+      if (minReserva === null && maxReserva === null) return true;
+      const amount = r.monto_reserva ?? null;
+      if (amount === null || Number.isNaN(Number(amount))) return false;
+      if (minReserva !== null && Number(amount) < minReserva) return false;
+      if (maxReserva !== null && Number(amount) > maxReserva) return false;
+      return true;
+    });
+
+    // 8. Ordenar por fecha de creación (más recientes primero)
     withReserva.sort((a, b) => {
       const da = a.created_at ? new Date(a.created_at).getTime() : 0;
       const db = b.created_at ? new Date(b.created_at).getTime() : 0;
       return db - da;
     });
 
+    // 9. Filtro por sincronización
     const withLinkFilter = onlyUnlinked
-      ? withReserva.filter((r) => {
-          return !isPaymentSynced(r);
-        })
+      ? withReserva.filter((r) => !isPaymentSynced(r))
       : withReserva;
 
     return withLinkFilter;
-  }, [rows, debouncedReservaMin, debouncedReservaMax, onlyUnlinked]);
+  }, [
+    rows,
+    debouncedSearch,
+    debouncedClienteCodigo,
+    estatus,
+    debouncedMetodo,
+    fechaDesde,
+    fechaHasta,
+    debouncedMontoMin,
+    debouncedMontoMax,
+    debouncedReservaMin,
+    debouncedReservaMax,
+    onlyUnlinked,
+  ]);
+
+  // Paginación local sobre datos filtrados
+  const paginatedData = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    const end = start + pageSize;
+    return filtered.slice(start, end);
+  }, [filtered, page, pageSize]);
+
+  // Total de páginas basado en datos filtrados
+  const calculatedTotalPages = useMemo(() => {
+    return Math.ceil(filtered.length / pageSize) || 1;
+  }, [filtered.length, pageSize]);
+
+  // Actualizar totalPages cuando cambie
+  useEffect(() => {
+    setTotalPages(calculatedTotalPages);
+  }, [calculatedTotalPages]);
 
   const unlinkedCount = useMemo(() => {
     const list = Array.isArray(rows) ? rows : [];
@@ -588,24 +701,22 @@ function PaymentsContent() {
   }, [rows, estatus]);
 
   useEffect(() => {
-    // Carga inicial
+    // Carga inicial: traer todos los registros una sola vez
     void loadList({ page: 1, pageSize: 25 });
     void loadMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto aplicar filtros (sin botón)
+  // Cuando cambian los filtros, solo resetear a página 1 (sin recargar datos)
   useEffect(() => {
-    // Cuando cambian los filtros, volvemos a página 1
-    void loadList({ page: 1, pageSize });
-    void loadMetrics();
+    setPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    pageSize,
     estatus,
     fechaDesde,
     fechaHasta,
     debouncedSearch,
+    debouncedClienteCodigo,
     debouncedMetodo,
     debouncedMontoMin,
     debouncedMontoMax,
@@ -828,17 +939,12 @@ function PaymentsContent() {
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
           <div>
-            Total: <span className="text-foreground">{total}</span> · Página:{" "}
+            Total: <span className="text-foreground">{rows.length}</span> ·
+            Filtrados:{" "}
+            <span className="text-foreground">{filtered.length}</span> · Página:{" "}
             <span className="text-foreground">
               {page}/{totalPages}
             </span>
-            {rows.length ? (
-              <>
-                {" "}
-                · Cargados:{" "}
-                <span className="text-foreground">{rows.length}</span>
-              </>
-            ) : null}
             {unlinkedCount ? (
               <>
                 {" "}
@@ -858,20 +964,16 @@ function PaymentsContent() {
             <Button
               variant="outline"
               size="sm"
-              disabled={isLoading || page <= 1}
-              onClick={() =>
-                loadList({ page: Math.max(1, page - 1), pageSize })
-              }
+              disabled={page <= 1}
+              onClick={() => setPage(Math.max(1, page - 1))}
             >
               Anterior
             </Button>
             <Button
               variant="outline"
               size="sm"
-              disabled={isLoading || page >= totalPages}
-              onClick={() =>
-                loadList({ page: Math.min(totalPages, page + 1), pageSize })
-              }
+              disabled={page >= totalPages}
+              onClick={() => setPage(Math.min(totalPages, page + 1))}
             >
               Siguiente
             </Button>
@@ -911,7 +1013,7 @@ function PaymentsContent() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((r) => {
+                paginatedData.map((r) => {
                   const clientName = fixMojibake(
                     r.cliente_nombre || r.cliente_codigo || "—"
                   );

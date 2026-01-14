@@ -11,6 +11,12 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Mail,
   Phone,
@@ -23,6 +29,11 @@ import {
   Globe,
   AtSign,
   DollarSign,
+  ChevronDown,
+  FileText,
+  CreditCard,
+  Package,
+  Settings,
 } from "lucide-react";
 import { crmService } from "@/lib/crm-service";
 import { useAuth } from "@/hooks/use-auth";
@@ -112,143 +123,205 @@ export function ProspectDetailDrawer({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-xl p-0">
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-2xl p-0 flex flex-col"
+      >
         <div className="flex flex-col h-full">
-          <div className="border-b px-5 py-4 bg-white">
+          <div className="border-b px-5 py-3 bg-gradient-to-r from-slate-50 to-white flex-shrink-0">
             <SheetHeader>
-              <SheetTitle>Detalle de prospecto</SheetTitle>
+              <SheetTitle className="text-base font-semibold">
+                Detalle de prospecto
+              </SheetTitle>
             </SheetHeader>
           </div>
-          <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-white">
+          <div className="flex-1 overflow-y-auto bg-slate-50">
             {!core && !meta ? (
-              <div className="text-sm text-slate-500">
-                Sin datos para este ID.
+              <div className="p-8 text-center">
+                <div className="text-sm text-slate-500">
+                  Sin datos para este ID.
+                </div>
               </div>
             ) : core ? (
-              <>
-                <div className="rounded-lg border p-4">
-                  <div className="text-base font-semibold">{core.nombre}</div>
-                  <div className="grid grid-cols-2 gap-3 text-sm mt-2">
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-slate-400" />
-                      {core.email || "—"}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-slate-400" />
-                      {core.telefono || "—"}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Tags className="h-4 w-4 text-slate-400" />
-                      {core.canalFuente || "—"}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-slate-400" />
-                      {core.ownerNombre || "—"}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-slate-400" />
-                      {core.pais || "—"}{" "}
-                      {core.ciudad ? ` · ${core.ciudad}` : ""}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-slate-400" />
-                      Creado:{" "}
-                      {core.creadoAt
-                        ? new Date(core.creadoAt).toLocaleString("es-ES")
-                        : "—"}
-                    </div>
-                  </div>
-                </div>
+              <Tabs defaultValue="info" className="h-full flex flex-col">
+                <TabsList className="w-full justify-start rounded-none border-b bg-white px-4 h-11 flex-shrink-0">
+                  <TabsTrigger value="info" className="text-xs">
+                    Información
+                  </TabsTrigger>
+                  <TabsTrigger value="edit" className="text-xs">
+                    Editar
+                  </TabsTrigger>
+                  <TabsTrigger value="actions" className="text-xs">
+                    Acciones
+                  </TabsTrigger>
+                </TabsList>
 
-                <div className="rounded-lg border p-4">
-                  <div className="text-sm font-medium mb-2">
-                    Editar prospecto
-                  </div>
-                  <ProspectEditor
-                    prospect={core}
-                    onSaved={() => {
-                      load();
-                      onSaved?.();
-                    }}
-                  />
-                </div>
+                <TabsContent
+                  value="info"
+                  className="flex-1 p-4 m-0 overflow-y-auto"
+                >
+                  <div className="space-y-3">
+                    <div className="bg-white rounded-lg border p-4">
+                      <div className="space-y-3">
+                        <div>
+                          <h3 className="text-lg font-semibold">
+                            {core.nombre}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-xs">
+                              {core.etapaPipeline}
+                            </Badge>
+                            {core.score && (
+                              <Badge variant="secondary" className="text-xs">
+                                Score: {core.score}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
 
-                <div className="rounded-lg border p-4 space-y-2">
-                  <div className="text-sm font-medium">Acciones rápidas</div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        if (crmService.verifyPayment(core.id, true)) {
-                          toast({ title: "Pago confirmado" });
-                          load();
-                          onSaved?.();
-                        }
-                      }}
-                    >
-                      Pago confirmado
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        if (
-                          crmService.sendContract(
-                            core.id,
-                            `https://sign.example.com/${core.id}`
-                          )
-                        ) {
-                          toast({ title: "Contrato enviado" });
-                          load();
-                          onSaved?.();
-                        }
-                      }}
-                    >
-                      Enviar contrato
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        if (crmService.markContractSigned(core.id)) {
-                          toast({ title: "Contrato firmado" });
-                          load();
-                          onSaved?.();
-                        }
-                      }}
-                    >
-                      Marcar firmado
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        if (crmService.activateAccess(core.id, false)) {
-                          toast({ title: "Acceso activado" });
-                          load();
-                          onSaved?.();
-                        }
-                      }}
-                    >
-                      Activar acceso
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        if (crmService.convertProspect(core.id)) {
-                          toast({ title: "Convertido a alumno" });
-                          load();
-                          onSaved?.();
-                        }
-                      }}
-                    >
-                      Convertir a alumno
-                    </Button>
+                        <div className="grid grid-cols-2 gap-2 text-sm pt-2">
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {core.email || "—"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Phone className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {core.telefono || "—"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Tags className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {core.canalFuente || "—"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-600">
+                            <Users className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {core.ownerNombre || "—"}
+                            </span>
+                          </div>
+                          {core.pais && (
+                            <div className="flex items-center gap-2 text-slate-600 col-span-2">
+                              <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                              <span className="truncate">
+                                {core.pais}
+                                {core.ciudad ? ` · ${core.ciudad}` : ""}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </>
+                </TabsContent>
+
+                <TabsContent
+                  value="edit"
+                  className="flex-1 p-4 m-0 overflow-y-auto"
+                >
+                  <div className="bg-white rounded-lg border p-4">
+                    <ProspectEditor
+                      prospect={core}
+                      onSaved={() => {
+                        load();
+                        onSaved?.();
+                      }}
+                    />
+                  </div>
+                </TabsContent>
+
+                <TabsContent
+                  value="actions"
+                  className="flex-1 p-4 m-0 overflow-y-auto"
+                >
+                  <div className="bg-white rounded-lg border p-4">
+                    <div className="text-sm font-medium mb-3">
+                      Acciones rápidas
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-9"
+                        onClick={() => {
+                          if (crmService.verifyPayment(core.id, true)) {
+                            toast({ title: "Pago confirmado" });
+                            load();
+                            onSaved?.();
+                          }
+                        }}
+                      >
+                        Pago confirmado
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-9"
+                        onClick={() => {
+                          if (
+                            crmService.sendContract(
+                              core.id,
+                              `https://sign.example.com/${core.id}`
+                            )
+                          ) {
+                            toast({ title: "Contrato enviado" });
+                            load();
+                            onSaved?.();
+                          }
+                        }}
+                      >
+                        Enviar contrato
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-9"
+                        onClick={() => {
+                          if (crmService.markContractSigned(core.id)) {
+                            toast({ title: "Contrato firmado" });
+                            load();
+                            onSaved?.();
+                          }
+                        }}
+                      >
+                        Marcar firmado
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-9"
+                        onClick={() => {
+                          if (crmService.activateAccess(core.id, false)) {
+                            toast({ title: "Acceso activado" });
+                            load();
+                            onSaved?.();
+                          }
+                        }}
+                      >
+                        Activar acceso
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs h-9 col-span-2"
+                        onClick={() => {
+                          if (crmService.convertProspect(core.id)) {
+                            toast({ title: "Convertido a alumno" });
+                            load();
+                            onSaved?.();
+                          }
+                        }}
+                      >
+                        Convertir a alumno
+                      </Button>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
             ) : meta ? (
               <>
                 {(() => {
@@ -340,103 +413,227 @@ export function ProspectDetailDrawer({
                     };
 
                     return (
-                      <>
-                        <div className="rounded-lg border p-4">
-                          <div className="flex items-center gap-2">
-                            <div className="text-base font-semibold flex-1">
-                              {p.name || meta.entity}
-                            </div>
-                            <Badge className="capitalize bg-slate-100 text-slate-700">
-                              {String(p.status || "new")}
-                            </Badge>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                window.open(
-                                  `/admin/crm/sales/${encodeURIComponent(
-                                    String(meta.id)
-                                  )}`,
-                                  "_blank"
-                                );
-                              }}
-                            >
-                              Abrir en página
-                            </Button>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm mt-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Mail className="h-4 w-4 text-slate-400" />
-                              <span className="truncate">{p.email || "—"}</span>
-                            </div>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Phone className="h-4 w-4 text-slate-400" />
-                              <span className="truncate">{p.phone || "—"}</span>
-                            </div>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Tags className="h-4 w-4 text-slate-400" />
-                              <span className="truncate">
-                                {p.program || "Programa"}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Calendar className="h-4 w-4 text-slate-400" />
-                              <span className="truncate">
-                                Registrado:{" "}
-                                {fmtDate(meta.created_at || p.created_at)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border p-4">
-                          <div className="text-sm font-medium mb-3">Pago</div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div>Monto: {pay.amount || "—"}</div>
-                            <div>Modalidad: {pay.mode || "—"}</div>
-                            <div>Plataforma: {pay.platform || "—"}</div>
-                            <div>
-                              Próximo cobro:{" "}
-                              {pay.nextChargeDate
-                                ? fmtDate(pay.nextChargeDate)
-                                : "—"}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border p-4">
-                          <div className="text-sm font-medium mb-3">
-                            Producto y bonos
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div>Programa adquirido: {p.program || "—"}</div>
-                            <div>
-                              Bonos ofrecidos:{" "}
-                              {(() => {
-                                const list = Array.isArray(p.bonuses)
-                                  ? (p.bonuses as string[])
-                                  : p.bonuses
-                                  ? String(p.bonuses)
-                                      .split(",")
-                                      .map((s) => s.trim())
-                                      .filter(Boolean)
-                                  : [];
-                                if (!list || list.length === 0) return "—";
-                                const labels = list.map(
-                                  (k) => BONOS_BY_KEY[k]?.title || k
-                                );
-                                return labels.join(", ");
-                              })()}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border p-4">
-                          <div className="text-sm font-medium mb-3">
+                      <Tabs
+                        defaultValue="info"
+                        className="h-full flex flex-col"
+                      >
+                        <TabsList className="w-full justify-start rounded-none border-b bg-white px-4 h-11 flex-shrink-0">
+                          <TabsTrigger value="info" className="text-xs">
+                            Info
+                          </TabsTrigger>
+                          <TabsTrigger value="payment" className="text-xs">
+                            Pago
+                          </TabsTrigger>
+                          <TabsTrigger value="product" className="text-xs">
+                            Producto
+                          </TabsTrigger>
+                          <TabsTrigger value="contract" className="text-xs">
                             Contrato
+                          </TabsTrigger>
+                          <TabsTrigger value="actions" className="text-xs">
+                            Acciones
+                          </TabsTrigger>
+                        </TabsList>
+
+                        <TabsContent
+                          value="info"
+                          className="flex-1 p-4 m-0 overflow-y-auto"
+                        >
+                          <div className="space-y-3">
+                            <div className="bg-white rounded-lg border p-4">
+                              <div className="space-y-3">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1 min-w-0">
+                                    <h3 className="text-lg font-semibold truncate">
+                                      {p.name || meta.entity}
+                                    </h3>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge className="capitalize text-xs">
+                                        {String(p.status || "new")}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 text-xs px-2"
+                                    onClick={() => {
+                                      window.open(
+                                        `/admin/crm/sales/${encodeURIComponent(
+                                          String(meta.id)
+                                        )}`,
+                                        "_blank"
+                                      );
+                                    }}
+                                  >
+                                    Abrir página →
+                                  </Button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 text-sm text-slate-600">
+                                  <div className="flex items-center gap-2">
+                                    <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                                    <span className="truncate">
+                                      {p.email || "—"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Phone className="h-3.5 w-3.5 flex-shrink-0" />
+                                    <span className="truncate">
+                                      {p.phone || "—"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Tags className="h-3.5 w-3.5 flex-shrink-0" />
+                                    <span className="truncate">
+                                      {p.program || "Programa"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-3.5 w-3.5 flex-shrink-0" />
+                                    <span className="truncate text-xs">
+                                      {fmtDate(meta.created_at || p.created_at)}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
                           </div>
-                          <div className="space-y-3 text-sm">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        </TabsContent>
+
+                        <TabsContent
+                          value="payment"
+                          className="flex-1 p-4 m-0 overflow-y-auto"
+                        >
+                          <div className="space-y-3">
+                            <div className="bg-white rounded-lg border p-4 space-y-3">
+                              <div className="text-sm font-medium">
+                                Información de pago
+                              </div>
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Monto
+                                  </div>
+                                  <div className="font-medium">
+                                    {pay.amount || "—"}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Modalidad
+                                  </div>
+                                  <div>{pay.mode || "—"}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Plataforma
+                                  </div>
+                                  <div>{pay.platform || "—"}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Próximo cobro
+                                  </div>
+                                  <input
+                                    type="date"
+                                    className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                                    defaultValue={
+                                      pay.nextChargeDate
+                                        ? String(pay.nextChargeDate).slice(
+                                            0,
+                                            10
+                                          )
+                                        : ""
+                                    }
+                                    onChange={async (e) => {
+                                      const next = e.target.value;
+                                      try {
+                                        await updateMetadataPayload(meta.id, {
+                                          payment: {
+                                            ...pay,
+                                            nextChargeDate: next || null,
+                                          },
+                                        });
+                                        toast({ title: "Guardado" });
+                                        await load();
+                                        onSaved?.();
+                                      } catch (err: any) {
+                                        toast({
+                                          title: "Error",
+                                          description:
+                                            err?.message || String(err),
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent
+                          value="product"
+                          className="flex-1 p-4 m-0 overflow-y-auto"
+                        >
+                          <div className="space-y-3">
+                            <div className="bg-white rounded-lg border p-4 space-y-3">
+                              <div className="text-sm font-medium">
+                                Producto y bonos
+                              </div>
+                              <div className="space-y-2 text-sm">
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Programa adquirido
+                                  </div>
+                                  <div className="font-medium">
+                                    {p.program || "—"}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Bonos ofrecidos
+                                  </div>
+                                  <div>
+                                    {(() => {
+                                      const list = Array.isArray(p.bonuses)
+                                        ? (p.bonuses as string[])
+                                        : p.bonuses
+                                        ? String(p.bonuses)
+                                            .split(",")
+                                            .map((s) => s.trim())
+                                            .filter(Boolean)
+                                        : [];
+                                      if (!list || list.length === 0)
+                                        return "—";
+                                      const labels = list.map(
+                                        (k) => BONOS_BY_KEY[k]?.title || k
+                                      );
+                                      return labels.join(", ");
+                                    })()}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </TabsContent>
+
+                        <TabsContent
+                          value="contract"
+                          className="flex-1 p-4 m-0 overflow-y-auto"
+                        >
+                          <div className="space-y-3">
+                            <div className="bg-white rounded-lg border p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="text-sm font-medium">
+                                  Contrato
+                                </div>
+                                <Badge variant="outline" className="text-xs">
+                                  {contract.status || "pending"}
+                                </Badge>
+                              </div>
                               <div className="flex items-center gap-2">
                                 <input
                                   id="contract-third-party"
@@ -466,110 +663,117 @@ export function ProspectDetailDrawer({
                                 />
                                 <Label
                                   htmlFor="contract-third-party"
-                                  className="cursor-pointer"
+                                  className="cursor-pointer text-sm"
                                 >
                                   Contrato a nombre de otra persona
                                 </Label>
                               </div>
-                              <div>Estado: {contract.status || "pending"}</div>
-                            </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                              <div>
-                                <div className="text-xs text-slate-500 mb-1">
-                                  Nombre para contrato
-                                </div>
-                                <Input
-                                  placeholder="Nombre completo"
-                                  defaultValue={p?.contract?.party?.name || ""}
-                                  onBlur={async (e) => {
-                                    try {
-                                      await updateMetadataPayload(meta.id, {
-                                        contract: {
-                                          ...(p.contract || {}),
-                                          party: {
-                                            ...(p.contract?.party || {}),
-                                            name: e.target.value || null,
-                                          },
-                                        },
-                                      });
-                                      toast({ title: "Guardado" });
-                                    } catch (err: any) {
-                                      toast({
-                                        title: "Error",
-                                        description:
-                                          err?.message || String(err),
-                                        variant: "destructive",
-                                      });
+                              <div className="grid grid-cols-1 gap-3 text-sm">
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Nombre para contrato
+                                  </div>
+                                  <Input
+                                    placeholder="Nombre completo"
+                                    className="h-8 text-xs"
+                                    defaultValue={
+                                      p?.contract?.party?.name || ""
                                     }
-                                  }}
-                                />
-                              </div>
-                              <div>
-                                <div className="text-xs text-slate-500 mb-1">
-                                  Email para contrato
-                                </div>
-                                <Input
-                                  type="email"
-                                  placeholder="correo@ejemplo.com"
-                                  defaultValue={p?.contract?.party?.email || ""}
-                                  onBlur={async (e) => {
-                                    try {
-                                      await updateMetadataPayload(meta.id, {
-                                        contract: {
-                                          ...(p.contract || {}),
-                                          party: {
-                                            ...(p.contract?.party || {}),
-                                            email: e.target.value || null,
+                                    onBlur={async (e) => {
+                                      try {
+                                        await updateMetadataPayload(meta.id, {
+                                          contract: {
+                                            ...(p.contract || {}),
+                                            party: {
+                                              ...(p.contract?.party || {}),
+                                              name: e.target.value || null,
+                                            },
                                           },
-                                        },
-                                      });
-                                      toast({ title: "Guardado" });
-                                    } catch (err: any) {
-                                      toast({
-                                        title: "Error",
-                                        description:
-                                          err?.message || String(err),
-                                        variant: "destructive",
-                                      });
-                                    }
-                                  }}
-                                />
-                              </div>
-                              <div>
-                                <div className="text-xs text-slate-500 mb-1">
-                                  Teléfono para contrato
+                                        });
+                                        toast({ title: "Guardado" });
+                                      } catch (err: any) {
+                                        toast({
+                                          title: "Error",
+                                          description:
+                                            err?.message || String(err),
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }}
+                                  />
                                 </div>
-                                <Input
-                                  placeholder="+1 555 555 5555"
-                                  defaultValue={p?.contract?.party?.phone || ""}
-                                  onBlur={async (e) => {
-                                    try {
-                                      await updateMetadataPayload(meta.id, {
-                                        contract: {
-                                          ...(p.contract || {}),
-                                          party: {
-                                            ...(p.contract?.party || {}),
-                                            phone: e.target.value || null,
-                                          },
-                                        },
-                                      });
-                                      toast({ title: "Guardado" });
-                                    } catch (err: any) {
-                                      toast({
-                                        title: "Error",
-                                        description:
-                                          err?.message || String(err),
-                                        variant: "destructive",
-                                      });
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Email para contrato
+                                  </div>
+                                  <Input
+                                    type="email"
+                                    placeholder="correo@ejemplo.com"
+                                    className="h-8 text-xs"
+                                    defaultValue={
+                                      p?.contract?.party?.email || ""
                                     }
-                                  }}
-                                />
-                              </div>
-                              <div className="flex items-end justify-end">
+                                    onBlur={async (e) => {
+                                      try {
+                                        await updateMetadataPayload(meta.id, {
+                                          contract: {
+                                            ...(p.contract || {}),
+                                            party: {
+                                              ...(p.contract?.party || {}),
+                                              email: e.target.value || null,
+                                            },
+                                          },
+                                        });
+                                        toast({ title: "Guardado" });
+                                      } catch (err: any) {
+                                        toast({
+                                          title: "Error",
+                                          description:
+                                            err?.message || String(err),
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <div className="text-xs text-slate-500 mb-1">
+                                    Teléfono para contrato
+                                  </div>
+                                  <Input
+                                    placeholder="+1 555 555 5555"
+                                    className="h-8 text-xs"
+                                    defaultValue={
+                                      p?.contract?.party?.phone || ""
+                                    }
+                                    onBlur={async (e) => {
+                                      try {
+                                        await updateMetadataPayload(meta.id, {
+                                          contract: {
+                                            ...(p.contract || {}),
+                                            party: {
+                                              ...(p.contract?.party || {}),
+                                              phone: e.target.value || null,
+                                            },
+                                          },
+                                        });
+                                        toast({ title: "Guardado" });
+                                      } catch (err: any) {
+                                        toast({
+                                          title: "Error",
+                                          description:
+                                            err?.message || String(err),
+                                          variant: "destructive",
+                                        });
+                                      }
+                                    }}
+                                  />
+                                </div>
                                 <Button
                                   size="sm"
                                   variant="outline"
+                                  className="h-8 text-xs"
                                   onClick={async () => {
                                     try {
                                       await updateMetadataPayload(meta.id, {
@@ -602,104 +806,80 @@ export function ProspectDetailDrawer({
                               </div>
                             </div>
                           </div>
-                        </div>
+                        </TabsContent>
 
-                        <div className="rounded-lg border p-4 space-y-2">
-                          <div className="text-sm font-medium">
-                            Acciones rápidas
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onAction("confirm_payment")}
-                            >
-                              Pago confirmado
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onAction("send_contract")}
-                            >
-                              Enviar contrato
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onAction("mark_signed")}
-                            >
-                              Marcar firmado
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onAction("activate_access")}
-                            >
-                              Activar acceso
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onAction("activate_provisional")}
-                            >
-                              Activar provisional
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => onAction("close_operational")}
-                            >
-                              Cierre operativo
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border p-4 space-y-3">
-                          <div className="text-sm font-medium">
-                            Editar campos
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <div className="text-xs text-slate-500 mb-1">
-                                Próximo cobro
+                        <TabsContent
+                          value="actions"
+                          className="flex-1 p-4 m-0 overflow-y-auto"
+                        >
+                          <div className="space-y-3">
+                            <div className="bg-white rounded-lg border p-4">
+                              <div className="text-sm font-medium mb-3">
+                                Acciones rápidas
                               </div>
-                              <input
-                                type="date"
-                                className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm"
-                                defaultValue={
-                                  pay.nextChargeDate
-                                    ? String(pay.nextChargeDate).slice(0, 10)
-                                    : ""
-                                }
-                                onChange={async (e) => {
-                                  const next = e.target.value;
-                                  try {
-                                    await updateMetadataPayload(meta.id, {
-                                      payment: {
-                                        ...pay,
-                                        nextChargeDate: next || null,
-                                      },
-                                    });
-                                    toast({ title: "Guardado" });
-                                    await load();
-                                    onSaved?.();
-                                  } catch (err: any) {
-                                    toast({
-                                      title: "Error",
-                                      description: err?.message || String(err),
-                                      variant: "destructive",
-                                    });
+                              <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-8"
+                                  onClick={() => onAction("confirm_payment")}
+                                >
+                                  Pago confirmado
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-8"
+                                  onClick={() => onAction("send_contract")}
+                                >
+                                  Enviar contrato
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-8"
+                                  onClick={() => onAction("mark_signed")}
+                                >
+                                  Marcar firmado
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-8"
+                                  onClick={() => onAction("activate_access")}
+                                >
+                                  Activar acceso
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-8"
+                                  onClick={() =>
+                                    onAction("activate_provisional")
                                   }
-                                }}
-                              />
+                                >
+                                  Activar provisional
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs h-8"
+                                  onClick={() => onAction("close_operational")}
+                                >
+                                  Cierre operativo
+                                </Button>
+                              </div>
                             </div>
-                            <div className="md:col-span-2">
-                              <div className="text-xs text-slate-500 mb-1">
+
+                            {/* Notas */}
+                            <div className="bg-white rounded-lg border p-4">
+                              <div className="text-sm font-medium mb-2">
                                 Notas
                               </div>
                               <textarea
-                                className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                                className="w-full min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
                                 defaultValue={p.notes || ""}
+                                placeholder="Agregar notas sobre esta venta..."
                                 onBlur={async (e) => {
                                   const next = e.target.value;
                                   try {
@@ -720,8 +900,8 @@ export function ProspectDetailDrawer({
                               />
                             </div>
                           </div>
-                        </div>
-                      </>
+                        </TabsContent>
+                      </Tabs>
                     );
                   }
 
