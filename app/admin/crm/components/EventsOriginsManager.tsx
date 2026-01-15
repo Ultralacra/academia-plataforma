@@ -8,6 +8,8 @@ import {
   listLeadOrigins,
   updateLeadOrigin,
   type LeadOrigin,
+  listLeads,
+  type Lead,
 } from "@/app/admin/crm/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -87,6 +89,7 @@ function toIsoEnd(dateStr: string) {
 
 export function EventsOriginsManager() {
   const [items, setItems] = React.useState<LeadOrigin[]>([]);
+  const [leads, setLeads] = React.useState<Lead[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -120,13 +123,18 @@ export function EventsOriginsManager() {
   const load = React.useCallback(async () => {
     setLoading(true);
     try {
-      const data = await listLeadOrigins();
-      setItems(Array.isArray(data) ? data : []);
+      const [originsData, leadsData] = await Promise.all([
+        listLeadOrigins(),
+        listLeads({ page: 1, pageSize: 500 }),
+      ]);
+      setItems(Array.isArray(originsData) ? originsData : []);
+      setLeads(Array.isArray(leadsData.items) ? leadsData.items : []);
     } catch (err: any) {
       setItems([]);
+      setLeads([]);
       toast({
         title: "Error",
-        description: err?.message || "No se pudo cargar /v1/leads/origins",
+        description: err?.message || "No se pudo cargar datos",
         variant: "destructive",
       });
     } finally {
@@ -141,8 +149,12 @@ export function EventsOriginsManager() {
   const handleRefresh = React.useCallback(async () => {
     setRefreshing(true);
     try {
-      const data = await listLeadOrigins();
-      setItems(Array.isArray(data) ? data : []);
+      const [originsData, leadsData] = await Promise.all([
+        listLeadOrigins(),
+        listLeads({ page: 1, pageSize: 500 }),
+      ]);
+      setItems(Array.isArray(originsData) ? originsData : []);
+      setLeads(Array.isArray(leadsData.items) ? leadsData.items : []);
     } catch (err: any) {
       toast({
         title: "Error",
@@ -279,6 +291,9 @@ export function EventsOriginsManager() {
                   <TableHead>Descripción</TableHead>
                   <TableHead className="whitespace-nowrap">Inicio</TableHead>
                   <TableHead className="whitespace-nowrap">Fin</TableHead>
+                  <TableHead className="text-center whitespace-nowrap">
+                    Leads
+                  </TableHead>
                   <TableHead className="text-right whitespace-nowrap">
                     Acción
                   </TableHead>
@@ -301,6 +316,11 @@ export function EventsOriginsManager() {
                     </TableCell>
                     <TableCell className="whitespace-nowrap">
                       {fmtDate((it as any).end_date)}
+                    </TableCell>
+                    <TableCell className="text-center whitespace-nowrap">
+                      <span className="inline-flex items-center justify-center rounded-full bg-blue-100 text-blue-700 px-2.5 py-0.5 text-xs font-semibold">
+                        {leads.filter((l) => l.source === it.codigo).length}
+                      </span>
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-2">

@@ -53,7 +53,13 @@ import { MetricsOverview } from "./components/MetricsOverview";
 import { SellerMetricsTable } from "./components/SellerMetricsTable";
 import { MetricsTabs } from "./components/MetricsTabs";
 import { crmAutomations } from "@/lib/crm-service";
-import { listLeads, updateLead, type Lead } from "./api";
+import {
+  listLeads,
+  updateLead,
+  type Lead,
+  listLeadOrigins,
+  type LeadOrigin,
+} from "./api";
 import { toast } from "@/components/ui/use-toast";
 import { StageBadge } from "./components/StageBadge";
 import { CloseSaleForm } from "./components/CloseSaleForm2";
@@ -84,6 +90,7 @@ function CrmContent() {
 
   const [rows, setRows] = useState<Prospect[]>([]);
   const [stageUpdatingId, setStageUpdatingId] = useState<string | null>(null);
+  const [leadOrigins, setLeadOrigins] = useState<LeadOrigin[]>([]);
 
   const mapLeadStatusToEtapa = (status?: string) => {
     const s = (status || "new").toLowerCase();
@@ -137,14 +144,26 @@ function CrmContent() {
     }
   };
 
+  const loadOrigins = async () => {
+    try {
+      const items = await listLeadOrigins();
+      setLeadOrigins(items || []);
+    } catch (e) {
+      console.warn("No se pudieron cargar orígenes", e);
+    }
+  };
+
   useEffect(() => {
     reload();
+    loadOrigins();
   }, []);
 
   const [q, setQ] = useState("");
   const [view, setView] = useState<"lista" | "kanban">("lista");
   const [etapaFiltro, setEtapaFiltro] = useState<string>("all");
   const [canalFiltro, setCanalFiltro] = useState<string>("all");
+  const [selectedCampaignForMetrics, setSelectedCampaignForMetrics] =
+    useState<string>("all");
   // Owner eliminado de la tabla; mantenemos estado por compatibilidad UI pero podría retirarse luego.
   const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
   const [openCreate, setOpenCreate] = useState(false);
@@ -252,6 +271,13 @@ function CrmContent() {
       Array.from(new Set(rows.map((r) => r.canal).filter(Boolean))) as string[],
     [rows]
   );
+
+  // Mapeo de ID de origen a nombre
+  const getOriginName = (originId?: string) => {
+    if (!originId) return "—";
+    const origin = leadOrigins.find((o) => o.codigo === originId);
+    return origin?.name || originId;
+  };
   const owners: string[] = []; // Owner eliminado
 
   const saleStatusClass = (s?: string) => {
@@ -277,9 +303,76 @@ function CrmContent() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-indigo-600" />{" "}
+              <span className="inline-block w-2 h-2 rounded-full bg-blue-600" />{" "}
               CRM
             </h1>
+
+            {/* Selector de campaña para métricas */}
+            {leadOrigins.length > 0 && (
+              <div className="flex items-center gap-2 mt-3">
+                <label className="text-sm font-medium text-slate-700">
+                  Métricas de:
+                </label>
+                <select
+                  className="h-8 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  value={selectedCampaignForMetrics}
+                  onChange={(e) =>
+                    setSelectedCampaignForMetrics(e.target.value)
+                  }
+                >
+                  <option value="all">Todas las campañas</option>
+                  {leadOrigins.map((origin) => (
+                    <option key={origin.codigo} value={origin.codigo}>
+                      {origin.name || origin.codigo}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Métricas dinámicas basadas en la campaña seleccionada */}
+            <div className="flex gap-4 mt-3 flex-wrap items-center">
+              {(() => {
+                // Filtrar leads según la campaña seleccionada
+                const filteredRows =
+                  selectedCampaignForMetrics === "all"
+                    ? rows
+                    : rows.filter(
+                        (r) => r.canal === selectedCampaignForMetrics
+                      );
+
+                // Calcular métricas
+                const statusMetrics = filteredRows.reduce((acc, r) => {
+                  const status = r.etapa || "sin etapa";
+                  acc[status] = (acc[status] || 0) + 1;
+                  return acc;
+                }, {} as Record<string, number>);
+
+                const campaignName =
+                  selectedCampaignForMetrics === "all"
+                    ? "Total"
+                    : getOriginName(selectedCampaignForMetrics);
+
+                return (
+                  <>
+                    <span className="text-sm font-semibold text-slate-700">
+                      {campaignName}:
+                    </span>
+                    <span className="text-xs text-slate-600">
+                      Total:{" "}
+                      <span className="font-semibold text-blue-600">
+                        {filteredRows.length}
+                      </span>
+                    </span>
+                    {Object.entries(statusMetrics).map(([status, count]) => (
+                      <span key={status} className="text-xs text-slate-600">
+                        {status}: <span className="font-semibold">{count}</span>
+                      </span>
+                    ))}
+                  </>
+                );
+              })()}
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <CreateLeadDialog onCreated={reload} />
@@ -320,7 +413,7 @@ function CrmContent() {
                     onClick={() => setView("lista")}
                     className={`px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 ${
                       view === "lista"
-                        ? "bg-indigo-600 text-white hover:bg-indigo-600"
+                        ? "bg-blue-600 text-white hover:bg-blue-600"
                         : ""
                     }`}
                     title="Vista de lista"
@@ -332,7 +425,7 @@ function CrmContent() {
                     onClick={() => setView("kanban")}
                     className={`px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 border-l border-slate-200 ${
                       view === "kanban"
-                        ? "bg-indigo-600 text-white hover:bg-indigo-600"
+                        ? "bg-blue-600 text-white hover:bg-blue-600"
                         : ""
                     }`}
                     title="Vista Kanban"
@@ -343,12 +436,11 @@ function CrmContent() {
               </div>
               {view === "lista" ? (
                 <div className="rounded-xl border bg-white">
-                  <div className="grid grid-cols-12 gap-2 px-4 py-2 text-xs font-medium text-slate-600 border-b bg-slate-50/50">
+                  <div className="grid grid-cols-11 gap-2 px-4 py-2 text-xs font-medium text-slate-600 border-b bg-slate-50/50">
                     <div className="col-span-3">Prospecto</div>
                     <div className="col-span-2">Contacto</div>
                     <div className="col-span-2">Canal</div>
                     <div className="col-span-2">Etapa</div>
-                    <div className="col-span-1">Venta</div>
                     <div className="col-span-2 text-right">Acción</div>
                   </div>
                   <div>
@@ -360,7 +452,7 @@ function CrmContent() {
                       filtrados.map((p) => (
                         <div
                           key={p.id}
-                          className="grid grid-cols-12 gap-2 px-4 py-3 border-b last:border-b-0 hover:bg-indigo-50/40 transition-colors"
+                          className="grid grid-cols-11 gap-2 px-4 py-3 border-b last:border-b-0 hover:bg-blue-50/30 transition-colors"
                         >
                           <div className="col-span-3 min-w-0">
                             <div className="flex items-center gap-2">
@@ -370,14 +462,6 @@ function CrmContent() {
                               >
                                 {p.nombre}
                               </span>
-                              {p.remote && (
-                                <span
-                                  className="inline-flex items-center rounded-md bg-indigo-100 text-indigo-700 px-1.5 py-0.5 text-[10px] font-medium"
-                                  title="Lead remoto API"
-                                >
-                                  API
-                                </span>
-                              )}
                             </div>
                             <div className="text-xs text-slate-500 truncate">
                               {p.pais || ""} {p.ciudad ? `· ${p.ciudad}` : ""}
@@ -396,13 +480,13 @@ function CrmContent() {
                             </div>
                           </div>
                           <div className="col-span-2 text-xs flex items-center">
-                            {p.canal || (
-                              <span className="text-slate-400">—</span>
-                            )}
+                            <span title={p.canal}>
+                              {getOriginName(p.canal)}
+                            </span>
                           </div>
                           <div className="col-span-2">
                             <select
-                              className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs focus:outline-none"
+                              className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-slate-400 transition-colors"
                               value={p.etapa}
                               disabled={stageUpdatingId === p.id}
                               onChange={async (e) => {
@@ -423,7 +507,7 @@ function CrmContent() {
                                   });
                                   toast({
                                     title: "Etapa actualizada",
-                                    description: `${p.nombre} → ${nextEtapa}`,
+                                    description: nextEtapa,
                                   });
                                 } catch (err) {
                                   // rollback
@@ -452,20 +536,6 @@ function CrmContent() {
                                 </option>
                               ))}
                             </select>
-                          </div>
-                          <div className="col-span-1 flex items-center">
-                            {p.saleStatus ? (
-                              <span
-                                className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ${saleStatusClass(
-                                  p.saleStatus
-                                )}`}
-                                title={p.saleStatus}
-                              >
-                                {p.saleStatus}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 text-xs">—</span>
-                            )}
                           </div>
                           <div className="col-span-2 flex items-center justify-end">
                             <div className="flex items-center gap-2">

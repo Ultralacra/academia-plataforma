@@ -864,17 +864,27 @@ export function CloseSaleForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <Tabs defaultValue="datos" className="w-full">
-        <TabsList>
-          <TabsTrigger value="datos">Datos</TabsTrigger>
-          <TabsTrigger value="bonos">Bonos</TabsTrigger>
-          <TabsTrigger value="pago">Pago</TabsTrigger>
-          <TabsTrigger value="contrato">Contrato</TabsTrigger>
-          <TabsTrigger value="notas">Notas</TabsTrigger>
+      <Tabs defaultValue="datos" className="w-full gap-0">
+        <TabsList className="sticky top-0 z-20 w-full justify-start rounded-md border border-slate-200 bg-white/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-white/75 overflow-x-auto">
+          <TabsTrigger value="datos" className="text-xs sm:text-sm">
+            Datos
+          </TabsTrigger>
+          <TabsTrigger value="bonos" className="text-xs sm:text-sm">
+            Bonos
+          </TabsTrigger>
+          <TabsTrigger value="pago" className="text-xs sm:text-sm">
+            Pago
+          </TabsTrigger>
+          <TabsTrigger value="contrato" className="text-xs sm:text-sm">
+            Contrato
+          </TabsTrigger>
+          <TabsTrigger value="notas" className="text-xs sm:text-sm">
+            Notas
+          </TabsTrigger>
         </TabsList>
-        <div className="mt-4">
+        <div className="mt-3">
           <TabsContent value="datos" className="m-0">
-            <Card className="p-4 border-indigo-100">
+            <Card className="p-4 border-slate-200">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label>Nombre completo *</Label>
@@ -1175,7 +1185,7 @@ export function CloseSaleForm({
           </TabsContent>
 
           <TabsContent value="pago" className="m-0">
-            <Card className="p-4 border-indigo-100">
+            <Card className="p-4 border-slate-200">
               {(() => {
                 const programKey = inferProgramKey(form.program);
                 const pricing =
@@ -1730,7 +1740,7 @@ export function CloseSaleForm({
           </TabsContent>
 
           <TabsContent value="contrato" className="m-0">
-            <Card className="p-4 space-y-4 border-indigo-100">
+            <Card className="p-4 space-y-4 border-slate-200">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex items-center gap-2">
                   <input

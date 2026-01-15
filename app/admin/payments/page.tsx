@@ -265,6 +265,8 @@ function PaymentsContent() {
   const [reservaMin, setReservaMin] = useState<string>("");
   const [reservaMax, setReservaMax] = useState<string>("");
 
+  const [pageChanging, setPageChanging] = useState(false);
+
   const debouncedSearch = useDebouncedValue(search, 350);
   const debouncedClienteCodigo = useDebouncedValue(clienteCodigo, 350);
   const debouncedMetodo = useDebouncedValue(metodo, 350);

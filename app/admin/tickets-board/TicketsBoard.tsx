@@ -310,7 +310,7 @@ export default function TicketsBoard({
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<
-    "general" | "respuesta" | "detalle" | "notas"
+    "general" | "respuesta" | "detalle" | "notas" | "anteriores"
   >("general");
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
@@ -318,14 +318,106 @@ export default function TicketsBoard({
     null
   );
 
+  const [previousTickets, setPreviousTickets] = useState<TicketBoardItem[]>([]);
+  const [previousTicketsLoading, setPreviousTicketsLoading] = useState(false);
+  const [previousTicketsError, setPreviousTicketsError] = useState<
+    string | null
+  >(null);
+  const [previousTicketsStudentCode, setPreviousTicketsStudentCode] = useState<
+    string | null
+  >(null);
+
+  const [historyDetailOpen, setHistoryDetailOpen] = useState(false);
+  const [historyDetailCodigo, setHistoryDetailCodigo] = useState<string | null>(
+    null
+  );
+  const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
+  const [historyDetailError, setHistoryDetailError] = useState<string | null>(
+    null
+  );
+  const [historyDetail, setHistoryDetail] = useState<any | null>(null);
+
   const visibleDesc = useMemo(() => {
     return filterDescriptionForStudent(String(ticketDetail?.descripcion || ""));
   }, [ticketDetail?.descripcion, isStudent]);
 
   // Los alumnos solo pueden ver: bloquear pestañas/acciones privadas
   useEffect(() => {
-    if (isStudent && detailTab === "notas") setDetailTab("general");
+    if (isStudent && (detailTab === "notas" || detailTab === "anteriores")) {
+      setDetailTab("general");
+    }
   }, [isStudent, detailTab]);
+
+  // Carga perezosa: historial de tickets del alumno solo cuando se abre la pestaña
+  useEffect(() => {
+    const studentCode = String(selectedTicket?.id_alumno ?? "").trim();
+    if (!drawerOpen) return;
+    if (detailTab !== "anteriores") return;
+    if (!studentCode) return;
+
+    // Evita re-consultar si ya intentamos cargar para ese alumno
+    if (previousTicketsStudentCode === studentCode) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setPreviousTicketsLoading(true);
+        setPreviousTicketsError(null);
+        const res = await getTickets({ studentCode });
+        if (cancelled) return;
+        setPreviousTickets(res.items || []);
+        setPreviousTicketsStudentCode(studentCode);
+      } catch (e: any) {
+        if (cancelled) return;
+        setPreviousTicketsError(
+          String(e?.message || e || "Error cargando historial")
+        );
+        setPreviousTickets([]);
+        setPreviousTicketsStudentCode(studentCode);
+      } finally {
+        if (!cancelled) setPreviousTicketsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    drawerOpen,
+    detailTab,
+    selectedTicket?.id_alumno,
+    previousTicketsStudentCode,
+  ]);
+
+  async function loadHistoryTicketDetail(codigo: string) {
+    const code = String(codigo || "").trim();
+    if (!code) return;
+    try {
+      setHistoryDetailLoading(true);
+      setHistoryDetailError(null);
+      setHistoryDetail(null);
+      const url = buildUrl(`/ticket/get/ticket/${encodeURIComponent(code)}`);
+      const token = typeof window !== "undefined" ? getAuthToken() : null;
+      const res = await fetch(url, {
+        method: "GET",
+        cache: "no-store",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+      const json = await res.json().catch(() => ({}));
+      const data = (json as any)?.data ?? json ?? null;
+      setHistoryDetail(data);
+    } catch (e: any) {
+      setHistoryDetailError(
+        String(e?.message || e || "Error al cargar detalle")
+      );
+    } finally {
+      setHistoryDetailLoading(false);
+    }
+  }
 
   // Estado para crear ticket manual
   const [createModalOpen, setCreateModalOpen] = useState(false);
@@ -2798,6 +2890,137 @@ export default function TicketsBoard({
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={historyDetailOpen}
+        onOpenChange={(v) => {
+          if (!v) {
+            setHistoryDetailOpen(false);
+            setHistoryDetailCodigo(null);
+            setHistoryDetail(null);
+            setHistoryDetailError(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Detalle del ticket
+            </DialogTitle>
+            <DialogDescription>
+              {historyDetailCodigo ? `Código: ${historyDetailCodigo}` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {historyDetailLoading ? (
+            <div className="flex items-center justify-center py-10 text-sm text-slate-500">
+              Cargando...
+            </div>
+          ) : historyDetailError ? (
+            <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+              {historyDetailError}
+            </div>
+          ) : !historyDetail ? (
+            <div className="text-sm text-slate-600">Sin datos.</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {(() => {
+                  const statusKey = coerceStatus(
+                    historyDetail?.estado ?? historyDetail?.status
+                  );
+                  const label = STATUS_LABEL[statusKey];
+                  const badge = STATUS_STYLE[statusKey];
+                  return (
+                    <span
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] ${badge}`}
+                    >
+                      {label}
+                    </span>
+                  );
+                })()}
+                <Badge variant="secondary">
+                  {formatTitleForUi(
+                    historyDetail?.tipo ?? historyDetail?.type ?? "—"
+                  )}
+                </Badge>
+                {historyDetail?.creacion || historyDetail?.created_at ? (
+                  <Badge variant="muted">
+                    {new Date(
+                      historyDetail?.creacion || historyDetail?.created_at
+                    ).toLocaleString("es-ES", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      timeZone: "UTC",
+                    })}
+                  </Badge>
+                ) : null}
+              </div>
+
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-slate-900">
+                  {formatTitleForUi(historyDetail?.nombre) || "—"}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {historyDetail?.alumno_nombre || historyDetail?.alumnoNombre
+                    ? `Alumno: ${
+                        historyDetail?.alumno_nombre ||
+                        historyDetail?.alumnoNombre
+                      }`
+                    : ""}
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-slate-600">
+                  Descripción
+                </div>
+                <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
+                  {filterDescriptionForStudent(
+                    String(historyDetail?.descripcion || "")
+                  ) || "—"}
+                </div>
+              </div>
+
+              {(() => {
+                const responseText =
+                  historyDetail?.respuesta_coach ??
+                  historyDetail?.respuestaCoach ??
+                  historyDetail?.respuesta ??
+                  historyDetail?.respuesta_del_coach ??
+                  historyDetail?.solucion ??
+                  historyDetail?.solution ??
+                  "";
+                if (!String(responseText || "").trim()) return null;
+                return (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-slate-600">
+                      Respuesta
+                    </div>
+                    <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
+                      {String(responseText)}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setHistoryDetailOpen(false)}
+            >
+              Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Sheet open={drawerOpen} onOpenChange={setDrawerOpen}>
         <SheetContent
           side="right"
@@ -2875,6 +3098,20 @@ export default function TicketsBoard({
                     {!isStudent && (
                       <button
                         type="button"
+                        onClick={() => setDetailTab("anteriores")}
+                        className={`px-3 py-1.5 text-xs border-l ${
+                          detailTab === "anteriores"
+                            ? "bg-slate-900 text-white"
+                            : "hover:bg-gray-50"
+                        }`}
+                        title="Historial de tickets del alumno"
+                      >
+                        Feedback anteriores
+                      </button>
+                    )}
+                    {!isStudent && (
+                      <button
+                        type="button"
                         onClick={() => setDetailTab("notas")}
                         className={`px-3 py-1.5 text-xs border-l ${
                           detailTab === "notas"
@@ -2899,160 +3136,165 @@ export default function TicketsBoard({
                           Este {uiTicketLower} está pausado y requiere acción.
                           Por favor envía la información correspondiente.
                         </div>
-                      </div>
-                    )}
-
-                    {/* Título editable */}
-                    {canEdit && (
-                      <div className="space-y-1">
-                        <Input
-                          className="text-lg font-semibold border-transparent hover:border-slate-200 px-0 h-auto py-1 focus:ring-0 focus:border-slate-300 bg-transparent shadow-none"
-                          value={editForm.nombre ?? ""}
-                          onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              nombre: e.target.value,
-                            }))
-                          }
-                          placeholder={`Título del ${uiTicketLower}`}
-                          disabled={!canEdit}
-                        />
-                      </div>
-                    )}
-
-                    {/* Coaches (Movido desde Detalle) */}
-                    {(() => {
-                      const overrides = (ticketDetail as any)?.coaches_override;
-                      const hasOverride =
-                        Array.isArray(overrides) && overrides.length > 0;
-                      const source = hasOverride
-                        ? overrides
-                        : ticketDetail?.coaches;
-
-                      if (!Array.isArray(source) || source.length === 0)
-                        return null;
-
-                      // Mostrar solo el primero si el usuario pide "el coach"
-                      const c = source[0];
-                      // Normalizar si es string o objeto
-                      const name =
-                        typeof c === "string" ? c : c.nombre ?? "Coach";
-                      const area = typeof c === "string" ? null : c.area;
-                      const puesto = typeof c === "string" ? null : c.puesto;
-
-                      return (
-                        <div className="flex flex-wrap gap-1.5">
-                          <span
-                            className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                            title={`${name}${area ? ` · ${area}` : ""}${
-                              puesto ? ` · ${puesto}` : ""
-                            }`}
-                          >
-                            {name.slice(0, 20)}
-                            {area ? ` · ${String(area).slice(0, 10)}` : ""}
-                          </span>
-                          {source.length > 1 && (
-                            <span
-                              className="text-xs text-slate-400 flex items-center"
-                              title="Más coaches asignados"
+                          {!isStudent && (
+                            <div
+                              className={detailTab === "anteriores" ? "block" : "hidden"}
                             >
-                              +{source.length - 1}
-                            </span>
+                              <div className="p-6 space-y-4">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div>
+                                    <div className="text-sm font-medium text-slate-900">
+                                      Feedback anteriores del alumno
+                                    </div>
+                                    <div className="text-xs text-slate-500">
+                                      {selectedTicket?.alumno_nombre || "Alumno"}
+                                      {selectedTicket?.id_alumno
+                                        ? ` • ${selectedTicket.id_alumno}`
+                                        : ""}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs"
+                                    onClick={() => {
+                                      // Forzar recarga
+                                      setPreviousTicketsStudentCode(null);
+                                      setPreviousTickets([]);
+                                    }}
+                                    disabled={previousTicketsLoading}
+                                  >
+                                    <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                                    Actualizar
+                                  </Button>
+                                </div>
+
+                                {!String(selectedTicket?.id_alumno ?? "").trim() ? (
+                                  <div className="text-sm text-slate-600">
+                                    Este ticket no tiene alumno asociado.
+                                  </div>
+                                ) : previousTicketsLoading ? (
+                                  <div className="flex items-center justify-center py-10 text-sm text-slate-500">
+                                    Cargando historial...
+                                  </div>
+                                ) : previousTicketsError ? (
+                                  <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                                    {previousTicketsError}
+                                  </div>
+                                ) : previousTickets.length === 0 ? (
+                                  <div className="text-sm text-slate-600">
+                                    No hay tickets anteriores para este alumno.
+                                  </div>
+                                ) : (
+                                  <div className="rounded-md border border-slate-200 overflow-hidden">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead className="text-xs">Fecha</TableHead>
+                                          <TableHead className="text-xs">Título</TableHead>
+                                          <TableHead className="text-xs">Tipo</TableHead>
+                                          <TableHead className="text-xs">Estado</TableHead>
+                                          <TableHead className="text-xs text-right">
+                                            Ver
+                                          </TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {previousTickets
+                                          .slice()
+                                          .sort((a, b) => {
+                                            const at = a.created_at
+                                              ? new Date(a.created_at).getTime()
+                                              : 0;
+                                            const bt = b.created_at
+                                              ? new Date(b.created_at).getTime()
+                                              : 0;
+                                            return bt - at;
+                                          })
+                                          .map((t) => {
+                                            const isCurrent =
+                                              !!selectedTicket?.codigo &&
+                                              String(t.codigo || "").trim() ===
+                                                String(
+                                                  selectedTicket.codigo || ""
+                                                ).trim();
+                                            const statusKey = coerceStatus(t.estado);
+                                            const label = STATUS_LABEL[statusKey];
+                                            const badge = STATUS_STYLE[statusKey];
+
+                                            return (
+                                              <TableRow key={String(t.codigo ?? t.id)}>
+                                                <TableCell className="text-xs text-slate-700 whitespace-nowrap">
+                                                  {t.created_at
+                                                    ? new Date(
+                                                        t.created_at
+                                                      ).toLocaleString("es-ES", {
+                                                        day: "2-digit",
+                                                        month: "short",
+                                                        year: "numeric",
+                                                      })
+                                                    : "—"}
+                                                </TableCell>
+                                                <TableCell className="text-xs">
+                                                  <div className="flex items-center gap-2 min-w-0">
+                                                    <span className="truncate">
+                                                      {formatTitleForUi(t.nombre) || "—"}
+                                                    </span>
+                                                    {isCurrent && (
+                                                      <Badge variant="secondary">
+                                                        Actual
+                                                      </Badge>
+                                                    )}
+                                                  </div>
+                                                </TableCell>
+                                                <TableCell className="text-xs text-slate-600">
+                                                  {t.tipo || "—"}
+                                                </TableCell>
+                                                <TableCell className="text-xs">
+                                                  <span
+                                                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] ${badge}`}
+                                                  >
+                                                    {label}
+                                                  </span>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                  <TooltipProvider>
+                                                    <Tooltip>
+                                                      <TooltipTrigger asChild>
+                                                        <Button
+                                                          variant="ghost"
+                                                          size="sm"
+                                                          className="h-7 w-7 p-0"
+                                                          onClick={() => {
+                                                            const codigo = String(
+                                                              t.codigo || ""
+                                                            ).trim();
+                                                            if (!codigo) return;
+                                                            setHistoryDetailCodigo(codigo);
+                                                            setHistoryDetailOpen(true);
+                                                            loadHistoryTicketDetail(codigo);
+                                                          }}
+                                                          disabled={!t.codigo}
+                                                        >
+                                                          <Eye className="h-4 w-4" />
+                                                        </Button>
+                                                      </TooltipTrigger>
+                                                      <TooltipContent>
+                                                        Ver detalle
+                                                      </TooltipContent>
+                                                    </Tooltip>
+                                                  </TooltipProvider>
+                                                </TableCell>
+                                              </TableRow>
+                                            );
+                                          })}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           )}
-                        </div>
-                      );
-                    })()}
-
-                    {/* Lista de Propiedades (Estilo Notion) */}
-                    <div className="grid grid-cols-[140px_1fr] gap-y-3 text-sm items-start">
-                      {/* Alumno */}
-                      <div className="flex items-center gap-2 text-slate-500 h-6">
-                        <User className="h-4 w-4" /> <span>Alumno</span>
-                      </div>
-                      <div className="min-h-[24px] flex items-center font-medium">
-                        {ticketDetail?.alumno_nombre || "—"}
-                      </div>
-
-                      {/* Tipo (Movido desde Detalle) */}
-                      <div className="flex items-center gap-2 text-slate-500 h-6">
-                        <Tag className="h-4 w-4" /> <span>Tipo</span>
-                      </div>
-                      <div className="min-h-[24px] flex items-center">
-                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-800">
-                          {ticketDetail?.tipo || "—"}
-                        </span>
-                      </div>
-
-                      {/* Tarea (Links) - Integrado aquí */}
-                      <div className="flex items-center gap-2 text-slate-500 h-6 pt-1">
-                        <LinkIcon className="h-4 w-4" /> <span>Tarea</span>
-                      </div>
-                      <div className="space-y-2">
-                        {(() => {
-                          type TaskLink = {
-                            id?: string | number | null;
-                            url: string;
-                            title?: string | null;
-                          };
-                          const raw = Array.isArray(
-                            (ticketDetail as any)?.links
-                          )
-                            ? (ticketDetail as any).links
-                            : [];
-                          const taskLinks: TaskLink[] = (raw as any[])
-                            .map((it) => {
-                              if (typeof it === "string")
-                                return { id: null, url: it, title: null };
-                              const url =
-                                it?.url || it?.link || it?.enlace || "";
-                              const title =
-                                it?.titulo || it?.title || it?.nombre || null;
-                              return {
-                                id: it?.id ?? null,
-                                url,
-                                title,
-                              } as TaskLink;
-                            })
-                            .filter((t) => !!t.url);
-
-                          const onDeleteTask = async (
-                            id?: string | number | null
-                          ) => {
-                            if (!id) return;
-                            try {
-                              await deleteTicketLink(id);
-                              toast({ title: "Tarea eliminada" });
-                              if (selectedTicket?.codigo)
-                                await loadTicketDetail(selectedTicket.codigo);
-                            } catch (e) {
-                              console.error(e);
-                              toast({ title: "Error al eliminar tarea" });
-                            }
-                          };
-
-                          return (
-                            <>
-                              {taskLinks.length > 0 && (
-                                <div className="flex flex-col gap-1">
-                                  {taskLinks.map((t, i) => (
-                                    <div
-                                      key={`task-${t.id ?? i}`}
-                                      className="group flex items-center gap-2"
-                                    >
-                                      <a
-                                        href={normalizeUrl(t.url)}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-sky-600 underline truncate max-w-[300px]"
-                                        title={t.url}
-                                      >
-                                        {t.title || t.url}
-                                      </a>
-                                      {canEdit && t.id != null && (
-                                        <button
-                                          onClick={() => onDeleteTask(t.id!)}
-                                          className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity"
-                                        >
                                           <X className="h-3 w-3" />
                                         </button>
                                       )}
@@ -4227,6 +4469,163 @@ export default function TicketsBoard({
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+
+                <div
+                  className={detailTab === "anteriores" ? "block" : "hidden"}
+                >
+                  <div className="p-6 space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-medium text-slate-900">
+                          Feedback anteriores del alumno
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {selectedTicket?.alumno_nombre || "Alumno"}
+                          {selectedTicket?.id_alumno
+                            ? ` • ${selectedTicket.id_alumno}`
+                            : ""}
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => {
+                          // Forzar recarga
+                          setPreviousTicketsStudentCode(null);
+                          setPreviousTickets([]);
+                        }}
+                        disabled={previousTicketsLoading}
+                      >
+                        <RefreshCw className="h-3.5 w-3.5 mr-1" />
+                        Actualizar
+                      </Button>
+                    </div>
+
+                    {!String(selectedTicket?.id_alumno ?? "").trim() ? (
+                      <div className="text-sm text-slate-600">
+                        Este ticket no tiene alumno asociado.
+                      </div>
+                    ) : previousTicketsLoading ? (
+                      <div className="flex items-center justify-center py-10 text-sm text-slate-500">
+                        Cargando historial...
+                      </div>
+                    ) : previousTicketsError ? (
+                      <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">
+                        {previousTicketsError}
+                      </div>
+                    ) : previousTickets.length === 0 ? (
+                      <div className="text-sm text-slate-600">
+                        No hay tickets anteriores para este alumno.
+                      </div>
+                    ) : (
+                      <div className="rounded-md border border-slate-200 overflow-hidden">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="text-xs">Fecha</TableHead>
+                              <TableHead className="text-xs">Título</TableHead>
+                              <TableHead className="text-xs">Tipo</TableHead>
+                              <TableHead className="text-xs">Estado</TableHead>
+                              <TableHead className="text-xs text-right">
+                                Ver
+                              </TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {previousTickets
+                              .slice()
+                              .sort((a, b) => {
+                                const at = a.created_at
+                                  ? new Date(a.created_at).getTime()
+                                  : 0;
+                                const bt = b.created_at
+                                  ? new Date(b.created_at).getTime()
+                                  : 0;
+                                return bt - at;
+                              })
+                              .map((t) => {
+                                const isCurrent =
+                                  !!selectedTicket?.codigo &&
+                                  String(t.codigo || "").trim() ===
+                                    String(selectedTicket.codigo || "").trim();
+                                const statusKey = coerceStatus(t.estado);
+                                const label = STATUS_LABEL[statusKey];
+                                const badge = STATUS_STYLE[statusKey];
+
+                                return (
+                                  <TableRow key={String(t.codigo ?? t.id)}>
+                                    <TableCell className="text-xs text-slate-700 whitespace-nowrap">
+                                      {t.created_at
+                                        ? new Date(t.created_at).toLocaleString(
+                                            "es-ES",
+                                            {
+                                              day: "2-digit",
+                                              month: "short",
+                                              year: "numeric",
+                                            }
+                                          )
+                                        : "—"}
+                                    </TableCell>
+                                    <TableCell className="text-xs">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span className="truncate">
+                                          {formatTitleForUi(t.nombre) || "—"}
+                                        </span>
+                                        {isCurrent && (
+                                          <Badge variant="secondary">
+                                            Actual
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-slate-600">
+                                      {t.tipo || "—"}
+                                    </TableCell>
+                                    <TableCell className="text-xs">
+                                      <span
+                                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] ${badge}`}
+                                      >
+                                        {label}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-7 w-7 p-0"
+                                              onClick={() => {
+                                                const codigo = String(
+                                                  t.codigo || ""
+                                                ).trim();
+                                                if (!codigo) return;
+                                                setHistoryDetailCodigo(codigo);
+                                                setHistoryDetailOpen(true);
+                                                loadHistoryTicketDetail(codigo);
+                                              }}
+                                              disabled={!t.codigo}
+                                            >
+                                              <Eye className="h-4 w-4" />
+                                            </Button>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            Ver detalle
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    )}
                   </div>
                 </div>
 
