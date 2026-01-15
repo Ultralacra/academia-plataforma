@@ -20,6 +20,9 @@ import {
   LayoutGrid,
   Eye,
   Trash2,
+  CheckCircle2,
+  XCircle,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -29,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -61,6 +65,7 @@ import {
   type LeadOrigin,
 } from "./api";
 import { toast } from "@/components/ui/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { StageBadge } from "./components/StageBadge";
 import { CloseSaleForm } from "./components/CloseSaleForm2";
 import { SalesPersonalMetrics } from "./components/SalesPersonalMetrics";
@@ -68,9 +73,11 @@ import { useRouter } from "next/navigation";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { DeleteLeadConfirmDialog } from "./components/DeleteLeadConfirmDialog";
 import { EventsOriginsManager } from "./components/EventsOriginsManager";
+import { apiFetch } from "@/lib/api-config";
 
 function CrmContent() {
   const router = useRouter();
+  const { authState } = useAuth();
   type Prospect = {
     id: string;
     nombre: string;
@@ -91,6 +98,53 @@ function CrmContent() {
   const [rows, setRows] = useState<Prospect[]>([]);
   const [stageUpdatingId, setStageUpdatingId] = useState<string | null>(null);
   const [leadOrigins, setLeadOrigins] = useState<LeadOrigin[]>([]);
+  const [showingMyLeads, setShowingMyLeads] = useState(false);
+  const [userCodigo, setUserCodigo] = useState<string | null>(null);
+
+  // Filtro de leads por usuario sales (para admin)
+  const [salesUsers, setSalesUsers] = useState<
+    Array<{ codigo: string; name: string; email: string }>
+  >([]);
+  const [selectedSalesUserFilter, setSelectedSalesUserFilter] = useState<string>("");
+  const [salesUsersLoading, setSalesUsersLoading] = useState(false);
+
+  // Determinar si el usuario actual es admin o sales
+  const currentUserRole = authState?.user?.role;
+  const isAdmin = currentUserRole === "admin";
+  const isSalesUser = currentUserRole === "sales";
+
+  // Estados para asignar lead desde tabla
+  const [assignModalOpen, setAssignModalOpen] = useState(false);
+  const [leadToAssign, setLeadToAssign] = useState<{
+    codigo: string;
+    nombre: string;
+  } | null>(null);
+  const [allUsers, setAllUsers] = useState<
+    Array<{
+      codigo: string;
+      name: string;
+      email: string;
+      tipo: string;
+      role: string;
+    }>
+  >([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [selectedUserForAssign, setSelectedUserForAssign] =
+    useState<string>("");
+  const [assigning, setAssigning] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [calendarStatus, setCalendarStatus] = useState<{
+    connected: boolean;
+    google_email?: string;
+    loading: boolean;
+  }>({ connected: false, loading: true });
+  const [syncingCalendar, setSyncingCalendar] = useState(false);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availability, setAvailability] = useState<{
+    google_email: string;
+    busy: Array<{ start: string; end: string }>;
+  } | null>(null);
 
   const mapLeadStatusToEtapa = (status?: string) => {
     const s = (status || "new").toLowerCase();
@@ -114,10 +168,27 @@ function CrmContent() {
 
   // Eliminado: ya no usamos submissions locales vía localStorage.
 
-  const reload = async () => {
-    // Cargar leads desde /v1/leads
+  const reload = async (userCodigoFilter?: string) => {
+    // Cargar leads desde /v1/leads o /v1/leads/user/:user_codigo
     try {
-      const { items } = await listLeads({ page: 1, pageSize: 500 });
+      let items: Lead[] = [];
+
+      // Si hay un filtro de usuario (para admin filtrando por sales user)
+      // o si es un usuario sales viendo sus propios leads
+      const filterCodigo = userCodigoFilter || selectedSalesUserFilter;
+      
+      if (filterCodigo) {
+        // Usar endpoint de leads por usuario
+        const response = await apiFetch<{ data: Lead[] }>(`/leads/user/${filterCodigo}`);
+        items = response.data || [];
+        setShowingMyLeads(true);
+      } else {
+        // Cargar todos los leads
+        const response = await apiFetch<{ data: Lead[] }>("/leads");
+        items = response.data || [];
+        setShowingMyLeads(false);
+      }
+
       const mapped: Prospect[] = items.map((l: Lead) => ({
         id: l.codigo,
         nombre: l.name,
@@ -133,14 +204,33 @@ function CrmContent() {
       setRows(mapped);
       return;
     } catch (e) {
-      console.warn("listLeads falló, mostrando lista vacía", e);
+      console.warn("Cargar leads falló, mostrando lista vacía", e);
       setRows([]);
       toast({
         title: "Error cargando leads",
-        description: "El endpoint /v1/leads falló.",
+        description: "No se pudieron cargar los leads.",
         variant: "destructive",
       });
       return;
+    }
+  };
+
+  // Cargar usuarios de tipo sales (para el filtro de admin)
+  const loadSalesUsers = async () => {
+    setSalesUsersLoading(true);
+    try {
+      const response = await apiFetch<{ data: any[] }>("/users?pageSize=1000");
+      const usersData = response?.data || [];
+      // Filtrar solo usuarios con role "sales"
+      const salesOnly = usersData.filter(
+        (u: any) => u.role === "sales"
+      );
+      setSalesUsers(salesOnly);
+    } catch (e: any) {
+      setSalesUsers([]);
+      console.warn("No se pudieron cargar usuarios de ventas", e);
+    } finally {
+      setSalesUsersLoading(false);
     }
   };
 
@@ -153,10 +243,257 @@ function CrmContent() {
     }
   };
 
+  const loadAllUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const response = await apiFetch<{ data: any[] }>("/users?pageSize=1000");
+      const usersData = response?.data || [];
+      setAllUsers(Array.isArray(usersData) ? usersData : []);
+    } catch (e: any) {
+      setAllUsers([]);
+      toast({
+        title: "Error",
+        description: e?.message || "No se pudieron cargar los usuarios",
+        variant: "destructive",
+      });
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const handleAssignLead = async () => {
+    if (!leadToAssign || !selectedUserForAssign) return;
+
+    setAssigning(true);
+    try {
+      await apiFetch(`/leads/${leadToAssign.codigo}/assign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_codigo: selectedUserForAssign }),
+      });
+      toast({
+        title: "Lead asignado",
+        description: `${leadToAssign.nombre} asignado correctamente`,
+      });
+      setAssignModalOpen(false);
+      setLeadToAssign(null);
+      setSelectedUserForAssign("");
+      setUserSearchQuery("");
+      reload();
+    } catch (error: any) {
+      let errorMessage = error?.message || "No se pudo asignar el lead";
+      if (errorMessage.includes("User is not a sales user")) {
+        errorMessage = "El usuario seleccionado no es un usuario de ventas";
+      }
+      toast({
+        title: "Error al asignar",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   useEffect(() => {
     reload();
     loadOrigins();
+    // Si el usuario es admin, cargar usuarios de ventas para el filtro
+    if (isAdmin) {
+      loadSalesUsers();
+    }
+  }, [isAdmin]);
+
+  // Cargar estado de sincronización de Google Calendar
+  useEffect(() => {
+    const fetchCalendarStatus = async () => {
+      try {
+        const response = await apiFetch<{
+          connected: boolean;
+          google_email?: string;
+        }>("/calendar/status");
+        setCalendarStatus({
+          connected: response.connected,
+          google_email: response.google_email,
+          loading: false,
+        });
+      } catch (error) {
+        console.error("Error al obtener estado del calendario:", error);
+        setCalendarStatus({ connected: false, loading: false });
+      }
+    };
+
+    fetchCalendarStatus();
+    // Recargar cada 2 minutos
+    const interval = setInterval(fetchCalendarStatus, 120000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Función para sincronizar con Google Calendar
+  const handleSyncCalendar = async () => {
+    try {
+      setSyncingCalendar(true);
+      const response = await apiFetch<{ url: string }>("/calendar/auth");
+
+      if (response.url) {
+        // Redirigir a la URL de autorización de Google
+        window.location.href = response.url;
+      } else {
+        toast({
+          title: "Error",
+          description: "No se recibió URL de autorización",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error al iniciar sincronización:", error);
+      toast({
+        title: "Error al sincronizar",
+        description:
+          error?.message ||
+          "No se pudo iniciar la sincronización con Google Calendar",
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingCalendar(false);
+    }
+  };
+
+  const loadAvailability = async () => {
+    setAvailabilityLoading(true);
+    try {
+      const response = await apiFetch<{
+        success: boolean;
+        google_email: string;
+        busy: Array<{ start: string; end: string }>;
+      }>("/calendar/availability");
+      setAvailability({
+        google_email: response.google_email,
+        busy: response.busy,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description:
+          error?.message ||
+          "No se pudo cargar la disponibilidad del calendario",
+        variant: "destructive",
+      });
+    } finally {
+      setAvailabilityLoading(false);
+    }
+  };
+
+  const handleViewAvailability = () => {
+    setAvailabilityOpen(true);
+    loadAvailability();
+  };
+
+  const getBusyDates = () => {
+    if (!availability) return new Set<string>();
+    const busyDates = new Set<string>();
+    availability.busy.forEach((slot) => {
+      const start = new Date(slot.start);
+      const end = new Date(slot.end);
+      let current = new Date(start);
+      while (current <= end) {
+        busyDates.add(current.toISOString().split("T")[0]);
+        current.setDate(current.getDate() + 1);
+      }
+    });
+    return busyDates;
+  };
+
+  const renderCalendar = () => {
+    if (!availability) return null;
+
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+    const firstDay = new Date(currentYear, currentMonth, 1);
+    const lastDay = new Date(currentYear, currentMonth + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+
+    const busyDates = getBusyDates();
+    const days = [];
+
+    // Días vacíos antes del primer día del mes
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      days.push(<div key={`empty-${i}`} className="h-12" />);
+    }
+
+    // Días del mes
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(currentYear, currentMonth, day);
+      const dateStr = date.toISOString().split("T")[0];
+      const isBusy = busyDates.has(dateStr);
+      const isToday = date.toDateString() === now.toDateString();
+
+      days.push(
+        <div
+          key={day}
+          className={`h-12 flex items-center justify-center rounded-lg border text-sm font-medium transition-colors ${
+            isToday
+              ? "border-blue-500 bg-blue-50 text-blue-700"
+              : isBusy
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-slate-200 bg-white text-slate-700"
+          }`}
+          title={isBusy ? "Ocupado - No disponible para agendar" : "Disponible"}
+        >
+          {day}
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        <div className="mb-4 text-center">
+          <h3 className="text-lg font-semibold">
+            {new Intl.DateTimeFormat("es-ES", {
+              month: "long",
+              year: "numeric",
+            }).format(now)}
+          </h3>
+        </div>
+        <div className="grid grid-cols-7 gap-2 mb-2">
+          {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map((day) => (
+            <div
+              key={day}
+              className="h-8 flex items-center justify-center text-xs font-semibold text-slate-600"
+            >
+              {day}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-2">{days}</div>
+        <div className="mt-4 flex items-center gap-4 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-4 rounded border-2 border-red-200 bg-red-50" />
+            <span>Ocupado</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-4 w-4 rounded border-2 border-slate-200 bg-white" />
+            <span>Disponible</span>
+          </div>
+        </div>
+        {availability.busy.length > 0 && (
+          <div className="mt-4 max-h-32 overflow-y-auto border-t pt-4">
+            <h4 className="text-sm font-semibold mb-2">Horas ocupadas:</h4>
+            <div className="space-y-1">
+              {availability.busy.map((slot, idx) => (
+                <div key={idx} className="text-xs text-slate-600">
+                  {new Date(slot.start).toLocaleString("es-ES")} -{" "}
+                  {new Date(slot.end).toLocaleString("es-ES")}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const [q, setQ] = useState("");
   const [view, setView] = useState<"lista" | "kanban">("lista");
@@ -292,8 +629,6 @@ function CrmContent() {
       ].includes(v)
     )
       return "bg-amber-100 text-amber-700";
-    if (["operational_closure", "cancelled", "lost"].includes(v))
-      return "bg-red-100 text-red-700";
     return "bg-slate-100 text-slate-700";
   };
 
@@ -302,11 +637,187 @@ function CrmContent() {
       <div className="border-b bg-white px-6 py-5">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-blue-600" />{" "}
-              CRM
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-blue-600" />{" "}
+                CRM
+              </h1>
+              
+              {/* Filtro de leads por usuario sales (solo para admin) */}
+              {isAdmin && (
+                <div className="flex items-center gap-2">
+                  <select
+                    className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={selectedSalesUserFilter}
+                    onChange={(e) => {
+                      setSelectedSalesUserFilter(e.target.value);
+                      reload(e.target.value);
+                    }}
+                    disabled={salesUsersLoading}
+                  >
+                    <option value="">
+                      {salesUsersLoading ? "Cargando..." : "Todos los Leads"}
+                    </option>
+                    {salesUsers.map((u) => (
+                      <option key={u.codigo} value={u.codigo}>
+                        {u.name} ({u.email})
+                      </option>
+                    ))}
+                  </select>
+                  {selectedSalesUserFilter && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedSalesUserFilter("");
+                        reload("");
+                      }}
+                      className="gap-1 text-slate-500 hover:text-slate-700"
+                    >
+                      <X className="h-4 w-4" />
+                      Limpiar
+                    </Button>
+                  )}
+                </div>
+              )}
 
+              {/* Botón para ver mis leads (solo para usuarios sales/equipo) */}
+              {isSalesUser && authState?.user?.codigo && (
+                <div className="flex items-center gap-2">
+                  <Badge variant={showingMyLeads ? "default" : "secondary"}>
+                    {showingMyLeads ? "Mis Leads" : "Todos los Leads"}
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (showingMyLeads) {
+                        // Mostrar todos
+                        reload("");
+                      } else {
+                        // Mostrar mis leads
+                        reload(authState?.user?.codigo);
+                      }
+                    }}
+                    className="gap-2"
+                  >
+                    {showingMyLeads ? (
+                      <>
+                        <List className="h-4 w-4" />
+                        Ver Todos
+                      </>
+                    ) : (
+                      <>
+                        <User className="h-4 w-4" />
+                        Ver Mis Leads
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Indicador de sincronización de Google Calendar */}
+            <div className="flex flex-col gap-2 mt-2">
+              {calendarStatus.loading ? (
+                <div className="flex items-center gap-2 text-sm text-slate-500">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Verificando calendario...</span>
+                </div>
+              ) : calendarStatus.connected ? (
+                <>
+                  <div
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-green-50 text-green-700 border border-green-200"
+                    title={`Sincronizado con ${
+                      calendarStatus.google_email || "Google Calendar"
+                    }`}
+                  >
+                    {/* Icono de Google */}
+                    <svg
+                      className="h-4 w-4"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4"
+                      />
+                      <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853"
+                      />
+                      <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        fill="#FBBC05"
+                      />
+                      <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335"
+                      />
+                    </svg>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Calendar sincronizado</span>
+                    {calendarStatus.google_email && (
+                      <span className="text-xs opacity-75">
+                        ({calendarStatus.google_email})
+                      </span>
+                    )}
+                  </div>
+                  <Button
+                    onClick={handleViewAvailability}
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 w-fit"
+                  >
+                    <Calendar className="h-4 w-4" />
+                    Ver mis horas disponibles
+                  </Button>
+                </>
+              ) : (
+                <button
+                  onClick={handleSyncCalendar}
+                  disabled={syncingCalendar}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-slate-700 border-2 border-slate-300 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed group"
+                  title="Sincronizar con Google Calendar"
+                >
+                  {syncingCalendar ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Conectando...</span>
+                    </>
+                  ) : (
+                    <>
+                      {/* Icono de Google */}
+                      <svg
+                        className="h-5 w-5 transition-transform group-hover:scale-110"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                          fill="#4285F4"
+                        />
+                        <path
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                          fill="#34A853"
+                        />
+                        <path
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                          fill="#FBBC05"
+                        />
+                        <path
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                          fill="#EA4335"
+                        />
+                      </svg>
+                      <span className="font-semibold">
+                        Sincronizar Calendar
+                      </span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
             {/* Selector de campaña para métricas */}
             {leadOrigins.length > 0 && (
               <div className="flex items-center gap-2 mt-3">
@@ -539,6 +1050,22 @@ function CrmContent() {
                           </div>
                           <div className="col-span-2 flex items-center justify-end">
                             <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                aria-label={`Asignar lead ${p.nombre}`}
+                                title="Asignar a usuario"
+                                onClick={() => {
+                                  setLeadToAssign({
+                                    codigo: p.id,
+                                    nombre: p.nombre,
+                                  });
+                                  setAssignModalOpen(true);
+                                  loadAllUsers();
+                                }}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                              >
+                                <UserPlus className="h-4 w-4" />
+                              </button>
                               <Link
                                 href={`/admin/crm/booking/${encodeURIComponent(
                                   p.id
@@ -690,6 +1217,150 @@ function CrmContent() {
         leadName={deleteTarget?.nombre || ""}
         onDeleted={reload}
       />
+
+      {/* Modal de Disponibilidad del Calendario */}
+      <Dialog open={availabilityOpen} onOpenChange={setAvailabilityOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Disponibilidad del Calendario</DialogTitle>
+            <DialogDescription>
+              {availability?.google_email &&
+                `Mostrando disponibilidad de ${availability.google_email}`}
+            </DialogDescription>
+          </DialogHeader>
+          {availabilityLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+            </div>
+          ) : availability ? (
+            renderCalendar()
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              No se pudo cargar la disponibilidad del calendario
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Asignación de Lead */}
+      <Dialog open={assignModalOpen} onOpenChange={setAssignModalOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[600px] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Asignar Lead a Usuario</DialogTitle>
+            <DialogDescription>
+              {leadToAssign && `Asignando: ${leadToAssign.nombre}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
+            {/* Buscador */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Buscar por nombre o email..."
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Lista de usuarios */}
+            <div className="flex-1 overflow-y-auto border rounded-md">
+              {usersLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {allUsers
+                    .filter((user) => user.role === "sales")
+                    .filter((user) => {
+                      const query = userSearchQuery.toLowerCase();
+                      return (
+                        user.name.toLowerCase().includes(query) ||
+                        user.email.toLowerCase().includes(query)
+                      );
+                    })
+                    .map((user) => (
+                      <button
+                        key={user.codigo}
+                        onClick={() => setSelectedUserForAssign(user.codigo)}
+                        className={`w-full p-4 text-left hover:bg-slate-50 transition-colors ${
+                          selectedUserForAssign === user.codigo
+                            ? "bg-blue-50 border-l-4 border-blue-500"
+                            : ""
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
+                            <User className="h-5 w-5 text-slate-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-slate-900">
+                                {user.name}
+                              </p>
+                              <Badge
+                                variant="secondary"
+                                className="text-xs"
+                              >
+                                Ventas
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-slate-500 truncate">
+                              {user.email}
+                            </p>
+                          </div>
+                          {selectedUserForAssign === user.codigo && (
+                            <div className="text-blue-600">✓</div>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  {allUsers
+                    .filter((user) => user.role === "sales")
+                    .filter((user) => {
+                      const query = userSearchQuery.toLowerCase();
+                      return (
+                        user.name.toLowerCase().includes(query) ||
+                        user.email.toLowerCase().includes(query)
+                      );
+                    }).length === 0 && (
+                    <div className="text-center py-12 text-slate-500">
+                      No se encontraron usuarios de ventas
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAssignModalOpen(false);
+                setLeadToAssign(null);
+                setSelectedUserForAssign("");
+                setUserSearchQuery("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAssignLead}
+              disabled={!selectedUserForAssign || assigning}
+            >
+              {assigning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Asignando...
+                </>
+              ) : (
+                "Asignar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

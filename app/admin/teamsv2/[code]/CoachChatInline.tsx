@@ -1801,7 +1801,14 @@ export default function CoachChatInline({
     try {
       if (chatId == null) return;
       const key = `chatLastReadById:coach:${String(chatId)}`;
-      localStorage.setItem(key, String(Date.now()));
+      const timestamp = Date.now();
+      localStorage.setItem(key, String(timestamp));
+      console.log("[Chat] 📖 MARCANDO COMO LEÍDO", {
+        chatId,
+        role,
+        timestamp: new Date(timestamp).toISOString(),
+        stack: new Error().stack?.split("\n").slice(1, 4).join("\n"),
+      });
       // Reiniciar contador persistente de no leídos por chatId
       try {
         const unreadKey = `chatUnreadById:${role}:${String(chatId)}`;
@@ -2315,7 +2322,11 @@ export default function CoachChatInline({
               });
               window.dispatchEvent(evtRefresh);
             } catch {}
-            markRead();
+            // ⚠️ COMENTADO: No marcar automáticamente como leído al recibir mensaje
+            // markRead();
+            console.log(
+              "[Chat] ⚠️ markRead() NO ejecutado automáticamente al recibir mensaje"
+            );
             // dbg("mapped incoming", {
             //   id: newMsg.id,
             //   sender,
@@ -2489,6 +2500,11 @@ export default function CoachChatInline({
         const sio = sioRef.current;
         const current = chatIdRef.current ?? chatId;
         if (!sio || current == null) return;
+        console.log("[Chat] 🔄 POLLING ejecutándose", {
+          chatId: current,
+          role,
+          timeSinceLastRealtime: since,
+        });
         sio.emit("chat.join", { id_chat: current }, (ack: any) => {
           try {
             if (!ack || ack.success === false) return;
@@ -2878,7 +2894,29 @@ export default function CoachChatInline({
 
           if (Array.isArray(ack?.data)) {
             console.log("--- LISTA DE CHATS RECIBIDA DEL SERVIDOR ---");
+
+            // DETECTAR CONVERSACIONES DUPLICADAS
+            const chatIds = new Map<string, number>();
+            const duplicates: any[] = [];
             ack.data.forEach((c: any, i: number) => {
+              const id = String(c?.id_chat ?? c?.id ?? "");
+              if (id) {
+                if (chatIds.has(id)) {
+                  duplicates.push({
+                    id,
+                    index: i,
+                    previousIndex: chatIds.get(id),
+                  });
+                  console.error("🚨 CONVERSACIÓN DUPLICADA DETECTADA:", {
+                    id_chat: id,
+                    indice_actual: i,
+                    indice_previo: chatIds.get(id),
+                    chat_actual: c,
+                  });
+                }
+                chatIds.set(id, i);
+              }
+
               // Resolver nombre del contacto desde otros_participantes / my_participante_nombre
               const arr = Array.isArray((c as any)?.otros_participantes)
                 ? (c as any).otros_participantes
@@ -2904,6 +2942,15 @@ export default function CoachChatInline({
                 resolved_contact_name: contactName,
               });
             });
+
+            if (duplicates.length > 0) {
+              console.error("🚨🚨🚨 RESUMEN DE DUPLICADOS:", {
+                total_duplicados: duplicates.length,
+                duplicados: duplicates,
+              });
+            } else {
+              console.log("✅ No se detectaron conversaciones duplicadas");
+            }
             console.log("--------------------------------------------");
 
             // Usar el nombre del contacto del chat activo (si existe); de lo contrario, el primero

@@ -3,43 +3,20 @@ import React from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { createLeadSnapshot, getLead } from "@/app/admin/crm/api";
-import {
-  CloseSaleForm,
-  type CloseSaleInput,
-} from "../../components/CloseSaleForm2";
-import { CallFlowManager } from "@/app/admin/crm/components/CallFlowManager";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { type CloseSaleInput } from "../../components/CloseSaleForm2";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Loader2, Mail, Phone, Tags, Calendar } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { SalePreview } from "@/app/admin/crm/components/SalePreview";
 import { toast } from "@/components/ui/use-toast";
 import { StageBadge } from "@/app/admin/crm/components/StageBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabResumen } from "./components/TabResumen";
+import { TabSeguimiento } from "./components/TabSeguimiento";
+import { TabVenta } from "./components/TabVenta";
+import { TabNotas } from "./components/TabNotas";
 
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   return (
@@ -909,436 +886,48 @@ function Content({ id }: { id: string }) {
         </TabsList>
 
         <TabsContent value="resumen" className="mt-6">
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-            <div className="xl:col-span-2 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Resumen</CardTitle>
-                  <CardDescription>Datos básicos del contacto</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 gap-3 text-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Mail className="h-4 w-4 text-muted-foreground" />
-                      <span className="truncate">{p.email || "—"}</span>
-                    </div>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Phone className="h-4 w-4 text-muted-foreground" />
-                      <span className="truncate">{p.phone || "—"}</span>
-                    </div>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Tags className="h-4 w-4 text-muted-foreground" />
-                      <span className="truncate">{p.source || "booking"}</span>
-                    </div>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="truncate">
-                        Registrado: {fmtDate(record.created_at || p.created_at)}
-                      </span>
-                    </div>
-
-                    <div className="pt-2 border-t border-border text-xs text-muted-foreground">
-                      Detalle
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Instagram</span>
-                        <span className="truncate">
-                          {p.instagram_user || p.instagramUser || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Programa</span>
-                        <span className="truncate">
-                          {(draft as any)?.program ||
-                            effectiveSalePayload?.program ||
-                            p.program ||
-                            salePayload?.program ||
-                            "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-start justify-between gap-3">
-                        <span className="text-muted-foreground">Bonos</span>
-                        <span className="flex flex-wrap justify-end gap-1">
-                          {bonusesList.length ? (
-                            bonusesList.map((b) => (
-                              <Badge key={b} variant="secondary">
-                                {b}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="truncate">—</span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Presupuesto mensual
-                        </span>
-                        <span className="truncate">
-                          {(p.monthly_budget ?? p.monthlyBudget) === null ||
-                          (p.monthly_budget ?? p.monthlyBudget) === undefined
-                            ? "—"
-                            : String(p.monthly_budget ?? p.monthlyBudget)}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Plataforma llamada
-                        </span>
-                        <span className="truncate">
-                          {p.platform_call || p.platformCall || "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Resultado llamada
-                        </span>
-                        <span className="truncate">
-                          {callOutcomeLabel(
-                            p.call_outcome || p.callOutcome || p.call?.outcome
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Pago</span>
-                        <span className="truncate">
-                          {p.payment_status
-                            ? paymentStatusLabel(p.payment_status)
-                            : statusLabel}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Monto</span>
-                        <span className="truncate">
-                          {(p.payment_amount ??
-                            effectiveSalePayload?.payment?.amount) === null ||
-                          (p.payment_amount ??
-                            effectiveSalePayload?.payment?.amount) === undefined
-                            ? "—"
-                            : String(
-                                p.payment_amount ??
-                                  effectiveSalePayload?.payment?.amount
-                              )}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Próximo cobro
-                        </span>
-                        <span className="truncate">
-                          {p.next_charge_date ||
-                          effectiveSalePayload?.payment?.nextChargeDate
-                            ? fmtDate(
-                                p.next_charge_date ||
-                                  effectiveSalePayload?.payment?.nextChargeDate
-                              )
-                            : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">Plan</span>
-                        <span className="truncate">{planSummary}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Recordatorios
-                        </span>
-                        <span className="truncate">
-                          {Array.isArray(p.reminders)
-                            ? p.reminders.length
-                            : Array.isArray(p.call?.reminders)
-                            ? p.call.reminders.length
-                            : 0}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Estado del lead</CardTitle>
-                  <CardDescription>
-                    Etapa del pipeline + estado comercial
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-4">
-                    <div className="grid gap-1">
-                      <Label htmlFor="lead-stage">Etapa</Label>
-                      <Select
-                        value={leadStatus}
-                        onValueChange={(next) => {
-                          applyRecordPatch({ status: next });
-                        }}
-                      >
-                        <SelectTrigger id="lead-stage" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="new">Nuevo</SelectItem>
-                          <SelectItem value="contacted">Contactado</SelectItem>
-                          <SelectItem value="qualified">Calificado</SelectItem>
-                          <SelectItem value="won">Ganado</SelectItem>
-                          <SelectItem value="lost">Perdido</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="grid gap-1">
-                      <Label htmlFor="lead-disposition">Estado comercial</Label>
-                      <Select
-                        value={leadDisposition || "__empty__"}
-                        onValueChange={(next) => {
-                          applyRecordPatch({
-                            lead_disposition:
-                              next === "__empty__" ? null : next,
-                          });
-                        }}
-                      >
-                        <SelectTrigger id="lead-disposition" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__empty__">—</SelectItem>
-                          <SelectItem value="interesado">Interesado</SelectItem>
-                          <SelectItem value="en_seguimiento">
-                            En seguimiento
-                          </SelectItem>
-                          <SelectItem value="pendiente_pago">
-                            Pendiente de pago
-                          </SelectItem>
-                          <SelectItem value="reagendar">Reagendar</SelectItem>
-                          <SelectItem value="no_responde">
-                            No responde
-                          </SelectItem>
-                          <SelectItem value="no_califica">
-                            No califica
-                          </SelectItem>
-                          <SelectItem value="no_interesado">
-                            No interesado
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    Se guarda al presionar “Guardar cambios”.
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+          <TabResumen
+            p={p}
+            record={record}
+            salePayload={salePayload}
+            effectiveSalePayload={effectiveSalePayload}
+            draft={draft}
+            leadStatus={leadStatus}
+            leadDisposition={leadDisposition}
+            statusLabel={statusLabel}
+            planSummary={planSummary}
+            bonusesList={bonusesList}
+            fmtDate={fmtDate}
+            callOutcomeLabel={callOutcomeLabel}
+            paymentStatusLabel={paymentStatusLabel}
+            applyRecordPatch={applyRecordPatch}
+          />
         </TabsContent>
 
         <TabsContent value="seguimiento" className="mt-6">
-          <CallFlowManager
-            leadCodigo={id}
-            payload={p}
-            persistMode="local"
-            onSaved={(nextCall) => {
-              if (!nextCall) return;
-
-              const toMidnightIso = (date?: string | null) => {
-                if (!date) return null;
-                const s = String(date);
-                if (s.includes("T")) return s;
-                try {
-                  return new Date(`${s}T00:00:00.000Z`).toISOString();
-                } catch {
-                  return s;
-                }
-              };
-
-              applyRecordPatch({
-                call: nextCall,
-                call_outcome: nextCall?.outcome ?? null,
-                call_result_at: nextCall?.result_at ?? null,
-                call_reschedule_date: toMidnightIso(
-                  nextCall?.reschedule?.date ?? null
-                ),
-                call_reschedule_time: nextCall?.reschedule?.time ?? null,
-                call_negotiation_active: nextCall?.negotiation?.active ? 1 : 0,
-                call_negotiation_until: nextCall?.negotiation?.until ?? null,
-                reminders: Array.isArray(nextCall?.reminders)
-                  ? nextCall.reminders
-                  : [],
-                ...(nextCall?.notes !== undefined
-                  ? { text_messages: nextCall?.notes ?? null }
-                  : {}),
-              });
-            }}
+          <TabSeguimiento
+            id={id}
+            p={p}
+            applyRecordPatch={applyRecordPatch}
           />
         </TabsContent>
 
         <TabsContent value="venta" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Venta</CardTitle>
-              <CardDescription>Cierre de venta dentro del lead</CardDescription>
-              <CardAction>
-                <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="secondary">Vista previa</Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-                    <DialogHeader>
-                      <DialogTitle>Vista previa / contrato</DialogTitle>
-                    </DialogHeader>
-                    <SalePreview
-                      payload={effectiveSalePayload}
-                      draft={draft || undefined}
-                      leadCodigo={id}
-                      entity="booking"
-                      persistMode="local"
-                      title="Contrato / resumen"
-                    />
-                  </DialogContent>
-                </Dialog>
-              </CardAction>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                Pago con reserva:{" "}
-                <span className="text-foreground">
-                  {hasReserva ? "Sí" : "No"}
-                </span>
-                {hasReserva ? (
-                  <>
-                    {" "}
-                    · Monto reserva:{" "}
-                    <span className="text-foreground">
-                      {String(reserveAmountRaw ?? "—")}
-                    </span>
-                  </>
-                ) : null}
-              </div>
-              <CloseSaleForm
-                mode="edit"
-                leadCodigo={id}
-                entity="booking"
-                initial={initial}
-                autoSave={false}
-                persistMode="local"
-                onChange={(f: CloseSaleInput) => setDraft({ ...f })}
-                onPaymentProofChange={setPaymentProof}
-                onSalePayloadChange={setSaleDraftPayload}
-                onDone={() => {
-                  toast({
-                    title: "Listo para guardar",
-                    description:
-                      "Estos cambios se guardarán al presionar “Guardar cambios”.",
-                  });
-                }}
-              />
-            </CardContent>
-          </Card>
+          <TabVenta
+            id={id}
+            effectiveSalePayload={effectiveSalePayload}
+            draft={draft}
+            initial={initial}
+            hasReserva={hasReserva}
+            reserveAmountRaw={reserveAmountRaw}
+            setDraft={setDraft}
+            setPaymentProof={setPaymentProof}
+            setSaleDraftPayload={setSaleDraftPayload}
+          />
         </TabsContent>
 
         <TabsContent value="notas" className="mt-6">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notas</CardTitle>
-                <CardDescription>Notas de venta y mensajes</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4 text-sm">
-                  <div>
-                    <div className="text-xs font-medium text-slate-600">
-                      Notas de venta
-                    </div>
-                    <div className="mt-1 rounded-md border border-slate-200 bg-slate-50 p-3 whitespace-pre-wrap">
-                      {String(p.sale_notes ?? p.saleNotes ?? "").trim() || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-medium text-slate-600">
-                      Mensajes / notas de llamada
-                    </div>
-                    <div className="mt-1 rounded-md border border-slate-200 bg-slate-50 p-3 whitespace-pre-wrap">
-                      {String(p.text_messages ?? p.textMessages ?? "").trim() ||
-                        "—"}
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Recordatorios y reagenda</CardTitle>
-                <CardDescription>
-                  Resumen rápido del seguimiento
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const reminders = Array.isArray(p.reminders)
-                    ? p.reminders
-                    : Array.isArray(p.call?.reminders)
-                    ? p.call.reminders
-                    : [];
-
-                  const reagendaDate =
-                    p.call_reschedule_date || p.call?.reschedule?.date || null;
-                  const reagendaTime =
-                    p.call_reschedule_time || p.call?.reschedule?.time || null;
-
-                  return (
-                    <div className="space-y-4 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Reagendado
-                        </span>
-                        <span className="font-medium">
-                          {reagendaDate || reagendaTime
-                            ? `${String(reagendaDate || "").slice(0, 10)}${
-                                reagendaTime ? ` ${String(reagendaTime)}` : ""
-                              }`.trim()
-                            : "—"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
-                          Recordatorios
-                        </span>
-                        <span className="font-medium">{reminders.length}</span>
-                      </div>
-                      <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
-                        {reminders.length ? (
-                          <ul className="space-y-2">
-                            {reminders
-                              .slice(0, 6)
-                              .map((r: any, idx: number) => (
-                                <li key={idx} className="text-sm">
-                                  {typeof r === "string"
-                                    ? r
-                                    : JSON.stringify(r)}
-                                </li>
-                              ))}
-                            {reminders.length > 6 ? (
-                              <li className="text-xs text-slate-500">
-                                +{reminders.length - 6} más…
-                              </li>
-                            ) : null}
-                          </ul>
-                        ) : (
-                          <span className="text-slate-600">—</span>
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        Para editar seguimiento/recordatorios, usa la pestaña
-                        “Seguimiento”.
-                      </div>
-                    </div>
-                  );
-                })()}
-              </CardContent>
-            </Card>
-          </div>
+          <TabNotas p={p} />
         </TabsContent>
       </Tabs>
     </div>
