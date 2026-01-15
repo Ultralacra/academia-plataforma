@@ -1,6 +1,12 @@
 "use client";
 import React from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 interface TabNotasProps {
   p: any;
@@ -40,8 +46,7 @@ export function TabNotas({ p }: TabNotasProps) {
                 Mensajes / notas de llamada
               </div>
               <div className="mt-1 rounded-md border border-slate-200 bg-slate-50 p-3 whitespace-pre-wrap">
-                {String(p.text_messages ?? p.textMessages ?? "").trim() ||
-                  "—"}
+                {String(p.text_messages ?? p.textMessages ?? "").trim() || "—"}
               </div>
             </div>
           </div>
@@ -51,16 +56,12 @@ export function TabNotas({ p }: TabNotasProps) {
       <Card>
         <CardHeader>
           <CardTitle>Recordatorios y reagenda</CardTitle>
-          <CardDescription>
-            Resumen rápido del seguimiento
-          </CardDescription>
+          <CardDescription>Resumen rápido del seguimiento</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4 text-sm">
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">
-                Reagendado
-              </span>
+              <span className="text-muted-foreground">Reagendado</span>
               <span className="font-medium">
                 {reagendaDate || reagendaTime
                   ? `${String(reagendaDate || "").slice(0, 10)}${
@@ -70,23 +71,17 @@ export function TabNotas({ p }: TabNotasProps) {
               </span>
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">
-                Recordatorios
-              </span>
+              <span className="text-muted-foreground">Recordatorios</span>
               <span className="font-medium">{reminders.length}</span>
             </div>
             <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
               {reminders.length ? (
                 <ul className="space-y-2">
-                  {reminders
-                    .slice(0, 6)
-                    .map((r: any, idx: number) => (
-                      <li key={idx} className="text-sm">
-                        {typeof r === "string"
-                          ? r
-                          : JSON.stringify(r)}
-                      </li>
-                    ))}
+                  {reminders.slice(0, 6).map((r: any, idx: number) => (
+                    <li key={idx} className="text-sm">
+                      {typeof r === "string" ? r : JSON.stringify(r)}
+                    </li>
+                  ))}
                   {reminders.length > 6 ? (
                     <li className="text-xs text-slate-500">
                       +{reminders.length - 6} más…

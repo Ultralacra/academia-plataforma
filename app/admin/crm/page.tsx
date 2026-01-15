@@ -105,7 +105,8 @@ function CrmContent() {
   const [salesUsers, setSalesUsers] = useState<
     Array<{ codigo: string; name: string; email: string }>
   >([]);
-  const [selectedSalesUserFilter, setSelectedSalesUserFilter] = useState<string>("");
+  const [selectedSalesUserFilter, setSelectedSalesUserFilter] =
+    useState<string>("");
   const [salesUsersLoading, setSalesUsersLoading] = useState(false);
 
   // Determinar si el usuario actual es admin o sales
@@ -176,10 +177,12 @@ function CrmContent() {
       // Si hay un filtro de usuario (para admin filtrando por sales user)
       // o si es un usuario sales viendo sus propios leads
       const filterCodigo = userCodigoFilter || selectedSalesUserFilter;
-      
+
       if (filterCodigo) {
         // Usar endpoint de leads por usuario
-        const response = await apiFetch<{ data: Lead[] }>(`/leads/user/${filterCodigo}`);
+        const response = await apiFetch<{ data: Lead[] }>(
+          `/leads/user/${filterCodigo}`
+        );
         items = response.data || [];
         setShowingMyLeads(true);
       } else {
@@ -222,9 +225,7 @@ function CrmContent() {
       const response = await apiFetch<{ data: any[] }>("/users?pageSize=1000");
       const usersData = response?.data || [];
       // Filtrar solo usuarios con role "sales"
-      const salesOnly = usersData.filter(
-        (u: any) => u.role === "sales"
-      );
+      const salesOnly = usersData.filter((u: any) => u.role === "sales");
       setSalesUsers(salesOnly);
     } catch (e: any) {
       setSalesUsers([]);
@@ -642,7 +643,7 @@ function CrmContent() {
                 <span className="inline-block w-2 h-2 rounded-full bg-blue-600" />{" "}
                 CRM
               </h1>
-              
+
               {/* Filtro de leads por usuario sales (solo para admin) */}
               {isAdmin && (
                 <div className="flex items-center gap-2">
@@ -1299,10 +1300,7 @@ function CrmContent() {
                               <p className="font-medium text-slate-900">
                                 {user.name}
                               </p>
-                              <Badge
-                                variant="secondary"
-                                className="text-xs"
-                              >
+                              <Badge variant="secondary" className="text-xs">
                                 Ventas
                               </Badge>
                             </div>

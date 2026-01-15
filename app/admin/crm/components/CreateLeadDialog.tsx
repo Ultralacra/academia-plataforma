@@ -106,9 +106,7 @@ function CreateLeadForm({ onCreated }: { onCreated: () => void }) {
       );
       const usersData = response?.data || [];
       // Filtrar solo usuarios con role "sales"
-      const salesUsers = usersData.filter(
-        (u: any) => u.role === "sales"
-      );
+      const salesUsers = usersData.filter((u: any) => u.role === "sales");
       setUsers(Array.isArray(salesUsers) ? salesUsers : []);
     } catch (e: any) {
       setUsers([]);
@@ -372,10 +370,7 @@ function CreateLeadForm({ onCreated }: { onCreated: () => void }) {
                               <p className="font-medium text-slate-900">
                                 {user.name}
                               </p>
-                              <Badge
-                                variant="secondary"
-                                className="text-xs"
-                              >
+                              <Badge variant="secondary" className="text-xs">
                                 Ventas
                               </Badge>
                             </div>
@@ -390,13 +385,13 @@ function CreateLeadForm({ onCreated }: { onCreated: () => void }) {
                       </button>
                     ))}
                   {users.filter((user) => {
-                      const query = userSearchQuery.toLowerCase();
-                      return (
-                        user.name.toLowerCase().includes(query) ||
-                        user.email.toLowerCase().includes(query) ||
-                        user.role.toLowerCase().includes(query)
-                      );
-                    }).length === 0 && (
+                    const query = userSearchQuery.toLowerCase();
+                    return (
+                      user.name.toLowerCase().includes(query) ||
+                      user.email.toLowerCase().includes(query) ||
+                      user.role.toLowerCase().includes(query)
+                    );
+                  }).length === 0 && (
                     <div className="text-center py-12 text-slate-500">
                       No se encontraron usuarios de ventas
                     </div>

@@ -905,11 +905,7 @@ function Content({ id }: { id: string }) {
         </TabsContent>
 
         <TabsContent value="seguimiento" className="mt-6">
-          <TabSeguimiento
-            id={id}
-            p={p}
-            applyRecordPatch={applyRecordPatch}
-          />
+          <TabSeguimiento id={id} p={p} applyRecordPatch={applyRecordPatch} />
         </TabsContent>
 
         <TabsContent value="venta" className="mt-6">

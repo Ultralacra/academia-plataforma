@@ -1,9 +1,21 @@
 "use client";
 import React from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Mail, Phone, Tags, Calendar } from "lucide-react";
 
 interface TabResumenProps {
@@ -154,9 +166,7 @@ export function TabResumen({
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    Próximo cobro
-                  </span>
+                  <span className="text-muted-foreground">Próximo cobro</span>
                   <span className="truncate">
                     {p.next_charge_date ||
                     effectiveSalePayload?.payment?.nextChargeDate
@@ -172,9 +182,7 @@ export function TabResumen({
                   <span className="truncate">{planSummary}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    Recordatorios
-                  </span>
+                  <span className="text-muted-foreground">Recordatorios</span>
                   <span className="truncate">
                     {Array.isArray(p.reminders)
                       ? p.reminders.length
@@ -224,8 +232,7 @@ export function TabResumen({
                   value={leadDisposition || "__empty__"}
                   onValueChange={(next) => {
                     applyRecordPatch({
-                      lead_disposition:
-                        next === "__empty__" ? null : next,
+                      lead_disposition: next === "__empty__" ? null : next,
                     });
                   }}
                 >
@@ -242,15 +249,9 @@ export function TabResumen({
                       Pendiente de pago
                     </SelectItem>
                     <SelectItem value="reagendar">Reagendar</SelectItem>
-                    <SelectItem value="no_responde">
-                      No responde
-                    </SelectItem>
-                    <SelectItem value="no_califica">
-                      No califica
-                    </SelectItem>
-                    <SelectItem value="no_interesado">
-                      No interesado
-                    </SelectItem>
+                    <SelectItem value="no_responde">No responde</SelectItem>
+                    <SelectItem value="no_califica">No califica</SelectItem>
+                    <SelectItem value="no_interesado">No interesado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

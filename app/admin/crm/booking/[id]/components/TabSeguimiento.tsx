@@ -8,7 +8,11 @@ interface TabSeguimientoProps {
   applyRecordPatch: (patch: Record<string, any>) => void;
 }
 
-export function TabSeguimiento({ id, p, applyRecordPatch }: TabSeguimientoProps) {
+export function TabSeguimiento({
+  id,
+  p,
+  applyRecordPatch,
+}: TabSeguimientoProps) {
   return (
     <CallFlowManager
       leadCodigo={id}
