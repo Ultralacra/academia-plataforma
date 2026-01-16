@@ -210,7 +210,8 @@ function normalizePaymentStatus(input: unknown): string {
 function formatPaymentStatusLabel(input: unknown): string {
   const s = normalizePaymentStatus(input);
   if (!s) return "—";
-  return s.replace(/_/g, " ");
+  // Reemplaza _ por espacio y capitaliza cada palabra
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function getStatusChipClass(status?: string | null) {
@@ -1044,7 +1045,9 @@ function PaymentsContent() {
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Todos" />
+                  <SelectValue placeholder="Todos">
+                    {estatus ? formatPaymentStatusLabel(estatus) : "Todos"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__ALL__">Todos</SelectItem>
@@ -1055,7 +1058,7 @@ function PaymentsContent() {
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="pagado">pagado</SelectItem>
+                    <SelectItem value="pagado">Pagado</SelectItem>
                   )}
                 </SelectContent>
               </Select>
@@ -1800,7 +1803,22 @@ function PaymentsContent() {
                                         }}
                                       >
                                         <SelectTrigger className="h-8 w-[190px]">
-                                          <SelectValue placeholder="Estatus" />
+                                          <SelectValue placeholder="Estatus">
+                                            {value ? (
+                                              <span
+                                                className={
+                                                  "inline-flex items-center rounded-full border px-2 py-0.5 text-xs " +
+                                                  getStatusChipClass(value)
+                                                }
+                                              >
+                                                {formatPaymentStatusLabel(
+                                                  value
+                                                )}
+                                              </span>
+                                            ) : (
+                                              "Estatus"
+                                            )}
+                                          </SelectValue>
                                         </SelectTrigger>
                                         <SelectContent>
                                           {opts.map((s) => (

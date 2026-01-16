@@ -21,6 +21,7 @@ import {
   Check,
   ChevronUp,
   ChevronDown,
+  FilePlus2,
 } from "lucide-react";
 import {
   Popover,
@@ -42,6 +43,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CreateTicketModal } from "@/app/admin/tickets-board/CreateTicketModal";
 
 type Sender = "admin" | "alumno" | "coach";
 
@@ -161,6 +163,7 @@ export default function ChatRealtime({
   const phaseOptions = ["ONBOARDING", "F1", "F2", "F3", "F4", "F5"];
 
   const [ticketModalOpen, setTicketModalOpen] = React.useState(false);
+  const [manualTicketModalOpen, setManualTicketModalOpen] = React.useState(false);
   const [ticketTitle, setTicketTitle] = React.useState("");
   const [ticketDescription, setTicketDescription] = React.useState("");
   const [ticketType, setTicketType] = React.useState<TicketType | "">("");
@@ -3417,16 +3420,28 @@ export default function ChatRealtime({
           </div>
           <div className="flex items-center gap-2">
             {showGenerateTicket && (
-              <button
-                title="Generar ticket (IA)"
-                onClick={generateTicketFromRecent}
-                className="p-2 rounded-full hover:bg-white/10 transition-colors flex items-center gap-2"
-              >
-                <Zap className="w-5 h-5" />
-                <span className="hidden sm:inline text-sm font-medium">
-                  Generar ticket
-                </span>
-              </button>
+              <>
+                <button
+                  title="Generar ticket (IA)"
+                  onClick={generateTicketFromRecent}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors flex items-center gap-2"
+                >
+                  <Zap className="w-5 h-5" />
+                  <span className="hidden sm:inline text-sm font-medium">
+                    Generar ticket
+                  </span>
+                </button>
+                <button
+                  title="Crear ticket manual"
+                  onClick={() => setManualTicketModalOpen(true)}
+                  className="p-2 rounded-full hover:bg-white/10 transition-colors flex items-center gap-2"
+                >
+                  <FilePlus2 className="w-5 h-5" />
+                  <span className="hidden sm:inline text-sm font-medium">
+                    Manual
+                  </span>
+                </button>
+              </>
             )}
             {showFilter && (
               <Popover open={filterOpen} onOpenChange={setFilterOpen}>
@@ -3961,6 +3976,17 @@ export default function ChatRealtime({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal para crear ticket manual - usa el mismo modal del tickets-board */}
+      <CreateTicketModal
+        open={manualTicketModalOpen}
+        onOpenChange={setManualTicketModalOpen}
+        defaultStudentCode={normRoom}
+        onSuccess={() => {
+          setManualTicketModalOpen(false);
+          console.debug("Ticket manual creado exitosamente");
+        }}
+      />
     </>
   );
 }

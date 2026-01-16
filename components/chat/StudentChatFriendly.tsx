@@ -51,6 +51,7 @@ import {
   ArrowLeft,
   CheckCheck,
   Check,
+  FilePlus2,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -63,9 +64,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { CreateTicketModal } from "@/app/admin/tickets-board/CreateTicketModal";
 
 function chatDebug(): boolean {
-  return false;
+  return false; // Debug desactivado
 }
 
 function dbg(...args: any[]) {
@@ -73,6 +75,12 @@ function dbg(...args: any[]) {
     if (!chatDebug()) return;
     console.log("[Chat]", ...args);
   } catch {}
+}
+
+// Log especial para depurar mensajes no leídos (desactivado)
+function logUnread(_context: string, _data: any) {
+  // Desactivado para producción
+  // console.log(`%c[UNREAD DEBUG] ${context}`, 'background: #ff6b6b; color: white; padding: 2px 8px; border-radius: 3px;', data);
 }
 
 export default function StudentChatFriendly({
@@ -202,6 +210,7 @@ export default function StudentChatFriendly({
   const [creatingChat, setCreatingChat] = React.useState(false);
   // Estado del ticket generado por IA
   const [ticketModalOpen, setTicketModalOpen] = React.useState(false);
+  const [manualTicketModalOpen, setManualTicketModalOpen] = React.useState(false);
   const [ticketLoading, setTicketLoading] = React.useState(false);
   const [ticketError, setTicketError] = React.useState<string | null>(null);
   const [ticketData, setTicketData] = React.useState<TicketData | null>(null);
@@ -1574,6 +1583,7 @@ export default function StudentChatFriendly({
   const markRead = React.useCallback(() => {
     try {
       if (chatId == null) return;
+      
       const key = `chatLastReadById:coach:${String(chatId)}`;
       localStorage.setItem(key, String(Date.now()));
       // Reiniciar contador persistente de no leídos por chatId
@@ -1794,13 +1804,7 @@ export default function StudentChatFriendly({
           try {
             lastRealtimeAtRef.current = Date.now();
             const currentChatId = chatIdRef.current;
-            // dbg("event chat.message", {
-            //   id_chat: msg?.id_chat,
-            //   id_mensaje: msg?.id_mensaje ?? msg?.id,
-            //   texto: (msg?.contenido ?? msg?.texto ?? "").slice(0, 140),
-            //   emitter: getEmitter(msg),
-            //   currentChatId,
-            // });
+            
             // Si el mensaje es de otro chat (o no hay chat unido aún), avisa para refrescar y sumar no leídos
             if (
               msg?.id_chat != null &&
@@ -2038,7 +2042,10 @@ export default function StudentChatFriendly({
               });
               window.dispatchEvent(evtRefresh);
             } catch {}
-            markRead();
+            
+            // DESACTIVADO: No marcar automáticamente como leído cuando llega un mensaje
+            // El usuario debe hacer scroll al fondo para marcar como leído
+            // markRead();
             // dbg("mapped incoming", {
             //   id: newMsg.id,
             //   sender,
@@ -2867,15 +2874,18 @@ export default function StudentChatFriendly({
     } catch {}
   }, [connected, role, socketio?.idEquipo, onChatsList]);
 
-  React.useEffect(() => {
-    if (!connected || chatId == null) return;
-    if (typeof document === "undefined") return;
-    if (document.visibilityState !== "visible") return;
-    try {
-      sioRef.current?.emit("chat.read.all", { id_chat: chatId });
-      markRead();
-    } catch {}
-  }, [items.length, connected, chatId]);
+  // DESACTIVADO: Este useEffect marcaba automáticamente como leído cada vez que llegaba un mensaje
+  // Ahora el usuario debe hacer scroll al fondo o click en el chat para marcar como leído manualmente
+  // Se deja comentado por si se necesita reactivar en el futuro
+  // React.useEffect(() => {
+  //   if (!connected || chatId == null) return;
+  //   if (typeof document === "undefined") return;
+  //   if (document.visibilityState !== "visible") return;
+  //   try {
+  //     sioRef.current?.emit("chat.read.all", { id_chat: chatId });
+  //     markRead();
+  //   } catch {}
+  // }, [items.length, connected, chatId]);
 
   // Evitar creación automática en recarga para alumno: solo buscar y unir si existe
   React.useEffect(() => {
@@ -3914,6 +3924,16 @@ export default function StudentChatFriendly({
                   )}
                   {role !== "alumno" && (
                     <button
+                      onClick={() => setManualTicketModalOpen(true)}
+                      className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition"
+                      title="Crear ticket manual"
+                    >
+                      <FilePlus2 className="h-3.5 w-3.5" />
+                      Manual
+                    </button>
+                  )}
+                  {role !== "alumno" && (
+                    <button
                       onClick={() => {
                         if (selectionMode) {
                           setSelectionMode(false);
@@ -4852,6 +4872,15 @@ export default function StudentChatFriendly({
         error={ticketError}
         data={ticketData}
         onConfirm={() => setTicketModalOpen(false)}
+      />
+      {/* Modal para crear ticket manual - usa el mismo modal del tickets-board */}
+      <CreateTicketModal
+        open={manualTicketModalOpen}
+        onOpenChange={setManualTicketModalOpen}
+        defaultStudentCode={room}
+        onSuccess={() => {
+          setManualTicketModalOpen(false);
+        }}
       />
     </>
   );

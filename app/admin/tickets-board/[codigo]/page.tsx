@@ -293,7 +293,7 @@ function TicketDetailContent() {
   if (error) {
     return (
       <div className="p-6">
-        <Button variant="ghost" onClick={() => router.back()} className="mb-4">
+        <Button variant="ghost" onClick={() => router.push("/admin/tickets-board")} className="mb-4">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
@@ -307,7 +307,7 @@ function TicketDetailContent() {
   if (!ticket) {
     return (
       <div className="p-6">
-        <Button variant="ghost" onClick={() => router.back()} className="mb-4">
+        <Button variant="ghost" onClick={() => router.push("/admin/tickets-board")} className="mb-4">
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
@@ -354,7 +354,7 @@ function TicketDetailContent() {
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
-        <Button variant="ghost" onClick={() => router.back()}>
+        <Button variant="ghost" onClick={() => router.push("/admin/tickets-board")}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
