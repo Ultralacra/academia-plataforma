@@ -890,7 +890,11 @@ export default function ChatRealtime({
               return [...prev, newMsg];
             });
             // Si es mi propio mensaje (eco), marcar como leído ANTES del refresh para evitar badge de no leído
-            const isMyMessage = isMyEcho || senderIsMeById || senderIsMineByTipo || sender === currentRole;
+            const isMyMessage =
+              isMyEcho ||
+              senderIsMeById ||
+              senderIsMineByTipo ||
+              sender === currentRole;
             if (isMyMessage) {
               try {
                 markRead();

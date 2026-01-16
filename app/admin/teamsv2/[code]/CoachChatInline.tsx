@@ -2347,7 +2347,12 @@ export default function CoachChatInline({
                 setNewMessagesCount((n) => n + 1);
               }
               // Si es mi mensaje, asegurar que markRead() se ejecute ANTES del refresh
-              if (isMineNow || senderIsMeBySession || senderIsMeById || senderIsMeByTipo) {
+              if (
+                isMineNow ||
+                senderIsMeBySession ||
+                senderIsMeById ||
+                senderIsMeByTipo
+              ) {
                 markRead();
               }
             } catch {}

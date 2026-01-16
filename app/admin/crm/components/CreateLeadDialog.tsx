@@ -28,8 +28,10 @@ type UserType = {
 
 export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
   // Control de qué modal está visible: "create" | "users" | null
-  const [activeModal, setActiveModal] = React.useState<"create" | "users" | null>(null);
-  
+  const [activeModal, setActiveModal] = React.useState<
+    "create" | "users" | null
+  >(null);
+
   // Estados del formulario (persistentes mientras se navega entre modales)
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -42,7 +44,8 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
   // Estados para usuarios
   const [users, setUsers] = React.useState<UserType[]>([]);
   const [usersLoading, setUsersLoading] = React.useState(false);
-  const [selectedUserCodigo, setSelectedUserCodigo] = React.useState<string>("");
+  const [selectedUserCodigo, setSelectedUserCodigo] =
+    React.useState<string>("");
   const [userSearchQuery, setUserSearchQuery] = React.useState("");
 
   // Campañas
@@ -163,7 +166,8 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
             description: `${name.trim()} asignado correctamente`,
           });
         } catch (assignError: any) {
-          let errorMessage = assignError?.message || "No se pudo asignar el lead";
+          let errorMessage =
+            assignError?.message || "No se pudo asignar el lead";
           if (errorMessage.includes("User is not a sales user")) {
             errorMessage = "El usuario seleccionado no es un usuario de ventas";
           }
@@ -280,8 +284,8 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
                   disabled={usersLoading}
                 >
                   {selectedUserCodigo
-                    ? users.find((u) => u.codigo === selectedUserCodigo)?.name ||
-                      "Usuario seleccionado"
+                    ? users.find((u) => u.codigo === selectedUserCodigo)
+                        ?.name || "Usuario seleccionado"
                     : usersLoading
                     ? "Cargando usuarios..."
                     : "Seleccionar usuario (opcional)"}
@@ -318,8 +322,8 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
       </Dialog>
 
       {/* Modal de selección de usuario */}
-      <Dialog 
-        open={activeModal === "users"} 
+      <Dialog
+        open={activeModal === "users"}
         onOpenChange={(open) => {
           if (!open) setActiveModal("create");
         }}
@@ -412,4 +416,3 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
     </>
   );
 }
-
