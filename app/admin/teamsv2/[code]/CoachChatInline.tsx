@@ -1829,12 +1829,6 @@ export default function CoachChatInline({
       const key = `chatLastReadById:coach:${String(chatId)}`;
       const timestamp = Date.now();
       localStorage.setItem(key, String(timestamp));
-      console.log("[Chat] 📖 MARCANDO COMO LEÍDO", {
-        chatId,
-        role,
-        timestamp: new Date(timestamp).toISOString(),
-        stack: new Error().stack?.split("\n").slice(1, 4).join("\n"),
-      });
       // Reiniciar contador persistente de no leídos por chatId
       try {
         const unreadKey = `chatUnreadById:${role}:${String(chatId)}`;
@@ -2532,11 +2526,11 @@ export default function CoachChatInline({
         const sio = sioRef.current;
         const current = chatIdRef.current ?? chatId;
         if (!sio || current == null) return;
-        console.log("[Chat] 🔄 POLLING ejecutándose", {
+        /* console.log("[Chat] 🔄 POLLING ejecutándose", {
           chatId: current,
           role,
           timeSinceLastRealtime: since,
-        });
+        }); */
         sio.emit("chat.join", { id_chat: current }, (ack: any) => {
           try {
             if (!ack || ack.success === false) return;
