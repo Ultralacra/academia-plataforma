@@ -847,26 +847,29 @@ export default function CoachDetailPage({
       });
     }
 
-    // 5. ORDENAR por última actividad (más reciente primero)
-    // CRÍTICO: Esto garantiza que cuando llega un mensaje nuevo, la conversación sube al tope
-    finalResult.sort((a, b) => {
-      // Priorizar conversaciones con mensajes no leídos
-      if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
-      if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
-
-      // Si ambas son NO leídas, ordenar por timestamp de mensaje más reciente
-      if (a.unreadCount > 0 && b.unreadCount > 0) {
-        return (b.lastAt || 0) - (a.lastAt || 0);
-      }
-
-      // Si ambas son LEÍDAS, ordenar por timestamp de lectura (más recientemente leída primero)
-      // Si no hay readAt, usar lastAt como fallback
-      const aSort = a.readAt || a.lastAt || 0;
-      const bSort = b.readAt || b.lastAt || 0;
-      return bSort - aSort;
-    });
-
-    return finalResult;
+    // 5. Separar no leídas y leídas, cada grupo ordenado por timestamp (más reciente primero)
+    // Así funciona como WhatsApp: cuando abres una no leída, se posiciona por fecha entre las leídas
+    const unreadItems = finalResult
+      .filter((item) => (item.unreadCount || 0) > 0)
+      .sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+    
+    const readItems = finalResult
+      .filter((item) => (item.unreadCount || 0) === 0)
+      .sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+    
+    const sorted = [...unreadItems, ...readItems];
+    
+    // DEBUG: Imprimir lista cuando cambia
+    console.log("[ChatList] Lista actualizada:", sorted.map((item, idx) => ({
+      pos: idx + 1,
+      name: item.name,
+      unread: item.unreadCount > 0,
+      unreadCount: item.unreadCount,
+      lastAt: item.lastAt,
+      lastAtDate: item.lastAt ? new Date(item.lastAt).toISOString() : null,
+    })));
+    
+    return sorted;
   }, [
     chatList,
     teamsList,
@@ -1110,6 +1113,77 @@ export default function CoachDetailPage({
       setChatsLoading(true);
       setRequestListSignal((n) => (n ?? 0) + 1);
     };
+    // Listener para actualizar localmente el snippet cuando el coach envía un mensaje
+    const onMessageSent = (e: any) => {
+      try {
+        const { chatId, text, at } = e?.detail || {};
+        if (chatId == null) return;
+        const chatIdStr = String(chatId);
+        setChatList((prev) => {
+          const next = [...prev];
+          for (let i = 0; i < next.length; i++) {
+            const it = next[i];
+            const itId = String(it?.id_chat ?? it?.id ?? "");
+            if (itId === chatIdStr) {
+              // Actualizar el last_message localmente
+              next[i] = {
+                ...it,
+                last_message: {
+                  ...(it?.last_message || {}),
+                  contenido: text || "",
+                  fecha_envio_local: new Date(at || Date.now()).toISOString(),
+                  fecha_envio: new Date(at || Date.now()).toISOString(),
+                },
+                fecha_ultimo_mensaje: new Date(at || Date.now()).toISOString(),
+                last_message_at: new Date(at || Date.now()).toISOString(),
+              };
+              break;
+            }
+          }
+          return next;
+        });
+        // Forzar recálculo de la vista
+        setReadsBump((n) => n + 1);
+      } catch {}
+    };
+    // Listener para actualizar localmente cuando llega un mensaje entrante (de alumno)
+    // Esto hace que la conversación suba al tope inmediatamente
+    const onMessageReceived = (e: any) => {
+      try {
+        const { chatId, text, at } = e?.detail || {};
+        if (chatId == null) return;
+        const chatIdStr = String(chatId);
+        console.log("[CoachDetailPage] Mensaje recibido, actualizando lastAt:", {
+          chatId: chatIdStr,
+          at,
+        });
+        setChatList((prev) => {
+          const next = [...prev];
+          for (let i = 0; i < next.length; i++) {
+            const it = next[i];
+            const itId = String(it?.id_chat ?? it?.id ?? "");
+            if (itId === chatIdStr) {
+              // Actualizar el last_message localmente para que lastAt se recalcule
+              next[i] = {
+                ...it,
+                last_message: {
+                  ...(it?.last_message || {}),
+                  contenido: text || it?.last_message?.contenido || "",
+                  fecha_envio_local: new Date(at || Date.now()).toISOString(),
+                  fecha_envio: new Date(at || Date.now()).toISOString(),
+                },
+                fecha_ultimo_mensaje: new Date(at || Date.now()).toISOString(),
+                last_message_at: new Date(at || Date.now()).toISOString(),
+              };
+              break;
+            }
+          }
+          return next;
+        });
+        // Forzar recálculo de la vista para reordenar
+        setUnreadBump((n) => n + 1);
+      } catch {}
+    };
     window.addEventListener("storage", onStorage);
     window.addEventListener("chat:last-read-updated", onLastReadUpdated as any);
     window.addEventListener(
@@ -1117,6 +1191,8 @@ export default function CoachDetailPage({
       onUnreadCountUpdated as any
     );
     window.addEventListener("chat:list-refresh", onListRefresh as any);
+    window.addEventListener("chat:message-sent", onMessageSent as any);
+    window.addEventListener("chat:message-received", onMessageReceived as any);
     // const iv = setInterval(() => {
     //   setChatsLoading(true);
     //   setRequestListSignal((n) => (n ?? 0) + 1);
@@ -1132,6 +1208,11 @@ export default function CoachDetailPage({
         onUnreadCountUpdated as any
       );
       window.removeEventListener("chat:list-refresh", onListRefresh as any);
+      window.removeEventListener("chat:message-sent", onMessageSent as any);
+      window.removeEventListener(
+        "chat:message-received",
+        onMessageReceived as any
+      );
       // clearInterval(iv);
     };
   }, []);

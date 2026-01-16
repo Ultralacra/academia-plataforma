@@ -889,6 +889,13 @@ export default function ChatRealtime({
               }
               return [...prev, newMsg];
             });
+            // Si es mi propio mensaje (eco), marcar como leído ANTES del refresh para evitar badge de no leído
+            const isMyMessage = isMyEcho || senderIsMeById || senderIsMineByTipo || sender === currentRole;
+            if (isMyMessage) {
+              try {
+                markRead();
+              } catch {}
+            }
             // Solicitar refresco de listado también cuando llega mensaje del chat actual
             try {
               window.dispatchEvent(
@@ -2572,6 +2579,8 @@ export default function ChatRealtime({
               at: Date.now(),
               pid: effectiveMyParticipantId,
             });
+            // Marcar como leído ANTES de enviar para evitar que el eco se marque como no leído
+            markRead();
             sio.emit("chat.message.send", payload, (ack: any) => {
               try {
                 if (ack && !ack.success) {
@@ -2593,12 +2602,26 @@ export default function ChatRealtime({
                     }
                     return next;
                   });
+                  // Marcar como leído DESPUÉS del ACK para asegurar timestamp posterior
+                  markRead();
+                  // Emitir evento para actualizar el snippet en la lista de chats
+                  try {
+                    window.dispatchEvent(
+                      new CustomEvent("chat:message-sent", {
+                        detail: {
+                          chatId,
+                          text: val,
+                          at: Date.now(),
+                          role: currentRole,
+                        },
+                      })
+                    );
+                  } catch {}
                 }
               } catch {}
             });
           }
         } catch {}
-        markRead();
         return;
       }
 

@@ -441,13 +441,21 @@ export function CoachChatNotifier() {
               })
             );
 
-            // CRÍTICO: Disparar evento para refrescar lista completa y reordenar
-            // Esto garantiza que cuando llega un mensaje, la conversación sube al tope
+            // Disparar evento para actualizar localmente el lastAt del chat
+            // Esto hace que la conversación suba al tope inmediatamente sin esperar al servidor
+            // NO disparamos chat:list-refresh porque eso recarga del API y sobreescribe
+            // el lastAt local, causando que la conversación vuelva a su posición original
+            const msgAt =
+              msg?.fecha_envio_local ||
+              msg?.fecha_envio ||
+              msg?.created_at ||
+              new Date().toISOString();
             window.dispatchEvent(
-              new CustomEvent("chat:list-refresh", {
+              new CustomEvent("chat:message-received", {
                 detail: {
-                  reason: "new-message",
                   chatId: msg.id_chat,
+                  text: msg?.contenido ?? msg?.texto ?? "",
+                  at: new Date(msgAt).getTime(),
                   role: "coach",
                 },
               })

@@ -2255,6 +2255,11 @@ export default function CoachChatInline({
                 "[CoachChatInline] Playing sound for incoming message"
               );
               playNotificationSound();
+            } else {
+              // Es mi propio mensaje (eco), marcar como leído para evitar que aparezca como no leído
+              try {
+                markRead();
+              } catch {}
             }
 
             // logging eliminado
@@ -2341,6 +2346,10 @@ export default function CoachChatInline({
               if (!pinnedToBottomRef.current && !isMineNow) {
                 setNewMessagesCount((n) => n + 1);
               }
+              // Si es mi mensaje, asegurar que markRead() se ejecute ANTES del refresh
+              if (isMineNow || senderIsMeBySession || senderIsMeById || senderIsMeByTipo) {
+                markRead();
+              }
             } catch {}
             // Pedir refresco de listado también cuando llega mensaje del chat actual
             try {
@@ -2352,18 +2361,6 @@ export default function CoachChatInline({
               });
               window.dispatchEvent(evtRefresh);
             } catch {}
-            // ⚠️ COMENTADO: No marcar automáticamente como leído al recibir mensaje
-            // markRead();
-            console.log(
-              "[Chat] ⚠️ markRead() NO ejecutado automáticamente al recibir mensaje"
-            );
-            // dbg("mapped incoming", {
-            //   id: newMsg.id,
-            //   sender,
-            //   at: newMsg.at,
-            //   textLen: (newMsg.text || "").length,
-            //   atts: (newMsg.attachments || []).length,
-            // });
             // No actualizamos myParticipantId a partir de eventos entrantes para evitar desincronización;
             // se establece de forma confiable en JOIN o al ENVIAR un mensaje.
           } catch {}
@@ -3742,6 +3739,8 @@ export default function CoachChatInline({
           // logging eliminado
           return;
         }
+        // Marcar como leído ANTES de enviar para evitar que el eco se marque como no leído
+        markRead();
         sio.emit(
           "chat.message.send",
           {
@@ -3800,11 +3799,26 @@ export default function CoachChatInline({
                   pinnedToBottomRef.current = true;
                   setNewMessagesCount(0);
                 } catch {}
+                // Marcar como leído DESPUÉS del ACK para asegurar que el timestamp
+                // sea posterior al del servidor y evitar marcarse como no leído
+                markRead();
+                // Emitir evento para actualizar el snippet en la lista de chats
+                try {
+                  window.dispatchEvent(
+                    new CustomEvent("chat:message-sent", {
+                      detail: {
+                        chatId: chatIdRef.current,
+                        text: val,
+                        at: Date.now(),
+                        role,
+                      },
+                    })
+                  );
+                } catch {}
               } catch {}
             } catch {}
           }
         );
-        markRead();
       }
 
       // 2) Enviar adjuntos después del mensaje
