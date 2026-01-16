@@ -58,6 +58,12 @@ export type PaymentDetailEnvelope = {
   data: PaymentDetail;
 };
 
+export type PaymentUpsertDetailEnvelope = {
+  code?: number;
+  status?: string;
+  data?: any;
+};
+
 async function fetchJson<T>(pathOrUrl: string, init?: RequestInit): Promise<T> {
   return apiFetch<T>(pathOrUrl, init);
 }
@@ -124,6 +130,22 @@ export async function syncPaymentCliente(
     {
       method: "PUT",
       body: JSON.stringify(body),
+    }
+  );
+}
+
+export async function upsertPaymentDetalle(
+  paymentCodigo: string,
+  detalleCodigo: string,
+  detalle: Partial<PaymentDetailRow>
+): Promise<PaymentUpsertDetailEnvelope> {
+  const safePayment = encodeURIComponent(String(paymentCodigo || "").trim());
+  const safeDetalle = encodeURIComponent(String(detalleCodigo || "").trim());
+  return fetchJson<PaymentUpsertDetailEnvelope>(
+    `/payments/update/payment/${safePayment}/detalle/${safeDetalle}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(detalle ?? {}),
     }
   );
 }

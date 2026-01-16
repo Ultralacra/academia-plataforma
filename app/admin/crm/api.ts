@@ -670,6 +670,13 @@ export interface LeadOrigin {
   config?: any;
   created_at?: string | null;
   updated_at?: string | null;
+  users?: Array<{
+    id?: string | number;
+    codigo: string;
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+  }>;
 }
 
 function unwrapData<T>(raw: any): T {

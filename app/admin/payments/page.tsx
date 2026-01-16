@@ -45,10 +45,12 @@ import {
   getPaymentByCodigo,
   getPayments,
   syncPaymentCliente,
+  upsertPaymentDetalle,
   type PaymentRow,
 } from "./api";
 import { fetchUsers, type SysUser } from "../users/api";
 import { toast } from "@/components/ui/use-toast";
+import { CreditCard } from "lucide-react";
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState<T>(value);
@@ -281,6 +283,20 @@ function PaymentsContent() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
 
+  const [detailEditStatusByKey, setDetailEditStatusByKey] = useState<
+    Record<string, string>
+  >({});
+  const [detailEditConceptByKey, setDetailEditConceptByKey] = useState<
+    Record<string, string>
+  >({});
+  const [detailSavingByKey, setDetailSavingByKey] = useState<
+    Record<string, boolean>
+  >({});
+
+  const detailEditStatusByKeyRef = useRef<Record<string, string>>({});
+  const detailEditConceptByKeyRef = useRef<Record<string, string>>({});
+  const detailSaveTimersRef = useRef<Record<string, number>>({});
+
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncPayment, setSyncPayment] = useState<PaymentRow | null>(null);
   const [syncUserSearch, setSyncUserSearch] = useState("");
@@ -419,6 +435,9 @@ function PaymentsContent() {
     setDetailLoading(true);
     setDetailError(null);
     setDetail(null);
+    setDetailEditStatusByKey({});
+    setDetailEditConceptByKey({});
+    setDetailSavingByKey({});
     try {
       const json = await getPaymentByCodigo(safe);
       setDetail(json?.data ?? null);
@@ -701,6 +720,120 @@ function PaymentsContent() {
     if (estatus && !arr.includes(estatus)) arr.unshift(estatus);
     return arr;
   }, [rows, estatus]);
+
+  useEffect(() => {
+    detailEditStatusByKeyRef.current = detailEditStatusByKey;
+  }, [detailEditStatusByKey]);
+
+  useEffect(() => {
+    detailEditConceptByKeyRef.current = detailEditConceptByKey;
+  }, [detailEditConceptByKey]);
+
+  function getDetailRowKey(d: any) {
+    const k = d?.codigo ?? d?.cuota_codigo ?? d?.id;
+    return String(k ?? "");
+  }
+
+  async function saveDetalle(d: any) {
+    const key = getDetailRowKey(d);
+    if (!key) return;
+
+    const paymentCodigo =
+      String(detail?.codigo ?? detailCodigo ?? "").trim() || null;
+    if (!paymentCodigo) return;
+
+    const nextStatus = String(
+      detailEditStatusByKeyRef.current[key] ?? d?.estatus ?? ""
+    )
+      .trim()
+      .trim();
+
+    const nextConcept = String(
+      detailEditConceptByKeyRef.current[key] ?? d?.concepto ?? ""
+    ).trim();
+    if (!nextStatus) {
+      toast({
+        title: "Selecciona un estatus",
+        description: "El estatus no puede quedar vacío.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDetailSavingByKey((prev) => ({ ...prev, [key]: true }));
+    try {
+      const estatusToSend = String(nextStatus).toLowerCase();
+      const payload = {
+        codigo: d?.codigo ?? null,
+        cuota_codigo: d?.cuota_codigo ?? null,
+        estatus: estatusToSend,
+        monto: d?.monto ?? null,
+        moneda: d?.moneda ?? detail?.moneda ?? null,
+        fecha_pago: d?.fecha_pago ?? null,
+        metodo: d?.metodo ? String(d.metodo) : "",
+        referencia: d?.referencia ? String(d.referencia) : "",
+        concepto: nextConcept || null,
+        notas: d?.notas ?? null,
+      };
+
+      await upsertPaymentDetalle(
+        paymentCodigo,
+        String(d.codigo ?? ""),
+        payload
+      );
+
+      // Optimistic update local
+      setDetail((prev: any) => {
+        if (!prev) return prev;
+        const arr = Array.isArray(prev?.detalles) ? prev.detalles : [];
+        return {
+          ...prev,
+          detalles: arr.map((it: any) => {
+            const itKey = getDetailRowKey(it);
+            if (itKey !== key) return it;
+            return {
+              ...it,
+              estatus: nextStatus,
+              concepto: nextConcept,
+            };
+          }),
+        };
+      });
+
+      // Sin toast en éxito: guardado silencioso para evitar spam.
+
+      // Best-effort refresh from backend (keeps UI consistent)
+      try {
+        const fresh = await getPaymentByCodigo(paymentCodigo);
+        setDetail(fresh?.data ?? null);
+      } catch {
+        // noop
+      }
+    } catch (e: any) {
+      toast({
+        title: "Error al actualizar",
+        description: e?.message || "No se pudo actualizar el estatus",
+        variant: "destructive",
+      });
+    } finally {
+      setDetailSavingByKey((prev) => ({ ...prev, [key]: false }));
+    }
+  }
+
+  function scheduleSaveDetalle(d: any, delayMs: number) {
+    const key = getDetailRowKey(d);
+    if (!key) return;
+
+    const prev = detailSaveTimersRef.current[key];
+    if (prev) {
+      window.clearTimeout(prev);
+    }
+    const t = window.setTimeout(() => {
+      delete detailSaveTimersRef.current[key];
+      void saveDetalle(d);
+    }, Math.max(0, delayMs));
+    detailSaveTimersRef.current[key] = t;
+  }
 
   useEffect(() => {
     // Carga inicial: traer todos los registros una sola vez
@@ -1312,18 +1445,24 @@ function PaymentsContent() {
             setDetailCodigo(null);
             setDetail(null);
             setDetailError(null);
+            setDetailEditStatusByKey({});
+            setDetailEditConceptByKey({});
+            setDetailSavingByKey({});
           }
         }}
       >
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="w-[98vw] sm:max-w-6xl h-[92vh] max-h-[92vh] overflow-hidden flex flex-col top-[4vh] translate-y-0">
           <DialogHeader>
-            <DialogTitle>Detalle de pago</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <CreditCard className="h-4 w-4" />
+              Detalle de pago
+            </DialogTitle>
             <DialogDescription>
               {detailCodigo ? `Código: ${detailCodigo}` : ""}
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="min-h-0 flex-1 pr-2">
+          <div className="min-h-0 flex-1 overflow-y-auto pr-2">
             {detailLoading ? (
               <div className="text-sm text-muted-foreground">
                 Cargando detalle…
@@ -1337,77 +1476,148 @@ function PaymentsContent() {
               <div className="text-sm text-muted-foreground">Sin detalle.</div>
             ) : (
               <div className="space-y-4">
-                <div className="grid gap-2 md:grid-cols-3">
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">Cliente</div>
-                    <div className="text-sm font-medium">
-                      {fixMojibake(
-                        detail.cliente_nombre || detail.cliente_codigo || "—"
-                      )}
-                    </div>
-                    {detail.cliente_nombre && detail.cliente_codigo ? (
+                <div className="rounded-md border bg-card p-3">
+                  <div className="grid gap-x-6 gap-y-2 md:grid-cols-2">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="text-xs text-muted-foreground">
-                        {fixMojibake(detail.cliente_codigo)}
+                        Cliente
+                      </div>
+                      <div className="text-sm font-semibold text-right break-words">
+                        {fixMojibake(
+                          detail.cliente_nombre || detail.cliente_codigo || "—"
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Estatus
+                      </div>
+                      <div className="text-right">
+                        <Badge
+                          variant="outline"
+                          className={getStatusChipClass(detail.estatus)}
+                        >
+                          {detail.estatus || "—"}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {detail.cliente_nombre && detail.cliente_codigo ? (
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="text-xs text-muted-foreground">
+                          Código cliente
+                        </div>
+                        <div className="text-sm text-right break-words">
+                          {fixMojibake(detail.cliente_codigo)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Moneda
+                      </div>
+                      <div className="text-sm text-right">
+                        {detail.moneda || "—"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">Monto</div>
+                      <div className="text-sm font-semibold text-right">
+                        {formatMoney(detail.monto, detail.moneda)}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Reserva
+                      </div>
+                      <div className="text-sm text-right">
+                        {formatMoney(detail.monto_reserva, detail.moneda)}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Nro. cuotas
+                      </div>
+                      <div className="text-sm text-right">
+                        {detail.nro_cuotas ?? "—"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Método
+                      </div>
+                      <div className="text-sm text-right break-words">
+                        {detail.metodo || "—"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Modalidad
+                      </div>
+                      <div className="text-sm text-right break-words">
+                        {detail.modalidad || "—"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Referencia
+                      </div>
+                      <div className="text-sm text-right break-words">
+                        {detail.referencia || "—"}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Creado
+                      </div>
+                      <div className="text-sm text-right">
+                        {formatDateTime(detail.created_at)}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Actualizado
+                      </div>
+                      <div className="text-sm text-right">
+                        {formatDateTime(detail.updated_at)}
+                      </div>
+                    </div>
+
+                    {detail.concepto ? (
+                      <div className="md:col-span-2 flex items-start justify-between gap-3">
+                        <div className="text-xs text-muted-foreground">
+                          Concepto
+                        </div>
+                        <div className="text-sm text-right whitespace-pre-wrap break-words">
+                          {fixMojibake(detail.concepto)}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {detail.notas ? (
+                      <div className="md:col-span-2 flex items-start justify-between gap-3">
+                        <div className="text-xs text-muted-foreground">
+                          Notas
+                        </div>
+                        <div className="text-sm text-right whitespace-pre-wrap break-words">
+                          {fixMojibake(detail.notas)}
+                        </div>
                       </div>
                     ) : null}
                   </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">Monto</div>
-                    <div className="text-sm font-medium">
-                      {formatMoney(detail.monto, detail.moneda)}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Reserva:{" "}
-                      {formatMoney(detail.monto_reserva, detail.moneda)}
-                    </div>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">Estatus</div>
-                    <div className="mt-1">
-                      <Badge
-                        variant="outline"
-                        className={getStatusChipClass(detail.estatus)}
-                      >
-                        {detail.estatus || "—"}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 text-xs text-muted-foreground">
-                      Creado: {formatDateTime(detail.created_at)}
-                    </div>
-                  </div>
                 </div>
-
-                <div className="grid gap-2 md:grid-cols-3">
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">
-                      Nro. cuotas
-                    </div>
-                    <div className="text-sm font-medium">
-                      {detail.nro_cuotas ?? "—"}
-                    </div>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">Método</div>
-                    <div className="text-sm font-medium">
-                      {detail.metodo || "—"}
-                    </div>
-                  </div>
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">
-                      Referencia
-                    </div>
-                    <div className="text-sm font-medium">
-                      {detail.referencia || "—"}
-                    </div>
-                  </div>
-                </div>
-
-                {detail.notas ? (
-                  <div className="rounded-md border p-3">
-                    <div className="text-xs text-muted-foreground">Notas</div>
-                    <div className="text-sm">{detail.notas}</div>
-                  </div>
-                ) : null}
 
                 <div>
                   <div className="mb-2 flex items-center justify-between">
@@ -1427,11 +1637,21 @@ function PaymentsContent() {
                           <TableHead className="whitespace-nowrap">
                             Monto
                           </TableHead>
+                          <TableHead>Moneda</TableHead>
                           <TableHead>Estatus</TableHead>
                           <TableHead className="whitespace-nowrap">
                             Fecha pago
                           </TableHead>
+                          <TableHead>Método</TableHead>
+                          <TableHead>Referencia</TableHead>
                           <TableHead>Concepto</TableHead>
+                          <TableHead>Notas</TableHead>
+                          <TableHead className="whitespace-nowrap">
+                            Creado
+                          </TableHead>
+                          <TableHead className="whitespace-nowrap">
+                            Actualizado
+                          </TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1448,24 +1668,138 @@ function PaymentsContent() {
                                   d.moneda || detail.moneda
                                 )}
                               </TableCell>
+                              <TableCell className="whitespace-nowrap">
+                                {d.moneda || detail.moneda || "—"}
+                              </TableCell>
                               <TableCell>
-                                <Badge
-                                  variant="outline"
-                                  className={getStatusChipClass(d.estatus)}
-                                >
-                                  {d.estatus || "—"}
-                                </Badge>
+                                {(() => {
+                                  const key = getDetailRowKey(d);
+                                  const saving = !!detailSavingByKey[key];
+                                  const current = String(d?.estatus ?? "");
+                                  const value =
+                                    detailEditStatusByKey[key] ?? current;
+
+                                  const opts = (() => {
+                                    const set = new Set<string>(statusOptions);
+                                    if (current) set.add(current);
+                                    return Array.from(set).sort((a, b) =>
+                                      a.localeCompare(b)
+                                    );
+                                  })();
+
+                                  return (
+                                    <div className="flex flex-col gap-1 min-w-[220px]">
+                                      <Select
+                                        value={value || ""}
+                                        onValueChange={(v) => {
+                                          setDetailEditStatusByKey((prev) => ({
+                                            ...prev,
+                                            [key]: v,
+                                          }));
+                                          // Optimistic update del UI
+                                          setDetail((prevDetail: any) => {
+                                            if (!prevDetail) return prevDetail;
+                                            const arr = Array.isArray(
+                                              prevDetail?.detalles
+                                            )
+                                              ? prevDetail.detalles
+                                              : [];
+                                            return {
+                                              ...prevDetail,
+                                              detalles: arr.map((it: any) => {
+                                                const itKey =
+                                                  getDetailRowKey(it);
+                                                if (itKey !== key) return it;
+                                                return { ...it, estatus: v };
+                                              }),
+                                            };
+                                          });
+                                          scheduleSaveDetalle(d, 250);
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-8 w-[190px]">
+                                          <SelectValue placeholder="Estatus" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {opts.map((s) => (
+                                            <SelectItem key={s} value={s}>
+                                              <span className="flex items-center gap-2">
+                                                <span
+                                                  className={
+                                                    "inline-flex items-center rounded-full border px-2 py-0.5 text-xs " +
+                                                    getStatusChipClass(s)
+                                                  }
+                                                >
+                                                  {s}
+                                                </span>
+                                              </span>
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+
+                                      {saving ? (
+                                        <div className="text-[11px] text-muted-foreground">
+                                          Guardando…
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell className="whitespace-nowrap">
                                 {formatDateTime(d.fecha_pago)}
                               </TableCell>
-                              <TableCell>{d.concepto || "—"}</TableCell>
+                              <TableCell className="whitespace-nowrap">
+                                {d.metodo || "—"}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap">
+                                {d.referencia || "—"}
+                              </TableCell>
+                              <TableCell className="min-w-[360px] max-w-[520px] whitespace-normal break-words">
+                                {(() => {
+                                  const key = getDetailRowKey(d);
+                                  const value =
+                                    detailEditConceptByKey[key] ??
+                                    String(d?.concepto ?? "");
+                                  return (
+                                    <Input
+                                      value={value}
+                                      onChange={(e) => {
+                                        const next = e.target.value;
+                                        setDetailEditConceptByKey((prev) => ({
+                                          ...prev,
+                                          [key]: next,
+                                        }));
+                                        scheduleSaveDetalle(d, 900);
+                                      }}
+                                      onBlur={() => scheduleSaveDetalle(d, 0)}
+                                      className="h-8"
+                                      placeholder="Concepto"
+                                    />
+                                  );
+                                })()}
+                              </TableCell>
+                              <TableCell className="min-w-[360px] max-w-[520px] whitespace-normal break-words">
+                                <div
+                                  className="whitespace-pre-wrap break-words"
+                                  title={String(d?.notas ?? "")}
+                                >
+                                  {fixMojibake(d.notas || "—")}
+                                </div>
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap">
+                                {formatDateTime(d.created_at)}
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap">
+                                {formatDateTime(d.updated_at)}
+                              </TableCell>
                             </TableRow>
                           ))
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={5}
+                              colSpan={12}
                               className="text-sm text-muted-foreground"
                             >
                               Sin detalles.
@@ -1478,7 +1812,7 @@ function PaymentsContent() {
                 </div>
               </div>
             )}
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

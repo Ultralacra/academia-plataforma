@@ -520,6 +520,10 @@ export default function CoachChatInline({
   const bottomRef = React.useRef<HTMLDivElement | null>(null);
   const scrollRef = React.useRef<HTMLDivElement | null>(null);
   const pinnedToBottomRef = React.useRef<boolean>(true);
+  const wasPinnedToBottomRef = React.useRef<boolean>(true);
+  const lastMarkedReadMsgIdRef = React.useRef<string | null>(null);
+  const lastMarkReadAtRef = React.useRef<number>(0);
+  const markReadRef = React.useRef<null | (() => void)>(null);
   const [newMessagesCount, setNewMessagesCount] = React.useState<number>(0);
   const lastRealtimeAtRef = React.useRef<number>(Date.now());
   const outboxRef = React.useRef<
@@ -731,11 +735,33 @@ export default function CoachChatInline({
     if (!el) return;
     const threshold = 120; // más tolerante con pequeños offsets
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
-    pinnedToBottomRef.current = distance <= threshold;
-    if (pinnedToBottomRef.current) {
+    const nextPinned = distance <= threshold;
+    const prevPinned = wasPinnedToBottomRef.current;
+    pinnedToBottomRef.current = nextPinned;
+    wasPinnedToBottomRef.current = nextPinned;
+    if (nextPinned) {
       setNewMessagesCount(0);
+      // Si volvimos al fondo, ahora sí marcamos como leído (best-effort)
+      try {
+        if (connected && chatIdRef.current != null) {
+          if (
+            typeof document !== "undefined" &&
+            document.visibilityState === "visible"
+          ) {
+            // Evitar spam si el scroll dispara muchos eventos
+            const now = Date.now();
+            if (!prevPinned && now - lastMarkReadAtRef.current > 800) {
+              sioRef.current?.emit("chat.read.all", {
+                id_chat: chatIdRef.current,
+              });
+              markReadRef.current?.();
+              lastMarkReadAtRef.current = now;
+            }
+          }
+        }
+      } catch {}
     }
-  }, []);
+  }, [connected]);
 
   // Markdown y parseo movidos a ./chat-utils
 
@@ -1825,6 +1851,10 @@ export default function CoachChatInline({
       window.dispatchEvent(evt);
     } catch {}
   }, [chatId, role]);
+
+  React.useEffect(() => {
+    markReadRef.current = markRead;
+  }, [markRead]);
 
   React.useEffect(() => {
     let alive = true;
@@ -3185,11 +3215,23 @@ export default function CoachChatInline({
     if (!connected || chatId == null) return;
     if (typeof document === "undefined") return;
     if (document.visibilityState !== "visible") return;
+    // Importante: NO marcar como le eddo si el usuario est viendo mensajes antiguos (scroll arriba)
+    if (!pinnedToBottomRef.current) return;
     try {
+      const last = itemsRef.current.length
+        ? itemsRef.current[itemsRef.current.length - 1]
+        : null;
+      if (!last) return;
+      const lastId = String(last.id ?? "");
+      if (!lastId) return;
+      if (lastMarkedReadMsgIdRef.current === lastId) return;
+
       sioRef.current?.emit("chat.read.all", { id_chat: chatId });
       markRead();
+      lastMarkedReadMsgIdRef.current = lastId;
+      lastMarkReadAtRef.current = Date.now();
     } catch {}
-  }, [items.length, connected, chatId]);
+  }, [items.length, connected, chatId, markRead]);
 
   async function ensureChatReadyForSend(opts?: {
     onlyFind?: boolean;

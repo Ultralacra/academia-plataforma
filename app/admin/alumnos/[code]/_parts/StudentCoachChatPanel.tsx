@@ -67,6 +67,19 @@ export default function StudentCoachChatPanel({
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [isLoadingCoaches, setIsLoadingCoaches] = useState(true);
 
+  const noCustomerCareCoaches = useMemo(() => {
+    return !isLoadingCoaches && (teams?.length ?? 0) === 0;
+  }, [isLoadingCoaches, teams]);
+
+  // Si no hay coaches de Atención al Cliente, evitamos que el input del chat quede enfocado.
+  useEffect(() => {
+    if (!noCustomerCareCoaches) return;
+    try {
+      const el = document.activeElement as any;
+      el?.blur?.();
+    } catch {}
+  }, [noCustomerCareCoaches]);
+
   const manualSelectionRef = useRef(false);
 
   // Selección de destino (coach)
@@ -835,265 +848,332 @@ export default function StudentCoachChatPanel({
               {(() => {
                 return null; // placeholder para mantener orden visual
               })()}
-              <CoachChatInline
-                key={chatKey}
-                room={room}
-                role="alumno"
-                title={targetTitle}
-                subtitle={targetSubtitle}
-                variant="card"
-                className="flex-1 min-h-0 rounded-lg shadow-sm overflow-hidden"
-                precreateOnParticipants={false}
-                onBack={isChatOpen ? handleBack : undefined}
-                resolveName={(tipo, id) => {
-                  const sid = String(id ?? "");
-                  if (tipo === "cliente") {
-                    if (sid === String(code)) return studentName || sid;
-                    return sid;
+              <div className="relative flex flex-col flex-1 min-h-0">
+                <div
+                  className={
+                    noCustomerCareCoaches
+                      ? "flex flex-col flex-1 min-h-0 pointer-events-none select-none blur-[2px] opacity-60"
+                      : "flex flex-col flex-1 min-h-0"
                   }
-                  if (tipo === "equipo") {
-                    // Intentar resolver nombre real del coach
-                    const t = (teamsAll.length ? teamsAll : teams).find(
-                      (x) => String(x.id) === sid || String(x.codigo) === sid
-                    );
-                    if (t?.nombre) return t.nombre;
-                    return "Soporte";
-                  }
-                  return sid;
-                }}
-                socketio={{
-                  url: (CHAT_HOST || "").replace(/\/$/, ""),
-                  idCliente: String(code),
-                  idEquipo: resolvedEquipoCode
-                    ? String(resolvedEquipoCode)
-                    : undefined,
-                  participants: participants,
-                  // No crear automáticamente: solo al enviar o adjuntar desde el alumno
-                  autoCreate: false,
-                  autoJoin: !!selectedChatId,
-                  chatId: selectedChatId ?? undefined,
-                }}
-                onConnectionChange={setConnected}
-                requestListSignal={listSignal}
-                listParams={listParams}
-                onChatsList={(list) => {
-                  const arr = Array.isArray(list) ? list : [];
-
-                  // FILTRO: Solo mostrar conversaciones con equipos de Atención al Cliente
-                  console.log(
-                    "═══════════════════════════════════════════════════════"
-                  );
-                  console.log(
-                    "🔍 [CHAT ALUMNO] FILTRANDO CONVERSACIONES EXISTENTES"
-                  );
-                  console.log(
-                    "═══════════════════════════════════════════════════════"
-                  );
-                  console.log(
-                    `📋 Total conversaciones recibidas: ${arr.length}`
-                  );
-
-                  const filtered = arr.filter((chat: any) => {
-                    const parts = chat.participants || chat.participantes || [];
-                    const coachP = parts.find(
-                      (p: any) =>
-                        String((p?.participante_tipo || "").toLowerCase()) ===
-                        "equipo"
-                    );
-                    if (!coachP) {
-                      console.log(
-                        `❌ Chat ${
-                          chat.id_chat || chat.id
-                        }: Sin participante equipo`
-                      );
-                      return false;
-                    }
-                    const sid = String(coachP.id_equipo || "");
-
-                    // Buscar en asignados (teamsAll) o global (teamsGlobal)
-                    const t =
-                      teamsAll.find(
-                        (x) => String(x.id) === sid || String(x.codigo) === sid
-                      ) ||
-                      teamsGlobal.find(
-                        (x) => String(x.id) === sid || String(x.codigo) === sid
-                      );
-
-                    if (!t) {
-                      console.log(
-                        `❌ Chat ${
-                          chat.id_chat || chat.id
-                        }: Coach ${sid} no identificado`
-                      );
-                      return false; // Si no identificamos al equipo, ocultar por seguridad
-                    }
-
-                    const isAC = hasCustomerCare(t.area);
-                    console.log(
-                      `${isAC ? "✅" : "❌"} Chat ${
-                        chat.id_chat || chat.id
-                      }: Coach ${t.nombre} (${sid}) - Área: ${t.area} ${
-                        isAC ? "👉 ES ATENCIÓN AL CLIENTE" : ""
-                      }`
-                    );
-
-                    return isAC;
-                  });
-
-                  console.log("");
-                  console.log(
-                    `✅ Conversaciones de Atención al Cliente: ${filtered.length}`
-                  );
-                  if (filtered.length > 0) {
-                    console.log("📋 Lista de chats válidos:");
-                    filtered.forEach((c: any, idx: number) => {
-                      const chatId = c.id_chat || c.id;
-                      const parts = c.participants || c.participantes || [];
-                      const coachP = parts.find(
-                        (p: any) => p?.participante_tipo === "equipo"
-                      );
-                      const sid = String(coachP?.id_equipo || "");
-                      const t = teamsAll.find(
-                        (x) => String(x.id) === sid || String(x.codigo) === sid
-                      );
-                      console.log(
-                        `   ${idx + 1}. Chat ID: ${chatId} - Coach: ${
-                          t?.nombre
-                        } (${t?.codigo})`
-                      );
-                    });
-                  }
-                  console.log(
-                    "═══════════════════════════════════════════════════════"
-                  );
-                  try {
-                    console.log("[StudentCoachChatPanel] onChatsList", {
-                      original: arr.length,
-                      filtered: filtered.length,
-                      sample: filtered.slice(0, 5).map((it: any) => ({
-                        id: it?.id_chat ?? it?.id,
-                        last:
-                          it?.last_message?.contenido ??
-                          it?.ultimo_mensaje?.contenido ??
-                          it?.last?.text ??
-                          null,
-                      })),
-                    });
-                  } catch {}
-
-                  setStudentChats(filtered);
-                  setIsLoadingChats(false);
-
-                  // Auto-load existing chat if available and not manually navigating
-                  if (
-                    filtered.length > 0 &&
-                    !selectedChatId &&
-                    !manualSelectionRef.current
-                  ) {
-                    const mostRecent = filtered[0];
-                    const id = mostRecent.id_chat ?? mostRecent.id;
-                    if (id) {
-                      const parts =
-                        mostRecent.participants ||
-                        mostRecent.participantes ||
-                        [];
-                      const coachP = parts.find(
-                        (p: any) => p?.participante_tipo === "equipo"
-                      );
-                      const sid = String(coachP?.id_equipo || "");
-                      const t = teamsAll.find(
-                        (x) => String(x.id) === sid || String(x.codigo) === sid
-                      );
-
-                      console.log(
-                        "═══════════════════════════════════════════════════════"
-                      );
-                      console.log(
-                        "🔄 [AUTO-LOAD] CARGANDO CONVERSACIÓN EXISTENTE"
-                      );
-                      console.log(
-                        "═══════════════════════════════════════════════════════"
-                      );
-                      console.log(`Chat ID: ${id}`);
-                      console.log(
-                        `Coach: ${t?.nombre || "Desconocido"} (${
-                          t?.codigo || sid
-                        })`
-                      );
-                      console.log(`Área: ${t?.area || "N/A"}`);
-                      console.log(`Puesto: ${t?.puesto || "N/A"}`);
-                      console.log(
-                        "═══════════════════════════════════════════════════════"
-                      );
-
-                      setSelectedChatId(id);
-                      setTargetCoachId(null);
-                    }
-                  }
-                }}
-                onChatInfo={(info) => {
-                  setCurrentOpenChatId(info?.chatId ?? null);
-                  try {
-                    console.log("[StudentCoachChatPanel] onChatInfo", {
-                      chatId: info?.chatId ?? null,
-                      myParticipantId: info?.myParticipantId ?? null,
-                      participants: Array.isArray(info?.participants)
-                        ? info?.participants?.map((p: any) => ({
-                            tipo: p?.participante_tipo,
-                            id_equipo: p?.id_equipo,
-                            id_cliente: p?.id_cliente,
-                            id_admin: p?.id_admin,
-                            id_chat_participante: p?.id_chat_participante,
-                          }))
-                        : info?.participants,
-                    });
-                  } catch {}
-                  // Si abrimos por chatId (no por coach seleccionado), intenta fijar encabezado con nombre del coach y su área/puesto
-                  try {
-                    if (!targetCoachId && Array.isArray(info?.participants)) {
-                      const coachP = (info?.participants as any[]).find(
-                        (p: any) =>
-                          String((p?.participante_tipo || "").toLowerCase()) ===
-                          "equipo"
-                      );
-                      const sid = coachP?.id_equipo
-                        ? String(coachP.id_equipo)
-                        : null;
-                      if (sid) {
+                >
+                  <CoachChatInline
+                    key={chatKey}
+                    room={room}
+                    role="alumno"
+                    title={targetTitle}
+                    subtitle={targetSubtitle}
+                    variant="card"
+                    className="flex-1 min-h-0 rounded-lg shadow-sm overflow-hidden"
+                    precreateOnParticipants={false}
+                    onBack={isChatOpen ? handleBack : undefined}
+                    resolveName={(tipo, id) => {
+                      const sid = String(id ?? "");
+                      if (tipo === "cliente") {
+                        if (sid === String(code)) return studentName || sid;
+                        return sid;
+                      }
+                      if (tipo === "equipo") {
+                        // Intentar resolver nombre real del coach
                         const t = (teamsAll.length ? teamsAll : teams).find(
                           (x) =>
-                            String((x as any).codigo) === sid ||
-                            String(x.id) === sid
+                            String(x.id) === sid || String(x.codigo) === sid
                         );
-                        const tg =
-                          t ||
+                        if (t?.nombre) return t.nombre;
+                        return "Soporte";
+                      }
+                      return sid;
+                    }}
+                    socketio={{
+                      url: (CHAT_HOST || "").replace(/\/$/, ""),
+                      idCliente: String(code),
+                      idEquipo: resolvedEquipoCode
+                        ? String(resolvedEquipoCode)
+                        : undefined,
+                      participants: participants,
+                      // No crear automáticamente: solo al enviar o adjuntar desde el alumno
+                      autoCreate: false,
+                      autoJoin: !!selectedChatId,
+                      chatId: selectedChatId ?? undefined,
+                    }}
+                    onConnectionChange={setConnected}
+                    requestListSignal={listSignal}
+                    listParams={listParams}
+                    onChatsList={(list) => {
+                      const arr = Array.isArray(list) ? list : [];
+
+                      // FILTRO: Solo mostrar conversaciones con equipos de Atención al Cliente
+                      console.log(
+                        "═══════════════════════════════════════════════════════"
+                      );
+                      console.log(
+                        "🔍 [CHAT ALUMNO] FILTRANDO CONVERSACIONES EXISTENTES"
+                      );
+                      console.log(
+                        "═══════════════════════════════════════════════════════"
+                      );
+                      console.log(
+                        `📋 Total conversaciones recibidas: ${arr.length}`
+                      );
+
+                      const filtered = arr.filter((chat: any) => {
+                        const parts =
+                          chat.participants || chat.participantes || [];
+                        const coachP = parts.find(
+                          (p: any) =>
+                            String(
+                              (p?.participante_tipo || "").toLowerCase()
+                            ) === "equipo"
+                        );
+                        if (!coachP) {
+                          console.log(
+                            `❌ Chat ${
+                              chat.id_chat || chat.id
+                            }: Sin participante equipo`
+                          );
+                          return false;
+                        }
+                        const sid = String(coachP.id_equipo || "");
+
+                        // Buscar en asignados (teamsAll) o global (teamsGlobal)
+                        const t =
+                          teamsAll.find(
+                            (x) =>
+                              String(x.id) === sid || String(x.codigo) === sid
+                          ) ||
                           teamsGlobal.find(
                             (x) =>
-                              String((x as any).codigo) === sid ||
-                              String(x.id) === sid
+                              String(x.id) === sid || String(x.codigo) === sid
                           );
-                        setTargetTitle(tg?.nombre || "Soporte");
-                        setTargetSubtitle(tg?.puesto || "Atención al Cliente");
-                      }
-                    }
-                  } catch {}
-                  if (info?.chatId != null) {
-                    try {
-                      const k = `chatUnreadById:alumno:${String(info.chatId)}`;
-                      localStorage.setItem(k, "0");
-                      window.dispatchEvent(
-                        new CustomEvent("chat:unread-count-updated", {
-                          detail: {
-                            chatId: info.chatId,
-                            role: "alumno",
-                            count: 0,
-                          },
-                        })
+
+                        if (!t) {
+                          console.log(
+                            `❌ Chat ${
+                              chat.id_chat || chat.id
+                            }: Coach ${sid} no identificado`
+                          );
+                          return false; // Si no identificamos al equipo, ocultar por seguridad
+                        }
+
+                        const isAC = hasCustomerCare(t.area);
+                        console.log(
+                          `${isAC ? "✅" : "❌"} Chat ${
+                            chat.id_chat || chat.id
+                          }: Coach ${t.nombre} (${sid}) - Área: ${t.area} ${
+                            isAC ? "👉 ES ATENCIÓN AL CLIENTE" : ""
+                          }`
+                        );
+
+                        return isAC;
+                      });
+
+                      console.log("");
+                      console.log(
+                        `✅ Conversaciones de Atención al Cliente: ${filtered.length}`
                       );
-                    } catch {}
-                  }
-                }}
-              />
+                      if (filtered.length > 0) {
+                        console.log("📋 Lista de chats válidos:");
+                        filtered.forEach((c: any, idx: number) => {
+                          const chatId = c.id_chat || c.id;
+                          const parts = c.participants || c.participantes || [];
+                          const coachP = parts.find(
+                            (p: any) => p?.participante_tipo === "equipo"
+                          );
+                          const sid = String(coachP?.id_equipo || "");
+                          const t = teamsAll.find(
+                            (x) =>
+                              String(x.id) === sid || String(x.codigo) === sid
+                          );
+                          console.log(
+                            `   ${idx + 1}. Chat ID: ${chatId} - Coach: ${
+                              t?.nombre
+                            } (${t?.codigo})`
+                          );
+                        });
+                      }
+                      console.log(
+                        "═══════════════════════════════════════════════════════"
+                      );
+                      try {
+                        console.log("[StudentCoachChatPanel] onChatsList", {
+                          original: arr.length,
+                          filtered: filtered.length,
+                          sample: filtered.slice(0, 5).map((it: any) => ({
+                            id: it?.id_chat ?? it?.id,
+                            last:
+                              it?.last_message?.contenido ??
+                              it?.ultimo_mensaje?.contenido ??
+                              it?.last?.text ??
+                              null,
+                          })),
+                        });
+                      } catch {}
+
+                      setStudentChats(filtered);
+                      setIsLoadingChats(false);
+
+                      // Auto-load existing chat if available and not manually navigating
+                      if (
+                        filtered.length > 0 &&
+                        !selectedChatId &&
+                        !manualSelectionRef.current
+                      ) {
+                        const mostRecent = filtered[0];
+                        const id = mostRecent.id_chat ?? mostRecent.id;
+                        if (id) {
+                          const parts =
+                            mostRecent.participants ||
+                            mostRecent.participantes ||
+                            [];
+                          const coachP = parts.find(
+                            (p: any) => p?.participante_tipo === "equipo"
+                          );
+                          const sid = String(coachP?.id_equipo || "");
+                          const t = teamsAll.find(
+                            (x) =>
+                              String(x.id) === sid || String(x.codigo) === sid
+                          );
+
+                          console.log(
+                            "═══════════════════════════════════════════════════════"
+                          );
+                          console.log(
+                            "🔄 [AUTO-LOAD] CARGANDO CONVERSACIÓN EXISTENTE"
+                          );
+                          console.log(
+                            "═══════════════════════════════════════════════════════"
+                          );
+                          console.log(`Chat ID: ${id}`);
+                          console.log(
+                            `Coach: ${t?.nombre || "Desconocido"} (${
+                              t?.codigo || sid
+                            })`
+                          );
+                          console.log(`Área: ${t?.area || "N/A"}`);
+                          console.log(`Puesto: ${t?.puesto || "N/A"}`);
+                          console.log(
+                            "═══════════════════════════════════════════════════════"
+                          );
+
+                          setSelectedChatId(id);
+                          setTargetCoachId(null);
+                        }
+                      }
+                    }}
+                    onChatInfo={(info) => {
+                      setCurrentOpenChatId(info?.chatId ?? null);
+                      try {
+                        console.log("[StudentCoachChatPanel] onChatInfo", {
+                          chatId: info?.chatId ?? null,
+                          myParticipantId: info?.myParticipantId ?? null,
+                          participants: Array.isArray(info?.participants)
+                            ? info?.participants?.map((p: any) => ({
+                                tipo: p?.participante_tipo,
+                                id_equipo: p?.id_equipo,
+                                id_cliente: p?.id_cliente,
+                                id_admin: p?.id_admin,
+                                id_chat_participante: p?.id_chat_participante,
+                              }))
+                            : info?.participants,
+                        });
+                      } catch {}
+                      // Si abrimos por chatId (no por coach seleccionado), intenta fijar encabezado con nombre del coach y su área/puesto
+                      try {
+                        if (
+                          !targetCoachId &&
+                          Array.isArray(info?.participants)
+                        ) {
+                          const coachP = (info?.participants as any[]).find(
+                            (p: any) =>
+                              String(
+                                (p?.participante_tipo || "").toLowerCase()
+                              ) === "equipo"
+                          );
+                          const sid = coachP?.id_equipo
+                            ? String(coachP.id_equipo)
+                            : null;
+                          if (sid) {
+                            const t = (teamsAll.length ? teamsAll : teams).find(
+                              (x) =>
+                                String((x as any).codigo) === sid ||
+                                String(x.id) === sid
+                            );
+                            const tg =
+                              t ||
+                              teamsGlobal.find(
+                                (x) =>
+                                  String((x as any).codigo) === sid ||
+                                  String(x.id) === sid
+                              );
+                            setTargetTitle(tg?.nombre || "Soporte");
+                            setTargetSubtitle(
+                              tg?.puesto || "Atención al Cliente"
+                            );
+                          }
+                        }
+                      } catch {}
+                      if (info?.chatId != null) {
+                        try {
+                          const k = `chatUnreadById:alumno:${String(
+                            info.chatId
+                          )}`;
+                          localStorage.setItem(k, "0");
+                          window.dispatchEvent(
+                            new CustomEvent("chat:unread-count-updated", {
+                              detail: {
+                                chatId: info.chatId,
+                                role: "alumno",
+                                count: 0,
+                              },
+                            })
+                          );
+                        } catch {}
+                      }
+                    }}
+                  />
+                </div>
+
+                {noCustomerCareCoaches && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center p-6">
+                    <div className="w-full max-w-md rounded-xl border bg-white/95 backdrop-blur shadow-lg">
+                      <div className="p-5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-base font-semibold">
+                              Estamos asignando tu coach de soporte
+                            </div>
+                            <div className="text-sm text-muted-foreground mt-1">
+                              Aún no tienes coaches de Atención al Cliente
+                              asignados. Cuando estén disponibles, podrás
+                              escribir por aquí.
+                            </div>
+                          </div>
+                          <Badge variant="outline">Soporte</Badge>
+                        </div>
+                        <div className="mt-4 flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">
+                            Asignando…
+                          </span>
+                        </div>
+                        <div className="mt-4 flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setIsLoadingCoaches(true);
+                              // dispara recarga de coaches reasignando el efecto por `code`
+                              // (best-effort: reusar el mismo code)
+                              setTimeout(() => setIsLoadingCoaches(false), 50);
+                              window.location.reload();
+                            }}
+                          >
+                            Reintentar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>

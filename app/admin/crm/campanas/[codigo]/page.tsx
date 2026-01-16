@@ -32,6 +32,14 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api-config";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 function fmtDate(iso: unknown) {
   const s = typeof iso === "string" ? iso : "";
@@ -144,6 +152,7 @@ export default function CampanaDetailPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ users: usersPayload }),
       });
+      await load();
       toast({
         title: "✓ Usuarios asignados",
         description: `${selectedUsers.size} usuario(s) asignado(s) a la campaña`,
@@ -432,6 +441,50 @@ export default function CampanaDetailPage() {
                         </p>
                       </div>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Usuarios asignados */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Users className="h-5 w-5 text-slate-700" />
+                      Usuarios asignados
+                      {Array.isArray((item as any)?.users) && (
+                        <Badge variant="outline" className="ml-2">
+                          {(item as any).users.length}
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {Array.isArray((item as any)?.users) &&
+                    (item as any).users.length > 0 ? (
+                      <div className="rounded-md border bg-white">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Nombre</TableHead>
+                              <TableHead>Email</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {(item as any).users.map((u: any) => (
+                              <TableRow key={String(u?.codigo || u?.id)}>
+                                <TableCell className="font-medium">
+                                  {u?.name || u?.nombre || "—"}
+                                </TableCell>
+                                <TableCell>{u?.email || "—"}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-600">
+                        No hay usuarios asignados a esta campaña.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               </div>
