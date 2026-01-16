@@ -84,6 +84,9 @@ export default function CampanaDetailPage() {
   const [assigningUsers, setAssigningUsers] = React.useState(false);
   const [availabilityOpen, setAvailabilityOpen] = React.useState(false);
   const [availabilityLoading, setAvailabilityLoading] = React.useState(false);
+  const [availabilityDay, setAvailabilityDay] = React.useState<Date>(
+    () => new Date()
+  );
   const [availability, setAvailability] = React.useState<{
     google_email: string;
     busy: Array<{ start: string; end: string }>;
@@ -201,8 +204,38 @@ export default function CampanaDetailPage() {
   };
 
   const handleViewAvailability = () => {
+    setAvailabilityDay(new Date());
     setAvailabilityOpen(true);
     loadAvailability();
+  };
+
+  const toDateKeyLocal = (d: Date) => {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const getDayRange = (d: Date) => {
+    const start = new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate(),
+      0,
+      0,
+      0,
+      0
+    );
+    const end = new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate(),
+      23,
+      59,
+      59,
+      999
+    );
+    return { start, end };
   };
 
   const getBusyDates = () => {
@@ -211,9 +244,17 @@ export default function CampanaDetailPage() {
     availability.busy.forEach((slot) => {
       const start = new Date(slot.start);
       const end = new Date(slot.end);
-      let current = new Date(start);
-      while (current <= end) {
-        busyDates.add(current.toISOString().split("T")[0]);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+
+      const current = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate()
+      );
+      const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+      while (current <= endDay) {
+        busyDates.add(toDateKeyLocal(current));
         current.setDate(current.getDate() + 1);
       }
     });
@@ -224,6 +265,8 @@ export default function CampanaDetailPage() {
     if (!availability) return null;
 
     const now = new Date();
+    const selectedDay = availabilityDay || now;
+    const selectedKey = toDateKeyLocal(selectedDay);
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
     const firstDay = new Date(currentYear, currentMonth, 1);
@@ -242,15 +285,20 @@ export default function CampanaDetailPage() {
     // Días del mes
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(currentYear, currentMonth, day);
-      const dateStr = date.toISOString().split("T")[0];
+      const dateStr = toDateKeyLocal(date);
       const isBusy = busyDates.has(dateStr);
       const isToday = date.toDateString() === now.toDateString();
+      const isSelected = dateStr === selectedKey;
 
       days.push(
-        <div
+        <button
           key={day}
-          className={`h-12 flex items-center justify-center rounded-lg border text-sm font-medium transition-colors ${
-            isToday
+          type="button"
+          onClick={() => setAvailabilityDay(date)}
+          className={`h-12 flex items-center justify-center rounded-lg border text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${
+            isSelected
+              ? "border-blue-600 bg-blue-100 text-blue-800"
+              : isToday
               ? "border-blue-500 bg-blue-50 text-blue-700"
               : isBusy
               ? "border-red-200 bg-red-50 text-red-700"
@@ -259,9 +307,21 @@ export default function CampanaDetailPage() {
           title={isBusy ? "Ocupado - No disponible para agendar" : "Disponible"}
         >
           {day}
-        </div>
+        </button>
       );
     }
+
+    const { start: dayStart, end: dayEnd } = getDayRange(selectedDay);
+    const busyForDay = availability.busy
+      .map((slot) => ({ start: new Date(slot.start), end: new Date(slot.end) }))
+      .filter(
+        (slot) =>
+          !Number.isNaN(slot.start.getTime()) &&
+          !Number.isNaN(slot.end.getTime()) &&
+          slot.end >= dayStart &&
+          slot.start <= dayEnd
+      )
+      .sort((a, b) => a.start.getTime() - b.start.getTime());
 
     return (
       <div>
@@ -294,19 +354,50 @@ export default function CampanaDetailPage() {
             <span>Disponible</span>
           </div>
         </div>
-        {availability.busy.length > 0 && (
-          <div className="mt-4 max-h-32 overflow-y-auto border-t pt-4">
-            <h4 className="text-sm font-semibold mb-2">Horas ocupadas:</h4>
-            <div className="space-y-1">
-              {availability.busy.map((slot, idx) => (
-                <div key={idx} className="text-xs text-slate-600">
-                  {new Date(slot.start).toLocaleString("es-ES")} -{" "}
-                  {new Date(slot.end).toLocaleString("es-ES")}
-                </div>
-              ))}
-            </div>
+        <div className="mt-4 border-t pt-4">
+          <h4 className="text-sm font-semibold mb-1">Día seleccionado</h4>
+          <p className="text-xs text-slate-600">
+            {new Intl.DateTimeFormat("es-ES", {
+              weekday: "long",
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            }).format(selectedDay)}
+          </p>
+
+          <div className="mt-3">
+            <h5 className="text-sm font-semibold mb-2">Horas bloqueadas</h5>
+            {busyForDay.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                No hay horas bloqueadas para este día.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {busyForDay.map((slot, idx) => {
+                  const clampedStart = new Date(
+                    Math.max(slot.start.getTime(), dayStart.getTime())
+                  );
+                  const clampedEnd = new Date(
+                    Math.min(slot.end.getTime(), dayEnd.getTime())
+                  );
+                  return (
+                    <div key={idx} className="text-xs text-slate-700">
+                      {clampedStart.toLocaleTimeString("es-ES", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      -{" "}
+                      {clampedEnd.toLocaleTimeString("es-ES", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     );
   };

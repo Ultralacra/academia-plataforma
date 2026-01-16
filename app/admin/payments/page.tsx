@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getPaymentByCodigo,
@@ -168,6 +169,50 @@ function getStatusVariant(
   return "outline";
 }
 
+const ALLOWED_PAYMENT_STATUS = [
+  "pendiente",
+  "pagado",
+  "fallido",
+  "reembolsado",
+  "en_proceso",
+  "listo",
+  "moroso",
+  "no_aplica",
+  "pendiente_por_cobrar",
+  "pendiente_confirmar_pago",
+] as const;
+
+const allowedPaymentStatusSet = new Set<string>(ALLOWED_PAYMENT_STATUS);
+
+function normalizePaymentStatus(input: unknown): string {
+  const raw = String(input ?? "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return "";
+
+  // Acepta valores con espacios y los convierte al formato esperado por backend
+  const normalized = raw
+    .replace(/\s+/g, "_")
+    .replace(/__+/g, "_")
+    .replace(/[^a-z0-9_]/g, "");
+
+  // Alias comunes
+  if (normalized === "en_progreso") return "en_proceso";
+  if (normalized === "pendiente_por_cobrar") return "pendiente_por_cobrar";
+  if (normalized === "pendiente_confirmar_pago")
+    return "pendiente_confirmar_pago";
+  if (normalized === "no_aplico") return "no_aplica";
+  if (normalized === "no_aplica") return "no_aplica";
+
+  return normalized;
+}
+
+function formatPaymentStatusLabel(input: unknown): string {
+  const s = normalizePaymentStatus(input);
+  if (!s) return "—";
+  return s.replace(/_/g, " ");
+}
+
 function getStatusChipClass(status?: string | null) {
   const s = String(status || "").toLowerCase();
   if (!s)
@@ -289,12 +334,16 @@ function PaymentsContent() {
   const [detailEditConceptByKey, setDetailEditConceptByKey] = useState<
     Record<string, string>
   >({});
+  const [detailEditNotesByKey, setDetailEditNotesByKey] = useState<
+    Record<string, string>
+  >({});
   const [detailSavingByKey, setDetailSavingByKey] = useState<
     Record<string, boolean>
   >({});
 
   const detailEditStatusByKeyRef = useRef<Record<string, string>>({});
   const detailEditConceptByKeyRef = useRef<Record<string, string>>({});
+  const detailEditNotesByKeyRef = useRef<Record<string, string>>({});
   const detailSaveTimersRef = useRef<Record<string, number>>({});
 
   const [syncOpen, setSyncOpen] = useState(false);
@@ -712,12 +761,17 @@ function PaymentsContent() {
 
   const statusOptions = useMemo(() => {
     const set = new Set<string>();
+
+    // Estatus permitidos (siempre presentes)
+    ALLOWED_PAYMENT_STATUS.forEach((s) => set.add(s));
+
     for (const r of rows) {
-      const v = String(r?.estatus ?? "").trim();
+      const v = normalizePaymentStatus(r?.estatus);
       if (v) set.add(v);
     }
     const arr = Array.from(set).sort((a, b) => a.localeCompare(b));
-    if (estatus && !arr.includes(estatus)) arr.unshift(estatus);
+    const est = normalizePaymentStatus(estatus);
+    if (est && !arr.includes(est)) arr.unshift(est);
     return arr;
   }, [rows, estatus]);
 
@@ -728,6 +782,10 @@ function PaymentsContent() {
   useEffect(() => {
     detailEditConceptByKeyRef.current = detailEditConceptByKey;
   }, [detailEditConceptByKey]);
+
+  useEffect(() => {
+    detailEditNotesByKeyRef.current = detailEditNotesByKey;
+  }, [detailEditNotesByKey]);
 
   function getDetailRowKey(d: any) {
     const k = d?.codigo ?? d?.cuota_codigo ?? d?.id;
@@ -751,7 +809,12 @@ function PaymentsContent() {
     const nextConcept = String(
       detailEditConceptByKeyRef.current[key] ?? d?.concepto ?? ""
     ).trim();
-    if (!nextStatus) {
+
+    const nextNotes = String(
+      detailEditNotesByKeyRef.current[key] ?? d?.notas ?? ""
+    );
+    const normalizedNextStatus = normalizePaymentStatus(nextStatus);
+    if (!normalizedNextStatus) {
       toast({
         title: "Selecciona un estatus",
         description: "El estatus no puede quedar vacío.",
@@ -760,20 +823,29 @@ function PaymentsContent() {
       return;
     }
 
+    if (!allowedPaymentStatusSet.has(normalizedNextStatus)) {
+      toast({
+        title: "Estatus inválido",
+        description:
+          "Selecciona un estatus permitido (sin escribir manualmente).",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setDetailSavingByKey((prev) => ({ ...prev, [key]: true }));
     try {
-      const estatusToSend = String(nextStatus).toLowerCase();
       const payload = {
         codigo: d?.codigo ?? null,
         cuota_codigo: d?.cuota_codigo ?? null,
-        estatus: estatusToSend,
+        estatus: normalizedNextStatus,
         monto: d?.monto ?? null,
         moneda: d?.moneda ?? detail?.moneda ?? null,
         fecha_pago: d?.fecha_pago ?? null,
         metodo: d?.metodo ? String(d.metodo) : "",
         referencia: d?.referencia ? String(d.referencia) : "",
         concepto: nextConcept || null,
-        notas: d?.notas ?? null,
+        notas: nextNotes.trim() ? nextNotes : null,
       };
 
       await upsertPaymentDetalle(
@@ -793,8 +865,9 @@ function PaymentsContent() {
             if (itKey !== key) return it;
             return {
               ...it,
-              estatus: nextStatus,
+              estatus: normalizedNextStatus,
               concepto: nextConcept,
+              notas: nextNotes,
             };
           }),
         };
@@ -964,9 +1037,9 @@ function PaymentsContent() {
             <div className="grid gap-1">
               <Label>Estatus</Label>
               <Select
-                value={estatus || "__ALL__"}
+                value={normalizePaymentStatus(estatus) || "__ALL__"}
                 onValueChange={(v) => {
-                  setEstatus(v === "__ALL__" ? "" : v);
+                  setEstatus(v === "__ALL__" ? "" : normalizePaymentStatus(v));
                   setPage(1);
                 }}
               >
@@ -978,11 +1051,11 @@ function PaymentsContent() {
                   {statusOptions.length ? (
                     statusOptions.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s}
+                        {formatPaymentStatusLabel(s)}
                       </SelectItem>
                     ))
                   ) : (
-                    <SelectItem value="LISTO">LISTO</SelectItem>
+                    <SelectItem value="pagado">pagado</SelectItem>
                   )}
                 </SelectContent>
               </Select>
@@ -1197,7 +1270,7 @@ function PaymentsContent() {
                           variant="outline"
                           className={getStatusChipClass(r.estatus)}
                         >
-                          {r.estatus || "—"}
+                          {formatPaymentStatusLabel(r.estatus)}
                         </Badge>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
@@ -1447,6 +1520,7 @@ function PaymentsContent() {
             setDetailError(null);
             setDetailEditStatusByKey({});
             setDetailEditConceptByKey({});
+            setDetailEditNotesByKey({});
             setDetailSavingByKey({});
           }
         }}
@@ -1498,7 +1572,7 @@ function PaymentsContent() {
                           variant="outline"
                           className={getStatusChipClass(detail.estatus)}
                         >
-                          {detail.estatus || "—"}
+                          {formatPaymentStatusLabel(detail.estatus)}
                         </Badge>
                       </div>
                     </div>
@@ -1675,9 +1749,12 @@ function PaymentsContent() {
                                 {(() => {
                                   const key = getDetailRowKey(d);
                                   const saving = !!detailSavingByKey[key];
-                                  const current = String(d?.estatus ?? "");
-                                  const value =
-                                    detailEditStatusByKey[key] ?? current;
+                                  const current = normalizePaymentStatus(
+                                    d?.estatus ?? ""
+                                  );
+                                  const value = normalizePaymentStatus(
+                                    detailEditStatusByKey[key] ?? current
+                                  );
 
                                   const opts = (() => {
                                     const set = new Set<string>(statusOptions);
@@ -1692,9 +1769,11 @@ function PaymentsContent() {
                                       <Select
                                         value={value || ""}
                                         onValueChange={(v) => {
+                                          const vLower =
+                                            normalizePaymentStatus(v);
                                           setDetailEditStatusByKey((prev) => ({
                                             ...prev,
-                                            [key]: v,
+                                            [key]: vLower,
                                           }));
                                           // Optimistic update del UI
                                           setDetail((prevDetail: any) => {
@@ -1710,7 +1789,10 @@ function PaymentsContent() {
                                                 const itKey =
                                                   getDetailRowKey(it);
                                                 if (itKey !== key) return it;
-                                                return { ...it, estatus: v };
+                                                return {
+                                                  ...it,
+                                                  estatus: vLower,
+                                                };
                                               }),
                                             };
                                           });
@@ -1730,7 +1812,7 @@ function PaymentsContent() {
                                                     getStatusChipClass(s)
                                                   }
                                                 >
-                                                  {s}
+                                                  {formatPaymentStatusLabel(s)}
                                                 </span>
                                               </span>
                                             </SelectItem>
@@ -1781,12 +1863,28 @@ function PaymentsContent() {
                                 })()}
                               </TableCell>
                               <TableCell className="min-w-[360px] max-w-[520px] whitespace-normal break-words">
-                                <div
-                                  className="whitespace-pre-wrap break-words"
-                                  title={String(d?.notas ?? "")}
-                                >
-                                  {fixMojibake(d.notas || "—")}
-                                </div>
+                                {(() => {
+                                  const key = getDetailRowKey(d);
+                                  const value =
+                                    detailEditNotesByKey[key] ??
+                                    fixMojibake(String(d?.notas ?? ""));
+                                  return (
+                                    <Textarea
+                                      value={value}
+                                      onChange={(e) => {
+                                        const next = e.target.value;
+                                        setDetailEditNotesByKey((prev) => ({
+                                          ...prev,
+                                          [key]: next,
+                                        }));
+                                        scheduleSaveDetalle(d, 1100);
+                                      }}
+                                      onBlur={() => scheduleSaveDetalle(d, 0)}
+                                      className="min-h-16 text-sm resize-none"
+                                      placeholder="Notas"
+                                    />
+                                  );
+                                })()}
                               </TableCell>
                               <TableCell className="whitespace-nowrap">
                                 {formatDateTime(d.created_at)}
