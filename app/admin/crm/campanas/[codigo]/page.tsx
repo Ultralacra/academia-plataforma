@@ -21,6 +21,8 @@ import {
   CalendarClock,
   Loader2,
   ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { getPublicAppOrigin } from "@/lib/public-app-origin";
 import {
@@ -266,50 +268,22 @@ export default function CampanaDetailPage() {
 
     const now = new Date();
     const selectedDay = availabilityDay || now;
-    const selectedKey = toDateKeyLocal(selectedDay);
-    const currentMonth = now.getMonth();
-    const currentYear = now.getFullYear();
-    const firstDay = new Date(currentYear, currentMonth, 1);
-    const lastDay = new Date(currentYear, currentMonth + 1, 0);
-    const daysInMonth = lastDay.getDate();
-    const startingDayOfWeek = firstDay.getDay();
+    const isToday = selectedDay.toDateString() === now.toDateString();
 
-    const busyDates = getBusyDates();
-    const days = [];
-
-    // Días vacíos antes del primer día del mes
-    for (let i = 0; i < startingDayOfWeek; i++) {
-      days.push(<div key={`empty-${i}`} className="h-12" />);
-    }
-
-    // Días del mes
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(currentYear, currentMonth, day);
-      const dateStr = toDateKeyLocal(date);
-      const isBusy = busyDates.has(dateStr);
-      const isToday = date.toDateString() === now.toDateString();
-      const isSelected = dateStr === selectedKey;
-
-      days.push(
-        <button
-          key={day}
-          type="button"
-          onClick={() => setAvailabilityDay(date)}
-          className={`h-12 flex items-center justify-center rounded-lg border text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/40 ${
-            isSelected
-              ? "border-blue-600 bg-blue-100 text-blue-800"
-              : isToday
-              ? "border-blue-500 bg-blue-50 text-blue-700"
-              : isBusy
-              ? "border-red-200 bg-red-50 text-red-700"
-              : "border-slate-200 bg-white text-slate-700"
-          }`}
-          title={isBusy ? "Ocupado - No disponible para agendar" : "Disponible"}
-        >
-          {day}
-        </button>
-      );
-    }
+    // Navegación de días
+    const goToPrevDay = () => {
+      const prev = new Date(selectedDay);
+      prev.setDate(prev.getDate() - 1);
+      setAvailabilityDay(prev);
+    };
+    const goToNextDay = () => {
+      const next = new Date(selectedDay);
+      next.setDate(next.getDate() + 1);
+      setAvailabilityDay(next);
+    };
+    const goToToday = () => {
+      setAvailabilityDay(new Date());
+    };
 
     const { start: dayStart, end: dayEnd } = getDayRange(selectedDay);
     const busyForDay = availability.busy
@@ -323,77 +297,170 @@ export default function CampanaDetailPage() {
       )
       .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-    return (
-      <div>
-        <div className="mb-4 text-center">
-          <h3 className="text-lg font-semibold">
-            {new Intl.DateTimeFormat("es-ES", {
-              month: "long",
-              year: "numeric",
-            }).format(now)}
-          </h3>
-        </div>
-        <div className="grid grid-cols-7 gap-2 mb-2">
-          {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map((day) => (
-            <div
-              key={day}
-              className="h-8 flex items-center justify-center text-xs font-semibold text-slate-600"
-            >
-              {day}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-2">{days}</div>
-        <div className="mt-4 flex items-center gap-4 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 rounded border-2 border-red-200 bg-red-50" />
-            <span>Ocupado</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="h-4 w-4 rounded border-2 border-slate-200 bg-white" />
-            <span>Disponible</span>
-          </div>
-        </div>
-        <div className="mt-4 border-t pt-4">
-          <h4 className="text-sm font-semibold mb-1">Día seleccionado</h4>
-          <p className="text-xs text-slate-600">
-            {new Intl.DateTimeFormat("es-ES", {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            }).format(selectedDay)}
-          </p>
+    // Generar franjas horarias de 6 AM a 10 PM (16 horas)
+    const hours = [];
+    for (let h = 6; h <= 22; h++) {
+      hours.push(h);
+    }
 
-          <div className="mt-3">
-            <h5 className="text-sm font-semibold mb-2">Horas bloqueadas</h5>
-            {busyForDay.length === 0 ? (
-              <p className="text-xs text-slate-500">
-                No hay horas bloqueadas para este día.
-              </p>
-            ) : (
-              <div className="space-y-1">
-                {busyForDay.map((slot, idx) => {
-                  const clampedStart = new Date(
-                    Math.max(slot.start.getTime(), dayStart.getTime())
-                  );
-                  const clampedEnd = new Date(
-                    Math.min(slot.end.getTime(), dayEnd.getTime())
-                  );
-                  return (
-                    <div key={idx} className="text-xs text-slate-700">
-                      {clampedStart.toLocaleTimeString("es-ES", {
+    // Verificar si una hora está ocupada
+    const isHourBusy = (hour: number) => {
+      const hourStart = new Date(selectedDay);
+      hourStart.setHours(hour, 0, 0, 0);
+      const hourEnd = new Date(selectedDay);
+      hourEnd.setHours(hour, 59, 59, 999);
+
+      return busyForDay.some(
+        (slot) => slot.start < hourEnd && slot.end > hourStart
+      );
+    };
+
+    // Obtener eventos ocupados para una hora específica
+    const getBusyEventsForHour = (hour: number) => {
+      const hourStart = new Date(selectedDay);
+      hourStart.setHours(hour, 0, 0, 0);
+      const hourEnd = new Date(selectedDay);
+      hourEnd.setHours(hour + 1, 0, 0, 0);
+
+      return busyForDay.filter(
+        (slot) => slot.start < hourEnd && slot.end > hourStart
+      );
+    };
+
+    return (
+      <div className="flex flex-col h-full">
+        {/* Header con navegación de días */}
+        <div className="flex items-center justify-between mb-4 pb-3 border-b">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={goToPrevDay}
+              className="h-8 w-8"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={goToNextDay}
+              className="h-8 w-8"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            {!isToday && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={goToToday}
+                className="text-xs"
+              >
+                Hoy
+              </Button>
+            )}
+          </div>
+          <div className="text-center">
+            <h3 className="text-lg font-semibold">
+              {new Intl.DateTimeFormat("es-ES", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              }).format(selectedDay)}
+            </h3>
+            {isToday && (
+              <span className="text-xs text-blue-600 font-medium">Hoy</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded bg-blue-500" />
+              <span>Ocupado</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="h-3 w-3 rounded border border-slate-300 bg-white" />
+              <span>Libre</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Vista de día con horas */}
+        <div className="flex-1 overflow-y-auto max-h-[400px] border rounded-lg">
+          <div className="relative">
+            {hours.map((hour) => {
+              const busy = isHourBusy(hour);
+              const busyEvents = getBusyEventsForHour(hour);
+              const hourLabel = hour.toString().padStart(2, "0") + ":00";
+
+              return (
+                <div
+                  key={hour}
+                  className="flex border-b last:border-b-0 min-h-[48px]"
+                >
+                  {/* Columna de hora */}
+                  <div className="w-16 flex-shrink-0 px-2 py-1 text-xs text-slate-500 border-r bg-slate-50 flex items-start justify-end">
+                    {hourLabel}
+                  </div>
+                  {/* Contenido de la hora */}
+                  <div
+                    className={`flex-1 relative ${
+                      busy ? "bg-blue-50" : "bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    {busyEvents.map((event, idx) => {
+                      const startTime = event.start.toLocaleTimeString(
+                        "es-ES",
+                        { hour: "2-digit", minute: "2-digit" }
+                      );
+                      const endTime = event.end.toLocaleTimeString("es-ES", {
                         hour: "2-digit",
                         minute: "2-digit",
-                      })}{" "}
-                      -{" "}
-                      {clampedEnd.toLocaleTimeString("es-ES", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </div>
-                  );
-                })}
+                      });
+                      return (
+                        <div
+                          key={idx}
+                          className="absolute inset-x-1 top-1 bg-blue-500 text-white text-xs px-2 py-1 rounded shadow-sm"
+                          style={{
+                            minHeight: "38px",
+                          }}
+                        >
+                          <div className="font-medium">Ocupado</div>
+                          <div className="opacity-80">
+                            {startTime} - {endTime}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Resumen del día */}
+        <div className="mt-4 pt-3 border-t">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-slate-600">
+              Horas bloqueadas:{" "}
+              <span className="font-semibold">{busyForDay.length}</span>
+            </span>
+            {busyForDay.length > 0 && (
+              <div className="text-xs text-slate-500">
+                {busyForDay.map((slot, idx) => (
+                  <span key={idx}>
+                    {idx > 0 && ", "}
+                    {slot.start.toLocaleTimeString("es-ES", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                    -
+                    {slot.end.toLocaleTimeString("es-ES", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                ))}
               </div>
             )}
           </div>
