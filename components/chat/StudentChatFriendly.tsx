@@ -210,7 +210,8 @@ export default function StudentChatFriendly({
   const [creatingChat, setCreatingChat] = React.useState(false);
   // Estado del ticket generado por IA
   const [ticketModalOpen, setTicketModalOpen] = React.useState(false);
-  const [manualTicketModalOpen, setManualTicketModalOpen] = React.useState(false);
+  const [manualTicketModalOpen, setManualTicketModalOpen] =
+    React.useState(false);
   const [ticketLoading, setTicketLoading] = React.useState(false);
   const [ticketError, setTicketError] = React.useState<string | null>(null);
   const [ticketData, setTicketData] = React.useState<TicketData | null>(null);
@@ -1583,7 +1584,7 @@ export default function StudentChatFriendly({
   const markRead = React.useCallback(() => {
     try {
       if (chatId == null) return;
-      
+
       const key = `chatLastReadById:coach:${String(chatId)}`;
       localStorage.setItem(key, String(Date.now()));
       // Reiniciar contador persistente de no leídos por chatId
@@ -1804,7 +1805,7 @@ export default function StudentChatFriendly({
           try {
             lastRealtimeAtRef.current = Date.now();
             const currentChatId = chatIdRef.current;
-            
+
             // Si el mensaje es de otro chat (o no hay chat unido aún), avisa para refrescar y sumar no leídos
             if (
               msg?.id_chat != null &&
@@ -2042,7 +2043,7 @@ export default function StudentChatFriendly({
               });
               window.dispatchEvent(evtRefresh);
             } catch {}
-            
+
             // DESACTIVADO: No marcar automáticamente como leído cuando llega un mensaje
             // El usuario debe hacer scroll al fondo para marcar como leído
             // markRead();

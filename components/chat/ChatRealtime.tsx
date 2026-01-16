@@ -163,7 +163,8 @@ export default function ChatRealtime({
   const phaseOptions = ["ONBOARDING", "F1", "F2", "F3", "F4", "F5"];
 
   const [ticketModalOpen, setTicketModalOpen] = React.useState(false);
-  const [manualTicketModalOpen, setManualTicketModalOpen] = React.useState(false);
+  const [manualTicketModalOpen, setManualTicketModalOpen] =
+    React.useState(false);
   const [ticketTitle, setTicketTitle] = React.useState("");
   const [ticketDescription, setTicketDescription] = React.useState("");
   const [ticketType, setTicketType] = React.useState<TicketType | "">("");
