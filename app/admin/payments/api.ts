@@ -149,3 +149,29 @@ export async function upsertPaymentDetalle(
     }
   );
 }
+
+export type CreateDetallePayload = {
+  cuota_codigo: string;
+  monto: number;
+  moneda?: string;
+  estatus?: string;
+  fecha_pago?: string;
+  metodo?: string;
+  referencia?: string;
+  concepto?: string;
+  notas?: string;
+};
+
+export async function createPaymentDetalle(
+  paymentCodigo: string,
+  detalle: CreateDetallePayload
+): Promise<PaymentUpsertDetailEnvelope> {
+  const safePayment = encodeURIComponent(String(paymentCodigo || "").trim());
+  return fetchJson<PaymentUpsertDetailEnvelope>(
+    `/payments/create/payment/${safePayment}/detalle`,
+    {
+      method: "POST",
+      body: JSON.stringify(detalle),
+    }
+  );
+}

@@ -47,11 +47,13 @@ import {
   getPayments,
   syncPaymentCliente,
   upsertPaymentDetalle,
+  createPaymentDetalle,
   type PaymentRow,
+  type CreateDetallePayload,
 } from "./api";
 import { fetchUsers, type SysUser } from "../users/api";
 import { toast } from "@/components/ui/use-toast";
-import { CreditCard } from "lucide-react";
+import { CreditCard, Plus, Pencil } from "lucide-react";
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState<T>(value);
@@ -380,6 +382,162 @@ function PaymentsContent() {
   const [metricsError, setMetricsError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<PaymentMetrics | null>(null);
   const metricsReqIdRef = useRef(0);
+
+  // Estado para modal de crear/editar cuota
+  const [cuotaModalOpen, setCuotaModalOpen] = useState(false);
+  const [cuotaEditing, setCuotaEditing] = useState<any | null>(null); // null = crear nueva
+  const [cuotaSaving, setCuotaSaving] = useState(false);
+  const [cuotaForm, setCuotaForm] = useState({
+    cuota_codigo: "",
+    monto: "",
+    moneda: "USD",
+    estatus: "pendiente",
+    fecha_pago: "",
+    metodo: "",
+    referencia: "",
+    concepto: "",
+    notas: "",
+  });
+
+  function openCuotaModal(cuota?: any) {
+    if (cuota) {
+      // Editar existente
+      setCuotaEditing(cuota);
+      setCuotaForm({
+        cuota_codigo: cuota.cuota_codigo || "",
+        monto: cuota.monto != null ? String(cuota.monto) : "",
+        moneda: cuota.moneda || detail?.moneda || "USD",
+        estatus: normalizePaymentStatus(cuota.estatus) || "pendiente",
+        fecha_pago: cuota.fecha_pago
+          ? cuota.fecha_pago.slice(0, 16)
+          : "",
+        metodo: cuota.metodo || "",
+        referencia: cuota.referencia || "",
+        concepto: cuota.concepto || "",
+        notas: cuota.notas || "",
+      });
+    } else {
+      // Crear nueva
+      setCuotaEditing(null);
+      const existingCuotas = Array.isArray(detail?.detalles)
+        ? detail.detalles.length
+        : 0;
+      setCuotaForm({
+        cuota_codigo: `CUOTA_${String(existingCuotas + 1).padStart(3, "0")}`,
+        monto: "",
+        moneda: detail?.moneda || "USD",
+        estatus: "pendiente",
+        fecha_pago: "",
+        metodo: "",
+        referencia: "",
+        concepto: "",
+        notas: "",
+      });
+    }
+    setCuotaModalOpen(true);
+  }
+
+  async function saveCuota() {
+    const paymentCodigo = String(detail?.codigo ?? detailCodigo ?? "").trim();
+    if (!paymentCodigo) {
+      toast({
+        title: "Error",
+        description: "No se encontró el código de pago",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const monto = parseFloat(cuotaForm.monto);
+    if (isNaN(monto) || monto <= 0) {
+      toast({
+        title: "Monto inválido",
+        description: "Ingresa un monto válido mayor a 0",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!cuotaForm.cuota_codigo.trim()) {
+      toast({
+        title: "Código de cuota requerido",
+        description: "Ingresa un código para la cuota",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCuotaSaving(true);
+    try {
+      if (cuotaEditing) {
+        // Actualizar existente
+        const payload = {
+          codigo: cuotaEditing.codigo ?? null,
+          cuota_codigo: cuotaForm.cuota_codigo.trim(),
+          monto: monto,
+          moneda: cuotaForm.moneda || "USD",
+          estatus: normalizePaymentStatus(cuotaForm.estatus) || "pendiente",
+          fecha_pago: cuotaForm.fecha_pago
+            ? new Date(cuotaForm.fecha_pago).toISOString()
+            : null,
+          metodo: cuotaForm.metodo.trim() || null,
+          referencia: cuotaForm.referencia.trim() || null,
+          concepto: cuotaForm.concepto.trim() || null,
+          notas: cuotaForm.notas.trim() || null,
+        };
+
+        await upsertPaymentDetalle(
+          paymentCodigo,
+          String(cuotaEditing.codigo ?? ""),
+          payload
+        );
+
+        toast({
+          title: "Cuota actualizada",
+          description: `Se actualizó la cuota ${cuotaForm.cuota_codigo}`,
+        });
+      } else {
+        // Crear nueva
+        const payload: CreateDetallePayload = {
+          cuota_codigo: cuotaForm.cuota_codigo.trim(),
+          monto: monto,
+          moneda: cuotaForm.moneda || "USD",
+          estatus: normalizePaymentStatus(cuotaForm.estatus) || "pendiente",
+          fecha_pago: cuotaForm.fecha_pago
+            ? new Date(cuotaForm.fecha_pago).toISOString()
+            : undefined,
+          metodo: cuotaForm.metodo.trim() || undefined,
+          referencia: cuotaForm.referencia.trim() || undefined,
+          concepto: cuotaForm.concepto.trim() || undefined,
+          notas: cuotaForm.notas.trim() || undefined,
+        };
+
+        await createPaymentDetalle(paymentCodigo, payload);
+
+        toast({
+          title: "Cuota creada",
+          description: `Se creó la cuota ${cuotaForm.cuota_codigo}`,
+        });
+      }
+
+      // Refrescar detalle desde backend
+      try {
+        const fresh = await getPaymentByCodigo(paymentCodigo);
+        setDetail(fresh?.data ?? null);
+      } catch {}
+
+      setCuotaModalOpen(false);
+      setCuotaEditing(null);
+    } catch (e: any) {
+      toast({
+        title: "Error al guardar",
+        description: e?.message || "No se pudo guardar la cuota",
+        variant: "destructive",
+      });
+    } finally {
+      setCuotaSaving(false);
+    }
+  }
 
   async function loadList(next?: { page?: number; pageSize?: number }) {
     setIsLoading(true);
@@ -1698,18 +1856,29 @@ function PaymentsContent() {
 
                 <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Detalles</div>
-                    <div className="text-xs text-muted-foreground">
-                      {Array.isArray(detail.detalles)
-                        ? detail.detalles.length
-                        : 0}{" "}
-                      items
+                    <div className="text-sm font-semibold">Detalles (Cuotas)</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-muted-foreground">
+                        {Array.isArray(detail.detalles)
+                          ? detail.detalles.length
+                          : 0}{" "}
+                        items
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openCuotaModal()}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Nueva cuota
+                      </Button>
                     </div>
                   </div>
                   <div className="overflow-auto rounded-md border">
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-[60px]">Acciones</TableHead>
                           <TableHead>Cuota</TableHead>
                           <TableHead className="whitespace-nowrap">
                             Monto
@@ -1736,6 +1905,16 @@ function PaymentsContent() {
                         detail.detalles.length ? (
                           detail.detalles.map((d: any) => (
                             <TableRow key={d.codigo || d.id}>
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => openCuotaModal(d)}
+                                  title="Editar cuota"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TableCell>
                               <TableCell className="font-medium">
                                 {d.cuota_codigo || "—"}
                               </TableCell>
@@ -1915,10 +2094,10 @@ function PaymentsContent() {
                         ) : (
                           <TableRow>
                             <TableCell
-                              colSpan={12}
+                              colSpan={13}
                               className="text-sm text-muted-foreground"
                             >
-                              Sin detalles.
+                              Sin detalles. Haz clic en &quot;Nueva cuota&quot; para agregar una.
                             </TableCell>
                           </TableRow>
                         )}
@@ -1928,6 +2107,189 @@ function PaymentsContent() {
                 </div>
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal crear/editar cuota */}
+      <Dialog open={cuotaModalOpen} onOpenChange={setCuotaModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {cuotaEditing ? "Editar Cuota" : "Nueva Cuota"}
+            </DialogTitle>
+            <DialogDescription>
+              {cuotaEditing
+                ? `Editando cuota ${cuotaEditing.cuota_codigo || cuotaEditing.codigo}`
+                : "Ingresa los datos de la nueva cuota"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-1">
+                <Label>Código de cuota *</Label>
+                <Input
+                  value={cuotaForm.cuota_codigo}
+                  onChange={(e) =>
+                    setCuotaForm((prev) => ({
+                      ...prev,
+                      cuota_codigo: e.target.value,
+                    }))
+                  }
+                  placeholder="CUOTA_001"
+                />
+              </div>
+
+              <div className="grid gap-1">
+                <Label>Monto *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={cuotaForm.monto}
+                  onChange={(e) =>
+                    setCuotaForm((prev) => ({
+                      ...prev,
+                      monto: e.target.value,
+                    }))
+                  }
+                  placeholder="100.00"
+                />
+              </div>
+
+              <div className="grid gap-1">
+                <Label>Moneda</Label>
+                <Select
+                  value={cuotaForm.moneda}
+                  onValueChange={(v) =>
+                    setCuotaForm((prev) => ({ ...prev, moneda: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Moneda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="EUR">EUR</SelectItem>
+                    <SelectItem value="MXN">MXN</SelectItem>
+                    <SelectItem value="COP">COP</SelectItem>
+                    <SelectItem value="PEN">PEN</SelectItem>
+                    <SelectItem value="CLP">CLP</SelectItem>
+                    <SelectItem value="ARS">ARS</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-1">
+                <Label>Estatus</Label>
+                <Select
+                  value={cuotaForm.estatus}
+                  onValueChange={(v) =>
+                    setCuotaForm((prev) => ({ ...prev, estatus: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Estatus" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ALLOWED_PAYMENT_STATUS.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {formatPaymentStatusLabel(s)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid gap-1">
+                <Label>Fecha de pago</Label>
+                <Input
+                  type="datetime-local"
+                  value={cuotaForm.fecha_pago}
+                  onChange={(e) =>
+                    setCuotaForm((prev) => ({
+                      ...prev,
+                      fecha_pago: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+
+              <div className="grid gap-1">
+                <Label>Método</Label>
+                <Input
+                  value={cuotaForm.metodo}
+                  onChange={(e) =>
+                    setCuotaForm((prev) => ({
+                      ...prev,
+                      metodo: e.target.value,
+                    }))
+                  }
+                  placeholder="card, transfer, cash..."
+                />
+              </div>
+
+              <div className="grid gap-1 md:col-span-2">
+                <Label>Referencia</Label>
+                <Input
+                  value={cuotaForm.referencia}
+                  onChange={(e) =>
+                    setCuotaForm((prev) => ({
+                      ...prev,
+                      referencia: e.target.value,
+                    }))
+                  }
+                  placeholder="REF-001"
+                />
+              </div>
+
+              <div className="grid gap-1 md:col-span-2">
+                <Label>Concepto</Label>
+                <Input
+                  value={cuotaForm.concepto}
+                  onChange={(e) =>
+                    setCuotaForm((prev) => ({
+                      ...prev,
+                      concepto: e.target.value,
+                    }))
+                  }
+                  placeholder="Pago cuota mensual"
+                />
+              </div>
+
+              <div className="grid gap-1 md:col-span-2">
+                <Label>Notas</Label>
+                <Textarea
+                  value={cuotaForm.notas}
+                  onChange={(e) =>
+                    setCuotaForm((prev) => ({
+                      ...prev,
+                      notas: e.target.value,
+                    }))
+                  }
+                  placeholder="Notas adicionales..."
+                  className="min-h-[80px]"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setCuotaModalOpen(false)}
+              disabled={cuotaSaving}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={saveCuota} disabled={cuotaSaving}>
+              {cuotaSaving
+                ? "Guardando..."
+                : cuotaEditing
+                ? "Actualizar"
+                : "Crear cuota"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
