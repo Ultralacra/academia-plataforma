@@ -408,9 +408,7 @@ function PaymentsContent() {
         monto: cuota.monto != null ? String(cuota.monto) : "",
         moneda: cuota.moneda || detail?.moneda || "USD",
         estatus: normalizePaymentStatus(cuota.estatus) || "pendiente",
-        fecha_pago: cuota.fecha_pago
-          ? cuota.fecha_pago.slice(0, 16)
-          : "",
+        fecha_pago: cuota.fecha_pago ? cuota.fecha_pago.slice(0, 16) : "",
         metodo: cuota.metodo || "",
         referencia: cuota.referencia || "",
         concepto: cuota.concepto || "",
@@ -1856,7 +1854,9 @@ function PaymentsContent() {
 
                 <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="text-sm font-semibold">Detalles (Cuotas)</div>
+                    <div className="text-sm font-semibold">
+                      Detalles (Cuotas)
+                    </div>
                     <div className="flex items-center gap-2">
                       <div className="text-xs text-muted-foreground">
                         {Array.isArray(detail.detalles)
@@ -2097,7 +2097,8 @@ function PaymentsContent() {
                               colSpan={13}
                               className="text-sm text-muted-foreground"
                             >
-                              Sin detalles. Haz clic en &quot;Nueva cuota&quot; para agregar una.
+                              Sin detalles. Haz clic en &quot;Nueva cuota&quot;
+                              para agregar una.
                             </TableCell>
                           </TableRow>
                         )}
@@ -2120,7 +2121,9 @@ function PaymentsContent() {
             </DialogTitle>
             <DialogDescription>
               {cuotaEditing
-                ? `Editando cuota ${cuotaEditing.cuota_codigo || cuotaEditing.codigo}`
+                ? `Editando cuota ${
+                    cuotaEditing.cuota_codigo || cuotaEditing.codigo
+                  }`
                 : "Ingresa los datos de la nueva cuota"}
             </DialogDescription>
           </DialogHeader>
