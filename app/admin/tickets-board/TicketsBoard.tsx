@@ -336,6 +336,10 @@ export default function TicketsBoard({
     null
   );
   const [historyDetail, setHistoryDetail] = useState<any | null>(null);
+  const [historyFiles, setHistoryFiles] = useState<any[]>([]);
+  const [historyFilesLoading, setHistoryFilesLoading] = useState(false);
+  const [historyComments, setHistoryComments] = useState<TicketComment[]>([]);
+  const [historyCommentsLoading, setHistoryCommentsLoading] = useState(false);
 
   const visibleDesc = useMemo(() => {
     return filterDescriptionForStudent(String(ticketDetail?.descripcion || ""));
@@ -411,6 +415,28 @@ export default function TicketsBoard({
       const json = await res.json().catch(() => ({}));
       const data = (json as any)?.data ?? json ?? null;
       setHistoryDetail(data);
+
+      // Cargar archivos del ticket
+      try {
+        setHistoryFilesLoading(true);
+        const filesData = await getTicketFiles(code);
+        setHistoryFiles(Array.isArray(filesData) ? filesData : []);
+      } catch {
+        setHistoryFiles([]);
+      } finally {
+        setHistoryFilesLoading(false);
+      }
+
+      // Cargar comentarios/observaciones del ticket
+      try {
+        setHistoryCommentsLoading(true);
+        const commentsData = await getTicketComments(code);
+        setHistoryComments(Array.isArray(commentsData) ? commentsData : []);
+      } catch {
+        setHistoryComments([]);
+      } finally {
+        setHistoryCommentsLoading(false);
+      }
     } catch (e: any) {
       setHistoryDetailError(
         String(e?.message || e || "Error al cargar detalle")
@@ -2899,11 +2925,13 @@ export default function TicketsBoard({
             setHistoryDetailCodigo(null);
             setHistoryDetail(null);
             setHistoryDetailError(null);
+            setHistoryFiles([]);
+            setHistoryComments([]);
           }
         }}
       >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle className="text-lg font-semibold">
               Detalle del ticket
             </DialogTitle>
@@ -2923,95 +2951,267 @@ export default function TicketsBoard({
           ) : !historyDetail ? (
             <div className="text-sm text-slate-600">Sin datos.</div>
           ) : (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex-1 min-h-0 overflow-y-auto pr-2">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  {(() => {
+                    const statusKey = coerceStatus(
+                      historyDetail?.estado ?? historyDetail?.status
+                    );
+                    const label = STATUS_LABEL[statusKey];
+                    const badge = STATUS_STYLE[statusKey];
+                    return (
+                      <span
+                        className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] ${badge}`}
+                      >
+                        {label}
+                      </span>
+                    );
+                  })()}
+                  <Badge variant="secondary">
+                    {formatTitleForUi(
+                      historyDetail?.tipo ?? historyDetail?.type ?? "—"
+                    )}
+                  </Badge>
+                  {historyDetail?.creacion || historyDetail?.created_at ? (
+                    <Badge variant="muted">
+                      {new Date(
+                        historyDetail?.creacion || historyDetail?.created_at
+                      ).toLocaleString("es-ES", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        timeZone: "UTC",
+                      })}
+                    </Badge>
+                  ) : null}
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-sm font-medium text-slate-900">
+                    {formatTitleForUi(historyDetail?.nombre) || "—"}
+                  </div>
+                  <div className="text-xs text-slate-500">
+                    {historyDetail?.alumno_nombre || historyDetail?.alumnoNombre
+                      ? `Alumno: ${
+                          historyDetail?.alumno_nombre ||
+                          historyDetail?.alumnoNombre
+                        }`
+                      : ""}
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-slate-600">
+                    Descripción
+                  </div>
+                  <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
+                    {filterDescriptionForStudent(
+                      String(historyDetail?.descripcion || "")
+                    ) || "—"}
+                  </div>
+                </div>
+
                 {(() => {
-                  const statusKey = coerceStatus(
-                    historyDetail?.estado ?? historyDetail?.status
-                  );
-                  const label = STATUS_LABEL[statusKey];
-                  const badge = STATUS_STYLE[statusKey];
+                  const responseText =
+                    historyDetail?.respuesta_coach ??
+                    historyDetail?.respuestaCoach ??
+                    historyDetail?.respuesta ??
+                    historyDetail?.respuesta_del_coach ??
+                    historyDetail?.coach_response ??
+                    historyDetail?.coachResponse ??
+                    historyDetail?.feedback ??
+                    historyDetail?.solucion ??
+                    historyDetail?.solution ??
+                    "";
                   return (
-                    <span
-                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] ${badge}`}
-                    >
-                      {label}
-                    </span>
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-slate-600">
+                        Respuesta del Coach
+                      </div>
+                      <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100 min-h-[60px]">
+                        {String(responseText || "").trim() || (
+                          <span className="text-slate-400 italic">
+                            Sin respuesta aún
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   );
                 })()}
-                <Badge variant="secondary">
-                  {formatTitleForUi(
-                    historyDetail?.tipo ?? historyDetail?.type ?? "—"
-                  )}
-                </Badge>
-                {historyDetail?.creacion || historyDetail?.created_at ? (
-                  <Badge variant="muted">
-                    {new Date(
-                      historyDetail?.creacion || historyDetail?.created_at
-                    ).toLocaleString("es-ES", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      timeZone: "UTC",
-                    })}
-                  </Badge>
-                ) : null}
-              </div>
 
-              <div className="space-y-1">
-                <div className="text-sm font-medium text-slate-900">
-                  {formatTitleForUi(historyDetail?.nombre) || "—"}
-                </div>
-                <div className="text-xs text-slate-500">
-                  {historyDetail?.alumno_nombre || historyDetail?.alumnoNombre
-                    ? `Alumno: ${
-                        historyDetail?.alumno_nombre ||
-                        historyDetail?.alumnoNombre
-                      }`
-                    : ""}
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="text-xs font-medium text-slate-600">
-                  Descripción
-                </div>
-                <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
-                  {filterDescriptionForStudent(
-                    String(historyDetail?.descripcion || "")
-                  ) || "—"}
-                </div>
-              </div>
-
-              {(() => {
-                const responseText =
-                  historyDetail?.respuesta_coach ??
-                  historyDetail?.respuestaCoach ??
-                  historyDetail?.respuesta ??
-                  historyDetail?.respuesta_del_coach ??
-                  historyDetail?.solucion ??
-                  historyDetail?.solution ??
-                  "";
-                if (!String(responseText || "").trim()) return null;
-                return (
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-slate-600">
-                      Respuesta
+                {/* Coaches asignados */}
+                {(() => {
+                  const coaches =
+                    historyDetail?.coaches ??
+                    historyDetail?.coaches_override ??
+                    [];
+                  if (!Array.isArray(coaches) || coaches.length === 0)
+                    return null;
+                  return (
+                    <div className="space-y-2">
+                      <div className="text-xs font-medium text-slate-600">
+                        Coaches asignados
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {coaches.map((c: any, idx: number) => {
+                          const name =
+                            typeof c === "string" ? c : c?.nombre ?? "Coach";
+                          const area = typeof c === "string" ? null : c?.area;
+                          return (
+                            <span
+                              key={idx}
+                              className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
+                              title={area ? `${name} · ${area}` : name}
+                            >
+                              {name}
+                              {area ? ` · ${area}` : ""}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
-                      {String(responseText)}
-                    </div>
+                  );
+                })()}
+
+                {/* Archivos adjuntos */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-slate-600">
+                    Archivos adjuntos
                   </div>
-                );
-              })()}
+                  {historyFilesLoading ? (
+                    <div className="text-xs text-slate-500">
+                      Cargando archivos...
+                    </div>
+                  ) : historyFiles.length === 0 ? (
+                    <div className="text-xs text-slate-500">
+                      Sin archivos adjuntos.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {historyFiles.map((f: any, idx: number) => {
+                        const fileName =
+                          f?.nombre ??
+                          f?.name ??
+                          f?.filename ??
+                          `Archivo ${idx + 1}`;
+                        const fileUrl = f?.url ?? f?.enlace ?? "";
+                        const fileMime = String(
+                          f?.tipo ?? f?.mime ?? f?.mimetype ?? ""
+                        ).toLowerCase();
+                        const isImage = fileMime.startsWith("image/");
+                        const isVideo = fileMime.startsWith("video/");
+                        const isAudio = fileMime.startsWith("audio/");
+                        return (
+                          <div
+                            key={f?.id ?? idx}
+                            className="flex items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-xs"
+                          >
+                            {isImage ? (
+                              <FileImage className="h-4 w-4 text-emerald-600" />
+                            ) : isVideo ? (
+                              <FileVideo className="h-4 w-4 text-purple-600" />
+                            ) : isAudio ? (
+                              <FileAudio className="h-4 w-4 text-amber-600" />
+                            ) : (
+                              <FileIcon className="h-4 w-4 text-slate-500" />
+                            )}
+                            <span
+                              className="truncate max-w-[140px]"
+                              title={fileName}
+                            >
+                              {fileName}
+                            </span>
+                            {fileUrl && (
+                              <a
+                                href={fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline"
+                                title="Descargar / Ver"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Observaciones */}
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-slate-600">
+                    Observaciones
+                  </div>
+                  {historyCommentsLoading ? (
+                    <div className="text-xs text-slate-500">
+                      Cargando observaciones...
+                    </div>
+                  ) : historyComments.length === 0 ? (
+                    <div className="text-xs text-slate-500">
+                      Sin observaciones.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-[200px] overflow-y-auto rounded border border-slate-100 bg-slate-50 p-2">
+                      {historyComments.map((c) => (
+                        <div
+                          key={c.id}
+                          className="rounded bg-white border border-slate-200 p-2 text-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="font-medium text-slate-700">
+                              {c.user_nombre || "Usuario"}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {c.created_at
+                                ? new Date(c.created_at).toLocaleString(
+                                    "es-ES",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    }
+                                  )
+                                : ""}
+                            </span>
+                          </div>
+                          <div className="whitespace-pre-wrap text-slate-800">
+                            {c.contenido || "—"}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex-shrink-0 flex items-center justify-end gap-2 pt-2 border-t">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (historyDetailCodigo) {
+                  window.open(
+                    `/admin/tickets-board/${historyDetailCodigo}`,
+                    "_blank"
+                  );
+                }
+              }}
+              disabled={!historyDetailCodigo}
+              className="flex items-center gap-2"
+            >
+              <Maximize className="h-4 w-4" />
+              Abrir completo
+            </Button>
             <Button
               variant="outline"
               onClick={() => setHistoryDetailOpen(false)}
@@ -4586,32 +4786,43 @@ export default function TicketsBoard({
                                       </span>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                      <TooltipProvider>
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="h-7 w-7 p-0"
-                                              onClick={() => {
-                                                const codigo = String(
-                                                  t.codigo || ""
-                                                ).trim();
-                                                if (!codigo) return;
-                                                setHistoryDetailCodigo(codigo);
-                                                setHistoryDetailOpen(true);
-                                                loadHistoryTicketDetail(codigo);
-                                              }}
-                                              disabled={!t.codigo}
-                                            >
-                                              <Eye className="h-4 w-4" />
-                                            </Button>
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            Ver detalle
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </TooltipProvider>
+                                      <div className="flex items-center justify-end gap-1">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 w-7 p-0"
+                                          onClick={() => {
+                                            const codigo = String(
+                                              t.codigo || ""
+                                            ).trim();
+                                            if (!codigo) return;
+                                            setHistoryDetailCodigo(codigo);
+                                            setHistoryDetailOpen(true);
+                                            loadHistoryTicketDetail(codigo);
+                                          }}
+                                          disabled={!t.codigo}
+                                        >
+                                          <Eye className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-7 w-7 p-0"
+                                          onClick={() => {
+                                            const codigo = String(
+                                              t.codigo || ""
+                                            ).trim();
+                                            if (!codigo) return;
+                                            window.open(
+                                              `/admin/tickets-board/${codigo}`,
+                                              "_blank"
+                                            );
+                                          }}
+                                          disabled={!t.codigo}
+                                        >
+                                          <Maximize className="h-4 w-4" />
+                                        </Button>
+                                      </div>
                                     </TableCell>
                                   </TableRow>
                                 );
