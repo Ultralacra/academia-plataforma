@@ -35,5 +35,10 @@ export async function GET(req: Request) {
     "AX"
   );
 
-  return new ImageResponse(element, { width: size, height: size });
+  const response = new ImageResponse(element, { width: size, height: size });
+  
+  // Cache por 1 día para evitar peticiones repetidas
+  response.headers.set("Cache-Control", "public, max-age=86400, immutable");
+  
+  return response;
 }
