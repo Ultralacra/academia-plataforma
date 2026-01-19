@@ -21,6 +21,8 @@ export type Message = {
   delivered?: boolean;
   read?: boolean;
   srcParticipantId?: string | number | null;
+  // ID del equipo emisor (para distinguir coach↔coach)
+  srcEquipoId?: string | number | null;
   attachments?: Attachment[];
   // Clave de UI estable para evitar parpadeos al cambiar id tras ACK del servidor
   uiKey?: string;

@@ -48,12 +48,13 @@ import {
   syncPaymentCliente,
   upsertPaymentDetalle,
   createPaymentDetalle,
+  deletePaymentDetalle,
   type PaymentRow,
   type CreateDetallePayload,
 } from "./api";
 import { fetchUsers, type SysUser } from "../users/api";
 import { toast } from "@/components/ui/use-toast";
-import { CreditCard, Plus, Pencil } from "lucide-react";
+import { CreditCard, Plus, Pencil, Trash2 } from "lucide-react";
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState<T>(value);
@@ -534,6 +535,59 @@ function PaymentsContent() {
       });
     } finally {
       setCuotaSaving(false);
+    }
+  }
+
+  // Estado para modal de confirmación de eliminar cuota
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [cuotaToDelete, setCuotaToDelete] = useState<any | null>(null);
+  const [cuotaDeleting, setCuotaDeleting] = useState(false);
+
+  function openDeleteConfirm(cuota: any) {
+    setCuotaToDelete(cuota);
+    setDeleteConfirmOpen(true);
+  }
+
+  async function deleteCuota() {
+    if (!cuotaToDelete) return;
+
+    const paymentCodigo = String(detail?.codigo ?? detailCodigo ?? "").trim();
+    const detalleCodigo = String(cuotaToDelete.codigo ?? "").trim();
+
+    if (!paymentCodigo || !detalleCodigo) {
+      toast({
+        title: "Error",
+        description: "No se encontró el código de pago o detalle",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setCuotaDeleting(true);
+    try {
+      await deletePaymentDetalle(paymentCodigo, detalleCodigo);
+
+      toast({
+        title: "Cuota eliminada",
+        description: `Se eliminó la cuota ${cuotaToDelete.cuota_codigo || detalleCodigo}`,
+      });
+
+      // Refrescar detalle desde backend
+      try {
+        const fresh = await getPaymentByCodigo(paymentCodigo);
+        setDetail(fresh?.data ?? null);
+      } catch {}
+
+      setDeleteConfirmOpen(false);
+      setCuotaToDelete(null);
+    } catch (e: any) {
+      toast({
+        title: "Error al eliminar",
+        description: e?.message || "No se pudo eliminar la cuota",
+        variant: "destructive",
+      });
+    } finally {
+      setCuotaDeleting(false);
     }
   }
 
@@ -1906,14 +1960,25 @@ function PaymentsContent() {
                           detail.detalles.map((d: any) => (
                             <TableRow key={d.codigo || d.id}>
                               <TableCell>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => openCuotaModal(d)}
-                                  title="Editar cuota"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => openCuotaModal(d)}
+                                    title="Editar cuota"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => openDeleteConfirm(d)}
+                                    title="Eliminar cuota"
+                                    className="text-destructive hover:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </TableCell>
                               <TableCell className="font-medium">
                                 {d.cuota_codigo || "—"}
@@ -2296,6 +2361,37 @@ function PaymentsContent() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal confirmar eliminación de cuota */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar cuota?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {cuotaToDelete
+                ? `Estás a punto de eliminar la cuota "${
+                    cuotaToDelete.cuota_codigo || cuotaToDelete.codigo
+                  }" con monto ${formatMoney(
+                    cuotaToDelete.monto,
+                    cuotaToDelete.moneda || detail?.moneda
+                  )}. Esta acción no se puede deshacer.`
+                : "¿Estás seguro de que deseas eliminar esta cuota?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cuotaDeleting}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={deleteCuota}
+              disabled={cuotaDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {cuotaDeleting ? "Eliminando..." : "Eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

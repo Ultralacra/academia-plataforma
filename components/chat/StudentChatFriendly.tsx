@@ -29,6 +29,7 @@ import {
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import { getAuthToken } from "@/lib/auth";
 import { CHAT_HOST, apiFetch, buildUrl } from "@/lib/api-config";
+import { getCoaches } from "@/lib/data-service";
 import { playNotificationSound } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -140,14 +141,14 @@ export default function StudentChatFriendly({
             ai?.fecha_ultimo_mensaje ??
             ai?.updated_at ??
             ai?.created_at ??
-            ""
+            "",
         );
         const atB = String(
           bi?.last_message_at ??
             bi?.fecha_ultimo_mensaje ??
             bi?.updated_at ??
             bi?.created_at ??
-            ""
+            "",
         );
         if (atA !== atB) return false;
       }
@@ -160,13 +161,66 @@ export default function StudentChatFriendly({
   const [contacts, setContacts] = React.useState<
     Array<{ codigo_equipo: string; area?: string }>
   >([]);
+  const [coachesList, setCoachesList] = React.useState<
+    Array<{ id: string | number; name: string; area?: string | null }>
+  >([]);
+  const [coachSearch, setCoachSearch] = React.useState("");
   const normRoom = React.useMemo(
     () => (room || "").trim().toLowerCase(),
-    [room]
+    [room],
   );
+  // Función mejorada para detectar si un mensaje es mío
+  // Soporta chats coach↔coach comparando srcParticipantId o srcEquipoId
   const mine = React.useCallback(
-    (s: Sender) => (s || "").toLowerCase() === role.toLowerCase(),
-    [role]
+    (senderOrMsg: Sender | Message): boolean => {
+      // Si recibe un string (sender), usa la lógica tradicional
+      if (typeof senderOrMsg === "string") {
+        const s = senderOrMsg as Sender;
+        return (s || "").toLowerCase() === role.toLowerCase();
+      }
+      // Si recibe un Message, usamos lógica avanzada
+      const m = senderOrMsg as Message;
+      const isCoachToCoach = !!isCoachToCoachChatRef.current;
+
+      // DEBUG: Ver todos los valores
+      console.log("[mine] DEBUG:", {
+        isCoachToCoach,
+        srcParticipantId: m.srcParticipantId,
+        myParticipantId: myParticipantIdRef.current,
+        srcEquipoId: m.srcEquipoId,
+        myEquipoId: socketio?.idEquipo,
+        sender: m.sender,
+        role,
+        msgText: (m.text || "").slice(0, 20),
+      });
+
+      if (isCoachToCoach) {
+        // En chat coach↔coach, DEBEMOS usar srcParticipantId o srcEquipoId
+        // Opción 1: Comparar por srcParticipantId
+        if (m.srcParticipantId != null && myParticipantIdRef.current != null) {
+          const result =
+            String(m.srcParticipantId) === String(myParticipantIdRef.current);
+          console.log("[mine] by srcParticipantId =>", result);
+          return result;
+        }
+        // Opción 2: Comparar por srcEquipoId (id_equipo del emisor)
+        const msgEquipoId = String(m.srcEquipoId ?? "").trim();
+        const myEquipoId = String(socketio?.idEquipo ?? "").trim();
+        if (msgEquipoId && myEquipoId) {
+          const result = msgEquipoId === myEquipoId;
+          console.log("[mine] by srcEquipoId =>", result);
+          return result;
+        }
+        // Fallback: si no podemos determinar, asumimos que NO es mío
+        console.log("[mine] fallback => false");
+        return false;
+      }
+      // Fallback normal: comparar sender con role
+      const result = (m.sender || "").toLowerCase() === role.toLowerCase();
+      console.log("[mine] by sender/role =>", result);
+      return result;
+    },
+    [role, socketio?.idEquipo],
   );
   // Límite de tamaño por archivo: 50MB
   const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -200,7 +254,7 @@ export default function StudentChatFriendly({
     loadingMessagesRef.current = loadingMessages;
   }, [loadingMessages]);
   const [chatId, setChatId] = React.useState<string | number | null>(
-    socketio?.chatId ?? null
+    socketio?.chatId ?? null,
   );
   const [myParticipantId, setMyParticipantId] = React.useState<
     string | number | null
@@ -234,8 +288,8 @@ export default function StudentChatFriendly({
             file_ids: Array.from(selectedAttachmentIds),
           },
           null,
-          3
-        )
+          3,
+        ),
       );
     }
   }, [selectedMessageIds, selectedAttachmentIds]);
@@ -322,7 +376,7 @@ export default function StudentChatFriendly({
           className="underline text-sky-700 hover:text-sky-900 break-all"
         >
           {match[0]}
-        </a>
+        </a>,
       );
       lastIndex = end;
     }
@@ -334,7 +388,7 @@ export default function StudentChatFriendly({
 
   const sioRef = React.useRef<any>(null);
   const chatIdRef = React.useRef<string | number | null>(
-    socketio?.chatId ?? null
+    socketio?.chatId ?? null,
   );
   const myParticipantIdRef = React.useRef<string | number | null>(null);
   const seenRef = React.useRef<Set<string>>(new Set());
@@ -351,7 +405,7 @@ export default function StudentChatFriendly({
     timer: null,
   });
   const clientSessionRef = React.useRef<string>(
-    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   );
   const latestRequestedChatIdRef = React.useRef<any>(socketio?.chatId ?? null);
   const joinInFlightRef = React.useRef<boolean>(false);
@@ -359,11 +413,11 @@ export default function StudentChatFriendly({
   // Controla auto-scroll inicial por chatId para evitar quedar "a la mitad"
   const autoScrolledChatRef = React.useRef<string | number | null>(null);
   const participantsRef = React.useRef<any[] | undefined>(
-    socketio?.participants
+    socketio?.participants,
   );
   const listParamsRef = React.useRef<any>(listParams);
   const lastPartsKeyRef = React.useRef<string>(
-    JSON.stringify(socketio?.participants || [])
+    JSON.stringify(socketio?.participants || []),
   );
 
   React.useEffect(() => {
@@ -435,7 +489,7 @@ export default function StudentChatFriendly({
     // - el último mensaje es mío (para no perder el contexto al enviar)
     const distance = getDistanceFromBottom();
     const last = items.length > 0 ? items[items.length - 1] : null;
-    const lastIsMine = last ? mine(last.sender) : false;
+    const lastIsMine = last ? mine(last) : false; // Pasar mensaje completo
     const shouldStick =
       pinnedToBottomRef.current || distance < 120 || lastIsMine;
     if (!shouldStick) return;
@@ -513,7 +567,7 @@ export default function StudentChatFriendly({
   const formatBytes = (bytes?: number) => formatBytesUtil(bytes);
   const getAttachmentUrlCb = React.useCallback(
     (a: Attachment) => getAttachmentUrl(a),
-    []
+    [],
   );
   const openPreview = (a: Attachment) => {
     setPreviewAttachment(a);
@@ -595,7 +649,7 @@ export default function StudentChatFriendly({
     try {
       if (items.length === 0) return;
       const last = items[items.length - 1];
-      const isMine = mine(last.sender);
+      const isMine = mine(last); // Pasar mensaje completo
       if (!isMine) playNotificationSound();
     } catch {}
   }, [items.length]);
@@ -618,7 +672,7 @@ export default function StudentChatFriendly({
       if (selectedMessageIds.size === 0 && selectedAttachmentIds.size === 0) {
         setTicketModalOpen(true);
         setTicketError(
-          "Debes seleccionar al menos un mensaje o archivo para generar el ticket."
+          "Debes seleccionar al menos un mensaje o archivo para generar el ticket.",
         );
         return;
       }
@@ -686,7 +740,7 @@ export default function StudentChatFriendly({
 
       const sendId = String(currentId).trim();
       const urlWithParam = buildUrl(
-        `/ai/compute/chat/by-ids/${encodeURIComponent(sendId)}`
+        `/ai/compute/chat/by-ids/${encodeURIComponent(sendId)}`,
       );
       // logging eliminado
       res = await fetch(urlWithParam, {
@@ -715,10 +769,10 @@ export default function StudentChatFriendly({
         const rawMessages = Array.isArray((data as any)?.messages)
           ? (data as any).messages
           : Array.isArray((data as any)?.mensajes)
-          ? (data as any).mensajes
-          : Array.isArray((data as any)?.original_messages)
-          ? (data as any).original_messages
-          : [];
+            ? (data as any).mensajes
+            : Array.isArray((data as any)?.original_messages)
+              ? (data as any).original_messages
+              : [];
         const mappedMessages = rawMessages.map((m: any) => ({
           fecha: String(m?.fecha || m?.date || ""),
           mensaje: String(m?.mensaje || m?.message || "").trim(),
@@ -739,10 +793,10 @@ export default function StudentChatFriendly({
         const rawMessages = Array.isArray((data as any)?.messages)
           ? (data as any).messages
           : Array.isArray((data as any)?.mensajes)
-          ? (data as any).mensajes
-          : Array.isArray((data as any)?.original_messages)
-          ? (data as any).original_messages
-          : [];
+            ? (data as any).mensajes
+            : Array.isArray((data as any)?.original_messages)
+              ? (data as any).original_messages
+              : [];
         const mappedMessages = rawMessages.map((m: any) => ({
           fecha: String(m?.fecha || m?.date || ""),
           mensaje: String(m?.mensaje || m?.message || "").trim(),
@@ -796,7 +850,7 @@ export default function StudentChatFriendly({
           .join(", ");
         const more = tooBig.length > 3 ? ` y ${tooBig.length - 3} más` : "";
         setUploadError(
-          `Se omitieron ${tooBig.length} archivo(s) por exceder 50MB: ${names}${more}.`
+          `Se omitieron ${tooBig.length} archivo(s) por exceder 50MB: ${names}${more}.`,
         );
         arr = arr.filter((f) => (f?.size || 0) <= MAX_FILE_SIZE);
       }
@@ -839,6 +893,7 @@ export default function StudentChatFriendly({
           delivered: false,
           read: false,
           srcParticipantId: myParticipantIdRef.current ?? undefined,
+          srcEquipoId: socketio?.idEquipo ?? undefined,
           attachments: [optimisticAttachment],
           uiKey: optimisticId,
         };
@@ -884,7 +939,7 @@ export default function StudentChatFriendly({
           if (!ok) {
             try {
               const fallbackUrl = buildUrl(
-                `/v1/ai/upload-file/${encodeURIComponent(id)}`
+                `/v1/ai/upload-file/${encodeURIComponent(id)}`,
               );
               const h2: Record<string, string> = {
                 ...headers,
@@ -902,8 +957,8 @@ export default function StudentChatFriendly({
           // 3) Marcar optimista como entregado o mostrar error
           setItems((prev) =>
             prev.map((m) =>
-              m.id === optimisticId ? { ...m, delivered: ok } : m
-            )
+              m.id === optimisticId ? { ...m, delivered: ok } : m,
+            ),
           );
 
           // 4) Disparar refresh de listas y confiar en el evento socket del servidor
@@ -945,7 +1000,7 @@ export default function StudentChatFriendly({
         .join(", ");
       const more = rejected.length > 3 ? ` y ${rejected.length - 3} más` : "";
       setUploadError(
-        `No se pueden adjuntar archivos mayores a 50MB. Se omitieron: ${names}${more}.`
+        `No se pueden adjuntar archivos mayores a 50MB. Se omitieron: ${names}${more}.`,
       );
     }
     if (!valid.length) return;
@@ -1013,7 +1068,7 @@ export default function StudentChatFriendly({
       {
         root,
         threshold: [0, 0.01, 0.5, 0.95, 1],
-      }
+      },
     );
     try {
       obs.observe(target);
@@ -1053,7 +1108,7 @@ export default function StudentChatFriendly({
         return String(id ?? "");
       }
     },
-    [resolveName]
+    [resolveName],
   );
   const getTipoByParticipantId = React.useCallback(
     (pid: any): "cliente" | "equipo" | "admin" | "" => {
@@ -1071,12 +1126,13 @@ export default function StudentChatFriendly({
         return "";
       }
     },
-    []
+    [],
   );
 
   const joinedParticipantsRef = React.useRef<any[] | null>(null);
   const joinDataRef = React.useRef<any | null>(null);
   const isTwoPartyAlumnoCoachRef = React.useRef<boolean>(false);
+  const isCoachToCoachChatRef = React.useRef<boolean>(false);
 
   // getEmitter/normalizeDateStr movidos a ./chat-core
 
@@ -1088,7 +1144,7 @@ export default function StudentChatFriendly({
     (
       m: any,
       cid: any,
-      ctx?: "realtime" | "user" | "join" | "poll"
+      ctx?: "realtime" | "user" | "join" | "poll",
     ): SenderEval => {
       try {
         const myPid = myParticipantIdRef.current;
@@ -1111,7 +1167,7 @@ export default function StudentChatFriendly({
         try {
           const txt = String(m?.contenido ?? m?.texto ?? "").trim();
           const tMsg = Date.parse(
-            String(normalizeDateStr(m?.fecha_envio) || "")
+            String(normalizeDateStr(m?.fecha_envio) || ""),
           );
           for (let i = outboxRef.current.length - 1; i >= 0; i--) {
             const ob = outboxRef.current[i];
@@ -1139,7 +1195,7 @@ export default function StudentChatFriendly({
                     String(x?.id) === String(clientId) &&
                     x?.delivered === false &&
                     String(x?.sender || "").toLowerCase() ===
-                      String(role || "").toLowerCase()
+                      String(role || "").toLowerCase(),
                 )
               : false;
             if (!hasOptimistic) {
@@ -1169,7 +1225,7 @@ export default function StudentChatFriendly({
             m?.emisor_tipo ||
             m?.tipo_emisor ||
             m?.remitente_tipo ||
-            getTipoByParticipantId(m?.id_chat_participante_emisor ?? emitter)
+            getTipoByParticipantId(m?.id_chat_participante_emisor ?? emitter),
         );
         const senderIsByTipoKnown =
           tipoNorm === "cliente" ||
@@ -1179,10 +1235,18 @@ export default function StudentChatFriendly({
         // Priorizar identificación por id (emitter) cuando esté disponible.
         let final: Sender;
         let reason = "unknown";
+
+        // Detectar si es chat coach↔coach
+        const isCoachToCoach = !!isCoachToCoachChatRef.current;
+
         if (senderIsById) {
           reason = "byId";
           const isMine = true;
-          if (role === "alumno") final = isMine ? "alumno" : "coach";
+          if (isCoachToCoach) {
+            // En chat coach↔coach, el sender siempre es "coach" pero diferenciamos por isMine
+            final = "coach";
+            reason = "byId-coachToCoach-mine";
+          } else if (role === "alumno") final = isMine ? "alumno" : "coach";
           else if (role === "coach") final = isMine ? "coach" : "alumno";
           else final = isMine ? role : "alumno";
         } else {
@@ -1191,7 +1255,18 @@ export default function StudentChatFriendly({
           // Esto evita que todo se renderice a la derecha. Los ecos propios se siguen
           // reconciliando por los merges (optimistas/client_session) sin depender de esto.
           if (ctx === "realtime") {
-            if (senderIsByTipoKnown) {
+            if (isCoachToCoach) {
+              // Chat coach↔coach: comparar id_equipo del mensaje con el mío
+              const msgEquipoId = String(m?.id_equipo ?? "").trim();
+              const myEquipoId = String(socketio?.idEquipo ?? "").trim();
+              if (msgEquipoId && myEquipoId && msgEquipoId === myEquipoId) {
+                reason = "realtime-coachToCoach-mine";
+                final = "coach";
+              } else {
+                reason = "realtime-coachToCoach-other";
+                final = "coach"; // El otro también es coach
+              }
+            } else if (senderIsByTipoKnown) {
               reason = "realtime-byParticipantType";
               if (tipoNorm === "cliente") final = "alumno";
               else if (tipoNorm === "equipo") final = "coach";
@@ -1202,8 +1277,8 @@ export default function StudentChatFriendly({
                 role === "alumno"
                   ? "coach"
                   : role === "coach"
-                  ? "alumno"
-                  : "alumno";
+                    ? "alumno"
+                    : "alumno";
             }
           } else {
             // En no-realtime sí usamos heurísticas para reconciliar ecos propios.
@@ -1217,6 +1292,17 @@ export default function StudentChatFriendly({
             } else if (senderIsBySession) {
               reason = "bySession";
               final = role;
+            } else if (isCoachToCoach) {
+              // Chat coach↔coach sin identificación clara: usar id_equipo
+              const msgEquipoId = String(m?.id_equipo ?? "").trim();
+              const myEquipoId = String(socketio?.idEquipo ?? "").trim();
+              if (msgEquipoId && myEquipoId && msgEquipoId === myEquipoId) {
+                reason = "coachToCoach-byEquipoId-mine";
+                final = "coach";
+              } else {
+                reason = "coachToCoach-byEquipoId-other";
+                final = "coach";
+              }
             } else if (senderIsByTipoKnown) {
               reason = "byParticipantType";
               if (tipoNorm === "cliente") final = "alumno";
@@ -1231,16 +1317,16 @@ export default function StudentChatFriendly({
                   role === "alumno"
                     ? "coach"
                     : role === "coach"
-                    ? "alumno"
-                    : "alumno";
+                      ? "alumno"
+                      : "alumno";
                 reason = "fallback-twoParty-attachments-other";
               } else {
                 final =
                   role === "alumno"
                     ? "coach"
                     : role === "coach"
-                    ? "alumno"
-                    : "alumno";
+                      ? "alumno"
+                      : "alumno";
               }
             }
           }
@@ -1268,7 +1354,7 @@ export default function StudentChatFriendly({
         return { sender: fallback, byId: false, reason: "error-fallback" };
       }
     },
-    [role]
+    [role],
   );
 
   // Construir un mensaje desde un payload genérico (incluyendo eventos de archivo)
@@ -1285,7 +1371,7 @@ export default function StudentChatFriendly({
           obj?.id_mensaje ??
             obj?.id ??
             obj?.id_archivo ??
-            `${Date.now()}-${Math.random()}`
+            `${Date.now()}-${Math.random()}`,
         );
         // Unificar determinación de remitente (isMine) utilizando
         // la función centralizada evalSenderForMapping para evitar
@@ -1298,11 +1384,13 @@ export default function StudentChatFriendly({
           sender,
           text: txt,
           at: String(
-            normalizeDateStr(obj?.fecha_envio) || new Date().toISOString()
+            normalizeDateStr(obj?.fecha_envio) || new Date().toISOString(),
           ),
           delivered: true,
           read: false,
           srcParticipantId: getEmitter(obj),
+          // Guardar id_equipo para distinguir coach↔coach
+          srcEquipoId: obj?.id_equipo ?? null,
           attachments: atts,
           uiKey: id,
         };
@@ -1315,7 +1403,7 @@ export default function StudentChatFriendly({
         return null;
       }
     },
-    [role, normRoom, chatId]
+    [role, normRoom, chatId],
   );
 
   const pushIncomingMessage = React.useCallback((msg: Message) => {
@@ -1401,7 +1489,7 @@ export default function StudentChatFriendly({
         const prev = itemsRef.current || [];
         if (!prev.length) return mapped;
         const prevById = new Map<string, Message>(
-          prev.map((p) => [String(p.id), p])
+          prev.map((p) => [String(p.id), p]),
         );
         return mapped.map((m) => {
           const old = prevById.get(String(m.id));
@@ -1417,7 +1505,7 @@ export default function StudentChatFriendly({
         return mapped;
       }
     },
-    []
+    [],
   );
 
   // Unir mensajes del servidor con optimistas locales para que no desaparezcan tras un refresh
@@ -1518,7 +1606,7 @@ export default function StudentChatFriendly({
         return serverMapped;
       }
     },
-    [role]
+    [role],
   );
 
   // Mapear archivo/archivos del backend a adjuntos del UI
@@ -1594,7 +1682,7 @@ export default function StudentChatFriendly({
         window.dispatchEvent(
           new CustomEvent("chat:unread-count-updated", {
             detail: { chatId, role, count: 0 },
-          })
+          }),
         );
       } catch {}
       const evt = new CustomEvent("chat:last-read-updated", {
@@ -1658,8 +1746,8 @@ export default function StudentChatFriendly({
                 const msgsSrc = Array.isArray(data.messages)
                   ? data.messages
                   : Array.isArray((data as any).mensajes)
-                  ? (data as any).mensajes
-                  : [];
+                    ? (data as any).mensajes
+                    : [];
                 const myPidLocal =
                   data?.my_participante ?? myParticipantIdRef.current;
                 const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -1669,23 +1757,24 @@ export default function StudentChatFriendly({
                     id: String(
                       m?.id_mensaje ??
                         m?.id_archivo ??
-                        `${Date.now()}-${Math.random()}`
+                        `${Date.now()}-${Math.random()}`,
                     ),
                     room: normRoom,
                     sender,
                     text: String(
-                      m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                      m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
                     ).trim(),
                     at: String(
                       normalizeDateStr(m?.fecha_envio) ||
-                        new Date().toISOString()
+                        new Date().toISOString(),
                     ),
                     delivered: true,
                     read: !!m?.leido,
                     srcParticipantId: getEmitter(m),
+                    srcEquipoId: m?.id_equipo ?? null,
                     attachments: mapArchivoToAttachments(m),
                     uiKey: String(
-                      m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                      m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                     ),
                   } as Message;
                   (msg as any).__senderById = !!ev.byId;
@@ -1832,7 +1921,7 @@ export default function StudentChatFriendly({
                 try {
                   const txt = String(msg?.contenido ?? msg?.texto ?? "").trim();
                   const tMsg = Date.parse(
-                    String(normalizeDateStr(msg?.fecha_envio) || "")
+                    String(normalizeDateStr(msg?.fecha_envio) || ""),
                   );
                   for (let i = outboxRef.current.length - 1; i >= 0; i--) {
                     const ob = outboxRef.current[i];
@@ -1866,11 +1955,11 @@ export default function StudentChatFriendly({
                   // Persistir incremento de no leídos por chatId
                   try {
                     const unreadKey = `chatUnreadById:${role}:${String(
-                      msg?.id_chat
+                      msg?.id_chat,
                     )}`;
                     const prev = Number.parseInt(
                       localStorage.getItem(unreadKey) || "0",
-                      10
+                      10,
                     );
                     const next = (isNaN(prev) ? 0 : prev) + 1;
                     localStorage.setItem(unreadKey, String(next));
@@ -1881,7 +1970,7 @@ export default function StudentChatFriendly({
                           role,
                           count: next,
                         },
-                      })
+                      }),
                     );
                   } catch {}
                 }
@@ -1892,7 +1981,7 @@ export default function StudentChatFriendly({
               return;
             }
             const id = String(
-              msg?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+              msg?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
             );
             if (seenRef.current.has(id)) return;
             seenRef.current.add(id);
@@ -1907,7 +1996,7 @@ export default function StudentChatFriendly({
             try {
               const txt = String(msg?.contenido ?? msg?.texto ?? "").trim();
               const tMsg = Date.parse(
-                String(normalizeDateStr(msg?.fecha_envio) || "")
+                String(normalizeDateStr(msg?.fecha_envio) || ""),
               );
               for (let i = outboxRef.current.length - 1; i >= 0; i--) {
                 const ob = outboxRef.current[i];
@@ -1928,7 +2017,7 @@ export default function StudentChatFriendly({
             const senderIsMeByRecent = hasRecentUploadMatch(
               role,
               currentChatId,
-              attsLive
+              attsLive,
             );
 
             const senderIsMeBySessionRaw =
@@ -1945,7 +2034,7 @@ export default function StudentChatFriendly({
               !senderIsMeByRecent
             ) {
               console.log(
-                "[StudentChatFriendly] Playing sound for incoming message"
+                "[StudentChatFriendly] Playing sound for incoming message",
               );
               playNotificationSound();
             }
@@ -1962,11 +2051,12 @@ export default function StudentChatFriendly({
               sender,
               text: String(msg?.contenido ?? msg?.texto ?? "").trim(),
               at: String(
-                normalizeDateStr(msg?.fecha_envio) || new Date().toISOString()
+                normalizeDateStr(msg?.fecha_envio) || new Date().toISOString(),
               ),
               delivered: true,
               read: false,
               srcParticipantId: getEmitter(msg),
+              srcEquipoId: msg?.id_equipo ?? null,
               uiKey: id,
             };
             if (attsLive && attsLive.length) newMsg.attachments = attsLive;
@@ -2079,8 +2169,8 @@ export default function StudentChatFriendly({
             if (!idMsg) return;
             setItems((prev) =>
               prev.map((m) =>
-                String(m.id) === String(idMsg) ? { ...m, read: true } : m
-              )
+                String(m.id) === String(idMsg) ? { ...m, read: true } : m,
+              ),
             );
           } catch {}
         });
@@ -2090,8 +2180,8 @@ export default function StudentChatFriendly({
               prev.map((m) =>
                 (m.sender || "").toLowerCase() === role.toLowerCase()
                   ? { ...m, read: true }
-                  : m
-              )
+                  : m,
+              ),
             );
           } catch {}
         });
@@ -2175,8 +2265,8 @@ export default function StudentChatFriendly({
             const msgsSrc = Array.isArray(data.messages)
               ? data.messages
               : Array.isArray((data as any).mensajes)
-              ? (data as any).mensajes
-              : [];
+                ? (data as any).mensajes
+                : [];
             const myPidLocal =
               data?.my_participante ?? myParticipantIdRef.current;
             const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -2186,22 +2276,23 @@ export default function StudentChatFriendly({
                 id: String(
                   m?.id_mensaje ??
                     m?.id_archivo ??
-                    `${Date.now()}-${Math.random()}`
+                    `${Date.now()}-${Math.random()}`,
                 ),
                 room: normRoom,
                 sender,
                 text: String(
-                  m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                  m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
                 ).trim(),
                 at: String(
-                  normalizeDateStr(m?.fecha_envio) || new Date().toISOString()
+                  normalizeDateStr(m?.fecha_envio) || new Date().toISOString(),
                 ),
                 delivered: true,
                 read: !!m?.leido,
                 srcParticipantId: getEmitter(m),
+                srcEquipoId: m?.id_equipo ?? null,
                 attachments: mapArchivoToAttachments(m),
                 uiKey: String(
-                  m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                  m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                 ),
               } as Message;
               (msg as any).__senderById = !!ev.byId;
@@ -2299,12 +2390,29 @@ export default function StudentChatFriendly({
               ? joinedParticipantsRef.current
               : [];
             const tipos = arr.map((p: any) =>
-              normalizeTipo(p?.participante_tipo)
+              normalizeTipo(p?.participante_tipo),
             );
             const clientes = tipos.filter((t) => t === "cliente").length;
             const equipos = tipos.filter((t) => t === "equipo").length;
             isTwoPartyAlumnoCoachRef.current =
               clientes >= 1 && equipos >= 1 && arr.length <= 3;
+            // Detectar chat coach↔coach (ambos participantes son equipo)
+            isCoachToCoachChatRef.current =
+              clientes === 0 && equipos >= 2 && arr.length <= 3;
+
+            // DEBUG: Imprimir tipo de chat detectado
+            console.log("========== TIPO DE CHAT DETECTADO ==========");
+            console.log("Participantes:", arr);
+            console.log("Tipos normalizados:", tipos);
+            console.log("Clientes:", clientes, "Equipos:", equipos);
+            console.log("isCoachToCoach:", isCoachToCoachChatRef.current);
+            console.log(
+              "isTwoPartyAlumnoCoach:",
+              isTwoPartyAlumnoCoachRef.current,
+            );
+            console.log("myParticipantId:", myParticipantIdRef.current);
+            console.log("socketio.idEquipo:", socketio?.idEquipo);
+            console.log("==============================================");
           } catch {}
           if (
             !myParticipantIdRef.current &&
@@ -2317,7 +2425,7 @@ export default function StudentChatFriendly({
                   String((p?.participante_tipo || "").toLowerCase()) ===
                     "equipo" &&
                   String(p?.id_equipo) === String(socketio.idEquipo) &&
-                  p?.id_chat_participante != null
+                  p?.id_chat_participante != null,
               );
               if (mine?.id_chat_participante != null) {
                 setMyParticipantId(mine.id_chat_participante);
@@ -2336,7 +2444,7 @@ export default function StudentChatFriendly({
                   String((p?.participante_tipo || "").toLowerCase()) ===
                     "cliente" &&
                   String(p?.id_cliente) === String(socketio.idCliente) &&
-                  p?.id_chat_participante != null
+                  p?.id_chat_participante != null,
               );
               if (mineCli?.id_chat_participante != null) {
                 setMyParticipantId(mineCli.id_chat_participante);
@@ -2355,7 +2463,7 @@ export default function StudentChatFriendly({
                   String((p?.participante_tipo || "").toLowerCase()) ===
                     "admin" &&
                   String(p?.id_admin) === String(socketio.idAdmin) &&
-                  p?.id_chat_participante != null
+                  p?.id_chat_participante != null,
               );
               if (mineAdm?.id_chat_participante != null) {
                 setMyParticipantId(mineAdm.id_chat_participante);
@@ -2374,7 +2482,7 @@ export default function StudentChatFriendly({
                   String((p?.participante_tipo || "").toLowerCase()) ===
                     "cliente" &&
                   String(p?.id_cliente) === String(socketio.idCliente) &&
-                  p?.id_chat_participante != null
+                  p?.id_chat_participante != null,
               );
               if (mineCli?.id_chat_participante != null) {
                 setMyParticipantId(mineCli.id_chat_participante);
@@ -2385,8 +2493,8 @@ export default function StudentChatFriendly({
           const msgsSrc = Array.isArray(data.messages)
             ? data.messages
             : Array.isArray((data as any).mensajes)
-            ? (data as any).mensajes
-            : [];
+              ? (data as any).mensajes
+              : [];
           const myPidLocal =
             data?.my_participante ?? myParticipantIdRef.current;
           const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -2396,19 +2504,20 @@ export default function StudentChatFriendly({
               id: String(
                 m?.id_mensaje ??
                   m?.id_archivo ??
-                  `${Date.now()}-${Math.random()}`
+                  `${Date.now()}-${Math.random()}`,
               ),
               room: normRoom,
               sender,
               text: String(
-                m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
               ).trim(),
               at: String(
-                normalizeDateStr(m?.fecha_envio) || new Date().toISOString()
+                normalizeDateStr(m?.fecha_envio) || new Date().toISOString(),
               ),
               delivered: true,
               read: !!m?.leido,
               srcParticipantId: getEmitter(m),
+              srcEquipoId: m?.id_equipo ?? null,
               attachments: mapArchivoToAttachments(m),
               uiKey: String(m?.id_mensaje ?? `${Date.now()}-${Math.random()}`),
             } as Message;
@@ -2436,7 +2545,7 @@ export default function StudentChatFriendly({
                   attachment_ids: Array.isArray(m.attachments)
                     ? m.attachments.map((a) => a.id)
                     : [],
-                }))
+                })),
               );
             } catch {}
           } catch {}
@@ -2566,45 +2675,45 @@ export default function StudentChatFriendly({
               const parts = it?.participants || it?.participantes || [];
               const equipos = (Array.isArray(parts) ? parts : [])
                 .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo"
+                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo",
                 )
                 .map((p: any) => nameOf("equipo", p?.id_equipo))
                 .filter(Boolean);
               const clientes = (Array.isArray(parts) ? parts : [])
                 .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
+                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente",
                 )
                 .map((p: any) => nameOf("cliente", p?.id_cliente))
                 .filter(Boolean);
               return `id=${id} | equipos=[${equipos.join(
-                ", "
+                ", ",
               )}] | clientes=[${clientes.join(", ")}]`;
             };
             const meLabel =
               role === "alumno"
                 ? "cliente"
                 : role === "coach"
-                ? "equipo"
-                : role;
+                  ? "equipo"
+                  : role;
             const meId =
               role === "alumno"
                 ? (socketio as any)?.idCliente
                 : role === "coach"
-                ? socketio?.idEquipo
-                : (socketio as any)?.idAdmin;
+                  ? socketio?.idEquipo
+                  : (socketio as any)?.idAdmin;
             const meName =
               meLabel === "cliente"
                 ? nameOf("cliente", meId)
                 : meLabel === "equipo"
-                ? nameOf("equipo", meId)
-                : String(meId ?? "");
+                  ? nameOf("equipo", meId)
+                  : String(meId ?? "");
             console.log(
               "[Chat] comversaciones del usuario —",
               meLabel + ":",
               meName,
               "(total:",
               baseArr.length,
-              ")"
+              ")",
             );
             baseArr.forEach((it: any) => console.log(" -", toLine(it)));
           } catch {}
@@ -2612,7 +2721,7 @@ export default function StudentChatFriendly({
           const list = Array.isArray(ack?.data) ? ack.data : [];
           const baseList: any[] = Array.isArray(list) ? list : [];
           const needEnrich = baseList.some(
-            (it) => !Array.isArray(it?.participants || it?.participantes)
+            (it) => !Array.isArray(it?.participants || it?.participantes),
           );
           if (!needEnrich) {
             onChatsList?.(baseList);
@@ -2626,19 +2735,20 @@ export default function StudentChatFriendly({
                 const parts = it?.participants || it?.participantes || [];
                 const equipos = (Array.isArray(parts) ? parts : [])
                   .filter(
-                    (p: any) => normalizeTipo(p?.participante_tipo) === "equipo"
+                    (p: any) =>
+                      normalizeTipo(p?.participante_tipo) === "equipo",
                   )
                   .map((p: any) => nameOf("equipo", p?.id_equipo))
                   .filter(Boolean);
                 const clientes = (Array.isArray(parts) ? parts : [])
                   .filter(
                     (p: any) =>
-                      normalizeTipo(p?.participante_tipo) === "cliente"
+                      normalizeTipo(p?.participante_tipo) === "cliente",
                   )
                   .map((p: any) => nameOf("cliente", p?.id_cliente))
                   .filter(Boolean);
                 return `id=${id} | equipos=[${equipos.join(
-                  ", "
+                  ", ",
                 )}] | clientes=[${clientes.join(", ")}]`;
               };
               console.log(
@@ -2646,7 +2756,7 @@ export default function StudentChatFriendly({
                 String(socketio?.idEquipo ?? ""),
                 "(enriquecido, total:",
                 baseList.length,
-                ")"
+                ")",
               );
               baseList.forEach((it: any) => console.log(" -", toLine2(it)));
               const sample = baseList.length > 0 ? baseList[0] : null;
@@ -2662,7 +2772,7 @@ export default function StudentChatFriendly({
                       sample?.fecha_creacion ||
                       null,
                     participants: Array.isArray(
-                      sample?.participants || sample?.participantes
+                      sample?.participants || sample?.participantes,
                     )
                       ? (sample?.participants || sample?.participantes).length
                       : 0,
@@ -2673,8 +2783,8 @@ export default function StudentChatFriendly({
                 JSON.stringify(
                   { count: baseList.length, sample: sampleObj },
                   null,
-                  2
-                )
+                  2,
+                ),
               );
             } catch {}
             return;
@@ -2720,18 +2830,18 @@ export default function StudentChatFriendly({
               const parts = it?.participants || it?.participantes || [];
               const equipos = (Array.isArray(parts) ? parts : [])
                 .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo"
+                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo",
                 )
                 .map((p: any) => nameOf("equipo", p?.id_equipo))
                 .filter(Boolean);
               const clientes = (Array.isArray(parts) ? parts : [])
                 .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
+                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente",
                 )
                 .map((p: any) => nameOf("cliente", p?.id_cliente))
                 .filter(Boolean);
               return `id=${id} | equipos=[${equipos.join(
-                ", "
+                ", ",
               )}] | clientes=[${clientes.join(", ")}]`;
             };
             console.log(
@@ -2739,7 +2849,7 @@ export default function StudentChatFriendly({
               String(socketio?.idEquipo ?? ""),
               "(enriquecido, total:",
               merged.length,
-              ")"
+              ")",
             );
             merged.forEach((it: any) => console.log(" -", toLine3(it)));
             const sample = merged.length > 0 ? merged[0] : null;
@@ -2755,7 +2865,7 @@ export default function StudentChatFriendly({
                     sample?.fecha_creacion ||
                     null,
                   participants: Array.isArray(
-                    sample?.participants || sample?.participantes
+                    sample?.participants || sample?.participantes,
                   )
                     ? (sample?.participants || sample?.participantes).length
                     : 0,
@@ -2766,8 +2876,8 @@ export default function StudentChatFriendly({
               JSON.stringify(
                 { count: merged.length, sample: sampleObj },
                 null,
-                2
-              )
+                2,
+              ),
             );
           } catch {}
           onChatsList?.(merged);
@@ -2790,13 +2900,13 @@ export default function StudentChatFriendly({
           : null;
         if (!alumnoCode) return;
         const j = await apiFetch<any>(
-          `/client/get/clients-coaches?alumno=${encodeURIComponent(alumnoCode)}`
+          `/client/get/clients-coaches?alumno=${encodeURIComponent(alumnoCode)}`,
         );
         const rows: any[] = Array.isArray(j?.data) ? j.data : [];
         const list = rows
           .map((r) => ({
             codigo_equipo: String(
-              r.codigo_equipo ?? r.codigo_coach ?? r.codigo ?? ""
+              r.codigo_equipo ?? r.codigo_coach ?? r.codigo ?? "",
             ),
             area: r.area || undefined,
           }))
@@ -2805,6 +2915,22 @@ export default function StudentChatFriendly({
       } catch {}
     })();
   }, [role, (socketio as any)?.idCliente]);
+
+  // Cargar catálogo de coaches para permitir chats coach↔coach
+  React.useEffect(() => {
+    (async () => {
+      try {
+        if (role !== "coach") return;
+        const rows = await getCoaches();
+        const mapped = (rows || []).map((r: any) => ({
+          id: r.id ?? r.name,
+          name: r.name ?? String(r.id ?? ""),
+          area: r.area ?? null,
+        }));
+        setCoachesList(mapped);
+      } catch {}
+    })();
+  }, [role]);
 
   const refreshListNow = React.useCallback(() => {
     try {
@@ -2842,18 +2968,18 @@ export default function StudentChatFriendly({
               const parts = it?.participants || it?.participantes || [];
               const equipos = (Array.isArray(parts) ? parts : [])
                 .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo"
+                  (p: any) => normalizeTipo(p?.participante_tipo) === "equipo",
                 )
                 .map((p: any) => String(p?.id_equipo ?? ""))
                 .filter(Boolean);
               const clientes = (Array.isArray(parts) ? parts : [])
                 .filter(
-                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
+                  (p: any) => normalizeTipo(p?.participante_tipo) === "cliente",
                 )
                 .map((p: any) => String(p?.id_cliente ?? ""))
                 .filter(Boolean);
               return `id=${id} | equipos=[${equipos.join(
-                ", "
+                ", ",
               )}] | clientes=[${clientes.join(", ")}]`;
             };
             console.log(
@@ -2861,7 +2987,7 @@ export default function StudentChatFriendly({
               String(socketio?.idEquipo ?? ""),
               "(total:",
               list.length,
-              ")"
+              ")",
             );
             (list || []).forEach((it: any) => console.log(" -", toLine(it)));
           } catch {}
@@ -2937,12 +3063,12 @@ export default function StudentChatFriendly({
             (arr || []).some(
               (p) =>
                 normalizeTipo(p?.participante_tipo) === "equipo" &&
-                /[^0-9]/.test(String(p?.id_equipo || ""))
+                /[^0-9]/.test(String(p?.id_equipo || "")),
             );
           if (!hasEquipoCode(participants) && (socketio as any)?.idCliente) {
             const alumnoCode = String((socketio as any).idCliente);
             const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
-              alumnoCode
+              alumnoCode,
             )}`;
             const j = await apiFetch<any>(url);
             const rows: any[] = Array.isArray(j?.data) ? j.data : [];
@@ -2963,22 +3089,22 @@ export default function StudentChatFriendly({
               .filter((x) => x.codigo);
 
             console.log(
-              "═══════════════════════════════════════════════════════"
+              "═══════════════════════════════════════════════════════",
             );
             console.log("🔍 [CHAT ALUMNO] RESOLUCIÓN DE EQUIPO ASIGNADO");
             console.log(
-              "═══════════════════════════════════════════════════════"
+              "═══════════════════════════════════════════════════════",
             );
             console.log(`📋 Alumno: ${alumnoCode}`);
             console.log(
-              `📊 Total coaches asignados encontrados: ${assigned.length}`
+              `📊 Total coaches asignados encontrados: ${assigned.length}`,
             );
             console.log("");
             console.log("👥 COACHES ASIGNADOS:");
             assigned.forEach((c, idx) => {
               const esAC = isAC(c.area);
               console.log(
-                `  ${idx + 1}. ${esAC ? "✅" : "❌"} Código: ${c.codigo}`
+                `  ${idx + 1}. ${esAC ? "✅" : "❌"} Código: ${c.codigo}`,
               );
               console.log(`     Nombre: ${c.nombre || "N/A"}`);
               console.log(`     Área: ${c.area || "N/A"}`);
@@ -2988,7 +3114,7 @@ export default function StudentChatFriendly({
                   esAC
                     ? "👉 ES ATENCIÓN AL CLIENTE"
                     : "No es Atención al Cliente"
-                }`
+                }`,
               );
               console.log("");
             });
@@ -3006,13 +3132,13 @@ export default function StudentChatFriendly({
                   isAC(preferred.area)
                     ? "Prioridad Atención al Cliente"
                     : "Primer coach disponible (no hay AC)"
-                }`
+                }`,
               );
             } else {
               console.log("  ❌ NO SE ENCONTRÓ NINGÚN COACH ASIGNADO");
             }
             console.log(
-              "═══════════════════════════════════════════════════════"
+              "═══════════════════════════════════════════════════════",
             );
 
             const codeEquipo = preferred?.codigo
@@ -3071,7 +3197,7 @@ export default function StudentChatFriendly({
               } catch {
                 resolve([]);
               }
-            }
+            },
           );
         } catch {
           resolve([]);
@@ -3132,13 +3258,43 @@ export default function StudentChatFriendly({
                     myParticipantIdRef.current = data.my_participante;
                   }
                   joinedParticipantsRef.current = Array.isArray(
-                    data.participants || data.participantes
+                    data.participants || data.participantes,
                   )
                     ? data.participants || data.participantes
                     : [];
                   joinDataRef.current = {
                     participants: joinedParticipantsRef.current,
                   };
+
+                  // Detectar tipo de chat (coach↔coach vs coach↔alumno)
+                  try {
+                    const arr = joinedParticipantsRef.current;
+                    const tipos = arr.map((p: any) =>
+                      normalizeTipo(p?.participante_tipo),
+                    );
+                    const clientes = tipos.filter(
+                      (t) => t === "cliente",
+                    ).length;
+                    const equipos = tipos.filter((t) => t === "equipo").length;
+                    isTwoPartyAlumnoCoachRef.current =
+                      clientes >= 1 && equipos >= 1 && arr.length <= 3;
+                    isCoachToCoachChatRef.current =
+                      clientes === 0 && equipos >= 2 && arr.length <= 3;
+                    console.log(
+                      "===== ensureChatReadyForSend: TIPO DE CHAT =====",
+                    );
+                    console.log(
+                      "isCoachToCoach:",
+                      isCoachToCoachChatRef.current,
+                    );
+                    console.log("myParticipantId:", myParticipantIdRef.current);
+                    console.log("socketio.idEquipo:", socketio?.idEquipo);
+                    console.log("participantes:", arr);
+                    console.log(
+                      "================================================",
+                    );
+                  } catch {}
+
                   resolve(true);
                 } else resolve(false);
               } catch {
@@ -3174,7 +3330,7 @@ export default function StudentChatFriendly({
                     chatIdRef.current = cid;
                   }
                   joinedParticipantsRef.current = Array.isArray(
-                    data.participants || data.participantes
+                    data.participants || data.participantes,
                   )
                     ? data.participants || data.participantes
                     : [];
@@ -3210,13 +3366,33 @@ export default function StudentChatFriendly({
                   myParticipantIdRef.current = data.my_participante;
                 }
                 joinedParticipantsRef.current = Array.isArray(
-                  data.participants || data.participantes
+                  data.participants || data.participantes,
                 )
                   ? data.participants || data.participantes
                   : joinedParticipantsRef.current;
                 joinDataRef.current = {
                   participants: joinedParticipantsRef.current,
                 };
+
+                // Detectar tipo de chat (coach↔coach vs coach↔alumno)
+                try {
+                  const arr = joinedParticipantsRef.current;
+                  const tipos = arr.map((p: any) =>
+                    normalizeTipo(p?.participante_tipo),
+                  );
+                  const clientes = tipos.filter((t) => t === "cliente").length;
+                  const equipos = tipos.filter((t) => t === "equipo").length;
+                  isTwoPartyAlumnoCoachRef.current =
+                    clientes >= 1 && equipos >= 1 && arr.length <= 3;
+                  isCoachToCoachChatRef.current =
+                    clientes === 0 && equipos >= 2 && arr.length <= 3;
+                  console.log("===== CREATE+JOIN: TIPO DE CHAT =====");
+                  console.log("isCoachToCoach:", isCoachToCoachChatRef.current);
+                  console.log("myParticipantId:", myParticipantIdRef.current);
+                  console.log(
+                    "================================================",
+                  );
+                } catch {}
               }
             } catch {}
             resolve();
@@ -3305,17 +3481,17 @@ export default function StudentChatFriendly({
         const idb = String(next.it?.id_chat ?? next.it?.id ?? "");
         if (ida !== idb) return false;
         const atA = String(
-          prev.it?.last_message_at ?? prev.it?.updated_at ?? ""
+          prev.it?.last_message_at ?? prev.it?.updated_at ?? "",
         );
         const atB = String(
-          next.it?.last_message_at ?? next.it?.updated_at ?? ""
+          next.it?.last_message_at ?? next.it?.updated_at ?? "",
         );
         if (atA !== atB) return false;
         return true;
       } catch {
         return false;
       }
-    }
+    },
   );
 
   const ChatList = React.memo(function ChatList({
@@ -3376,7 +3552,7 @@ export default function StudentChatFriendly({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "equipo" &&
                 (!socketio?.idEquipo ||
-                  String(p?.id_equipo) === String(socketio?.idEquipo))
+                  String(p?.id_equipo) === String(socketio?.idEquipo)),
             );
             if (mine?.id_chat_participante != null)
               effectivePid = mine.id_chat_participante;
@@ -3385,7 +3561,7 @@ export default function StudentChatFriendly({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "cliente" &&
                 (!socketio?.idCliente ||
-                  String(p?.id_cliente) === String(socketio?.idCliente))
+                  String(p?.id_cliente) === String(socketio?.idCliente)),
             );
             if (mineCli?.id_chat_participante != null)
               effectivePid = mineCli.id_chat_participante;
@@ -3394,7 +3570,7 @@ export default function StudentChatFriendly({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "admin" &&
                 (!socketio?.idAdmin ||
-                  String(p?.id_admin) === String(socketio?.idAdmin))
+                  String(p?.id_admin) === String(socketio?.idAdmin)),
             );
             if (mineAdm?.id_chat_participante != null)
               effectivePid = mineAdm.id_chat_participante;
@@ -3416,7 +3592,7 @@ export default function StudentChatFriendly({
                 (p: any) =>
                   normalizeTipo(p?.participante_tipo) === "equipo" &&
                   (!socketio?.idEquipo ||
-                    String(p?.id_equipo) === String(socketio?.idEquipo))
+                    String(p?.id_equipo) === String(socketio?.idEquipo)),
               );
               if (mine?.id_chat_participante != null) {
                 effectivePid = mine.id_chat_participante;
@@ -3427,7 +3603,7 @@ export default function StudentChatFriendly({
                 (p: any) =>
                   normalizeTipo(p?.participante_tipo) === "cliente" &&
                   (!socketio?.idCliente ||
-                    String(p?.id_cliente) === String(socketio?.idCliente))
+                    String(p?.id_cliente) === String(socketio?.idCliente)),
               );
               if (mineCli?.id_chat_participante != null) {
                 effectivePid = mineCli.id_chat_participante;
@@ -3438,7 +3614,7 @@ export default function StudentChatFriendly({
                 (p: any) =>
                   normalizeTipo(p?.participante_tipo) === "admin" &&
                   (!socketio?.idAdmin ||
-                    String(p?.id_admin) === String(socketio?.idAdmin))
+                    String(p?.id_admin) === String(socketio?.idAdmin)),
               );
               if (mineAdm?.id_chat_participante != null) {
                 effectivePid = mineAdm.id_chat_participante;
@@ -3469,6 +3645,8 @@ export default function StudentChatFriendly({
           delivered: false,
           read: false,
           srcParticipantId: effectivePid ?? undefined,
+          // Incluir mi id_equipo para que mine() funcione en coach↔coach
+          srcEquipoId: socketio?.idEquipo ?? undefined,
           uiKey: clientId,
         };
         // Asignar client_session al optimista
@@ -3520,7 +3698,7 @@ export default function StudentChatFriendly({
                 const optimisticIdx = next.findIndex((m) => m.id === clientId);
                 if (serverIdStr) {
                   const existingIdx = next.findIndex(
-                    (m) => String(m.id) === serverIdStr
+                    (m) => String(m.id) === serverIdStr,
                   );
                   if (existingIdx >= 0) {
                     if (optimisticIdx >= 0) next.splice(optimisticIdx, 1);
@@ -3559,7 +3737,7 @@ export default function StudentChatFriendly({
                 } catch {}
               } catch {}
             } catch {}
-          }
+          },
         );
         markRead();
       }
@@ -3582,8 +3760,8 @@ export default function StudentChatFriendly({
                   const msgsSrc = Array.isArray(data.messages)
                     ? data.messages
                     : Array.isArray((data as any).mensajes)
-                    ? (data as any).mensajes
-                    : [];
+                      ? (data as any).mensajes
+                      : [];
                   const myPidLocal =
                     data?.my_participante ?? myParticipantIdRef.current;
                   const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -3591,23 +3769,24 @@ export default function StudentChatFriendly({
                     const sender: Sender = ev.sender;
                     const msg: Message = {
                       id: String(
-                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                       ),
                       room: normRoom,
                       sender,
                       text: String(
-                        m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                        m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
                       ).trim(),
                       at: String(
                         normalizeDateStr(m?.fecha_envio) ||
-                          new Date().toISOString()
+                          new Date().toISOString(),
                       ),
                       delivered: true,
                       read: !!m?.leido,
                       srcParticipantId: getEmitter(m),
+                      srcEquipoId: m?.id_equipo ?? null,
                       attachments: mapArchivoToAttachments(m),
                       uiKey: String(
-                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                       ),
                     } as Message;
                     (msg as any).__senderById = !!ev.byId;
@@ -3708,7 +3887,7 @@ export default function StudentChatFriendly({
         window.dispatchEvent(
           new CustomEvent("chat:list-refresh", {
             detail: { reason: "chat-deleted", id_chat: id },
-          })
+          }),
         );
       } catch {}
     } catch (e) {
@@ -3803,7 +3982,7 @@ export default function StudentChatFriendly({
                             {
                               participante_tipo: "cliente",
                               id_cliente: String(
-                                (socketio as any)?.idCliente || ""
+                                (socketio as any)?.idCliente || "",
                               ),
                             },
                             {
@@ -3834,6 +4013,86 @@ export default function StudentChatFriendly({
                   tryJoin={tryJoin}
                   activeChatId={chatIdRef.current ?? chatId}
                 />
+              )}
+            </div>
+          </div>
+        )}
+        {role === "coach" && (
+          <div
+            className={`${
+              isMobile && chatId ? "hidden" : "flex"
+            } md:flex flex-col w-[320px] flex-shrink-0 border-r border-gray-200 bg-white`}
+          >
+            <div className="px-3 py-2 border-b bg-gray-50 text-xs text-gray-600">
+              Coaches
+            </div>
+            <div className="px-3 py-2">
+              <input
+                placeholder="Buscar coach..."
+                value={coachSearch}
+                onChange={(e) => setCoachSearch(e.target.value)}
+                className="w-full text-sm px-2 py-1 border rounded"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {coachesList.length === 0 ? (
+                <div className="p-3 text-xs text-gray-700">Sin coaches</div>
+              ) : (
+                (coachesList || [])
+                  .filter((c) => {
+                    const q = String(coachSearch || "")
+                      .trim()
+                      .toLowerCase();
+                    if (!q) return true;
+                    return (
+                      String(c.name || "")
+                        .toLowerCase()
+                        .includes(q) ||
+                      String(c.id || "")
+                        .toLowerCase()
+                        .includes(q)
+                    );
+                  })
+                  .map((c) => (
+                    <button
+                      key={String(c.id)}
+                      type="button"
+                      className="w-full text-left px-3 py-2 border-b hover:bg-gray-50 transition"
+                      onClick={async () => {
+                        try {
+                          // Preparar participantes: mi equipo (si está) + coach destino
+                          setChatId(null);
+                          chatIdRef.current = null;
+                          const myEquipo = (socketio as any)?.idEquipo
+                            ? String((socketio as any).idEquipo)
+                            : null;
+                          const otherEquipo = String(c.id || "");
+                          const parts: any[] = [];
+                          if (myEquipo)
+                            parts.push({
+                              participante_tipo: "equipo",
+                              id_equipo: myEquipo,
+                            });
+                          parts.push({
+                            participante_tipo: "equipo",
+                            id_equipo: otherEquipo,
+                          });
+                          participantsRef.current = parts;
+                          // Intentar crear o unir al chat
+                          await ensureChatReadyForSend({ allowCreate: true });
+                        } catch {}
+                      }}
+                    >
+                      <div className="text-sm font-medium truncate text-gray-800">
+                        {c.name || `Coach ${String(c.id)}`}
+                      </div>
+                      {c.area && (
+                        <div className="text-[11px] text-gray-500">
+                          {c.area}
+                        </div>
+                      )}
+                    </button>
+                  ))
               )}
             </div>
           </div>
@@ -3914,7 +4173,7 @@ export default function StudentChatFriendly({
                       disabled={!(chatIdRef.current ?? chatId) || ticketLoading}
                       className="inline-flex items-center gap-1 rounded-md bg-white/10 hover:bg-white/20 text-white text-xs px-2 py-1 transition disabled:opacity-60"
                       title={
-                        chatIdRef.current ?? chatId
+                        (chatIdRef.current ?? chatId)
                           ? "Generar ticket de esta conversación"
                           : "Sin chat activo"
                       }
@@ -4070,11 +4329,23 @@ export default function StudentChatFriendly({
               </div>
             ) : (
               items.map((m, idx) => {
-                const isMine = mine(m.sender);
+                const isMine = mine(m); // Pasa el mensaje completo para soportar chat coach↔coach
                 const prev = idx > 0 ? items[idx - 1] : null;
                 const next = idx + 1 < items.length ? items[idx + 1] : null;
-                const samePrev = prev && prev.sender === m.sender;
-                const sameNext = next && next.sender === m.sender;
+                // Para agrupación, en coach↔coach usamos srcParticipantId
+                const isCoachToCoach = !!isCoachToCoachChatRef.current;
+                const samePrev =
+                  prev &&
+                  (isCoachToCoach
+                    ? String(prev.srcParticipantId ?? "") ===
+                      String(m.srcParticipantId ?? "")
+                    : prev.sender === m.sender);
+                const sameNext =
+                  next &&
+                  (isCoachToCoach
+                    ? String(next.srcParticipantId ?? "") ===
+                      String(m.srcParticipantId ?? "")
+                    : next.sender === m.sender);
                 const newGroup = !samePrev;
                 const endGroup = !sameNext;
                 const isSelected =
@@ -4102,7 +4373,7 @@ export default function StudentChatFriendly({
                 const hasAudioOnly =
                   Array.isArray(m.attachments) &&
                   m.attachments.some((a) =>
-                    (a.mime || "").startsWith("audio/")
+                    (a.mime || "").startsWith("audio/"),
                   ) &&
                   (!m.text || m.text.trim() === "");
 
@@ -4118,6 +4389,26 @@ export default function StudentChatFriendly({
                       isMine ? "justify-end" : "justify-start"
                     } ${wrapperMt}`}
                   >
+                    {/* Avatar diferenciado por rol */}
+                    {!isMine && newGroup && (
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold mr-2 flex-shrink-0 ${(() => {
+                          const s = String(m.sender || "").toLowerCase();
+                          if (["coach", "equipo", "entrenador"].includes(s))
+                            return "bg-indigo-500";
+                          if (["alumno", "cliente", "student"].includes(s))
+                            return "bg-emerald-500";
+                          return "bg-gray-500";
+                        })()}`}
+                      >
+                        {String(m.sender || "?")
+                          .charAt(0)
+                          .toUpperCase()}
+                      </div>
+                    )}
+                    {!isMine && !newGroup && (
+                      <div className="w-8 mr-2 flex-shrink-0" />
+                    )}
                     <div
                       onClick={() => {
                         if (selectionMode && !isAttachmentOnly)
@@ -4150,6 +4441,32 @@ export default function StudentChatFriendly({
                           </span>
                         </>
                       )}
+                      {/* Chip de rol visible siempre en el inicio del grupo */}
+                      {newGroup && (
+                        <div
+                          className={`flex items-center gap-1.5 mb-1 ${isMine ? "justify-end" : "justify-start"}`}
+                        >
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded-full font-semibold ${(() => {
+                              const s = String(m.sender || "").toLowerCase();
+                              if (["coach", "equipo", "entrenador"].includes(s))
+                                return "bg-indigo-100 text-indigo-700";
+                              if (["alumno", "cliente", "student"].includes(s))
+                                return "bg-emerald-100 text-emerald-700";
+                              return "bg-gray-100 text-gray-700";
+                            })()}`}
+                          >
+                            {(() => {
+                              const s = String(m.sender || "").toLowerCase();
+                              if (["coach", "equipo", "entrenador"].includes(s))
+                                return "Coach";
+                              if (["alumno", "cliente", "student"].includes(s))
+                                return "Alumno";
+                              return "Admin";
+                            })()}
+                          </span>
+                        </div>
+                      )}
                       {m.text?.trim() ? (
                         <div className="text-sm md:text-[15px] text-gray-900 whitespace-pre-wrap break-words leading-[1.3]">
                           {renderTextWithLinks(m.text)}
@@ -4161,7 +4478,7 @@ export default function StudentChatFriendly({
                           <div className="mt-0">
                             {m.attachments
                               .filter((a) =>
-                                (a.mime || "").startsWith("audio/")
+                                (a.mime || "").startsWith("audio/"),
                               )
                               .map((a) => {
                                 const url = getAttachmentUrl(a);
@@ -4216,10 +4533,10 @@ export default function StudentChatFriendly({
                               const url = getAttachmentUrl(a);
                               const isImg = (a.mime || "").startsWith("image/");
                               const isVideo = (a.mime || "").startsWith(
-                                "video/"
+                                "video/",
                               );
                               const isAudio = (a.mime || "").startsWith(
-                                "audio/"
+                                "audio/",
                               );
                               const attSelected =
                                 selectionMode &&
@@ -4513,7 +4830,7 @@ export default function StudentChatFriendly({
                           !navigator.mediaDevices?.getUserMedia
                         ) {
                           setUploadError(
-                            "Grabación no soportada en este navegador."
+                            "Grabación no soportada en este navegador.",
                           );
                           return;
                         }
@@ -4541,7 +4858,7 @@ export default function StudentChatFriendly({
                               const devices =
                                 await navigator.mediaDevices.enumerateDevices();
                               const mics = devices.filter(
-                                (d) => d.kind === "audioinput"
+                                (d) => d.kind === "audioinput",
                               );
                               if (mics.length > 0 && mics[0].deviceId) {
                                 stream =
@@ -4578,7 +4895,7 @@ export default function StudentChatFriendly({
                         }
                         const mr = new MediaRecorder(
                           stream,
-                          mimeType ? { mimeType } : undefined
+                          mimeType ? { mimeType } : undefined,
                         );
                         mediaRecorderRef.current = mr;
                         mr.ondataavailable = (ev) => {
@@ -4603,7 +4920,7 @@ export default function StudentChatFriendly({
                               .then((mp3File) => {
                                 if ((mp3File.size || 0) > MAX_FILE_SIZE) {
                                   setUploadError(
-                                    "El audio grabado excede el límite de 50MB y no se adjuntará."
+                                    "El audio grabado excede el límite de 50MB y no se adjuntará.",
                                   );
                                 } else {
                                   addPendingAttachments([mp3File] as any);
@@ -4612,7 +4929,7 @@ export default function StudentChatFriendly({
                               .catch((err) => {
                                 console.error(
                                   "Error convirtiendo a MP3, usando original",
-                                  err
+                                  err,
                                 );
                                 const ts = new Date();
                                 const pad = (n: number) =>
@@ -4625,18 +4942,18 @@ export default function StudentChatFriendly({
                                   return "webm";
                                 })();
                                 const fname = `grabacion-${ts.getFullYear()}${pad(
-                                  ts.getMonth() + 1
+                                  ts.getMonth() + 1,
                                 )}${pad(ts.getDate())}-${pad(
-                                  ts.getHours()
+                                  ts.getHours(),
                                 )}${pad(ts.getMinutes())}${pad(
-                                  ts.getSeconds()
+                                  ts.getSeconds(),
                                 )}.${ext}`;
                                 const file = new File([blob], fname, {
                                   type: blob.type || chosenType,
                                 });
                                 if ((file.size || 0) > MAX_FILE_SIZE) {
                                   setUploadError(
-                                    "El audio grabado excede el límite de 50MB y no se adjuntará."
+                                    "El audio grabado excede el límite de 50MB y no se adjuntará.",
                                   );
                                 } else {
                                   addPendingAttachments([file] as any);
@@ -4644,7 +4961,7 @@ export default function StudentChatFriendly({
                               });
                           } catch {
                             setUploadError(
-                              "No se pudo procesar el audio grabado."
+                              "No se pudo procesar el audio grabado.",
                             );
                           }
                           try {
@@ -4665,7 +4982,7 @@ export default function StudentChatFriendly({
                           setRecordStartAt(Date.now());
                           recordTimerRef.current = setInterval(
                             () => setRecordTick(Date.now()),
-                            250
+                            250,
                           );
                         } catch {}
                       } catch (err: any) {
@@ -4675,18 +4992,18 @@ export default function StudentChatFriendly({
                           name === "DevicesNotFoundError"
                         ) {
                           setUploadError(
-                            "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador."
+                            "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador.",
                           );
                         } else if (
                           name === "NotAllowedError" ||
                           name === "PermissionDeniedError"
                         ) {
                           setUploadError(
-                            "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio."
+                            "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio.",
                           );
                         } else if (name === "NotReadableError") {
                           setUploadError(
-                            "El micrófono está siendo usado por otra aplicación o no es accesible."
+                            "El micrófono está siendo usado por otra aplicación o no es accesible.",
                           );
                         } else {
                           setUploadError(
@@ -4694,7 +5011,7 @@ export default function StudentChatFriendly({
                               "No se pudo iniciar la grabación") +
                               " (" +
                               (name || "error") +
-                              ")"
+                              ")",
                           );
                         }
                       }
@@ -4721,7 +5038,7 @@ export default function StudentChatFriendly({
                     {(() => {
                       const ms = Math.max(
                         0,
-                        recordStartAt ? recordTick - recordStartAt : 0
+                        recordStartAt ? recordTick - recordStartAt : 0,
                       );
                       const s = Math.floor(ms / 1000);
                       const mm = Math.floor(s / 60);
@@ -4753,8 +5070,8 @@ export default function StudentChatFriendly({
                               {a.file.type.startsWith("video/")
                                 ? "VID"
                                 : a.file.type.startsWith("audio/")
-                                ? "AUD"
-                                : "FILE"}
+                                  ? "AUD"
+                                  : "FILE"}
                             </div>
                           )
                         ) : (

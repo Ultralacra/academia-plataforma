@@ -1526,19 +1526,42 @@ export default function CoachDetailPage({
                                       }}
                                     >
                                       {/* Avatar */}
-                                      <div
-                                        className={`h-12 w-12 rounded-full ${item.avatarColor} text-white grid place-items-center text-lg font-semibold flex-shrink-0 shadow-sm`}
-                                      >
-                                        {(item.name || item.code)
-                                          .slice(0, 1)
-                                          .toUpperCase()}
+                                      <div className="relative flex-shrink-0">
+                                        <div
+                                          className={`h-12 w-12 rounded-full ${item.avatarColor} text-white grid place-items-center text-lg font-semibold shadow-sm`}
+                                        >
+                                          {(item.name || item.code)
+                                            .slice(0, 1)
+                                            .toUpperCase()}
+                                        </div>
+                                        {/* Chip de rol */}
+                                        <span
+                                          className={`absolute -bottom-1 -right-1 inline-flex items-center px-1.5 py-0.5 text-[9px] rounded-full font-bold shadow-sm border border-white ${
+                                            item.type === "team"
+                                              ? "bg-indigo-500 text-white"
+                                              : "bg-emerald-500 text-white"
+                                          }`}
+                                        >
+                                          {item.type === "team" ? "Coach" : "Alumno"}
+                                        </span>
                                       </div>
 
                                       {/* Content */}
                                       <div className="min-w-0 flex-1 border-b border-slate-50 pb-3 group-hover:border-transparent transition-colors h-full flex flex-col justify-center">
-                                        <div className="flex items-baseline justify-between gap-2">
-                                          <div className="text-[15px] font-medium truncate text-slate-900">
-                                            {item.name}
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <div className="text-[15px] font-medium truncate text-slate-900">
+                                              {item.name}
+                                            </div>
+                                            <span
+                                              className={`inline-flex items-center px-1.5 py-0.5 text-[10px] rounded font-semibold flex-shrink-0 ${
+                                                item.type === "team"
+                                                  ? "bg-indigo-100 text-indigo-700"
+                                                  : "bg-emerald-100 text-emerald-700"
+                                              }`}
+                                            >
+                                              {item.type === "team" ? "Coach" : "Alumno"}
+                                            </span>
                                           </div>
                                           <div
                                             className={`text-[11px] flex-shrink-0 ${

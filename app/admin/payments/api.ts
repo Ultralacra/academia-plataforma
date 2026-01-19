@@ -175,3 +175,17 @@ export async function createPaymentDetalle(
     }
   );
 }
+
+export async function deletePaymentDetalle(
+  paymentCodigo: string,
+  detalleCodigo: string
+): Promise<PaymentUpsertDetailEnvelope> {
+  const safePayment = encodeURIComponent(String(paymentCodigo || "").trim());
+  const safeDetalle = encodeURIComponent(String(detalleCodigo || "").trim());
+  return fetchJson<PaymentUpsertDetailEnvelope>(
+    `/payments/delete/payment/${safePayment}/detalle/${safeDetalle}`,
+    {
+      method: "DELETE",
+    }
+  );
+}

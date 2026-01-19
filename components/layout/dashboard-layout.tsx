@@ -61,12 +61,20 @@ function NotificationsBadge() {
 
   const shouldHideForStudent = (n: any) => {
     if (!isStudent) return false;
-    const t = String(n?.type || "");
-    const curr = String(n?.current || "").toUpperCase();
-    if (t.includes("ticket.deleted") || t.includes("ticket.delete"))
-      return true;
-    if (curr.includes("ELIMINAD")) return true;
-    return false;
+    const t = String(n?.type || "").toLowerCase();
+    // Alumnos solo ven: feedback creado (ticket.created) y feedback resuelto (ticket.updated con estado cerrado/resuelto)
+    // Ocultar todo lo demás
+    if (t === "ticket.created") return false; // Mostrar: feedback creado
+    if (t === "ticket.updated") {
+      // Solo mostrar si es resuelto/cerrado
+      const curr = String(n?.current || "").toLowerCase();
+      if (curr.includes("cerrad") || curr.includes("resuelt") || curr.includes("closed") || curr.includes("resolved")) {
+        return false; // Mostrar: feedback resuelto
+      }
+      return true; // Ocultar otros updates
+    }
+    // Ocultar todo lo demás (deleted, etc.)
+    return true;
   };
 
   // Fusionar notificaciones: primero las SSE (más recientes directas), luego tickets por orden de fecha

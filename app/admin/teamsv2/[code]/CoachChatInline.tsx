@@ -133,20 +133,81 @@ export default function CoachChatInline({
   const isMobile = useIsMobile();
   const normRoom = React.useMemo(
     () => (room || "").trim().toLowerCase(),
-    [room]
+    [room],
   );
+
+  // Refs para participantes del chat (declaradas temprano para usarlas en mine() y helpers)
+  const joinedParticipantsRef = React.useRef<any[] | null>(null);
+  const joinDataRef = React.useRef<any | null>(null);
+  const isTwoPartyAlumnoCoachRef = React.useRef<boolean>(false);
+  const isCoachToCoachChatRef = React.useRef<boolean>(false);
+
+  // Helper: dado un id_chat_participante, devuelve el id_equipo buscando en joinedParticipantsRef
+  const getEquipoIdByParticipantId = React.useCallback(
+    (participantId: any): string | null => {
+      if (participantId == null) return null;
+      const parts = joinedParticipantsRef.current;
+      if (!Array.isArray(parts)) return null;
+      const found = parts.find(
+        (p: any) =>
+          String(p?.id_chat_participante ?? p?.id) === String(participantId),
+      );
+      return found?.id_equipo != null ? String(found.id_equipo) : null;
+    },
+    [],
+  );
+
   const mine = React.useCallback(
-    (s: Sender) => {
-      const sender = String(s || "").toLowerCase();
+    (senderOrMsg: Sender | Message): boolean => {
+      // Si recibe un string (sender), usa la lógica tradicional
+      if (typeof senderOrMsg === "string") {
+        const sender = String(senderOrMsg || "").toLowerCase();
+        const r = String(role || "").toLowerCase();
+        if (r === "alumno") return sender === "alumno" || sender === "cliente";
+        if (r === "coach") return sender === "coach" || sender === "equipo";
+        if (r === "admin") return sender === "admin" || sender === "usuario";
+        return sender === r;
+      }
+      // Si recibe un Message, usamos lógica avanzada para coach↔coach
+      const m = senderOrMsg as Message;
+      const isCoachToCoach = !!isCoachToCoachChatRef.current;
+
+      if (isCoachToCoach) {
+        // En chat coach↔coach, comparar por srcParticipantId primero
+        if (m.srcParticipantId != null && myParticipantIdRef.current != null) {
+          return (
+            String(m.srcParticipantId) === String(myParticipantIdRef.current)
+          );
+        }
+        // Si srcEquipoId viene en el mensaje, comparar directamente
+        let msgEquipoId = String(m.srcEquipoId ?? "").trim();
+        const myEquipoId = String(socketio?.idEquipo ?? "").trim();
+
+        // Si no vino srcEquipoId pero sí srcParticipantId, buscamos el id_equipo en los participantes
+        if (!msgEquipoId && m.srcParticipantId != null) {
+          const resolvedEquipoId = getEquipoIdByParticipantId(
+            m.srcParticipantId,
+          );
+          if (resolvedEquipoId) {
+            msgEquipoId = resolvedEquipoId;
+          }
+        }
+
+        if (msgEquipoId && myEquipoId) {
+          return msgEquipoId === myEquipoId;
+        }
+        // Fallback: si no podemos determinar, asumimos NO mío
+        return false;
+      }
+      // Fallback normal: comparar sender con role
+      const sender = String(m.sender || "").toLowerCase();
       const r = String(role || "").toLowerCase();
-      // En backend suele venir como participante_tipo: cliente/equipo/admin,
-      // mientras la UI usa role: alumno/coach/admin.
       if (r === "alumno") return sender === "alumno" || sender === "cliente";
       if (r === "coach") return sender === "coach" || sender === "equipo";
       if (r === "admin") return sender === "admin" || sender === "usuario";
       return sender === r;
     },
-    [role]
+    [role, socketio?.idEquipo, getEquipoIdByParticipantId],
   );
   // Límite de tamaño por archivo: 50MB
   const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -166,7 +227,7 @@ export default function CoachChatInline({
           at: m.at,
           dateObj: new Date(m.at),
           localTime: new Date(m.at).toLocaleTimeString(),
-        }))
+        })),
       );
     }
   }, [items]);
@@ -193,7 +254,7 @@ export default function CoachChatInline({
     loadingMessagesRef.current = loadingMessages;
   }, [loadingMessages]);
   const [chatId, setChatId] = React.useState<string | number | null>(
-    socketio?.chatId ?? null
+    socketio?.chatId ?? null,
   );
   const [myParticipantId, setMyParticipantId] = React.useState<
     string | number | null
@@ -225,8 +286,8 @@ export default function CoachChatInline({
             file_ids: Array.from(selectedAttachmentIds),
           },
           null,
-          3
-        )
+          3,
+        ),
       );
     }
   }, [selectedMessageIds, selectedAttachmentIds]);
@@ -318,7 +379,7 @@ export default function CoachChatInline({
           className="underline text-sky-700 hover:text-sky-900 break-all"
         >
           {match[0]}
-        </a>
+        </a>,
       );
       lastIndex = end;
     }
@@ -343,12 +404,12 @@ export default function CoachChatInline({
                   edited: true,
                   editedAt: at,
                 } as Message)
-              : m
-          )
+              : m,
+          ),
         );
       } catch {}
     },
-    []
+    [],
   );
 
   const openEditForMessage = React.useCallback((m: Message) => {
@@ -384,7 +445,7 @@ export default function CoachChatInline({
       }
       if (!connected || !sio.connected) {
         setEditError(
-          "No estás conectado al chat todavía. Intenta nuevamente en unos segundos."
+          "No estás conectado al chat todavía. Intenta nuevamente en unos segundos.",
         );
         dbg("edit:abort:not-connected", {
           connectedState: connected,
@@ -404,7 +465,7 @@ export default function CoachChatInline({
         cid = chatIdRef.current;
         if (cid == null) {
           setEditError(
-            "No se pudo resolver el chat (id_chat vacío). Abre el chat y vuelve a intentar."
+            "No se pudo resolver el chat (id_chat vacío). Abre el chat y vuelve a intentar.",
           );
           dbg("edit:abort:still-no-chatId");
           return;
@@ -431,7 +492,7 @@ export default function CoachChatInline({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "equipo" &&
                 (!socketio?.idEquipo ||
-                  String(p?.id_equipo) === String(socketio?.idEquipo))
+                  String(p?.id_equipo) === String(socketio?.idEquipo)),
             );
             if (mine?.id_chat_participante != null)
               return mine.id_chat_participante;
@@ -440,7 +501,7 @@ export default function CoachChatInline({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "cliente" &&
                 (!socketio?.idCliente ||
-                  String(p?.id_cliente) === String(socketio?.idCliente))
+                  String(p?.id_cliente) === String(socketio?.idCliente)),
             );
             if (mineCli?.id_chat_participante != null)
               return mineCli.id_chat_participante;
@@ -449,7 +510,7 @@ export default function CoachChatInline({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "admin" &&
                 (!socketio?.idAdmin ||
-                  String(p?.id_admin) === String(socketio?.idAdmin))
+                  String(p?.id_admin) === String(socketio?.idAdmin)),
             );
             if (mineAdm?.id_chat_participante != null)
               return mineAdm.id_chat_participante;
@@ -484,22 +545,22 @@ export default function CoachChatInline({
               data?.nuevo_contenido ?? data?.contenido ?? data?.texto ?? nuevo;
             const serverEditedAt =
               normalizeDateStr(
-                data?.fecha_edicion_local ?? data?.fecha_edicion
+                data?.fecha_edicion_local ?? data?.fecha_edicion,
               ) || nowLocalIso();
             applyEditToItems(
               serverId,
               String(serverText),
-              String(serverEditedAt)
+              String(serverEditedAt),
             );
             try {
               window.dispatchEvent(
                 new CustomEvent("chat:list-refresh", {
                   detail: { reason: "message-edited", id_chat: cid },
-                })
+                }),
               );
             } catch {}
           } catch {}
-        }
+        },
       );
 
       setEditOpen(false);
@@ -513,7 +574,7 @@ export default function CoachChatInline({
 
   const sioRef = React.useRef<any>(null);
   const chatIdRef = React.useRef<string | number | null>(
-    socketio?.chatId ?? null
+    socketio?.chatId ?? null,
   );
   const myParticipantIdRef = React.useRef<string | number | null>(null);
   const seenRef = React.useRef<Set<string>>(new Set());
@@ -534,7 +595,7 @@ export default function CoachChatInline({
     timer: null,
   });
   const clientSessionRef = React.useRef<string>(
-    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   );
   const latestRequestedChatIdRef = React.useRef<any>(socketio?.chatId ?? null);
   const joinInFlightRef = React.useRef<boolean>(false);
@@ -542,11 +603,11 @@ export default function CoachChatInline({
   // Controla auto-scroll inicial por chatId para evitar quedar "a la mitad"
   const autoScrolledChatRef = React.useRef<string | number | null>(null);
   const participantsRef = React.useRef<any[] | undefined>(
-    socketio?.participants
+    socketio?.participants,
   );
   const listParamsRef = React.useRef<any>(listParams);
   const lastPartsKeyRef = React.useRef<string>(
-    JSON.stringify(socketio?.participants || [])
+    JSON.stringify(socketio?.participants || []),
   );
 
   React.useEffect(() => {
@@ -559,7 +620,7 @@ export default function CoachChatInline({
       if (socketio?.participants) {
         console.log(
           "[CoachChatInline] socketio.participants changed (selection):",
-          socketio.participants
+          socketio.participants,
         );
       }
     } catch {}
@@ -667,7 +728,7 @@ export default function CoachChatInline({
     // - el último mensaje es mío (para no perder el contexto al enviar)
     const distance = getDistanceFromBottom();
     const last = items.length > 0 ? items[items.length - 1] : null;
-    const lastIsMine = last ? mine(last.sender) : false;
+    const lastIsMine = last ? mine(last) : false; // Pasar mensaje completo
     const shouldStick =
       pinnedToBottomRef.current || distance < 120 || lastIsMine;
     if (!shouldStick) return;
@@ -769,7 +830,7 @@ export default function CoachChatInline({
   const formatBytes = (bytes?: number) => formatBytesUtil(bytes);
   const getAttachmentUrlCb = React.useCallback(
     (a: Attachment) => getAttachmentUrl(a),
-    []
+    [],
   );
   const openPreview = (a: Attachment) => {
     setPreviewAttachment(a);
@@ -794,7 +855,7 @@ export default function CoachChatInline({
       if (selectedMessageIds.size === 0 && selectedAttachmentIds.size === 0) {
         setTicketModalOpen(true);
         setTicketError(
-          "Debes seleccionar al menos un mensaje o archivo para generar el ticket."
+          "Debes seleccionar al menos un mensaje o archivo para generar el ticket.",
         );
         return;
       }
@@ -862,7 +923,7 @@ export default function CoachChatInline({
 
       const sendId = String(currentId).trim();
       const urlWithParam = buildUrl(
-        `/ai/compute/chat/by-ids/${encodeURIComponent(sendId)}`
+        `/ai/compute/chat/by-ids/${encodeURIComponent(sendId)}`,
       );
       // logging eliminado
       res = await fetch(urlWithParam, {
@@ -891,10 +952,10 @@ export default function CoachChatInline({
         const rawMessages = Array.isArray((data as any)?.messages)
           ? (data as any).messages
           : Array.isArray((data as any)?.mensajes)
-          ? (data as any).mensajes
-          : Array.isArray((data as any)?.original_messages)
-          ? (data as any).original_messages
-          : [];
+            ? (data as any).mensajes
+            : Array.isArray((data as any)?.original_messages)
+              ? (data as any).original_messages
+              : [];
         const mappedMessages = rawMessages.map((m: any) => ({
           fecha: String(m?.fecha || m?.date || ""),
           mensaje: String(m?.mensaje || m?.message || "").trim(),
@@ -915,10 +976,10 @@ export default function CoachChatInline({
         const rawMessages = Array.isArray((data as any)?.messages)
           ? (data as any).messages
           : Array.isArray((data as any)?.mensajes)
-          ? (data as any).mensajes
-          : Array.isArray((data as any)?.original_messages)
-          ? (data as any).original_messages
-          : [];
+            ? (data as any).mensajes
+            : Array.isArray((data as any)?.original_messages)
+              ? (data as any).original_messages
+              : [];
         const mappedMessages = rawMessages.map((m: any) => ({
           fecha: String(m?.fecha || m?.date || ""),
           mensaje: String(m?.mensaje || m?.message || "").trim(),
@@ -1046,7 +1107,7 @@ export default function CoachChatInline({
           .join(", ");
         const more = tooBig.length > 3 ? ` y ${tooBig.length - 3} más` : "";
         setUploadError(
-          `Se omitieron ${tooBig.length} archivo(s) por exceder 50MB: ${names}${more}.`
+          `Se omitieron ${tooBig.length} archivo(s) por exceder 50MB: ${names}${more}.`,
         );
         arr = arr.filter((f) => (f?.size || 0) <= MAX_FILE_SIZE);
       }
@@ -1089,6 +1150,7 @@ export default function CoachChatInline({
           delivered: false,
           read: false,
           srcParticipantId: myParticipantIdRef.current ?? undefined,
+          srcEquipoId: socketio?.idEquipo ?? undefined,
           attachments: [optimisticAttachment],
           uiKey: optimisticId,
         };
@@ -1131,7 +1193,7 @@ export default function CoachChatInline({
           if (!ok) {
             try {
               const fallbackUrl = buildUrl(
-                `/v1/ai/upload-file/${encodeURIComponent(id)}`
+                `/v1/ai/upload-file/${encodeURIComponent(id)}`,
               );
               const h2: Record<string, string> = {
                 ...headers,
@@ -1149,8 +1211,8 @@ export default function CoachChatInline({
           // 3) Marcar optimista como entregado o mostrar error
           setItems((prev) =>
             prev.map((m) =>
-              m.id === optimisticId ? { ...m, delivered: ok } : m
-            )
+              m.id === optimisticId ? { ...m, delivered: ok } : m,
+            ),
           );
 
           // 4) Disparar refresh de listas y confiar en el evento socket del servidor
@@ -1192,7 +1254,7 @@ export default function CoachChatInline({
         .join(", ");
       const more = rejected.length > 3 ? ` y ${rejected.length - 3} más` : "";
       setUploadError(
-        `No se pueden adjuntar archivos mayores a 50MB. Se omitieron: ${names}${more}.`
+        `No se pueden adjuntar archivos mayores a 50MB. Se omitieron: ${names}${more}.`,
       );
     }
     if (!valid.length) return;
@@ -1260,7 +1322,7 @@ export default function CoachChatInline({
       {
         root,
         threshold: [0, 0.01, 0.5, 0.95, 1],
-      }
+      },
     );
     try {
       obs.observe(target);
@@ -1296,7 +1358,7 @@ export default function CoachChatInline({
         return String(id ?? "");
       }
     },
-    [resolveName]
+    [resolveName],
   );
   const getTipoByParticipantId = React.useCallback(
     (pid: any): "cliente" | "equipo" | "admin" | "" => {
@@ -1314,12 +1376,8 @@ export default function CoachChatInline({
         return "";
       }
     },
-    []
+    [],
   );
-
-  const joinedParticipantsRef = React.useRef<any[] | null>(null);
-  const joinDataRef = React.useRef<any | null>(null);
-  const isTwoPartyAlumnoCoachRef = React.useRef<boolean>(false);
 
   // getEmitter/normalizeDateStr movidos a ./chat-core
 
@@ -1342,7 +1400,7 @@ export default function CoachChatInline({
     (
       m: any,
       cid: any,
-      ctx?: "realtime" | "user" | "join" | "poll"
+      ctx?: "realtime" | "user" | "join" | "poll",
     ): SenderEval => {
       try {
         const myPid = myParticipantIdRef.current;
@@ -1369,8 +1427,8 @@ export default function CoachChatInline({
           const txt = String(m?.contenido ?? m?.texto ?? "").trim();
           const tMsg = Date.parse(
             String(
-              normalizeDateStr(m?.fecha_envio_local ?? m?.fecha_envio) || ""
-            )
+              normalizeDateStr(m?.fecha_envio_local ?? m?.fecha_envio) || "",
+            ),
           );
           for (let i = outboxRef.current.length - 1; i >= 0; i--) {
             const ob = outboxRef.current[i];
@@ -1397,7 +1455,7 @@ export default function CoachChatInline({
                     String(x?.id) === String(clientId) &&
                     x?.delivered === false &&
                     String(x?.sender || "").toLowerCase() ===
-                      String(role || "").toLowerCase()
+                      String(role || "").toLowerCase(),
                 )
               : false;
             if (!hasOptimistic) {
@@ -1432,7 +1490,7 @@ export default function CoachChatInline({
               m?.participante_tipo ||
                 m?.emisor_tipo ||
                 m?.tipo_emisor ||
-                m?.remitente_tipo
+                m?.remitente_tipo,
             );
         const senderIsByTipoKnown =
           tipoNorm === "cliente" ||
@@ -1461,8 +1519,8 @@ export default function CoachChatInline({
                 role === "alumno"
                   ? "coach"
                   : role === "coach"
-                  ? "alumno"
-                  : "alumno";
+                    ? "alumno"
+                    : "alumno";
             }
           } else {
             // En no-realtime sí usamos heurísticas para reconciliar ecos propios.
@@ -1490,16 +1548,16 @@ export default function CoachChatInline({
                   role === "alumno"
                     ? "coach"
                     : role === "coach"
-                    ? "alumno"
-                    : "alumno";
+                      ? "alumno"
+                      : "alumno";
                 reason = "fallback-twoParty-attachments-other";
               } else {
                 final =
                   role === "alumno"
                     ? "coach"
                     : role === "coach"
-                    ? "alumno"
-                    : "alumno";
+                      ? "alumno"
+                      : "alumno";
               }
             }
           }
@@ -1528,7 +1586,7 @@ export default function CoachChatInline({
         return { sender: fallback, byId: false, reason: "error-fallback" };
       }
     },
-    [role, getTipoByParticipantId]
+    [role, getTipoByParticipantId],
   );
 
   // Construir un mensaje desde un payload genérico (incluyendo eventos de archivo)
@@ -1545,7 +1603,7 @@ export default function CoachChatInline({
           obj?.id_mensaje ??
             obj?.id ??
             obj?.id_archivo ??
-            `${Date.now()}-${Math.random()}`
+            `${Date.now()}-${Math.random()}`,
         );
         // Unificar determinación de remitente (isMine) utilizando
         // la función centralizada evalSenderForMapping para evitar
@@ -1559,11 +1617,12 @@ export default function CoachChatInline({
           text: txt,
           at: String(
             normalizeDateStr(obj?.fecha_envio_local ?? obj?.fecha_envio) ||
-              nowLocalIso()
+              nowLocalIso(),
           ),
           delivered: true,
           read: false,
           srcParticipantId: getEmitter(obj),
+          srcEquipoId: obj?.id_equipo ?? null,
           attachments: atts,
           uiKey: id,
         };
@@ -1576,7 +1635,7 @@ export default function CoachChatInline({
         return null;
       }
     },
-    [role, normRoom, chatId]
+    [role, normRoom, chatId],
   );
 
   const pushIncomingMessage = React.useCallback((msg: Message) => {
@@ -1673,7 +1732,7 @@ export default function CoachChatInline({
         const prev = itemsRef.current || [];
         if (!prev.length) return mapped;
         const prevById = new Map<string, Message>(
-          prev.map((p) => [String(p.id), p])
+          prev.map((p) => [String(p.id), p]),
         );
         return mapped.map((m) => {
           const old = prevById.get(String(m.id));
@@ -1692,7 +1751,7 @@ export default function CoachChatInline({
         return mapped;
       }
     },
-    []
+    [],
   );
 
   // Unir mensajes del servidor con optimistas locales para que no desaparezcan tras un refresh
@@ -1793,7 +1852,7 @@ export default function CoachChatInline({
         return serverMapped;
       }
     },
-    [role]
+    [role],
   );
 
   // Mapear archivo/archivos del backend a adjuntos del UI
@@ -1807,7 +1866,7 @@ export default function CoachChatInline({
         if (!it) continue;
         atts.push({
           id: String(
-            it?.id_archivo ?? it?.id ?? `${Date.now()}-${Math.random()}`
+            it?.id_archivo ?? it?.id ?? `${Date.now()}-${Math.random()}`,
           ),
           name: String(it?.nombre_archivo ?? it?.nombre ?? "archivo"),
           mime: String(it?.mime_type ?? it?.mime ?? "application/octet-stream"),
@@ -1836,7 +1895,7 @@ export default function CoachChatInline({
         window.dispatchEvent(
           new CustomEvent("chat:unread-count-updated", {
             detail: { chatId, role, count: 0 },
-          })
+          }),
         );
       } catch {}
       const evt = new CustomEvent("chat:last-read-updated", {
@@ -1912,8 +1971,8 @@ export default function CoachChatInline({
                 const msgsSrc = Array.isArray(data.messages)
                   ? data.messages
                   : Array.isArray((data as any).mensajes)
-                  ? (data as any).mensajes
-                  : [];
+                    ? (data as any).mensajes
+                    : [];
                 const myPidLocal =
                   data?.my_participante ?? myParticipantIdRef.current;
                 const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -1923,24 +1982,24 @@ export default function CoachChatInline({
                     id: String(
                       m?.id_mensaje ??
                         m?.id_archivo ??
-                        `${Date.now()}-${Math.random()}`
+                        `${Date.now()}-${Math.random()}`,
                     ),
                     room: normRoom,
                     sender,
                     text: String(
-                      m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                      m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
                     ).trim(),
                     at: String(
                       normalizeDateStr(
-                        m?.fecha_envio_local ?? m?.fecha_envio
-                      ) || nowLocalIso()
+                        m?.fecha_envio_local ?? m?.fecha_envio,
+                      ) || nowLocalIso(),
                     ),
                     delivered: true,
                     read: !!m?.leido,
                     srcParticipantId: getEmitter(m),
                     attachments: mapArchivoToAttachments(m),
                     uiKey: String(
-                      m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                      m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                     ),
                   } as Message;
                   (msg as any).__senderById = !!ev.byId;
@@ -2064,7 +2123,7 @@ export default function CoachChatInline({
             // Log explícito cuando el emisor es un alumno/cliente
             try {
               const tipoNormMsg = normalizeTipo(
-                msg?.participante_tipo || undefined
+                msg?.participante_tipo || undefined,
               );
               if (tipoNormMsg === "cliente") {
                 const emitter = getEmitter(msg);
@@ -2072,7 +2131,7 @@ export default function CoachChatInline({
                   id_chat: msg?.id_chat,
                   id_mensaje: msg?.id_mensaje ?? msg?.id,
                   texto_preview: String(
-                    msg?.contenido ?? msg?.texto ?? ""
+                    msg?.contenido ?? msg?.texto ?? "",
                   ).slice(0, 140),
                   participante_tipo: msg?.participante_tipo,
                   id_cliente: msg?.id_cliente,
@@ -2117,7 +2176,7 @@ export default function CoachChatInline({
                   String(msg.client_session) ===
                     String(clientSessionRef.current);
                 const tipoNormOther = normalizeTipo(
-                  msg?.participante_tipo || undefined
+                  msg?.participante_tipo || undefined,
                 );
                 const isMineByTipoOther = (() => {
                   if (role === "coach") {
@@ -2146,11 +2205,11 @@ export default function CoachChatInline({
                   // Persistir incremento de no leídos por chatId
                   try {
                     const unreadKey = `chatUnreadById:${role}:${String(
-                      msg?.id_chat
+                      msg?.id_chat,
                     )}`;
                     const prev = Number.parseInt(
                       localStorage.getItem(unreadKey) || "0",
-                      10
+                      10,
                     );
                     const next = (isNaN(prev) ? 0 : prev) + 1;
                     localStorage.setItem(unreadKey, String(next));
@@ -2161,7 +2220,7 @@ export default function CoachChatInline({
                           role,
                           count: next,
                         },
-                      })
+                      }),
                     );
                   } catch {}
                 }
@@ -2172,7 +2231,7 @@ export default function CoachChatInline({
               return;
             }
             const id = String(
-              msg?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+              msg?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
             );
             if (seenRef.current.has(id)) return;
             seenRef.current.add(id);
@@ -2192,9 +2251,9 @@ export default function CoachChatInline({
               const tMsg = Date.parse(
                 String(
                   normalizeDateStr(
-                    msg?.fecha_envio_local ?? msg?.fecha_envio
-                  ) || ""
-                )
+                    msg?.fecha_envio_local ?? msg?.fecha_envio,
+                  ) || "",
+                ),
               );
               for (let i = outboxRef.current.length - 1; i >= 0; i--) {
                 const ob = outboxRef.current[i];
@@ -2215,7 +2274,7 @@ export default function CoachChatInline({
             const senderIsMeByRecent = hasRecentUploadMatch(
               role,
               currentChatId,
-              attsLive
+              attsLive,
             );
             const tipoNorm = normalizeTipo(msg?.participante_tipo || undefined);
             const senderIsMeByTipo = (() => {
@@ -2246,7 +2305,7 @@ export default function CoachChatInline({
               !mine(tipoNorm as unknown as Sender)
             ) {
               console.log(
-                "[CoachChatInline] Playing sound for incoming message"
+                "[CoachChatInline] Playing sound for incoming message",
               );
               playNotificationSound();
             } else {
@@ -2269,7 +2328,7 @@ export default function CoachChatInline({
               text: String(msg?.contenido ?? msg?.texto ?? "").trim(),
               at: String(
                 normalizeDateStr(msg?.fecha_envio_local ?? msg?.fecha_envio) ||
-                  nowLocalIso()
+                  nowLocalIso(),
               ),
               delivered: true,
               read: false,
@@ -2385,8 +2444,8 @@ export default function CoachChatInline({
             if (!idMsg) return;
             setItems((prev) =>
               prev.map((m) =>
-                String(m.id) === String(idMsg) ? { ...m, read: true } : m
-              )
+                String(m.id) === String(idMsg) ? { ...m, read: true } : m,
+              ),
             );
           } catch {}
         });
@@ -2407,7 +2466,7 @@ export default function CoachChatInline({
                       reason: "message-edit-other-chat",
                       id_chat: idChat,
                     },
-                  })
+                  }),
                 );
               } catch {}
               return;
@@ -2416,12 +2475,12 @@ export default function CoachChatInline({
             const idMsg = data?.id_mensaje ?? data?.id ?? null;
             if (!idMsg) return;
             const nuevo = String(
-              data?.nuevo_contenido ?? data?.contenido ?? data?.texto ?? ""
+              data?.nuevo_contenido ?? data?.contenido ?? data?.texto ?? "",
             );
             const editedAt = String(
               normalizeDateStr(
-                data?.fecha_edicion_local ?? data?.fecha_edicion
-              ) || nowLocalIso()
+                data?.fecha_edicion_local ?? data?.fecha_edicion,
+              ) || nowLocalIso(),
             );
 
             applyEditToItems(idMsg, nuevo, editedAt);
@@ -2433,7 +2492,7 @@ export default function CoachChatInline({
                     reason: "message-edited",
                     id_chat: currentChatId,
                   },
-                })
+                }),
               );
             } catch {}
           } catch {}
@@ -2448,8 +2507,8 @@ export default function CoachChatInline({
               prev.map((m) =>
                 (m.sender || "").toLowerCase() === role.toLowerCase()
                   ? { ...m, read: true }
-                  : m
-              )
+                  : m,
+              ),
             );
           } catch {}
         });
@@ -2543,8 +2602,8 @@ export default function CoachChatInline({
             const msgsSrc = Array.isArray(data.messages)
               ? data.messages
               : Array.isArray((data as any).mensajes)
-              ? (data as any).mensajes
-              : [];
+                ? (data as any).mensajes
+                : [];
             const myPidLocal =
               data?.my_participante ?? myParticipantIdRef.current;
             const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -2554,23 +2613,23 @@ export default function CoachChatInline({
                 id: String(
                   m?.id_mensaje ??
                     m?.id_archivo ??
-                    `${Date.now()}-${Math.random()}`
+                    `${Date.now()}-${Math.random()}`,
                 ),
                 room: normRoom,
                 sender,
                 text: String(
-                  m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                  m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
                 ).trim(),
                 at: String(
                   normalizeDateStr(m?.fecha_envio_local ?? m?.fecha_envio) ||
-                    nowLocalIso()
+                    nowLocalIso(),
                 ),
                 delivered: true,
                 read: !!m?.leido,
                 srcParticipantId: getEmitter(m),
                 attachments: mapArchivoToAttachments(m),
                 uiKey: String(
-                  m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                  m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                 ),
               } as Message;
               (msg as any).__senderById = !!ev.byId;
@@ -2671,12 +2730,24 @@ export default function CoachChatInline({
               ? joinedParticipantsRef.current
               : [];
             const tipos = arr.map((p: any) =>
-              normalizeTipo(p?.participante_tipo)
+              normalizeTipo(p?.participante_tipo),
             );
             const clientes = tipos.filter((t) => t === "cliente").length;
             const equipos = tipos.filter((t) => t === "equipo").length;
             isTwoPartyAlumnoCoachRef.current =
               clientes >= 1 && equipos >= 1 && arr.length <= 3;
+            // Detectar chat coach↔coach (ambos participantes son equipo)
+            isCoachToCoachChatRef.current =
+              clientes === 0 && equipos >= 2 && arr.length <= 3;
+
+            // DEBUG: Imprimir tipo de chat detectado
+            console.log("===== [CoachChatInline] TIPO DE CHAT DETECTADO =====");
+            console.log("Participantes:", arr);
+            console.log("Clientes:", clientes, "Equipos:", equipos);
+            console.log("isCoachToCoach:", isCoachToCoachChatRef.current);
+            console.log("myParticipantId:", myParticipantIdRef.current);
+            console.log("socketio.idEquipo:", socketio?.idEquipo);
+            console.log("====================================================");
           } catch {}
           if (
             !myParticipantIdRef.current &&
@@ -2689,7 +2760,7 @@ export default function CoachChatInline({
                   String((p?.participante_tipo || "").toLowerCase()) ===
                     "equipo" &&
                   String(p?.id_equipo) === String(socketio.idEquipo) &&
-                  p?.id_chat_participante != null
+                  p?.id_chat_participante != null,
               );
               if (mine?.id_chat_participante != null) {
                 setMyParticipantId(mine.id_chat_participante);
@@ -2708,7 +2779,7 @@ export default function CoachChatInline({
                   String((p?.participante_tipo || "").toLowerCase()) ===
                     "cliente" &&
                   String(p?.id_cliente) === String(socketio.idCliente) &&
-                  p?.id_chat_participante != null
+                  p?.id_chat_participante != null,
               );
               if (mineCli?.id_chat_participante != null) {
                 setMyParticipantId(mineCli.id_chat_participante);
@@ -2727,7 +2798,7 @@ export default function CoachChatInline({
                   String((p?.participante_tipo || "").toLowerCase()) ===
                     "admin" &&
                   String(p?.id_admin) === String(socketio.idAdmin) &&
-                  p?.id_chat_participante != null
+                  p?.id_chat_participante != null,
               );
               if (mineAdm?.id_chat_participante != null) {
                 setMyParticipantId(mineAdm.id_chat_participante);
@@ -2746,7 +2817,7 @@ export default function CoachChatInline({
                   String((p?.participante_tipo || "").toLowerCase()) ===
                     "cliente" &&
                   String(p?.id_cliente) === String(socketio.idCliente) &&
-                  p?.id_chat_participante != null
+                  p?.id_chat_participante != null,
               );
               if (mineCli?.id_chat_participante != null) {
                 setMyParticipantId(mineCli.id_chat_participante);
@@ -2757,8 +2828,8 @@ export default function CoachChatInline({
           const msgsSrc = Array.isArray(data.messages)
             ? data.messages
             : Array.isArray((data as any).mensajes)
-            ? (data as any).mensajes
-            : [];
+              ? (data as any).mensajes
+              : [];
           const myPidLocal =
             data?.my_participante ?? myParticipantIdRef.current;
           const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -2768,16 +2839,16 @@ export default function CoachChatInline({
               id: String(
                 m?.id_mensaje ??
                   m?.id_archivo ??
-                  `${Date.now()}-${Math.random()}`
+                  `${Date.now()}-${Math.random()}`,
               ),
               room: normRoom,
               sender,
               text: String(
-                m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
               ).trim(),
               at: String(
                 normalizeDateStr(m?.fecha_envio_local ?? m?.fecha_envio) ||
-                  nowLocalIso()
+                  nowLocalIso(),
               ),
               delivered: true,
               read: !!m?.leido,
@@ -2809,7 +2880,7 @@ export default function CoachChatInline({
                   attachment_ids: Array.isArray(m.attachments)
                     ? m.attachments.map((a) => a.id)
                     : [],
-                }))
+                })),
               );
 
               console.log("--- [DEBUG] CONVERSACIÓN ALUMNO ---");
@@ -2949,11 +3020,12 @@ export default function CoachChatInline({
                 : [];
               const cliente = arr.find(
                 (p: any) =>
-                  String(p?.participante_tipo || "").toLowerCase() === "cliente"
+                  String(p?.participante_tipo || "").toLowerCase() ===
+                  "cliente",
               );
               const equipo = arr.find(
                 (p: any) =>
-                  String(p?.participante_tipo || "").toLowerCase() === "equipo"
+                  String(p?.participante_tipo || "").toLowerCase() === "equipo",
               );
               const contactName =
                 cliente?.nombre_participante ||
@@ -2986,7 +3058,7 @@ export default function CoachChatInline({
               if (currentId) {
                 target = ack.data.find(
                   (c: any) =>
-                    String(c?.id_chat ?? c?.id ?? "") === String(currentId)
+                    String(c?.id_chat ?? c?.id ?? "") === String(currentId),
                 );
               }
               if (!target) target = ack.data[0];
@@ -2997,12 +3069,12 @@ export default function CoachChatInline({
                 const cliente = arr.find(
                   (p: any) =>
                     String(p?.participante_tipo || "").toLowerCase() ===
-                    "cliente"
+                    "cliente",
                 );
                 const equipo = arr.find(
                   (p: any) =>
                     String(p?.participante_tipo || "").toLowerCase() ===
-                    "equipo"
+                    "equipo",
                 );
                 const contactName =
                   cliente?.nombre_participante ||
@@ -3027,7 +3099,7 @@ export default function CoachChatInline({
           const baseList: any[] = Array.isArray(list) ? list : [];
 
           const needEnrich = baseList.some(
-            (it) => !Array.isArray(it?.participants || it?.participantes)
+            (it) => !Array.isArray(it?.participants || it?.participantes),
           );
 
           // Enviar SIEMPRE la lista base inmediatamente para render instantáneo en UI
@@ -3042,7 +3114,7 @@ export default function CoachChatInline({
             if (currentId) {
               target = baseList.find(
                 (c: any) =>
-                  String(c?.id_chat ?? c?.id ?? "") === String(currentId)
+                  String(c?.id_chat ?? c?.id ?? "") === String(currentId),
               );
             }
             if (!target) target = baseList[0];
@@ -3052,11 +3124,12 @@ export default function CoachChatInline({
                 : [];
               const cliente = arr.find(
                 (p: any) =>
-                  String(p?.participante_tipo || "").toLowerCase() === "cliente"
+                  String(p?.participante_tipo || "").toLowerCase() ===
+                  "cliente",
               );
               const equipo = arr.find(
                 (p: any) =>
-                  String(p?.participante_tipo || "").toLowerCase() === "equipo"
+                  String(p?.participante_tipo || "").toLowerCase() === "equipo",
               );
               const contactName =
                 cliente?.nombre_participante ||
@@ -3159,10 +3232,10 @@ export default function CoachChatInline({
           try {
             const sorted = [...list].sort((a: any, b: any) => {
               const ta = new Date(
-                a.last_message_at || a.updated_at || a.created_at || 0
+                a.last_message_at || a.updated_at || a.created_at || 0,
               ).getTime();
               const tb = new Date(
-                b.last_message_at || b.updated_at || b.created_at || 0
+                b.last_message_at || b.updated_at || b.created_at || 0,
               ).getTime();
               return tb - ta;
             });
@@ -3194,7 +3267,7 @@ export default function CoachChatInline({
                       resolve();
                     });
                   });
-                })
+                }),
               );
             }
           } catch (err) {
@@ -3260,13 +3333,13 @@ export default function CoachChatInline({
         try {
           const hasAnyEquipo = (arr: any[]) =>
             (arr || []).some(
-              (p) => normalizeTipo(p?.participante_tipo) === "equipo"
+              (p) => normalizeTipo(p?.participante_tipo) === "equipo",
             );
 
           if (!hasAnyEquipo(participants) && (socketio as any)?.idCliente) {
             const alumnoCode = String((socketio as any).idCliente);
             const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
-              alumnoCode
+              alumnoCode,
             )}`;
             const j = await apiFetch<any>(url);
             const rows: any[] = Array.isArray(j?.data) ? j.data : [];
@@ -3344,7 +3417,7 @@ export default function CoachChatInline({
               } catch {
                 resolve([]);
               }
-            }
+            },
           );
         } catch {
           resolve([]);
@@ -3416,7 +3489,7 @@ export default function CoachChatInline({
                     myParticipantIdRef.current = data.my_participante;
                   }
                   joinedParticipantsRef.current = Array.isArray(
-                    data.participants || data.participantes
+                    data.participants || data.participantes,
                   )
                     ? data.participants || data.participantes
                     : [];
@@ -3427,8 +3500,8 @@ export default function CoachChatInline({
                     const msgsSrc = Array.isArray(data.messages)
                       ? data.messages
                       : Array.isArray((data as any).mensajes)
-                      ? (data as any).mensajes
-                      : [];
+                        ? (data as any).mensajes
+                        : [];
                     const mapped: Message[] = msgsSrc.map((m: any) => {
                       const ev = evalSenderForMapping(m, cid, "join");
                       const sender: Sender = ev.sender;
@@ -3436,24 +3509,24 @@ export default function CoachChatInline({
                         id: String(
                           m?.id_mensaje ??
                             m?.id_archivo ??
-                            `${Date.now()}-${Math.random()}`
+                            `${Date.now()}-${Math.random()}`,
                         ),
                         room: normRoom,
                         sender,
                         text: String(
-                          m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                          m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
                         ).trim(),
                         at: String(
                           normalizeDateStr(
-                            m?.fecha_envio_local ?? m?.fecha_envio
-                          ) || nowLocalIso()
+                            m?.fecha_envio_local ?? m?.fecha_envio,
+                          ) || nowLocalIso(),
                         ),
                         delivered: true,
                         read: !!m?.leido,
                         srcParticipantId: getEmitter(m),
                         attachments: mapArchivoToAttachments(m),
                         uiKey: String(
-                          m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                          m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                         ),
                       } as Message;
                     });
@@ -3488,7 +3561,7 @@ export default function CoachChatInline({
                 "[CoachChatInline] Emitting create event:",
                 eventName,
                 "participants:",
-                participants
+                participants,
               );
             } catch {}
             sio.emit(eventName, { participants }, (ack: any) => {
@@ -3516,7 +3589,7 @@ export default function CoachChatInline({
                     } catch {}
                   }
                   joinedParticipantsRef.current = Array.isArray(
-                    data.participants || data.participantes
+                    data.participants || data.participantes,
                   )
                     ? data.participants || data.participantes
                     : [];
@@ -3543,7 +3616,7 @@ export default function CoachChatInline({
         "[DEBUG] Resultado creación chat:",
         created,
         "ChatID:",
-        chatIdRef.current
+        chatIdRef.current,
       );
 
       if (!created || chatIdRef.current == null) return false;
@@ -3560,7 +3633,7 @@ export default function CoachChatInline({
                   myParticipantIdRef.current = data.my_participante;
                 }
                 joinedParticipantsRef.current = Array.isArray(
-                  data.participants || data.participantes
+                  data.participants || data.participantes,
                 )
                   ? data.participants || data.participantes
                   : joinedParticipantsRef.current;
@@ -3617,7 +3690,7 @@ export default function CoachChatInline({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "equipo" &&
                 (!socketio?.idEquipo ||
-                  String(p?.id_equipo) === String(socketio?.idEquipo))
+                  String(p?.id_equipo) === String(socketio?.idEquipo)),
             );
             if (mine?.id_chat_participante != null)
               effectivePid = mine.id_chat_participante;
@@ -3626,7 +3699,7 @@ export default function CoachChatInline({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "cliente" &&
                 (!socketio?.idCliente ||
-                  String(p?.id_cliente) === String(socketio?.idCliente))
+                  String(p?.id_cliente) === String(socketio?.idCliente)),
             );
             if (mineCli?.id_chat_participante != null)
               effectivePid = mineCli.id_chat_participante;
@@ -3635,7 +3708,7 @@ export default function CoachChatInline({
               (p: any) =>
                 normalizeTipo(p?.participante_tipo) === "admin" &&
                 (!socketio?.idAdmin ||
-                  String(p?.id_admin) === String(socketio?.idAdmin))
+                  String(p?.id_admin) === String(socketio?.idAdmin)),
             );
             if (mineAdm?.id_chat_participante != null)
               effectivePid = mineAdm.id_chat_participante;
@@ -3657,7 +3730,7 @@ export default function CoachChatInline({
                 (p: any) =>
                   normalizeTipo(p?.participante_tipo) === "equipo" &&
                   (!socketio?.idEquipo ||
-                    String(p?.id_equipo) === String(socketio?.idEquipo))
+                    String(p?.id_equipo) === String(socketio?.idEquipo)),
               );
               if (mine?.id_chat_participante != null) {
                 effectivePid = mine.id_chat_participante;
@@ -3668,7 +3741,7 @@ export default function CoachChatInline({
                 (p: any) =>
                   normalizeTipo(p?.participante_tipo) === "cliente" &&
                   (!socketio?.idCliente ||
-                    String(p?.id_cliente) === String(socketio?.idCliente))
+                    String(p?.id_cliente) === String(socketio?.idCliente)),
               );
               if (mineCli?.id_chat_participante != null) {
                 effectivePid = mineCli.id_chat_participante;
@@ -3679,7 +3752,7 @@ export default function CoachChatInline({
                 (p: any) =>
                   normalizeTipo(p?.participante_tipo) === "admin" &&
                   (!socketio?.idAdmin ||
-                    String(p?.id_admin) === String(socketio?.idAdmin))
+                    String(p?.id_admin) === String(socketio?.idAdmin)),
               );
               if (mineAdm?.id_chat_participante != null) {
                 effectivePid = mineAdm.id_chat_participante;
@@ -3761,7 +3834,7 @@ export default function CoachChatInline({
                 const optimisticIdx = next.findIndex((m) => m.id === clientId);
                 if (serverIdStr) {
                   const existingIdx = next.findIndex(
-                    (m) => String(m.id) === serverIdStr
+                    (m) => String(m.id) === serverIdStr,
                   );
                   if (existingIdx >= 0) {
                     if (optimisticIdx >= 0) next.splice(optimisticIdx, 1);
@@ -3811,12 +3884,12 @@ export default function CoachChatInline({
                         at: Date.now(),
                         role,
                       },
-                    })
+                    }),
                   );
                 } catch {}
               } catch {}
             } catch {}
-          }
+          },
         );
       }
 
@@ -3838,8 +3911,8 @@ export default function CoachChatInline({
                   const msgsSrc = Array.isArray(data.messages)
                     ? data.messages
                     : Array.isArray((data as any).mensajes)
-                    ? (data as any).mensajes
-                    : [];
+                      ? (data as any).mensajes
+                      : [];
                   const myPidLocal =
                     data?.my_participante ?? myParticipantIdRef.current;
                   const mapped: Message[] = msgsSrc.map((m: any) => {
@@ -3847,24 +3920,24 @@ export default function CoachChatInline({
                     const sender: Sender = ev.sender;
                     const msg: Message = {
                       id: String(
-                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                       ),
                       room: normRoom,
                       sender,
                       text: String(
-                        m?.Contenido ?? m?.contenido ?? m?.texto ?? ""
+                        m?.Contenido ?? m?.contenido ?? m?.texto ?? "",
                       ).trim(),
                       at: String(
                         normalizeDateStr(
-                          m?.fecha_envio_local ?? m?.fecha_envio
-                        ) || nowLocalIso()
+                          m?.fecha_envio_local ?? m?.fecha_envio,
+                        ) || nowLocalIso(),
                       ),
                       delivered: true,
                       read: !!m?.leido,
                       srcParticipantId: getEmitter(m),
                       attachments: mapArchivoToAttachments(m),
                       uiKey: String(
-                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`
+                        m?.id_mensaje ?? `${Date.now()}-${Math.random()}`,
                       ),
                     } as Message;
                     (msg as any).__senderById = !!ev.byId;
@@ -3951,7 +4024,7 @@ export default function CoachChatInline({
         window.dispatchEvent(
           new CustomEvent("chat:list-refresh", {
             detail: { reason: "chat-deleted", id_chat: id },
-          })
+          }),
         );
       } catch {}
     } catch (e) {
@@ -3967,11 +4040,11 @@ export default function CoachChatInline({
         : [];
       const cliente = arr.find(
         (p: any) =>
-          String(p?.participante_tipo || "").toLowerCase() === "cliente"
+          String(p?.participante_tipo || "").toLowerCase() === "cliente",
       );
       const equipo = arr.find(
         (p: any) =>
-          String(p?.participante_tipo || "").toLowerCase() === "equipo"
+          String(p?.participante_tipo || "").toLowerCase() === "equipo",
       );
       const name =
         cliente?.nombre_participante || equipo?.nombre_participante || null;
@@ -3991,13 +4064,13 @@ export default function CoachChatInline({
         // Priorizar cliente; si no hay, equipo distinto al del coach
         const cliente = parts.find(
           (p: any) =>
-            String(p?.participante_tipo || "").toLowerCase() === "cliente"
+            String(p?.participante_tipo || "").toLowerCase() === "cliente",
         );
         const equipo = parts.find(
           (p: any) =>
             String(p?.participante_tipo || "").toLowerCase() === "equipo" &&
             (socketio?.idEquipo == null ||
-              String(p?.id_equipo) !== String(socketio?.idEquipo))
+              String(p?.id_equipo) !== String(socketio?.idEquipo)),
         );
         const name =
           cliente?.nombre_participante || equipo?.nombre_participante || null;
@@ -4251,10 +4324,17 @@ export default function CoachChatInline({
             </div>
           ) : (
             items.map((m, idx) => {
-              const isMine = mine(m.sender);
+              const isMine = mine(m); // Pasar mensaje completo para soportar coach↔coach
               const prev = idx > 0 ? items[idx - 1] : null;
               const next = idx + 1 < items.length ? items[idx + 1] : null;
-              const samePrev = prev && prev.sender === m.sender;
+              // Para agrupación, en coach↔coach usamos srcParticipantId
+              const isCoachToCoach = !!isCoachToCoachChatRef.current;
+              const samePrev =
+                prev &&
+                (isCoachToCoach
+                  ? String(prev.srcParticipantId ?? "") ===
+                    String(m.srcParticipantId ?? "")
+                  : prev.sender === m.sender);
               const newGroup = !samePrev;
 
               const isSelected = selectionMode && selectedMessageIds.has(m.id);
@@ -4271,7 +4351,7 @@ export default function CoachChatInline({
               const hasAudioOnly =
                 Array.isArray(m.attachments) &&
                 m.attachments.some((a) =>
-                  (a.mime || "").startsWith("audio/")
+                  (a.mime || "").startsWith("audio/"),
                 ) &&
                 (!m.text || m.text.trim() === "");
 
@@ -4765,8 +4845,8 @@ export default function CoachChatInline({
                         {a.file.type.startsWith("video/")
                           ? "VID"
                           : a.file.type.startsWith("audio/")
-                          ? "AUD"
-                          : "FILE"}
+                            ? "AUD"
+                            : "FILE"}
                       </div>
                     )
                   ) : (
@@ -4900,7 +4980,7 @@ export default function CoachChatInline({
                           !navigator.mediaDevices?.getUserMedia
                         ) {
                           setUploadError(
-                            "Grabación no soportada en este navegador."
+                            "Grabación no soportada en este navegador.",
                           );
                           return;
                         }
@@ -4924,7 +5004,7 @@ export default function CoachChatInline({
                               const devices =
                                 await navigator.mediaDevices.enumerateDevices();
                               const mics = devices.filter(
-                                (d) => d.kind === "audioinput"
+                                (d) => d.kind === "audioinput",
                               );
                               if (mics.length > 0 && mics[0].deviceId) {
                                 stream =
@@ -4961,7 +5041,7 @@ export default function CoachChatInline({
                         }
                         const mr = new MediaRecorder(
                           stream,
-                          mimeType ? { mimeType } : undefined
+                          mimeType ? { mimeType } : undefined,
                         );
                         mediaRecorderRef.current = mr;
                         mr.ondataavailable = (ev) => {
@@ -4986,9 +5066,9 @@ export default function CoachChatInline({
                               return "webm";
                             })();
                             const fname = `grabacion-${ts.getFullYear()}${pad(
-                              ts.getMonth() + 1
+                              ts.getMonth() + 1,
                             )}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(
-                              ts.getMinutes()
+                              ts.getMinutes(),
                             )}${pad(ts.getSeconds())}.${ext}`;
                             // Convertir a MP3 antes de adjuntar
                             (async () => {
@@ -5001,7 +5081,7 @@ export default function CoachChatInline({
                                   });
                                 if ((out.size || 0) > MAX_FILE_SIZE) {
                                   setUploadError(
-                                    "El audio grabado excede el límite de 50MB y no se adjuntará."
+                                    "El audio grabado excede el límite de 50MB y no se adjuntará.",
                                   );
                                 } else {
                                   addPendingAttachments([out] as any);
@@ -5013,7 +5093,7 @@ export default function CoachChatInline({
                                 });
                                 if ((out.size || 0) > MAX_FILE_SIZE) {
                                   setUploadError(
-                                    "El audio grabado excede el límite de 50MB y no se adjuntará."
+                                    "El audio grabado excede el límite de 50MB y no se adjuntará.",
                                   );
                                 } else {
                                   addPendingAttachments([out] as any);
@@ -5022,7 +5102,7 @@ export default function CoachChatInline({
                             })();
                           } catch {
                             setUploadError(
-                              "No se pudo procesar el audio grabado."
+                              "No se pudo procesar el audio grabado.",
                             );
                           }
                           try {
@@ -5043,7 +5123,7 @@ export default function CoachChatInline({
                           setRecordStartAt(Date.now());
                           recordTimerRef.current = setInterval(
                             () => setRecordTick(Date.now()),
-                            250
+                            250,
                           );
                         } catch {}
                       } catch (err: any) {
@@ -5053,18 +5133,18 @@ export default function CoachChatInline({
                           name === "DevicesNotFoundError"
                         ) {
                           setUploadError(
-                            "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador."
+                            "No se encontró un micrófono. Conecta uno y revisa los permisos del navegador.",
                           );
                         } else if (
                           name === "NotAllowedError" ||
                           name === "PermissionDeniedError"
                         ) {
                           setUploadError(
-                            "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio."
+                            "Permiso de micrófono denegado. Habilítalo en el navegador para grabar audio.",
                           );
                         } else if (name === "NotReadableError") {
                           setUploadError(
-                            "El micrófono está siendo usado por otra aplicación o no es accesible."
+                            "El micrófono está siendo usado por otra aplicación o no es accesible.",
                           );
                         } else {
                           setUploadError(
@@ -5072,7 +5152,7 @@ export default function CoachChatInline({
                               "No se pudo iniciar la grabación") +
                               " (" +
                               (name || "error") +
-                              ")"
+                              ")",
                           );
                         }
                       }
@@ -5101,7 +5181,7 @@ export default function CoachChatInline({
                 {(() => {
                   const ms = Math.max(
                     0,
-                    recordStartAt ? recordTick - recordStartAt : 0
+                    recordStartAt ? recordTick - recordStartAt : 0,
                   );
                   const s = Math.floor(ms / 1000);
                   const mm = Math.floor(s / 60);

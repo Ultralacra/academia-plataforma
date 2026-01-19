@@ -110,6 +110,37 @@ function MessageBubble({
           </AvatarFallback>
         </Avatar>
       )}
+      {/* Role badge */}
+      <div className="flex items-center gap-2">
+        <div className="text-xs font-semibold text-[#075e54]">
+          {String(message.sender || "")
+            .charAt(0)
+            .toUpperCase() + String(message.sender || "").slice(1)}
+        </div>
+        <span
+          className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full font-medium ${
+            String(message.sender || "")
+              .toLowerCase()
+              .includes("coach")
+              ? "bg-indigo-100 text-indigo-800"
+              : String(message.sender || "")
+                    .toLowerCase()
+                    .includes("alum")
+                ? "bg-emerald-100 text-emerald-800"
+                : "bg-gray-100 text-gray-800"
+          }`}
+        >
+          {String(message.sender || "")
+            .toLowerCase()
+            .includes("coach")
+            ? "Coach"
+            : String(message.sender || "")
+                  .toLowerCase()
+                  .includes("alum")
+              ? "Alumno"
+              : "Admin"}
+        </span>
+      </div>
       <div
         className={`max-w-md w-fit rounded-lg px-3 py-2 text-sm ${bubbleClasses}`}
       >

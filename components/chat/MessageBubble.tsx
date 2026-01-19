@@ -50,8 +50,52 @@ export default function MessageBubble({
   selectedAttachmentIds: Set<string>;
   onToggleSelectAttachment: (id: string) => void;
 }) {
+  const normalizeTipo = (v: any) => {
+    const s = String(v || "")
+      .trim()
+      .toLowerCase();
+    if (["cliente", "alumno", "student"].includes(s)) return "alumno";
+    if (["equipo", "coach", "entrenador"].includes(s)) return "coach";
+    if (["admin", "administrador", "usuario"].includes(s)) return "admin";
+    return s || "alumno";
+  };
+  const normalized = normalizeTipo(msg.sender);
+  const senderLabel =
+    String(msg.sender || normalized || "")
+      .charAt(0)
+      .toUpperCase() + String(msg.sender || normalized || "").slice(1);
+  const roleBadge =
+    normalized === "coach"
+      ? "Coach"
+      : normalized === "alumno"
+        ? "Alumno"
+        : "Admin";
+  const roleBadgeCls =
+    normalized === "coach"
+      ? "bg-indigo-100 text-indigo-800"
+      : normalized === "alumno"
+        ? "bg-emerald-100 text-emerald-800"
+        : "bg-gray-100 text-gray-800";
+
+  const avatarBgCls =
+    normalized === "coach"
+      ? "bg-indigo-500"
+      : normalized === "alumno"
+        ? "bg-emerald-500"
+        : "bg-gray-500";
+
   return (
-    <div className={`flex ${mine ? "justify-end" : "justify-start"} mb-1`}>
+    <div
+      className={`flex ${mine ? "justify-end" : "justify-start"} mb-1 items-end gap-2`}
+    >
+      {/* Avatar a la izquierda para mensajes de otros */}
+      {!mine && (
+        <div
+          className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ${avatarBgCls}`}
+        >
+          {senderLabel.charAt(0).toUpperCase()}
+        </div>
+      )}
       <div
         onClick={() => selectMode && onToggleSelect?.()}
         style={
@@ -67,11 +111,21 @@ export default function MessageBubble({
             : "bg-white text-gray-900 rounded-bl-none"
         }`}
       >
-        {!mine && (
-          <div className="text-xs font-semibold text-[#075e54] mb-0.5">
-            {msg.sender.charAt(0).toUpperCase() + msg.sender.slice(1)}
+        <div
+          className={`${mine ? "flex justify-end" : "flex"} items-center gap-2 mb-0.5`}
+        >
+          <div
+            className={`text-xs font-semibold text-[#075e54] ${mine ? "order-2" : ""}`}
+          >
+            {senderLabel}
           </div>
-        )}
+          <span
+            className={`inline-flex items-center px-2 py-0.5 text-xs rounded-full font-medium ${roleBadgeCls} ${mine ? "order-1" : ""}`}
+            aria-label={`rol-${normalized}`}
+          >
+            {roleBadge}
+          </span>
+        </div>
         {msg.text && (
           <div
             className="text-sm whitespace-pre-wrap break-words leading-relaxed pb-2"
@@ -211,12 +265,12 @@ export default function MessageBubble({
                 msg.status === "EN_CURSO"
                   ? "bg-yellow-500"
                   : msg.status === "COMPLETADO"
-                  ? "bg-emerald-600"
-                  : msg.status === "ABANDONO"
-                  ? "bg-red-600"
-                  : msg.status === "PAUSA"
-                  ? "bg-gray-500"
-                  : "bg-sky-600"
+                    ? "bg-emerald-600"
+                    : msg.status === "ABANDONO"
+                      ? "bg-red-600"
+                      : msg.status === "PAUSA"
+                        ? "bg-gray-500"
+                        : "bg-sky-600"
               }`}
             >
               {String(msg.status).replace("_", " ")}
