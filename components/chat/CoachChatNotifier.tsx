@@ -56,7 +56,7 @@ function extractAlumnoNameFromChat(chat: any): string | null {
       ? chat.otros_participantes
       : [];
     const fromOtros = arr.find(
-      (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
+      (p: any) => normalizeTipo(p?.participante_tipo) === "cliente",
     );
     const n1 =
       fromOtros?.nombre_participante ||
@@ -70,7 +70,7 @@ function extractAlumnoNameFromChat(chat: any): string | null {
       ? chat?.participants || chat?.participantes
       : [];
     const fromParts = parts.find(
-      (p: any) => normalizeTipo(p?.participante_tipo) === "cliente"
+      (p: any) => normalizeTipo(p?.participante_tipo) === "cliente",
     );
     const n2 =
       fromParts?.nombre_participante ||
@@ -154,7 +154,7 @@ export function CoachChatNotifier() {
     if (!token) {
       try {
         console.debug(
-          "[CoachChatNotifier] Token aún no disponible; esperando auth:changed"
+          "[CoachChatNotifier] Token aún no disponible; esperando auth:changed",
         );
       } catch {}
       return;
@@ -198,6 +198,21 @@ export function CoachChatNotifier() {
       socket.emit("chat.list", payload, (ack: any) => {
         if (ack && ack.success && Array.isArray(ack.data)) {
           console.log("[CoachChatNotifier] Joining chats:", ack.data.length);
+          // DEBUG: Ver estructura de los datos
+          console.log(
+            "[CoachChatNotifier] 📋 Lista completa de conversaciones:",
+            JSON.stringify(ack.data, null, 2),
+          );
+          console.log(
+            "[CoachChatNotifier] 📋 Resumen:",
+            ack.data.map((c: any) => ({
+              id: c?.id_chat ?? c?.id,
+              nombre: c?.otros_participantes?.[0]?.nombre_participante,
+              unread: c?.unread,
+              last_msg: c?.last_message?.contenido?.substring(0, 30),
+            })),
+          );
+
           ack.data.forEach((chat: any) => {
             const cid = toChatId(chat?.id_chat ?? chat?.id);
             if (cid) {
@@ -213,7 +228,7 @@ export function CoachChatNotifier() {
                   joinAck.data?.my_participante
                 ) {
                   myParticipantIds.current[cid] = String(
-                    joinAck.data.my_participante
+                    joinAck.data.my_participante,
                   );
                   try {
                     const name = extractAlumnoNameFromChat(joinAck.data);
@@ -235,7 +250,7 @@ export function CoachChatNotifier() {
         socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
           if (joinAck && joinAck.success && joinAck.data?.my_participante) {
             myParticipantIds.current[cid] = String(
-              joinAck.data.my_participante
+              joinAck.data.my_participante,
             );
             try {
               const name =
@@ -335,7 +350,7 @@ export function CoachChatNotifier() {
           if (isAlumno) {
             const preview = String(msg?.contenido ?? msg?.texto ?? "").slice(
               0,
-              140
+              140,
             );
             console.log("[CoachChatNotifier] ← Mensaje de alumno", {
               id_chat: msg?.id_chat,
@@ -354,7 +369,7 @@ export function CoachChatNotifier() {
           "[CoachChatNotifier] Notification triggered for message:",
           msg,
           "User:",
-          user.email
+          user.email,
         );
 
         const currentPath = pathnameRef.current;
@@ -387,7 +402,7 @@ export function CoachChatNotifier() {
               : senderName || "Nuevo mensaje";
 
             const textRaw = String(
-              msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+              msg?.contenido ?? msg?.texto ?? msg?.text ?? "",
             ).trim();
             const preview = (() => {
               const collapsed = textRaw.replace(/\s+/g, " ").trim();
@@ -420,7 +435,7 @@ export function CoachChatNotifier() {
                     chatUrl,
                     chatId: msg?.id_chat,
                   },
-                })
+                }),
               );
             }
           } catch {}
@@ -438,7 +453,7 @@ export function CoachChatNotifier() {
             window.dispatchEvent(
               new CustomEvent("chat:unread-count-updated", {
                 detail: { chatId: msg.id_chat, role: "coach", count: next },
-              })
+              }),
             );
 
             // Disparar evento para actualizar localmente el lastAt del chat
@@ -458,7 +473,7 @@ export function CoachChatNotifier() {
                   at: new Date(msgAt).getTime(),
                   role: "coach",
                 },
-              })
+              }),
             );
 
             console.log("[CoachChatNotifier] Eventos disparados:", {

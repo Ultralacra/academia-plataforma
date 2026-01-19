@@ -131,6 +131,10 @@ export default function CoachDetailPage({
   const [currentOpenChatId, setCurrentOpenChatId] = useState<
     string | number | null
   >(null);
+  
+  // Estado para rastrear qué chats tienen a alguien escribiendo
+  const [typingByChatId, setTypingByChatId] = useState<Record<string, boolean>>({});
+  const typingTimersRef = useMemo(() => new Map<string, NodeJS.Timeout>(), []);
 
   // Duplicados: guardar lista de chat IDs duplicados para la conversación actual
   const [duplicateChatIds, setDuplicateChatIds] = useState<(string | number)[]>(
@@ -392,6 +396,42 @@ export default function CoachDetailPage({
       minute: "2-digit",
     });
   };
+  
+  // Handler para eventos de typing desde el chat
+  const handleTypingChange = useMemo(() => {
+    return ({ chatId, isTyping }: { chatId: string | number; isTyping: boolean }) => {
+      const id = String(chatId);
+      console.log("[Page TYPING] Recibido:", { chatId: id, isTyping });
+      
+      // Limpiar timer previo si existe
+      const prevTimer = typingTimersRef.get(id);
+      if (prevTimer) {
+        clearTimeout(prevTimer);
+        typingTimersRef.delete(id);
+      }
+      
+      if (isTyping) {
+        setTypingByChatId((prev) => ({ ...prev, [id]: true }));
+        // Auto-limpiar después de 2 segundos si no llega otro evento
+        const timer = setTimeout(() => {
+          setTypingByChatId((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+          typingTimersRef.delete(id);
+        }, 2000);
+        typingTimersRef.set(id, timer);
+      } else {
+        setTypingByChatId((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    };
+  }, [typingTimersRef]);
+  
   function getLastReadByChatId(chatId: any): number {
     try {
       const key = `chatLastReadById:coach:${String(chatId)}`;
@@ -767,6 +807,12 @@ export default function CoachDetailPage({
       if (topChatId && group.name && group.name !== "(Sin nombre)") {
         setCachedContactName(topChatId, group.name);
       }
+      
+      // Verificar si alguien está escribiendo en alguno de los chats del grupo
+      const isTyping = group.chats.some((chat: any) => {
+        const cid = chat?.id_chat ?? chat?.id;
+        return cid && typingByChatId[String(cid)];
+      });
 
       return {
         ...group,
@@ -777,6 +823,7 @@ export default function CoachDetailPage({
         lastText: (last.text || "").trim(),
         hasUnread,
         unreadCount,
+        isTyping,
       };
     });
 
@@ -860,6 +907,7 @@ export default function CoachDetailPage({
     teamsMap,
     studentsMap,
     code,
+    typingByChatId,
   ]);
 
   const unreadConversationsCount = useMemo(() => {
@@ -1576,12 +1624,23 @@ export default function CoachDetailPage({
                                         <div className="flex items-center gap-2 mt-0.5">
                                           <div
                                             className={`text-[13px] truncate flex-1 ${
-                                              item.unreadCount > 0
+                                              item.isTyping
+                                                ? "text-teal-600 font-medium italic"
+                                                : item.unreadCount > 0
                                                 ? "text-slate-800 font-medium"
                                                 : "text-slate-500"
                                             }`}
                                           >
-                                            {item.isNew ? (
+                                            {item.isTyping ? (
+                                              <span className="flex items-center gap-1">
+                                                <span className="flex gap-0.5">
+                                                  <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                                                  <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
+                                                  <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                                                </span>
+                                                <span>escribiendo...</span>
+                                              </span>
+                                            ) : item.isNew ? (
                                               <span className="italic text-teal-600">
                                                 Iniciar nueva conversación
                                               </span>
@@ -1772,6 +1831,7 @@ export default function CoachDetailPage({
 
                     <CoachChatInline
                         onBack={() => setMobileChatOpen(false)}
+                        onTypingChange={handleTypingChange}
                         key={`chat-${code}-${
                           targetTeamCode ?? targetStudentCode ?? "inbox"
                         }`}
@@ -1806,6 +1866,7 @@ export default function CoachDetailPage({
                         socketio={{
                           url: chatServerUrl,
                           idEquipo: String(code),
+                          myUserCode: coach?.codigo,
                           participants: targetTeamCode
                             ? [
                                 {

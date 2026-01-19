@@ -108,6 +108,7 @@ export default function CoachChatInline({
   onChatsList,
   resolveName,
   onBack,
+  onTypingChange,
 }: {
   room: string;
   role?: Sender;
@@ -129,6 +130,10 @@ export default function CoachChatInline({
   onChatsList?: (list: any[]) => void;
   resolveName?: (tipo: "equipo" | "cliente" | "admin", id: string) => string;
   onBack?: () => void;
+  onTypingChange?: (data: {
+    chatId: string | number;
+    isTyping: boolean;
+  }) => void;
 }) {
   const isMobile = useIsMobile();
   const normRoom = React.useMemo(
@@ -2513,39 +2518,149 @@ export default function CoachChatInline({
           } catch {}
         });
 
+        console.log("[CoachChat] 🔌 Registrando listener chat.typing");
         sio.on("chat.typing", (data: any) => {
           try {
+            console.log(
+              "[CoachChat TYPING] ✏️ Evento recibido:",
+              JSON.stringify(data),
+            );
             const idChat = data?.id_chat ?? data?.chatId ?? null;
-            if (
-              idChat != null &&
-              chatId != null &&
-              String(idChat) !== String(chatId)
-            )
-              return;
+
+            // Ignorar si es mi propia sesión
             if (
               data?.client_session &&
               String(data.client_session) === String(clientSessionRef.current)
-            )
+            ) {
+              console.log(
+                "[CoachChat TYPING] ⏭️ Ignorado: misma sesión cliente",
+              );
               return;
+            }
+
+            // Detectar emisor: puede venir como id_chat_participante_emisor o como user.id/user.codigo
             const emitter = getEmitter(data);
+            const userFromPayload = data?.user;
+            const userIdFromPayload =
+              userFromPayload?.id ?? userFromPayload?.codigo ?? null;
+            const userRoleFromPayload = String(
+              userFromPayload?.role ?? userFromPayload?.tipo ?? "",
+            ).toLowerCase();
+
             const myPidNow2 = myParticipantIdRef.current;
+
+            // Si el emisor es identificable y soy yo, ignorar
             if (
               emitter != null &&
               myPidNow2 != null &&
               String(emitter) === String(myPidNow2)
-            )
+            ) {
+              console.log(
+                "[CoachChat TYPING] ⏭️ Ignorado: soy yo el emisor (por participante)",
+              );
               return;
+            }
+
+            // Si viene user y el rol es el mismo que el mío (coach/equipo), podría ser yo
+            const myRole = String(role || "").toLowerCase();
+            const isSameRole =
+              (myRole === "coach" &&
+                (userRoleFromPayload === "coach" ||
+                  userRoleFromPayload === "equipo")) ||
+              (myRole === "admin" && userRoleFromPayload === "admin") ||
+              (myRole === "alumno" &&
+                (userRoleFromPayload === "alumno" ||
+                  userRoleFromPayload === "cliente"));
+
+            // Verificar si es mi propio usuario por código de equipo
+            const myEquipoCode = socketio?.idEquipo;
+            const isMyOwnEquipo =
+              myEquipoCode &&
+              userIdFromPayload &&
+              String(userIdFromPayload).toLowerCase() ===
+                String(myEquipoCode).toLowerCase();
+
+            if (isMyOwnEquipo) {
+              console.log(
+                "[CoachChat TYPING] ⏭️ Ignorado: soy yo (mismo id_equipo)",
+              );
+              return;
+            }
+
+            // Verificar si es mi propio usuario por código personal (myUserCode)
+            const myUserCode = socketio?.myUserCode ?? null;
+            const isMyOwnUser =
+              myUserCode &&
+              userIdFromPayload &&
+              String(userIdFromPayload).toLowerCase() ===
+                String(myUserCode).toLowerCase();
+
+            if (isMyOwnUser) {
+              console.log(
+                "[CoachChat TYPING] ⏭️ Ignorado: soy yo (mismo myUserCode)",
+                { myUserCode, userIdFromPayload },
+              );
+              return;
+            }
+
+            // Si hay user con rol diferente al mío, es definitivamente otro usuario
+            const isOtherByUser = userFromPayload != null && !isSameRole;
+
             const hasClientDiff =
               !!data?.client_session &&
               String(data.client_session) !== String(clientSessionRef.current);
             const isOtherByEmitter =
               emitter != null &&
               (myPidNow2 == null || String(emitter) !== String(myPidNow2));
-            if (!hasClientDiff && !isOtherByEmitter) return;
+
+            // Si no podemos determinar que es otro usuario, pero hay user data de rol diferente, asumir que es válido
+            const isDefinitelyOther =
+              hasClientDiff || isOtherByEmitter || isOtherByUser;
+
+            if (!isDefinitelyOther) {
+              console.log(
+                "[CoachChat TYPING] ⏭️ Ignorado: no se pudo confirmar que es otro usuario",
+              );
+              return;
+            }
+
             const isOn = data?.typing === true || data?.on === true;
             const isOff = data?.typing === false || data?.on === false;
-            if (isOff) return setOtherTyping(false);
+            console.log("[CoachChat TYPING] ✅ Procesando:", {
+              isOn,
+              isOff,
+              idChat,
+              emitter,
+              userIdFromPayload,
+            });
+
+            // Notificar al padre para que actualice la lista de chats
+            if (idChat != null) {
+              try {
+                onTypingChange?.({ chatId: idChat, isTyping: isOn && !isOff });
+              } catch {}
+            }
+
+            // Solo actualizar indicador local si es el chat activo
+            const isCurrentChat =
+              idChat != null &&
+              chatId != null &&
+              String(idChat) === String(chatId);
+            if (!isCurrentChat) {
+              console.log(
+                "[CoachChat TYPING] 📋 Evento para otro chat, solo notificando lista",
+              );
+              return;
+            }
+
+            if (isOff) {
+              console.log("[CoachChat TYPING] ⬇️ Ocultando indicador");
+              return setOtherTyping(false);
+            }
             if (!isOn) return;
+            console.log(
+              "[CoachChat TYPING] ⬆️ Mostrando indicador 'escribiendo...'",
+            );
             setOtherTyping(true);
             setTimeout(() => setOtherTyping(false), 1800);
           } catch {}
@@ -3964,20 +4079,34 @@ export default function CoachChatInline({
   function emitTyping(on: boolean) {
     try {
       const sio = sioRef.current;
-      if (!sio || chatIdRef.current == null) return;
+      if (!sio || chatIdRef.current == null) {
+        console.log("[CoachChat EMIT_TYPING] ❌ No socket o chatId", {
+          hasSocket: !!sio,
+          chatId: chatIdRef.current,
+        });
+        return;
+      }
       const payload: any = { id_chat: chatIdRef.current, typing: !!on };
       if (myParticipantId != null)
         payload.id_chat_participante_emisor = myParticipantId;
       payload.client_session = clientSessionRef.current;
+      console.log("[CoachChat EMIT_TYPING] 📤 Emitiendo:", on, payload);
       sio.emit("chat.typing", payload);
-      // logging eliminado
     } catch {}
   }
 
   const notifyTyping = (on: boolean) => {
+    console.log("[CoachChat NOTIFY_TYPING] Llamado con on=", on);
     try {
       const state = typingRef.current;
+      console.log(
+        "[CoachChat NOTIFY_TYPING] Estado actual:",
+        state.on,
+        "timer:",
+        !!state.timer,
+      );
       if (on && !state.on) {
+        console.log("[CoachChat NOTIFY_TYPING] ✅ Disparando emitTyping(true)");
         emitTyping(true);
         state.on = true;
       }
@@ -4806,6 +4935,31 @@ export default function CoachChatInline({
             </button>
           )}
           <div ref={bottomRef} />
+        </div>
+
+        {/* Indicador de escritura "escribiendo..." - fuera del scroll, encima del input */}
+        <div
+          className={`px-4 py-1 bg-[#F0F2F5] transition-all duration-200 overflow-hidden ${
+            otherTyping ? "max-h-10 opacity-100" : "max-h-0 opacity-0"
+          }`}
+        >
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <div className="flex gap-1 items-center">
+              <span
+                className="w-2 h-2 bg-[#25d366] rounded-full animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              ></span>
+              <span
+                className="w-2 h-2 bg-[#25d366] rounded-full animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              ></span>
+              <span
+                className="w-2 h-2 bg-[#25d366] rounded-full animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              ></span>
+            </div>
+            <span className="text-xs font-medium">escribiendo...</span>
+          </div>
         </div>
 
         <div

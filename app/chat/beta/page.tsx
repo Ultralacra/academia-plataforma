@@ -934,7 +934,12 @@ export default function AdminChatPage() {
                             "0",
                           10
                         );
-                        const count = isNaN(storedCount) ? 0 : storedCount;
+                        // Prefer server-provided unread count if present, otherwise fallback to persistent localStorage count
+                        const count = it?.unread != null
+                          ? Number(it.unread) || 0
+                          : isNaN(storedCount)
+                            ? 0
+                            : storedCount;
                         const isOpen =
                           id != null &&
                           String(currentOpenChatId ?? "") === String(id);

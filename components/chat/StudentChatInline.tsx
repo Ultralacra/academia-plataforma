@@ -35,7 +35,7 @@ export default function StudentChatInline({
     "loading" | "ready" | "missing"
   >(coachIdFromProps ? "ready" : "loading");
   const [resolvedEquipoId, setResolvedEquipoId] = React.useState<string | null>(
-    coachIdFromProps ? String(coachIdFromProps) : null
+    coachIdFromProps ? String(coachIdFromProps) : null,
   );
   const [resolvedEquipoName, setResolvedEquipoName] = React.useState<
     string | null
@@ -58,7 +58,7 @@ export default function StudentChatInline({
       setCoachResolution("loading");
       try {
         const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
-          alumno
+          alumno,
         )}`;
         const j = await apiFetch<any>(url);
         if (!alive) return;
@@ -119,7 +119,7 @@ export default function StudentChatInline({
             {
               area: a.area || "(sin área)",
               es_atencion_cliente: isAC(a.area) ? "✅ SÍ" : "❌ NO",
-            }
+            },
           );
         });
         console.log("⭐ Coach seleccionado:", {
@@ -147,8 +147,8 @@ export default function StudentChatInline({
           const eqName = preferred?.nombre
             ? String(preferred.nombre)
             : codeEquipo && map[codeEquipo]?.name
-            ? String(map[codeEquipo].name)
-            : null;
+              ? String(map[codeEquipo].name)
+              : null;
           setResolvedEquipoName(eqName);
         } catch {}
       } catch {
@@ -215,7 +215,7 @@ export default function StudentChatInline({
       }
       return sid;
     },
-    [code, alumnoName, resolvedEquipoId, resolvedEquipoName, coachMap]
+    [code, alumnoName, resolvedEquipoId, resolvedEquipoName, coachMap],
   );
 
   return (
@@ -251,6 +251,7 @@ export default function StudentChatInline({
             url: SOCKET_URL || undefined,
             idCliente: String(code),
             idEquipo: resolvedEquipoId ? String(resolvedEquipoId) : undefined,
+            myUserCode: String(code),
             participants,
             // Solo creamos automáticamente si conocemos el id_equipo destino;
             // si no, intentaremos localizar una conversación existente por cliente.

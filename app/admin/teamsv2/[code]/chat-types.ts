@@ -34,6 +34,8 @@ export type SocketIOConfig = {
   idEquipo?: string;
   idCliente?: string;
   idAdmin?: string;
+  myUserCode?: string;
+  codigo?: string;
   participants?: any[];
   autoCreate?: boolean;
   autoJoin?: boolean;

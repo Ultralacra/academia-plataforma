@@ -2186,39 +2186,139 @@ export default function StudentChatFriendly({
           } catch {}
         });
 
+        console.log("[SOCKET] 🔌 Registrando listener chat.typing");
         sio.on("chat.typing", (data: any) => {
           try {
+            console.log(
+              "[StudentChat TYPING] ✏️ Evento recibido:",
+              JSON.stringify(data),
+            );
             const idChat = data?.id_chat ?? data?.chatId ?? null;
             if (
               idChat != null &&
               chatId != null &&
               String(idChat) !== String(chatId)
-            )
+            ) {
+              console.log("[StudentChat TYPING] ⏭️ Ignorado: chat diferente", {
+                idChat,
+                chatId,
+              });
               return;
+            }
             if (
               data?.client_session &&
               String(data.client_session) === String(clientSessionRef.current)
-            )
+            ) {
+              console.log(
+                "[StudentChat TYPING] ⏭️ Ignorado: misma sesión cliente",
+              );
               return;
+            }
             const emitter = getEmitter(data);
             const myPidNow2 = myParticipantIdRef.current;
+
+            // === NUEVO: Detectar al otro usuario por el objeto "user" en el payload ===
+            const userFromPayload = data?.user;
+            const userIdFromPayload =
+              userFromPayload?.id ?? userFromPayload?.codigo;
+            const userRoleFromPayload = String(
+              userFromPayload?.role ?? userFromPayload?.tipo ?? "",
+            ).toLowerCase();
+            const myRoleStr = String(role || "").toLowerCase(); // "alumno" o "cliente"
+            // Si el rol del emisor es diferente al mío (ej: coach/admin vs alumno)
+            const isSameRole =
+              (myRoleStr === "alumno" || myRoleStr === "cliente") &&
+              (userRoleFromPayload === "alumno" ||
+                userRoleFromPayload === "cliente");
+            const isOtherByUser = userFromPayload != null && !isSameRole;
+            // Verificar si es mi propio codigo usando myUserCode
+            const myUserCode =
+              socketio?.myUserCode ??
+              socketio?.idCliente ??
+              socketio?.codigo ??
+              null;
+            const isMyOwnCode =
+              myUserCode &&
+              userIdFromPayload &&
+              String(userIdFromPayload).toLowerCase() ===
+                String(myUserCode).toLowerCase();
+
+            // Si es mi propio código, ignorar inmediatamente
+            if (isMyOwnCode) {
+              console.log(
+                "[StudentChat TYPING] ⏭️ Ignorado: soy yo (mismo myUserCode)",
+                { myUserCode, userIdFromPayload },
+              );
+              return;
+            }
+
+            console.log("[StudentChat TYPING] 🔍 Detección:", {
+              emitter,
+              myPidNow2,
+              userFromPayload: userFromPayload
+                ? {
+                    id: userFromPayload.id,
+                    codigo: userFromPayload.codigo,
+                    role: userFromPayload.role,
+                  }
+                : null,
+              userRoleFromPayload,
+              myRoleStr,
+              isSameRole,
+              isOtherByUser,
+              myUserCode,
+            });
+
             if (
               emitter != null &&
               myPidNow2 != null &&
               String(emitter) === String(myPidNow2)
-            )
+            ) {
+              console.log(
+                "[StudentChat TYPING] ⏭️ Ignorado: soy yo el emisor",
+                { emitter, myPidNow2 },
+              );
               return;
+            }
             const hasClientDiff =
               !!data?.client_session &&
               String(data.client_session) !== String(clientSessionRef.current);
             const isOtherByEmitter =
               emitter != null &&
               (myPidNow2 == null || String(emitter) !== String(myPidNow2));
-            if (!hasClientDiff && !isOtherByEmitter) return;
+
+            // Condición: es otro usuario si hay diferencia de client_session, emisor, o rol diferente
+            const isDefinitelyOther =
+              hasClientDiff || isOtherByEmitter || isOtherByUser;
+
+            if (!isDefinitelyOther) {
+              console.log(
+                "[StudentChat TYPING] ⏭️ Ignorado: no es otro usuario",
+                {
+                  hasClientDiff,
+                  isOtherByEmitter,
+                  isOtherByUser,
+                },
+              );
+              return;
+            }
             const isOn = data?.typing === true || data?.on === true;
             const isOff = data?.typing === false || data?.on === false;
-            if (isOff) return setOtherTyping(false);
+            console.log("[StudentChat TYPING] ✅ Procesando typing:", {
+              isOn,
+              isOff,
+              emitter,
+              myPidNow2,
+              isOtherByUser,
+            });
+            if (isOff) {
+              console.log("[StudentChat TYPING] ⬇️ Ocultando indicador");
+              return setOtherTyping(false);
+            }
             if (!isOn) return;
+            console.log(
+              "[StudentChat TYPING] ⬆️ Mostrando indicador 'escribiendo...'",
+            );
             setOtherTyping(true);
             setTimeout(() => setOtherTyping(false), 1800);
           } catch {}
@@ -2720,6 +2820,22 @@ export default function StudentChatFriendly({
           if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
           const baseList: any[] = Array.isArray(list) ? list : [];
+
+          // DEBUG: Log completo de la lista de conversaciones recibida
+          console.log(
+            "[Chat] Lista de conversaciones COMPLETA del WebSocket:",
+            JSON.stringify(baseList, null, 2),
+          );
+          console.log(
+            "[Chat] Lista de conversaciones (resumen):",
+            baseList.map((it: any) => ({
+              id: it?.id_chat ?? it?.id,
+              otros_participantes: it?.otros_participantes,
+              unread: it?.unread,
+              last_message: it?.last_message?.contenido?.substring(0, 30),
+            })),
+          );
+
           const needEnrich = baseList.some(
             (it) => !Array.isArray(it?.participants || it?.participantes),
           );
@@ -2820,9 +2936,22 @@ export default function StudentChatFriendly({
             const id = String(e?.id_chat ?? e?.id ?? "");
             if (id) byId.set(id, e);
           }
+          // Merge: preservar TODOS los campos del item original (incluyendo unread, otros_participantes, etc.)
+          // y solo agregar/actualizar participants del enriquecido
           const merged = baseList.map((it) => {
             const id = String(it?.id_chat ?? it?.id ?? "");
-            return (id && byId.get(id)) || it;
+            const enrichedItem = id ? byId.get(id) : null;
+            if (enrichedItem) {
+              return {
+                ...it, // Preservar todos los campos originales (unread, otros_participantes, last_message, etc.)
+                participants:
+                  enrichedItem.participants ||
+                  enrichedItem.participantes ||
+                  it.participants ||
+                  it.participantes,
+              };
+            }
+            return it;
           });
           try {
             const toLine3 = (it: any) => {
@@ -2961,6 +3090,27 @@ export default function StudentChatFriendly({
         try {
           if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
+
+          // DEBUG: Log completo de conversaciones del WebSocket
+          console.log(
+            "[Chat] 📋 LISTA COMPLETA DE CONVERSACIONES:",
+            JSON.stringify(list, null, 2),
+          );
+          console.log(
+            "[Chat] 📋 Resumen de conversaciones:",
+            list.map((it: any) => ({
+              id: it?.id_chat ?? it?.id,
+              nombre:
+                it?.otros_participantes?.[0]?.nombre_participante ||
+                "sin nombre",
+              otros_participantes: it?.otros_participantes,
+              participants: it?.participants,
+              participantes: it?.participantes,
+              unread: it?.unread,
+              last_msg: it?.last_message?.contenido?.substring(0, 30),
+            })),
+          );
+
           dbg("chat.list immediate", { payload, count: list.length });
           try {
             const toLine = (it: any) => {
@@ -3420,17 +3570,66 @@ export default function StudentChatFriendly({
   const ChatListItem = React.memo(
     function ChatListItem({ it, nameOf, tryJoin, activeChatId }: any) {
       const id = it?.id_chat ?? it?.id;
-      const parts = it?.participants || it?.participantes || [];
-      const equipos = (Array.isArray(parts) ? parts : [])
-        .filter((p: any) => normalizeTipo(p?.participante_tipo) === "equipo")
-        .map((p: any) => nameOf("equipo", p?.id_equipo))
+      // Support both legacy format (participants/participantes) and new format (otros_participantes)
+      const parts =
+        it?.otros_participantes || it?.participants || it?.participantes || [];
+
+      // DEBUG: Log cada item de la lista
+      console.log("[ChatListItem] Rendering item:", {
+        id,
+        otros_participantes: it?.otros_participantes,
+        participants: it?.participants,
+        participantes: it?.participantes,
+        unread: it?.unread,
+        last_message: it?.last_message,
+        raw: it,
+      });
+
+      // First try to get names directly from nombre_participante (new WebSocket format)
+      const directNames = (Array.isArray(parts) ? parts : [])
+        .map((p: any) => p?.nombre_participante)
         .filter(Boolean);
-      const clientes = (Array.isArray(parts) ? parts : [])
-        .filter((p: any) => normalizeTipo(p?.participante_tipo) === "cliente")
-        .map((p: any) => nameOf("cliente", p?.id_cliente))
-        .filter(Boolean);
-      const title = equipos.length ? equipos.join(", ") : clientes.join(", ");
+
+      // Fallback to nameOf lookup (legacy format)
+      const equipos =
+        directNames.length === 0
+          ? (Array.isArray(parts) ? parts : [])
+              .filter(
+                (p: any) => normalizeTipo(p?.participante_tipo) === "equipo",
+              )
+              .map((p: any) => nameOf("equipo", p?.id_equipo))
+              .filter(Boolean)
+          : [];
+      const clientes =
+        directNames.length === 0
+          ? (Array.isArray(parts) ? parts : [])
+              .filter(
+                (p: any) => normalizeTipo(p?.participante_tipo) === "cliente",
+              )
+              .map((p: any) => nameOf("cliente", p?.id_cliente))
+              .filter(Boolean)
+          : [];
+
+      // Use direct names if available, otherwise fallback to resolved names
+      const title =
+        directNames.length > 0
+          ? directNames.join(", ")
+          : equipos.length
+            ? equipos.join(", ")
+            : clientes.join(", ");
+
+      console.log("[ChatListItem] Title resolved:", {
+        id,
+        title,
+        directNames,
+        equipos,
+        clientes,
+      });
+
+      // Support last_message?.fecha_envio from new WebSocket format
       const lastAt =
+        it?.last_message?.fecha_envio ||
+        it?.last_message?.fecha_envio_local ||
         it?.last_message_at ||
         it?.fecha_ultimo_mensaje ||
         it?.updated_at ||
@@ -3439,11 +3638,16 @@ export default function StudentChatFriendly({
         it?.fecha_creacion;
       const lastLabel = lastAt ? formatTime(String(lastAt)) : "";
       let unread = 0;
-      try {
-        const key = `chatUnreadById:alumno:${String(id)}`;
-        unread = parseInt(localStorage.getItem(key) || "0", 10);
-        if (isNaN(unread)) unread = 0;
-      } catch {}
+      // Prefer server-provided unread count when available, otherwise fallback to localStorage
+      if (it?.unread != null) {
+        unread = Number(it.unread) || 0;
+      } else {
+        try {
+          const key = `chatUnreadById:alumno:${String(id)}`;
+          unread = parseInt(localStorage.getItem(key) || "0", 10);
+          if (isNaN(unread)) unread = 0;
+        } catch {}
+      }
       const active =
         activeChatId != null && String(activeChatId) === String(id);
 
@@ -3480,13 +3684,24 @@ export default function StudentChatFriendly({
         const ida = String(prev.it?.id_chat ?? prev.it?.id ?? "");
         const idb = String(next.it?.id_chat ?? next.it?.id ?? "");
         if (ida !== idb) return false;
+        // Compare last message date (support new WebSocket format)
         const atA = String(
-          prev.it?.last_message_at ?? prev.it?.updated_at ?? "",
+          prev.it?.last_message?.fecha_envio ??
+            prev.it?.last_message_at ??
+            prev.it?.updated_at ??
+            "",
         );
         const atB = String(
-          next.it?.last_message_at ?? next.it?.updated_at ?? "",
+          next.it?.last_message?.fecha_envio ??
+            next.it?.last_message_at ??
+            next.it?.updated_at ??
+            "",
         );
         if (atA !== atB) return false;
+        // Compare unread count to re-render when it changes
+        const unreadA = Number(prev.it?.unread ?? 0);
+        const unreadB = Number(next.it?.unread ?? 0);
+        if (unreadA !== unreadB) return false;
         return true;
       } catch {
         return false;
@@ -3818,15 +4033,23 @@ export default function StudentChatFriendly({
       if (myParticipantId != null)
         payload.id_chat_participante_emisor = myParticipantId;
       payload.client_session = clientSessionRef.current;
+      console.log("[TYPING] 📤 Emitiendo typing:", on, payload);
       sio.emit("chat.typing", payload);
-      // logging eliminado
     } catch {}
   }
 
   const notifyTyping = (on: boolean) => {
+    console.log("[NOTIFY_TYPING] Llamado con on=", on);
     try {
       const state = typingRef.current;
+      console.log(
+        "[NOTIFY_TYPING] Estado actual:",
+        state.on,
+        "timer:",
+        !!state.timer,
+      );
       if (on && !state.on) {
+        console.log("[NOTIFY_TYPING] ✅ Disparando emitTyping(true)");
         emitTyping(true);
         state.on = true;
       }
@@ -4007,12 +4230,25 @@ export default function StudentChatFriendly({
                   )}
                 </div>
               ) : (
-                <ChatList
-                  list={convList}
-                  nameOf={nameOf}
-                  tryJoin={tryJoin}
-                  activeChatId={chatIdRef.current ?? chatId}
-                />
+                <>
+                  {/* DEBUG: Log convList antes de renderizar */}
+                  {console.log(
+                    "[ChatList] 🔍 convList que se va a renderizar:",
+                    convList?.length,
+                    "items",
+                    convList?.slice(0, 3)?.map((it: any) => ({
+                      id: it?.id_chat,
+                      nombre: it?.otros_participantes?.[0]?.nombre_participante,
+                      unread: it?.unread,
+                    })),
+                  )}
+                  <ChatList
+                    list={convList}
+                    nameOf={nameOf}
+                    tryJoin={tryJoin}
+                    activeChatId={chatIdRef.current ?? chatId}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -4714,30 +4950,6 @@ export default function StudentChatFriendly({
                 </div>
               </div>
             )}
-            {/* Indicador de escritura como overlay absoluto para no alterar el layout */}
-            <div
-              className={`pointer-events-none absolute left-4 bottom-4 transition-opacity duration-150 ${
-                otherTyping ? "opacity-100" : "opacity-0"
-              }`}
-              aria-hidden
-            >
-              <div className="bg-white/95 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200">
-                <div className="flex gap-1 items-center">
-                  <span
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "0ms" }}
-                  ></span>
-                  <span
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "150ms" }}
-                  ></span>
-                  <span
-                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style={{ animationDelay: "300ms" }}
-                  ></span>
-                </div>
-              </div>
-            </div>
             {/* Indicador de nuevos mensajes (flotante) */}
             {newMessagesCount > 0 && (
               <button
@@ -4764,6 +4976,31 @@ export default function StudentChatFriendly({
               </button>
             )}
             <div ref={bottomRef} />
+          </div>
+
+          {/* Indicador de escritura "escribiendo..." - fuera del scroll, encima del input */}
+          <div
+            className={`px-4 py-1 bg-[#F0F0F0] transition-all duration-200 overflow-hidden ${
+              otherTyping ? "max-h-10 opacity-100" : "max-h-0 opacity-0"
+            }`}
+          >
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <div className="flex gap-1 items-center">
+                <span
+                  className="w-2 h-2 bg-[#25d366] rounded-full animate-bounce"
+                  style={{ animationDelay: "0ms" }}
+                ></span>
+                <span
+                  className="w-2 h-2 bg-[#25d366] rounded-full animate-bounce"
+                  style={{ animationDelay: "150ms" }}
+                ></span>
+                <span
+                  className="w-2 h-2 bg-[#25d366] rounded-full animate-bounce"
+                  style={{ animationDelay: "300ms" }}
+                ></span>
+              </div>
+              <span className="text-xs font-medium">escribiendo...</span>
+            </div>
           </div>
 
           <div
@@ -5099,7 +5336,14 @@ export default function StudentChatFriendly({
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
-                  if (e.target.value.trim()) notifyTyping(true);
+                  console.log(
+                    "[TEXTAREA] ✍️ onChange - texto:",
+                    e.target.value.substring(0, 20),
+                  );
+                  if (e.target.value.trim()) {
+                    console.log("[TEXTAREA] 📞 Llamando notifyTyping(true)");
+                    notifyTyping(true);
+                  }
                   e.target.style.height = "auto";
                   e.target.style.height =
                     Math.min(e.target.scrollHeight, 120) + "px";
