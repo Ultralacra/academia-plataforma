@@ -71,10 +71,10 @@ export default function AdminChatPage() {
   const [targetKind, setTargetKind] = useState<TargetKind | null>(null);
   const [targetId, setTargetId] = useState<string | null>(null);
   const [targetTitle, setTargetTitle] = useState<string>(
-    "Selecciona un contacto"
+    "Selecciona un contacto",
   );
   const [targetSubtitle, setTargetSubtitle] = useState<string | undefined>(
-    undefined
+    undefined,
   );
 
   // Listado de conversaciones del admin (como equipo ADMIN_COACH_ID)
@@ -82,7 +82,7 @@ export default function AdminChatPage() {
   const [connected, setConnected] = useState<boolean>(false);
   const [listSignal, setListSignal] = useState<number>(0);
   const [selectedChatId, setSelectedChatId] = useState<string | number | null>(
-    null
+    null,
   );
   // Chat actualmente abierto (ya sea por chatId existente o por selección de participantes)
   const [currentOpenChatId, setCurrentOpenChatId] = useState<
@@ -161,7 +161,7 @@ export default function AdminChatPage() {
           ? [t.nombre, t.codigo, t.puesto, t.area]
               .map((x) => String(x ?? "").toLowerCase())
               .some((s) => s.includes(q))
-          : true
+          : true,
       );
   }, [teams, searchText, filterArea, filterPuesto]);
 
@@ -175,7 +175,7 @@ export default function AdminChatPage() {
           ? [s.name, s.code, s.state, s.stage]
               .map((x) => String(x ?? "").toLowerCase())
               .some((v) => v.includes(q))
-          : true
+          : true,
       );
   }, [students, searchText, filterStage, filterState]);
 
@@ -200,7 +200,7 @@ export default function AdminChatPage() {
   function chatHasClienteEquipoPair(
     it: any,
     clienteId: string,
-    equipoId: string
+    equipoId: string,
   ): boolean {
     try {
       const parts = it?.participants || it?.participantes || [];
@@ -242,9 +242,9 @@ export default function AdminChatPage() {
             it,
             String(ADMIN_COACH_ID),
             // Aceptar coincidencia por id o por código
-            String(target.id)
+            String(target.id),
           ) ||
-          chatHasEquipoPair(it, String(ADMIN_COACH_ID), String(target.codigo))
+          chatHasEquipoPair(it, String(ADMIN_COACH_ID), String(target.codigo)),
       );
       if (!match) return 0;
       const id = match?.id_chat ?? match?.id;
@@ -261,8 +261,8 @@ export default function AdminChatPage() {
         chatHasClienteEquipoPair(
           it,
           String(target.code ?? target.id),
-          String(ADMIN_COACH_ID)
-        )
+          String(ADMIN_COACH_ID),
+        ),
       );
       if (!match) return 0;
       const id = match?.id_chat ?? match?.id;
@@ -351,7 +351,7 @@ export default function AdminChatPage() {
       window.removeEventListener("chat:unread-bump", onUnreadBump as any);
       window.removeEventListener(
         "chat:last-read-updated",
-        onLastReadUpdated as any
+        onLastReadUpdated as any,
       );
       window.removeEventListener("storage", onStorage as any);
     };
@@ -366,7 +366,7 @@ export default function AdminChatPage() {
     }
     if (targetKind === "alumno") {
       const s = students.find(
-        (x) => String(x.code ?? x.id) === String(targetId)
+        (x) => String(x.code ?? x.id) === String(targetId),
       );
       setTargetTitle(s?.name || String(targetId));
       setTargetSubtitle("Alumno");
@@ -374,11 +374,11 @@ export default function AdminChatPage() {
       const t = teams.find(
         (x) =>
           String(x.id) === String(targetId) ||
-          String(x.codigo) === String(targetId)
+          String(x.codigo) === String(targetId),
       );
       setTargetTitle(t?.nombre || String(targetId));
       setTargetSubtitle(
-        [t?.puesto, t?.area].filter(Boolean).join(" · ") || "Coach"
+        [t?.puesto, t?.area].filter(Boolean).join(" · ") || "Coach",
       );
     }
   }, [targetKind, targetId, students, teams]);
@@ -412,11 +412,11 @@ export default function AdminChatPage() {
     // ¿es alumno?
     const cliente = parts.find((p: any) =>
       ["cliente", "alumno", "student"].includes(
-        String(p?.participante_tipo || "").toLowerCase()
-      )
+        String(p?.participante_tipo || "").toLowerCase(),
+      ),
     );
     const equipos = parts.filter(
-      (p: any) => String(p?.participante_tipo || "").toLowerCase() === "equipo"
+      (p: any) => String(p?.participante_tipo || "").toLowerCase() === "equipo",
     );
     // Si hay cliente, mostrar su nombre/código
     if (cliente) {
@@ -427,13 +427,13 @@ export default function AdminChatPage() {
     }
     // Si es coach-to-coach: tomar el equipo distinto al ADMIN_COACH_ID
     const other = equipos.find(
-      (e: any) => String(e?.id_equipo) !== String(ADMIN_COACH_ID)
+      (e: any) => String(e?.id_equipo) !== String(ADMIN_COACH_ID),
     );
     if (other) {
       const t = teams.find(
         (x) =>
           String(x.codigo) === String(other.id_equipo) ||
-          String(x.id) === String(other.id_equipo)
+          String(x.id) === String(other.id_equipo),
       );
       const subtitle =
         [t?.puesto, t?.area].filter(Boolean).join(" · ") || "Coach";
@@ -515,7 +515,7 @@ export default function AdminChatPage() {
         window.dispatchEvent(
           new CustomEvent("chat:list-refresh", {
             detail: { reason: "chat-deleted", id_chat: id },
-          })
+          }),
         );
       } catch {}
     } catch (err) {
@@ -734,8 +734,8 @@ export default function AdminChatPage() {
                                 selected
                                   ? "bg-[#f0f2f5]"
                                   : unread > 0
-                                  ? "bg-emerald-50"
-                                  : ""
+                                    ? "bg-emerald-50"
+                                    : ""
                               }`}
                               title={subtitle}
                               onClick={() => {
@@ -750,18 +750,18 @@ export default function AdminChatPage() {
                                       chatHasEquipoPair(
                                         it,
                                         String(ADMIN_COACH_ID),
-                                        String(t.id)
+                                        String(t.id),
                                       ) ||
                                       chatHasEquipoPair(
                                         it,
                                         String(ADMIN_COACH_ID),
-                                        String(t.codigo)
-                                      )
+                                        String(t.codigo),
+                                      ),
                                   );
                                   const id = match?.id_chat ?? match?.id;
                                   if (id != null) {
                                     const k = `chatUnreadById:coach:${String(
-                                      id
+                                      id,
                                     )}`;
                                     localStorage.setItem(k, "0");
                                     setReadsBump((n) => n + 1);
@@ -811,8 +811,8 @@ export default function AdminChatPage() {
                                 selected
                                   ? "bg-[#f0f2f5]"
                                   : unread > 0
-                                  ? "bg-emerald-50"
-                                  : ""
+                                    ? "bg-emerald-50"
+                                    : ""
                               }`}
                               onClick={() => {
                                 setTargetKind("alumno");
@@ -825,13 +825,13 @@ export default function AdminChatPage() {
                                     chatHasClienteEquipoPair(
                                       it,
                                       String(s.code ?? s.id),
-                                      String(ADMIN_COACH_ID)
-                                    )
+                                      String(ADMIN_COACH_ID),
+                                    ),
                                   );
                                   const id = match?.id_chat ?? match?.id;
                                   if (id != null) {
                                     const k = `chatUnreadById:coach:${String(
-                                      id
+                                      id,
                                     )}`;
                                     localStorage.setItem(k, "0");
                                     setReadsBump((n) => n + 1);
@@ -851,7 +851,7 @@ export default function AdminChatPage() {
                                     {s.stage && (
                                       <Badge
                                         className={`text-[10px] px-2 py-0 h-4 font-medium border ${getStageColor(
-                                          s.stage
+                                          s.stage,
                                         )}`}
                                       >
                                         {s.stage}
@@ -860,7 +860,7 @@ export default function AdminChatPage() {
                                     {s.state && (
                                       <Badge
                                         className={`text-[10px] px-2 py-0 h-4 font-medium border ${getStateColor(
-                                          s.state
+                                          s.state,
                                         )}`}
                                       >
                                         {s.state}
@@ -926,20 +926,21 @@ export default function AdminChatPage() {
                         const unread = hasUnreadForItem(it);
                         // Contador persistente de no-leídos por chatId (rol coach)
                         const countKey = `chatUnreadById:coach:${String(
-                          id ?? ""
+                          id ?? "",
                         )}`;
                         const storedCount = Number.parseInt(
                           (typeof window !== "undefined" &&
                             window.localStorage.getItem(countKey)) ||
                             "0",
-                          10
+                          10,
                         );
                         // Prefer server-provided unread count if present, otherwise fallback to persistent localStorage count
-                        const count = it?.unread != null
-                          ? Number(it.unread) || 0
-                          : isNaN(storedCount)
-                            ? 0
-                            : storedCount;
+                        const count =
+                          it?.unread != null
+                            ? Number(it.unread) || 0
+                            : isNaN(storedCount)
+                              ? 0
+                              : storedCount;
                         const isOpen =
                           id != null &&
                           String(currentOpenChatId ?? "") === String(id);
@@ -964,7 +965,7 @@ export default function AdminChatPage() {
                                 if (id != null) {
                                   try {
                                     const k = `chatUnreadById:coach:${String(
-                                      id
+                                      id,
                                     )}`;
                                     localStorage.setItem(k, "0");
                                   } catch {}
