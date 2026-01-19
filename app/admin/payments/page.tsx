@@ -69,7 +69,7 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 
 function formatMoney(
   amount: number | null | undefined,
-  currency?: string | null
+  currency?: string | null,
 ) {
   if (amount === null || amount === undefined || Number.isNaN(Number(amount)))
     return "—";
@@ -151,7 +151,7 @@ function fixReplacementCharNames(input: string) {
 }
 
 function getStatusVariant(
-  status?: string | null
+  status?: string | null,
 ): "default" | "secondary" | "muted" | "outline" | "destructive" {
   const s = String(status || "").toLowerCase();
   if (!s) return "muted";
@@ -361,7 +361,7 @@ function PaymentsContent() {
   const [syncUsersTotalPages, setSyncUsersTotalPages] = useState(1);
 
   const [syncSelectedUser, setSyncSelectedUser] = useState<SysUser | null>(
-    null
+    null,
   );
   const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
   const [syncSaving, setSyncSaving] = useState(false);
@@ -488,7 +488,7 @@ function PaymentsContent() {
         await upsertPaymentDetalle(
           paymentCodigo,
           String(cuotaEditing.codigo ?? ""),
-          payload
+          payload,
         );
 
         toast({
@@ -718,7 +718,7 @@ function PaymentsContent() {
           const codigo = String(r?.codigo ?? "").toLowerCase();
           const clienteCodigo = String(r?.cliente_codigo ?? "").toLowerCase();
           const clienteNombre = fixMojibake(
-            r?.cliente_nombre ?? ""
+            r?.cliente_nombre ?? "",
           ).toLowerCase();
           const estatus = String(r?.estatus ?? "").toLowerCase();
           const metodo = String(r?.metodo ?? "").toLowerCase();
@@ -943,10 +943,10 @@ function PaymentsContent() {
             ...r,
             cliente_codigo: clienteCodigo,
             cliente_nombre: fixMojibake(
-              syncSelectedUser.name || syncSelectedUser.email || clienteCodigo
+              syncSelectedUser.name || syncSelectedUser.email || clienteCodigo,
             ),
           };
-        })
+        }),
       );
 
       setSyncConfirmOpen(false);
@@ -1012,17 +1012,17 @@ function PaymentsContent() {
     if (!paymentCodigo) return;
 
     const nextStatus = String(
-      detailEditStatusByKeyRef.current[key] ?? d?.estatus ?? ""
+      detailEditStatusByKeyRef.current[key] ?? d?.estatus ?? "",
     )
       .trim()
       .trim();
 
     const nextConcept = String(
-      detailEditConceptByKeyRef.current[key] ?? d?.concepto ?? ""
+      detailEditConceptByKeyRef.current[key] ?? d?.concepto ?? "",
     ).trim();
 
     const nextNotes = String(
-      detailEditNotesByKeyRef.current[key] ?? d?.notas ?? ""
+      detailEditNotesByKeyRef.current[key] ?? d?.notas ?? "",
     );
     const normalizedNextStatus = normalizePaymentStatus(nextStatus);
     if (!normalizedNextStatus) {
@@ -1062,7 +1062,7 @@ function PaymentsContent() {
       await upsertPaymentDetalle(
         paymentCodigo,
         String(d.codigo ?? ""),
-        payload
+        payload,
       );
 
       // Optimistic update local
@@ -1112,10 +1112,13 @@ function PaymentsContent() {
     if (prev) {
       window.clearTimeout(prev);
     }
-    const t = window.setTimeout(() => {
-      delete detailSaveTimersRef.current[key];
-      void saveDetalle(d);
-    }, Math.max(0, delayMs));
+    const t = window.setTimeout(
+      () => {
+        delete detailSaveTimersRef.current[key];
+        void saveDetalle(d);
+      },
+      Math.max(0, delayMs),
+    );
     detailSaveTimersRef.current[key] = t;
   }
 
@@ -1190,25 +1193,25 @@ function PaymentsContent() {
           <div className="rounded-md border p-3">
             <div className="text-xs text-muted-foreground">Con reserva</div>
             <div className="text-sm font-semibold">
-              {metricsLoading ? "…" : metrics?.withReserva ?? "—"}
+              {metricsLoading ? "…" : (metrics?.withReserva ?? "—")}
             </div>
           </div>
           <div className="rounded-md border p-3">
             <div className="text-xs text-muted-foreground">Sin reserva</div>
             <div className="text-sm font-semibold">
-              {metricsLoading ? "…" : metrics?.withoutReserva ?? "—"}
+              {metricsLoading ? "…" : (metrics?.withoutReserva ?? "—")}
             </div>
           </div>
           <div className="rounded-md border p-3">
             <div className="text-xs text-muted-foreground">Reembolsos</div>
             <div className="text-sm font-semibold">
-              {metricsLoading ? "…" : metrics?.refunds ?? "—"}
+              {metricsLoading ? "…" : (metrics?.refunds ?? "—")}
             </div>
           </div>
           <div className="rounded-md border p-3">
             <div className="text-xs text-muted-foreground">Cuotas (total)</div>
             <div className="text-sm font-semibold">
-              {metricsLoading ? "…" : metrics?.totalCuotas ?? "—"}
+              {metricsLoading ? "…" : (metrics?.totalCuotas ?? "—")}
             </div>
           </div>
           <div className="rounded-md border p-3">
@@ -1219,8 +1222,8 @@ function PaymentsContent() {
               {metricsLoading
                 ? "…"
                 : metrics
-                ? metrics.avgCuotas.toFixed(2)
-                : "—"}
+                  ? metrics.avgCuotas.toFixed(2)
+                  : "—"}
             </div>
           </div>
         </div>
@@ -1436,7 +1439,7 @@ function PaymentsContent() {
               ) : (
                 paginatedData.map((r) => {
                   const clientName = fixMojibake(
-                    r.cliente_nombre || r.cliente_codigo || "—"
+                    r.cliente_nombre || r.cliente_codigo || "—",
                   );
                   const synced = isPaymentSynced(r);
 
@@ -1701,7 +1704,7 @@ function PaymentsContent() {
                   } al usuario ${fixMojibake(
                     syncSelectedUser.name ||
                       syncSelectedUser.email ||
-                      syncSelectedUser.codigo
+                      syncSelectedUser.codigo,
                   )}.`
                 : "Selecciona un usuario para continuar."}
             </AlertDialogDescription>
@@ -1771,7 +1774,7 @@ function PaymentsContent() {
                       </div>
                       <div className="text-sm font-semibold text-right break-words">
                         {fixMojibake(
-                          detail.cliente_nombre || detail.cliente_codigo || "—"
+                          detail.cliente_nombre || detail.cliente_codigo || "—",
                         )}
                       </div>
                     </div>
@@ -1986,7 +1989,7 @@ function PaymentsContent() {
                               <TableCell className="whitespace-nowrap">
                                 {formatMoney(
                                   d.monto,
-                                  d.moneda || detail.moneda
+                                  d.moneda || detail.moneda,
                                 )}
                               </TableCell>
                               <TableCell className="whitespace-nowrap">
@@ -1997,17 +2000,17 @@ function PaymentsContent() {
                                   const key = getDetailRowKey(d);
                                   const saving = !!detailSavingByKey[key];
                                   const current = normalizePaymentStatus(
-                                    d?.estatus ?? ""
+                                    d?.estatus ?? "",
                                   );
                                   const value = normalizePaymentStatus(
-                                    detailEditStatusByKey[key] ?? current
+                                    detailEditStatusByKey[key] ?? current,
                                   );
 
                                   const opts = (() => {
                                     const set = new Set<string>(statusOptions);
                                     if (current) set.add(current);
                                     return Array.from(set).sort((a, b) =>
-                                      a.localeCompare(b)
+                                      a.localeCompare(b),
                                     );
                                   })();
 
@@ -2026,7 +2029,7 @@ function PaymentsContent() {
                                           setDetail((prevDetail: any) => {
                                             if (!prevDetail) return prevDetail;
                                             const arr = Array.isArray(
-                                              prevDetail?.detalles
+                                              prevDetail?.detalles,
                                             )
                                               ? prevDetail.detalles
                                               : [];
@@ -2056,7 +2059,7 @@ function PaymentsContent() {
                                                 }
                                               >
                                                 {formatPaymentStatusLabel(
-                                                  value
+                                                  value,
                                                 )}
                                               </span>
                                             ) : (
@@ -2355,8 +2358,8 @@ function PaymentsContent() {
               {cuotaSaving
                 ? "Guardando..."
                 : cuotaEditing
-                ? "Actualizar"
-                : "Crear cuota"}
+                  ? "Actualizar"
+                  : "Crear cuota"}
             </Button>
           </div>
         </DialogContent>
@@ -2373,7 +2376,7 @@ function PaymentsContent() {
                     cuotaToDelete.cuota_codigo || cuotaToDelete.codigo
                   }" con monto ${formatMoney(
                     cuotaToDelete.monto,
-                    cuotaToDelete.moneda || detail?.moneda
+                    cuotaToDelete.moneda || detail?.moneda,
                   )}. Esta acción no se puede deshacer.`
                 : "¿Estás seguro de que deseas eliminar esta cuota?"}
             </AlertDialogDescription>

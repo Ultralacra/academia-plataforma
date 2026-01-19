@@ -68,7 +68,12 @@ function NotificationsBadge() {
     if (t === "ticket.updated") {
       // Solo mostrar si es resuelto/cerrado
       const curr = String(n?.current || "").toLowerCase();
-      if (curr.includes("cerrad") || curr.includes("resuelt") || curr.includes("closed") || curr.includes("resolved")) {
+      if (
+        curr.includes("cerrad") ||
+        curr.includes("resuelt") ||
+        curr.includes("closed") ||
+        curr.includes("resolved")
+      ) {
         return false; // Mostrar: feedback resuelto
       }
       return true; // Ocultar otros updates
@@ -215,18 +220,18 @@ function NotificationsBadge() {
                             s === "PENDIENTE"
                               ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
                               : s === "EN_PROGRESO"
-                              ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                              : s === "PENDIENTE_DE_ENVIO"
-                              ? "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800"
-                              : s === "PAUSADO"
-                              ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
-                              : s === "RESUELTO"
-                              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                              : s === "CREADO"
-                              ? "bg-muted text-muted-foreground border-border"
-                              : s === "ELIMINADO"
-                              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
-                              : "hidden";
+                                ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                                : s === "PENDIENTE_DE_ENVIO"
+                                  ? "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border-sky-200 dark:border-sky-800"
+                                  : s === "PAUSADO"
+                                    ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                                    : s === "RESUELTO"
+                                      ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                                      : s === "CREADO"
+                                        ? "bg-muted text-muted-foreground border-border"
+                                        : s === "ELIMINADO"
+                                          ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800"
+                                          : "hidden";
                           const labelMap: Record<string, string> = {
                             EN_PROGRESO: "En progreso",
                             PENDIENTE: "Pendiente",
