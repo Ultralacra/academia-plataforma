@@ -915,6 +915,73 @@ export default function CoachDetailPage({
       .length;
   }, [unifiedChatList]);
 
+  // Calcular el total de mensajes sin leer (suma de todos los unreadCount)
+  const totalUnreadMessages = useMemo(() => {
+    const total = unifiedChatList.reduce((acc: number, it: any) => acc + (it?.unreadCount ?? 0), 0);
+    console.log("[PAGE TITLE] 📊 Total mensajes sin leer:", total, "de", unifiedChatList.length, "conversaciones");
+    return total;
+  }, [unifiedChatList]);
+
+  // Actualizar el título de la pestaña del navegador con mensajes sin leer
+  // También hace parpadear cuando la pestaña no está activa (como WhatsApp)
+  useEffect(() => {
+    const baseTitle = coach?.nombre ? `${coach.nombre} - Chat` : "Chat Academia";
+    let blinkInterval: NodeJS.Timeout | null = null;
+    let isAltTitle = false;
+    
+    const updateTitle = () => {
+      const newTitle = totalUnreadMessages > 0 
+        ? `(${totalUnreadMessages}) ${baseTitle}` 
+        : baseTitle;
+      console.log("[PAGE TITLE] 📝 Actualizando título a:", newTitle);
+      document.title = newTitle;
+    };
+    
+    const startBlinking = () => {
+      if (blinkInterval) return;
+      blinkInterval = setInterval(() => {
+        isAltTitle = !isAltTitle;
+        if (isAltTitle && totalUnreadMessages > 0) {
+          document.title = `💬 Nuevo mensaje`;
+        } else {
+          updateTitle();
+        }
+      }, 1000);
+    };
+    
+    const stopBlinking = () => {
+      if (blinkInterval) {
+        clearInterval(blinkInterval);
+        blinkInterval = null;
+      }
+      isAltTitle = false;
+      updateTitle();
+    };
+    
+    const handleVisibilityChange = () => {
+      if (document.hidden && totalUnreadMessages > 0) {
+        startBlinking();
+      } else {
+        stopBlinking();
+      }
+    };
+    
+    // Inicializar
+    updateTitle();
+    if (document.hidden && totalUnreadMessages > 0) {
+      startBlinking();
+    }
+    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (blinkInterval) clearInterval(blinkInterval);
+      document.title = "Academia";
+    };
+  }, [totalUnreadMessages, coach?.nombre]);
+
   const visibleChatList = useMemo(() => {
     if (!showOnlyUnread) return unifiedChatList;
     return unifiedChatList.filter((it: any) => (it?.unreadCount ?? 0) > 0);
