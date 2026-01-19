@@ -9,6 +9,7 @@ import {
   initNotificationSound,
   playNotificationSound,
   showSystemNotification,
+  sendNotificationToServiceWorker,
 } from "@/lib/utils";
 
 interface StudentChatNotifierProps {
@@ -52,7 +53,7 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
           if (response && response.success && Array.isArray(response.data)) {
             console.log(
               "[Notifier] Joining existing chats:",
-              response.data.length
+              response.data.length,
             );
             response.data.forEach((chat: any) => {
               const cid = chat.id_chat || chat.id;
@@ -70,7 +71,7 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
               }
             });
           }
-        }
+        },
       );
     });
 
@@ -121,18 +122,64 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
         if (isBackground) {
           try {
             const textRaw = String(
-              msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+              msg?.contenido ?? msg?.texto ?? msg?.text ?? "",
             ).trim();
             const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+            const senderName = String(msg?.nombre_emisor ?? "").trim();
             const chatUrl = studentCode
               ? `/chat/${encodeURIComponent(studentCode)}`
               : "/chat";
-            showSystemNotification({
-              title: "Academia X: Nuevo mensaje",
+            // Intentar vía SW primero (mejor para móviles/PWA)
+            sendNotificationToServiceWorker({
+              title: senderName || "Academia X: Nuevo mensaje",
               body: preview,
               url: chatUrl,
               tag: `chat:${String(msg?.id_chat ?? "student")}`,
+              chatId: msg?.id_chat,
+              senderName,
+            }).then((sent) => {
+              if (!sent) {
+                showSystemNotification({
+                  title: senderName || "Academia X: Nuevo mensaje",
+                  body: preview,
+                  url: chatUrl,
+                  tag: `chat:${String(msg?.id_chat ?? "student")}`,
+                  chatId: msg?.id_chat,
+                  senderName,
+                });
+              }
             });
+          } catch {}
+        }
+
+        // En móviles, también notificar aunque esté en foreground (aparece en barra de notis)
+        if (!isBackground) {
+          try {
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(
+              navigator.userAgent,
+            );
+            if (
+              isMobile &&
+              typeof Notification !== "undefined" &&
+              Notification.permission === "granted"
+            ) {
+              const textRaw = String(
+                msg?.contenido ?? msg?.texto ?? msg?.text ?? "",
+              ).trim();
+              const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+              const senderName = String(msg?.nombre_emisor ?? "").trim();
+              const chatUrl = studentCode
+                ? `/chat/${encodeURIComponent(studentCode)}`
+                : "/chat";
+              sendNotificationToServiceWorker({
+                title: senderName || "Nuevo mensaje",
+                body: preview,
+                url: chatUrl,
+                tag: `chat:${String(msg?.id_chat ?? "student")}`,
+                chatId: msg?.id_chat,
+                senderName,
+              });
+            }
           } catch {}
         }
 
@@ -140,7 +187,7 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
         if (!isBackground) {
           try {
             const textRaw = String(
-              msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+              msg?.contenido ?? msg?.texto ?? msg?.text ?? "",
             ).trim();
             const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
             toast({

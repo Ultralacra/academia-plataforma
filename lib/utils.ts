@@ -209,11 +209,50 @@ export function playNotificationSound() {
   }
 }
 
+/**
+ * Envía un mensaje al Service Worker para mostrar una notificación.
+ * Útil cuando la app está en background y el WebSocket recibe un mensaje.
+ */
+export async function sendNotificationToServiceWorker(opts: {
+  title: string;
+  body?: string;
+  url?: string;
+  tag?: string;
+  chatId?: string | number;
+  senderName?: string;
+}): Promise<boolean> {
+  try {
+    if (typeof window === "undefined") return false;
+    if (!("serviceWorker" in navigator)) return false;
+    
+    const reg = await navigator.serviceWorker.ready.catch(() => null);
+    if (!reg || !reg.active) return false;
+
+    reg.active.postMessage({
+      type: "SHOW_NOTIFICATION",
+      payload: {
+        title: opts.title,
+        body: opts.body || "",
+        url: opts.url || "/chat",
+        tag: opts.tag || "chat-notification",
+        chatId: opts.chatId,
+        senderName: opts.senderName,
+      },
+    });
+    
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function showSystemNotification(opts: {
   title: string;
   body?: string;
   url?: string;
   tag?: string;
+  chatId?: string | number;
+  senderName?: string;
 }): Promise<boolean> {
   try {
     if (typeof window === "undefined") return false;
@@ -236,7 +275,12 @@ export async function showSystemNotification(opts: {
             renotify: true,
             icon: "/favicon.png",
             badge: "/favicon.png",
-            data: { url },
+            data: { 
+              url,
+              chatId: opts.chatId,
+              senderName: opts.senderName,
+            },
+            vibrate: [200, 100, 200], // Patrón de vibración para móviles
           });
           return true;
         }

@@ -9,6 +9,7 @@ import {
   initNotificationSound,
   playNotificationSound,
   showSystemNotification,
+  sendNotificationToServiceWorker,
 } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
 
@@ -419,13 +420,48 @@ export function CoachChatNotifier() {
 
             if (isBackground) {
               // Notificación del sistema mientras la PWA está en segundo plano
-              showSystemNotification({
+              // Intentar vía SW primero (mejor para móviles/PWA)
+              sendNotificationToServiceWorker({
                 title: `Academia X: ${title}`,
                 body: preview,
                 url: chatUrl,
                 tag: `chat:${String(msg?.id_chat ?? "coach")}`,
+                chatId: msg?.id_chat,
+                senderName,
+              }).then((sent) => {
+                if (!sent) {
+                  showSystemNotification({
+                    title: `Academia X: ${title}`,
+                    body: preview,
+                    url: chatUrl,
+                    tag: `chat:${String(msg?.id_chat ?? "coach")}`,
+                    chatId: msg?.id_chat,
+                    senderName,
+                  });
+                }
               });
             } else {
+              // En móviles, también enviar notificación a la barra aunque esté en foreground
+              try {
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(
+                  navigator.userAgent,
+                );
+                if (
+                  isMobile &&
+                  typeof Notification !== "undefined" &&
+                  Notification.permission === "granted"
+                ) {
+                  sendNotificationToServiceWorker({
+                    title: title,
+                    body: preview,
+                    url: chatUrl,
+                    tag: `chat:${String(msg?.id_chat ?? "coach")}`,
+                    chatId: msg?.id_chat,
+                    senderName,
+                  });
+                }
+              } catch {}
+
               window.dispatchEvent(
                 new CustomEvent("coach-chat:snackbar", {
                   detail: {

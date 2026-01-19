@@ -11,6 +11,7 @@ import {
   initNotificationSound,
   playNotificationSound,
   showSystemNotification,
+  sendNotificationToServiceWorker,
 } from "@/lib/utils";
 
 // Global set for deduplication across component instances/remounts
@@ -65,7 +66,7 @@ export function GlobalChatNotifications() {
     if (!token) {
       try {
         console.debug(
-          "[GlobalChatNotifications] Token aún no disponible; esperando auth:changed"
+          "[GlobalChatNotifications] Token aún no disponible; esperando auth:changed",
         );
       } catch {}
       return;
@@ -84,7 +85,7 @@ export function GlobalChatNotifications() {
       user.email,
       user.role,
       "Code:",
-      (user as any).codigo
+      (user as any).codigo,
     );
 
     // Connect to Socket.IO
@@ -134,7 +135,7 @@ export function GlobalChatNotifications() {
           if (ack && ack.success && Array.isArray(ack.data)) {
             console.debug(
               "[GlobalChatNotifications] Joining chats:",
-              ack.data.length
+              ack.data.length,
             );
             ack.data.forEach((chat: any) => {
               const cid = chat.id_chat || chat.id;
@@ -251,7 +252,7 @@ export function GlobalChatNotifications() {
         // Snackbar/Toast para mensajes entrantes cuando no estás en una vista de chat
         if (!isChatView && !isBackground) {
           const textRaw = String(
-            msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+            msg?.contenido ?? msg?.texto ?? msg?.text ?? "",
           ).trim();
           const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
           const senderName = String(msg?.nombre_emisor ?? "").trim();
@@ -281,17 +282,18 @@ export function GlobalChatNotifications() {
                     chatUrl,
                     chatId: cid,
                   },
-                })
+                }),
               );
             }
           } catch {}
         }
 
         // En background: lanzar notificación del sistema (si hay permisos)
+        // También funciona cuando la PWA está minimizada en móviles
         if (!isChatView && isBackground) {
           try {
             const textRaw = String(
-              msg?.contenido ?? msg?.texto ?? msg?.text ?? ""
+              msg?.contenido ?? msg?.texto ?? msg?.text ?? "",
             ).trim();
             const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
             const senderName = String(msg?.nombre_emisor ?? "").trim();
@@ -303,14 +305,66 @@ export function GlobalChatNotifications() {
                 ? `/chat/${encodeURIComponent(myCode)}`
                 : "/chat";
 
-            showSystemNotification({
+            // Intentar primero vía Service Worker (más robusto en móviles/PWA)
+            const swSent = await sendNotificationToServiceWorker({
               title: senderName
                 ? `Academia X: ${senderName}`
                 : "Academia X: Nuevo mensaje",
               body: preview,
               url: chatUrl,
               tag: `chat:${String(msg?.id_chat ?? msgId)}`,
+              chatId: msg?.id_chat,
+              senderName,
             });
+
+            // Si el SW no pudo mostrarla, usar el método directo
+            if (!swSent) {
+              showSystemNotification({
+                title: senderName
+                  ? `Academia X: ${senderName}`
+                  : "Academia X: Nuevo mensaje",
+                body: preview,
+                url: chatUrl,
+                tag: `chat:${String(msg?.id_chat ?? msgId)}`,
+                chatId: msg?.id_chat,
+                senderName,
+              });
+            }
+          } catch {}
+        }
+
+        // También mostrar notificación si la app está en foreground pero el usuario no está en chat
+        // Esto mejora la experiencia en móviles donde el usuario puede estar en otra pantalla
+        if (!isChatView && !isBackground) {
+          try {
+            // En móviles, también mostrar notificación del sistema aunque esté en foreground
+            // para que aparezca en la barra de notificaciones
+            const isMobile = /iPhone|iPad|iPod|Android/i.test(
+              navigator.userAgent,
+            );
+            if (isMobile && Notification.permission === "granted") {
+              const textRaw = String(
+                msg?.contenido ?? msg?.texto ?? msg?.text ?? "",
+              ).trim();
+              const preview = textRaw ? textRaw.slice(0, 120) : "(Adjunto)";
+              const senderName = String(msg?.nombre_emisor ?? "").trim();
+
+              const myRole = String(user.role || "").toLowerCase();
+              const myCode = String((user as any)?.codigo ?? "").trim();
+              const chatUrl =
+                ["student", "alumno", "cliente"].includes(myRole) && myCode
+                  ? `/chat/${encodeURIComponent(myCode)}`
+                  : "/chat";
+
+              sendNotificationToServiceWorker({
+                title: senderName || "Nuevo mensaje",
+                body: preview,
+                url: chatUrl,
+                tag: `chat:${String(msg?.id_chat ?? msgId)}`,
+                chatId: msg?.id_chat,
+                senderName,
+              });
+            }
           } catch {}
         }
 
@@ -319,8 +373,8 @@ export function GlobalChatNotifications() {
           const roleKey = isStudentRole
             ? "alumno"
             : isCoachRole
-            ? "coach"
-            : "admin";
+              ? "coach"
+              : "admin";
           const key = `chatUnreadById:${roleKey}:${msg.id_chat}`;
           try {
             const current = parseInt(localStorage.getItem(key) || "0", 10);
@@ -329,7 +383,7 @@ export function GlobalChatNotifications() {
             window.dispatchEvent(
               new CustomEvent("chat:unread-count-updated", {
                 detail: { chatId: msg.id_chat, role: roleKey, count: next },
-              })
+              }),
             );
           } catch (e) {}
         }
