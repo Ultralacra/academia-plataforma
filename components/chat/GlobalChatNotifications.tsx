@@ -177,7 +177,7 @@ export function GlobalChatNotifications() {
       }
     });
 
-    socket.on("chat.message", (msg: any) => {
+    socket.on("chat.message", async (msg: any) => {
       // Deduplication
       const msgId =
         msg.id_mensaje || msg.id || `${msg.id_chat}-${msg.created_at}`;
