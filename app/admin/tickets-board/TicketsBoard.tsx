@@ -301,12 +301,12 @@ export default function TicketsBoard({
   // Estado para modal de descarga y progreso básico
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [downloadMessage, setDownloadMessage] = useState(
-    "Descargando archivo..."
+    "Descargando archivo...",
   );
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
   const [selectedTicket, setSelectedTicket] = useState<TicketBoardItem | null>(
-    null
+    null,
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<
@@ -315,7 +315,7 @@ export default function TicketsBoard({
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
   const [ticketDetailError, setTicketDetailError] = useState<string | null>(
-    null
+    null,
   );
 
   const [previousTickets, setPreviousTickets] = useState<TicketBoardItem[]>([]);
@@ -329,11 +329,11 @@ export default function TicketsBoard({
 
   const [historyDetailOpen, setHistoryDetailOpen] = useState(false);
   const [historyDetailCodigo, setHistoryDetailCodigo] = useState<string | null>(
-    null
+    null,
   );
   const [historyDetailLoading, setHistoryDetailLoading] = useState(false);
   const [historyDetailError, setHistoryDetailError] = useState<string | null>(
-    null
+    null,
   );
   const [historyDetail, setHistoryDetail] = useState<any | null>(null);
   const [historyFiles, setHistoryFiles] = useState<any[]>([]);
@@ -374,7 +374,7 @@ export default function TicketsBoard({
       } catch (e: any) {
         if (cancelled) return;
         setPreviousTicketsError(
-          String(e?.message || e || "Error cargando historial")
+          String(e?.message || e || "Error cargando historial"),
         );
         setPreviousTickets([]);
         setPreviousTicketsStudentCode(studentCode);
@@ -439,7 +439,7 @@ export default function TicketsBoard({
       }
     } catch (e: any) {
       setHistoryDetailError(
-        String(e?.message || e || "Error al cargar detalle")
+        String(e?.message || e || "Error al cargar detalle"),
       );
     } finally {
       setHistoryDetailLoading(false);
@@ -567,7 +567,7 @@ export default function TicketsBoard({
   const [onlyMyTickets, setOnlyMyTickets] = useState(false);
 
   const [viewMode, setViewMode] = useState<"kanban" | "table">(
-    studentCode ? "table" : "kanban"
+    studentCode ? "table" : "kanban",
   );
 
   // Alumno: solo vista tabla (sin kanban)
@@ -617,20 +617,20 @@ export default function TicketsBoard({
         assignedToMe = coachesArr.some((co: any) => {
           const code = String(
             (co && typeof co === "object"
-              ? co?.codigo_equipo ?? co?.codigo ?? co?.id
-              : co) ?? ""
+              ? (co?.codigo_equipo ?? co?.codigo ?? co?.id)
+              : co) ?? "",
           ).trim();
           return code === myCode || (!!myId && code === myId);
         });
 
         if (!assignedToMe && overrides.length > 0) {
           const overrideObjects = overrides.filter(
-            (o: any) => o && typeof o === "object"
+            (o: any) => o && typeof o === "object",
           );
           if (overrideObjects.length > 0) {
             assignedToMe = overrideObjects.some((o: any) => {
               const code = String(
-                o?.codigo_equipo || o?.codigo || o?.id || ""
+                o?.codigo_equipo || o?.codigo || o?.id || "",
               ).trim();
               return code === myCode || (!!myId && code === myId);
             });
@@ -756,7 +756,7 @@ export default function TicketsBoard({
     if (loading) return;
     if (didShowPausedToast.current) return;
     const pausedCount = tickets.filter(
-      (t) => coerceStatus(t.estado) === "PAUSADO"
+      (t) => coerceStatus(t.estado) === "PAUSADO",
     ).length;
     if (pausedCount > 0) {
       didShowPausedToast.current = true;
@@ -809,7 +809,7 @@ export default function TicketsBoard({
     if (!id) return;
     const tid = Number(id);
     setTickets((prev) =>
-      prev.map((t) => (t.id === tid ? { ...t, estado: targetEstado } : t))
+      prev.map((t) => (t.id === tid ? { ...t, estado: targetEstado } : t)),
     );
     const tk = tickets.find((t) => t.id === tid);
     const codigo = tk?.codigo ?? null;
@@ -831,7 +831,7 @@ export default function TicketsBoard({
                   current: coerceStatus(targetEstado),
                   at: new Date().toISOString(),
                 },
-              })
+              }),
             );
           }
         } catch {}
@@ -898,7 +898,7 @@ export default function TicketsBoard({
         } catch (err) {
           console.warn(
             "Fallo descarga directa (posible CORS), intentando vía API...",
-            err
+            err,
           );
         }
       }
@@ -908,7 +908,7 @@ export default function TicketsBoard({
         try {
           const f = await getTicketFile(fileId);
           const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
-            c.charCodeAt(0)
+            c.charCodeAt(0),
           );
           blob = new Blob([b], {
             type: f.mime_type || "application/octet-stream",
@@ -1026,7 +1026,7 @@ export default function TicketsBoard({
 
   // Descarga múltiple con progreso simple
   async function downloadFiles(
-    filesToDownload: Array<{ id: string; nombre_archivo: string }>
+    filesToDownload: Array<{ id: string; nombre_archivo: string }>,
   ) {
     if (!filesToDownload?.length) return;
     setDownloadModalOpen(true);
@@ -1037,10 +1037,10 @@ export default function TicketsBoard({
         const f = filesToDownload[i];
         await downloadFile(f.id, f.nombre_archivo);
         setDownloadProgress(
-          Math.round(((i + 1) / filesToDownload.length) * 100)
+          Math.round(((i + 1) / filesToDownload.length) * 100),
         );
         setDownloadMessage(
-          `Descargando (${i + 1}/${filesToDownload.length})...`
+          `Descargando (${i + 1}/${filesToDownload.length})...`,
         );
       }
     } finally {
@@ -1072,7 +1072,7 @@ export default function TicketsBoard({
       }
       const res = await getTicketFile(f.id);
       const b = Uint8Array.from(atob(res.contenido_base64), (c) =>
-        c.charCodeAt(0)
+        c.charCodeAt(0),
       );
       const blob = new Blob([b], {
         type: res.mime_type || f.mime_type || "application/octet-stream",
@@ -1108,7 +1108,7 @@ export default function TicketsBoard({
       // Grabamos en webm/ogg y luego convertimos a MP3 con lamejs
       const options: MediaRecorderOptions = {};
       const supported = ["audio/webm", "audio/ogg"].filter((t) =>
-        MediaRecorder.isTypeSupported ? MediaRecorder.isTypeSupported(t) : true
+        MediaRecorder.isTypeSupported ? MediaRecorder.isTypeSupported(t) : true,
       );
       if (supported.length > 0) options.mimeType = supported[0] as any;
       const mr = new MediaRecorder(stream, options);
@@ -1464,11 +1464,11 @@ export default function TicketsBoard({
       // Mostrar SIEMPRE nombres cuando sea posible
       informante: resolvePersonName(
         (ticket as any)?.informante,
-        (ticket as any)?.informante_nombre
+        (ticket as any)?.informante_nombre,
       ),
       resuelto_por: resolvePersonName(
         (ticket as any)?.resuelto_por,
-        (ticket as any)?.resuelto_por_nombre
+        (ticket as any)?.resuelto_por_nombre,
       ),
       equipo: [],
       tarea: "",
@@ -1493,7 +1493,7 @@ export default function TicketsBoard({
 
     // 1) Si está en la lista actual, abrir directo
     const existing = ticketsRef.current.find(
-      (t) => String(t.codigo || "").trim() === code
+      (t) => String(t.codigo || "").trim() === code,
     );
     if (existing) {
       openTicketDetail(existing);
@@ -1536,7 +1536,7 @@ export default function TicketsBoard({
                   c?.id_equipo ??
                   null) &&
                 String(
-                  c?.codigo_equipo ?? c?.codigo ?? c?.id ?? c?.id_equipo
+                  c?.codigo_equipo ?? c?.codigo ?? c?.id ?? c?.id_equipo,
                 ).trim(),
               nombre: (c?.nombre ?? null) && String(c?.nombre).trim(),
               puesto:
@@ -1600,7 +1600,7 @@ export default function TicketsBoard({
       }));
     } catch (e: any) {
       setTicketDetailError(
-        String(e?.message || e || "Error al cargar detalle")
+        String(e?.message || e || "Error al cargar detalle"),
       );
     } finally {
       setTicketDetailLoading(false);
@@ -1683,19 +1683,19 @@ export default function TicketsBoard({
           if (isImage) {
             const originalSizeKb = Math.round(f.size / 1024);
             console.log(
-              `[Upload] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`
+              `[Upload] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`,
             );
             try {
               const webp = await compressImageToWebp(f, 0.8);
               const webpSizeKb = Math.round(webp.size / 1024);
               console.log(
-                `[Upload] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`
+                `[Upload] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`,
               );
               processed.push(webp);
             } catch (err) {
               console.error(
                 "[Upload] Error convirtiendo a WebP, usando original",
-                err
+                err,
               );
               processed.push(f);
             }
@@ -1719,7 +1719,7 @@ export default function TicketsBoard({
             console.log(
               `[Upload] Archivo: name=${f.name}, type=${
                 f.type
-              }, size=${Math.round(f.size / 1024)} KB`
+              }, size=${Math.round(f.size / 1024)} KB`,
             );
             processed.push(f);
           }
@@ -1770,7 +1770,7 @@ export default function TicketsBoard({
                 current,
                 at: new Date().toISOString(),
               },
-            })
+            }),
           );
         }
       } catch {}
@@ -1787,8 +1787,8 @@ export default function TicketsBoard({
                   : {}),
                 // No almacenamos descripcion aquí; se mostrará en detalle recargado
               }
-            : t
-        )
+            : t,
+        ),
       );
       // Recargar detalle para reflejar nueva descripción y links
       await loadTicketDetail(selectedTicket.codigo);
@@ -1831,7 +1831,7 @@ export default function TicketsBoard({
           resolve(b);
         },
         "image/webp",
-        quality
+        quality,
       );
     });
     const webpFile = new File([blob], renameToWebp(file.name), {
@@ -2160,7 +2160,7 @@ export default function TicketsBoard({
                   return (
                     <TableRow
                       key={String(
-                        (t as any)?.id ?? t.codigo ?? t.nombre ?? Math.random()
+                        (t as any)?.id ?? t.codigo ?? t.nombre ?? Math.random(),
                       )}
                       className={canOpen ? "cursor-pointer" : "cursor-default"}
                       onClick={canOpen ? () => openTicketDetail(t) : undefined}
@@ -2236,8 +2236,8 @@ export default function TicketsBoard({
                   assignedToMe = coachesArr.some((co: any) => {
                     const code = String(
                       (co && typeof co === "object"
-                        ? co?.codigo_equipo ?? co?.codigo ?? co?.id
-                        : co) ?? ""
+                        ? (co?.codigo_equipo ?? co?.codigo ?? co?.id)
+                        : co) ?? "",
                     ).trim();
                     return code === myCode || (!!myId && code === myId);
                   });
@@ -2245,12 +2245,12 @@ export default function TicketsBoard({
                   // b) overrides como objetos o ids
                   if (!assignedToMe && overrides.length > 0) {
                     const overrideObjects = overrides.filter(
-                      (o: any) => o && typeof o === "object"
+                      (o: any) => o && typeof o === "object",
                     );
                     if (overrideObjects.length > 0) {
                       assignedToMe = overrideObjects.some((o: any) => {
                         const code = String(
-                          o?.codigo_equipo || o?.codigo || o?.id || ""
+                          o?.codigo_equipo || o?.codigo || o?.id || "",
                         ).trim();
                         return code === myCode || (!!myId && code === myId);
                       });
@@ -2326,7 +2326,7 @@ export default function TicketsBoard({
                                 <h3 className="flex-1 text-sm font-medium leading-snug text-foreground">
                                   {(() => {
                                     return formatTitleForUi(
-                                      t.nombre ?? uiTicket
+                                      t.nombre ?? uiTicket,
                                     );
                                   })()}
                                 </h3>
@@ -2355,7 +2355,7 @@ export default function TicketsBoard({
                                   <span>
                                     {t.created_at
                                       ? new Date(
-                                          t.created_at
+                                          t.created_at,
                                         ).toLocaleDateString("es-ES", {
                                           day: "numeric",
                                           month: "short",
@@ -2377,7 +2377,7 @@ export default function TicketsBoard({
                                       Vence:{" "}
                                       {new Date(t.deadline).toLocaleDateString(
                                         "es-ES",
-                                        { day: "numeric", month: "short" }
+                                        { day: "numeric", month: "short" },
                                       )}
                                     </span>
                                   </div>
@@ -2432,7 +2432,7 @@ export default function TicketsBoard({
                                     ? t.coaches
                                     : [];
                                 const overrides = Array.isArray(
-                                  t.coaches_override
+                                  t.coaches_override,
                                 )
                                   ? t.coaches_override
                                   : [];
@@ -2447,7 +2447,7 @@ export default function TicketsBoard({
                                 if (overrides.length > 0) {
                                   // Caso A: overrides son objetos del coach
                                   const overrideObjects = overrides.filter(
-                                    (o: any) => o && typeof o === "object"
+                                    (o: any) => o && typeof o === "object",
                                   ) as any[];
                                   if (overrideObjects.length > 0) {
                                     result = overrideObjects.map((o) => ({
@@ -2463,8 +2463,8 @@ export default function TicketsBoard({
                                       (c) =>
                                         overrides.some(
                                           (o: any) =>
-                                            clean(o) === clean(c.codigo_equipo)
-                                        )
+                                            clean(o) === clean(c.codigo_equipo),
+                                        ),
                                     );
 
                                     result = [...fromTicket];
@@ -2476,8 +2476,8 @@ export default function TicketsBoard({
                                     ) {
                                       const foundIds = new Set(
                                         result.map((c) =>
-                                          clean(c.codigo_equipo)
-                                        )
+                                          clean(c.codigo_equipo),
+                                        ),
                                       );
                                       const missing = (
                                         overrides as any[]
@@ -2486,8 +2486,8 @@ export default function TicketsBoard({
                                       const fromGlobal = coaches
                                         .filter((c) =>
                                           missing.some(
-                                            (m) => clean(m) === clean(c.codigo)
-                                          )
+                                            (m) => clean(m) === clean(c.codigo),
+                                          ),
                                         )
                                         .map((c) => ({
                                           codigo_equipo: c.codigo,
@@ -2546,7 +2546,7 @@ export default function TicketsBoard({
                                           c.codigo_equipo ?? c.nombre ?? idx
                                         }`}
                                         className={`inline-flex items-center rounded-md px-2 py-1 text-xs transition-colors ${coachChipClass(
-                                          idx
+                                          idx,
                                         )}`}
                                         title={`${c.nombre ?? "Coach"}${
                                           c.area ? ` · ${c.area}` : ""
@@ -2573,7 +2573,7 @@ export default function TicketsBoard({
                                   {
                                     STATUS_LABEL[
                                       coerceStatus(
-                                        (t as any).ultimo_estado.estatus
+                                        (t as any).ultimo_estado.estatus,
                                       )
                                     ]
                                   }
@@ -2581,7 +2581,7 @@ export default function TicketsBoard({
                                     <>
                                       {" · "}
                                       {new Date(
-                                        (t as any).ultimo_estado.fecha
+                                        (t as any).ultimo_estado.fecha,
                                       ).toLocaleString("es-ES", {
                                         day: "numeric",
                                         month: "short",
@@ -2956,7 +2956,7 @@ export default function TicketsBoard({
                 <div className="flex flex-wrap items-center gap-2">
                   {(() => {
                     const statusKey = coerceStatus(
-                      historyDetail?.estado ?? historyDetail?.status
+                      historyDetail?.estado ?? historyDetail?.status,
                     );
                     const label = STATUS_LABEL[statusKey];
                     const badge = STATUS_STYLE[statusKey];
@@ -2970,13 +2970,13 @@ export default function TicketsBoard({
                   })()}
                   <Badge variant="secondary">
                     {formatTitleForUi(
-                      historyDetail?.tipo ?? historyDetail?.type ?? "—"
+                      historyDetail?.tipo ?? historyDetail?.type ?? "—",
                     )}
                   </Badge>
                   {historyDetail?.creacion || historyDetail?.created_at ? (
                     <Badge variant="muted">
                       {new Date(
-                        historyDetail?.creacion || historyDetail?.created_at
+                        historyDetail?.creacion || historyDetail?.created_at,
                       ).toLocaleString("es-ES", {
                         day: "2-digit",
                         month: "short",
@@ -3011,7 +3011,7 @@ export default function TicketsBoard({
                   </div>
                   <div className="whitespace-pre-wrap text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-100">
                     {filterDescriptionForStudent(
-                      String(historyDetail?.descripcion || "")
+                      String(historyDetail?.descripcion || ""),
                     ) || "—"}
                   </div>
                 </div>
@@ -3060,7 +3060,7 @@ export default function TicketsBoard({
                       <div className="flex flex-wrap gap-1.5">
                         {coaches.map((c: any, idx: number) => {
                           const name =
-                            typeof c === "string" ? c : c?.nombre ?? "Coach";
+                            typeof c === "string" ? c : (c?.nombre ?? "Coach");
                           const area = typeof c === "string" ? null : c?.area;
                           return (
                             <span
@@ -3101,7 +3101,7 @@ export default function TicketsBoard({
                           `Archivo ${idx + 1}`;
                         const fileUrl = f?.url ?? f?.enlace ?? "";
                         const fileMime = String(
-                          f?.tipo ?? f?.mime ?? f?.mimetype ?? ""
+                          f?.tipo ?? f?.mime ?? f?.mimetype ?? "",
                         ).toLowerCase();
                         const isImage = fileMime.startsWith("image/");
                         const isVideo = fileMime.startsWith("video/");
@@ -3178,7 +3178,7 @@ export default function TicketsBoard({
                                       year: "numeric",
                                       hour: "2-digit",
                                       minute: "2-digit",
-                                    }
+                                    },
                                   )
                                 : ""}
                             </span>
@@ -3202,7 +3202,7 @@ export default function TicketsBoard({
                 if (historyDetailCodigo) {
                   window.open(
                     `/admin/tickets-board/${historyDetailCodigo}`,
-                    "_blank"
+                    "_blank",
                   );
                 }
               }}
@@ -3372,7 +3372,7 @@ export default function TicketsBoard({
                       const c = source[0];
                       // Normalizar si es string o objeto
                       const name =
-                        typeof c === "string" ? c : c.nombre ?? "Coach";
+                        typeof c === "string" ? c : (c.nombre ?? "Coach");
                       const area = typeof c === "string" ? null : c.area;
                       const puesto = typeof c === "string" ? null : c.puesto;
 
@@ -3431,7 +3431,7 @@ export default function TicketsBoard({
                             title?: string | null;
                           };
                           const raw = Array.isArray(
-                            (ticketDetail as any)?.links
+                            (ticketDetail as any)?.links,
                           )
                             ? (ticketDetail as any).links
                             : [];
@@ -3452,7 +3452,7 @@ export default function TicketsBoard({
                             .filter((t) => !!t.url);
 
                           const onDeleteTask = async (
-                            id?: string | number | null
+                            id?: string | number | null,
                           ) => {
                             if (!id) return;
                             try {
@@ -3512,11 +3512,11 @@ export default function TicketsBoard({
                                         try {
                                           await createTicketLink(
                                             selectedTicket.codigo!,
-                                            { url }
+                                            { url },
                                           );
                                           setNewAudioUrl("");
                                           await loadTicketDetail(
-                                            selectedTicket.codigo!
+                                            selectedTicket.codigo!,
                                           );
                                           toast({ title: "Tarea creada" });
                                         } catch (err) {
@@ -3539,11 +3539,11 @@ export default function TicketsBoard({
                                       try {
                                         await createTicketLink(
                                           selectedTicket.codigo!,
-                                          { url }
+                                          { url },
                                         );
                                         setNewAudioUrl("");
                                         await loadTicketDetail(
-                                          selectedTicket.codigo!
+                                          selectedTicket.codigo!,
                                         );
                                         toast({ title: "Tarea creada" });
                                       } catch (err) {
@@ -3599,7 +3599,7 @@ export default function TicketsBoard({
                                 hour: "2-digit",
                                 minute: "2-digit",
                                 timeZone: "UTC",
-                              }
+                              },
                             )
                           : "—"}
                       </div>
@@ -3613,7 +3613,7 @@ export default function TicketsBoard({
                         {ticketDetail?.ultimo_estado?.estatus === "RESUELTO" &&
                         ticketDetail?.ultimo_estado?.fecha
                           ? new Date(
-                              ticketDetail.ultimo_estado.fecha
+                              ticketDetail.ultimo_estado.fecha,
                             ).toLocaleString("es-ES", {
                               day: "numeric",
                               month: "short",
@@ -3680,7 +3680,8 @@ export default function TicketsBoard({
                               <DropdownMenuContent align="start">
                                 {estados
                                   .filter(
-                                    (st) => st !== "PAUSADO" || canManageTickets
+                                    (st) =>
+                                      st !== "PAUSADO" || canManageTickets,
                                   )
                                   .map((st) => (
                                     <DropdownMenuItem
@@ -3696,7 +3697,7 @@ export default function TicketsBoard({
                                           try {
                                             await updateTicket(
                                               selectedTicket.codigo,
-                                              { estado: newStatus }
+                                              { estado: newStatus },
                                             );
 
                                             setTickets((prev) =>
@@ -3706,8 +3707,8 @@ export default function TicketsBoard({
                                                       ...t,
                                                       estado: newStatus,
                                                     }
-                                                  : t
-                                              )
+                                                  : t,
+                                              ),
                                             );
 
                                             if (ticketDetail) {
@@ -3723,7 +3724,7 @@ export default function TicketsBoard({
                                                     ...prev,
                                                     estado: newStatus,
                                                   }
-                                                : null
+                                                : null,
                                             );
 
                                             toast({
@@ -3772,7 +3773,7 @@ export default function TicketsBoard({
                             className="h-7 text-xs"
                             onClick={() => {
                               setDescDraft(
-                                String(ticketDetail?.descripcion || "")
+                                String(ticketDetail?.descripcion || ""),
                               );
                               setDescEditing(true);
                             }}
@@ -3846,7 +3847,7 @@ export default function TicketsBoard({
                             .map((it: any) =>
                               typeof it === "string"
                                 ? it
-                                : it?.url || it?.link || it?.enlace || ""
+                                : it?.url || it?.link || it?.enlace || "",
                             )
                             .filter((s: string) => !!s),
                         ];
@@ -3902,7 +3903,7 @@ export default function TicketsBoard({
                                 const picked = Array.from(e.target.files ?? []);
                                 if (!picked.length) return;
                                 setGeneralFiles((prev) =>
-                                  [...prev, ...picked].slice(0, 10)
+                                  [...prev, ...picked].slice(0, 10),
                                 );
                                 e.currentTarget.value = "";
                               }}
@@ -3939,7 +3940,7 @@ export default function TicketsBoard({
                               if (!ticketDetail?.created_at || !f.created_at)
                                 return true; // Si no hay fecha, mostrar por defecto
                               const ticketTime = new Date(
-                                ticketDetail.created_at
+                                ticketDetail.created_at,
                               ).getTime();
                               const fileTime = new Date(f.created_at).getTime();
                               const diffMinutes =
@@ -4024,7 +4025,7 @@ export default function TicketsBoard({
                                 <button
                                   onClick={() =>
                                     setGeneralFiles((prev) =>
-                                      prev.filter((_, idx) => idx !== i)
+                                      prev.filter((_, idx) => idx !== i),
                                     )
                                   }
                                   className="text-blue-400 hover:text-blue-700"
@@ -4052,7 +4053,7 @@ export default function TicketsBoard({
                               await uploadTicketFiles(
                                 selectedTicket.codigo,
                                 renamedFiles,
-                                generalUrls
+                                generalUrls,
                               );
                               toast({ title: "Archivos subidos" });
                               setGeneralFiles([]);
@@ -4169,7 +4170,7 @@ export default function TicketsBoard({
                                   <button
                                     onClick={() =>
                                       setGeneralUrls((prev) =>
-                                        prev.filter((_, idx) => idx !== i)
+                                        prev.filter((_, idx) => idx !== i),
                                       )
                                     }
                                     className="text-slate-400 hover:text-red-500"
@@ -4199,7 +4200,7 @@ export default function TicketsBoard({
                               {
                                 STATUS_LABEL[
                                   coerceStatus(
-                                    ticketDetail.ultimo_estado.estatus
+                                    ticketDetail.ultimo_estado.estatus,
                                   )
                                 ]
                               }
@@ -4207,7 +4208,7 @@ export default function TicketsBoard({
                                 <>
                                   {" · "}
                                   {new Date(
-                                    ticketDetail.ultimo_estado.fecha
+                                    ticketDetail.ultimo_estado.fecha,
                                   ).toLocaleString("es-ES", {
                                     day: "numeric",
                                     month: "short",
@@ -4245,7 +4246,7 @@ export default function TicketsBoard({
                                         hour: "2-digit",
                                         minute: "2-digit",
                                         timeZone: "UTC",
-                                      }
+                                      },
                                     )}
                                   </span>
                                 </div>
@@ -4282,7 +4283,7 @@ export default function TicketsBoard({
                                 const picked = Array.from(e.target.files ?? []);
                                 if (!picked.length) return;
                                 setEditFiles((prev) =>
-                                  [...prev, ...picked].slice(0, 10)
+                                  [...prev, ...picked].slice(0, 10),
                                 );
                                 e.currentTarget.value = "";
                               }}
@@ -4313,7 +4314,7 @@ export default function TicketsBoard({
                             if (!ticketDetail?.created_at || !f.created_at)
                               return false; // Si no hay fecha, asumimos que es original (General)
                             const ticketTime = new Date(
-                              ticketDetail.created_at
+                              ticketDetail.created_at,
                             ).getTime();
                             const fileTime = new Date(f.created_at).getTime();
                             const diffMinutes =
@@ -4384,7 +4385,7 @@ export default function TicketsBoard({
                               <button
                                 onClick={() =>
                                   setEditFiles((prev) =>
-                                    prev.filter((_, idx) => idx !== i)
+                                    prev.filter((_, idx) => idx !== i),
                                   )
                                 }
                                 className="text-blue-400 hover:text-blue-700"
@@ -4412,27 +4413,27 @@ export default function TicketsBoard({
                                     type !== "image/svg+xml";
                                   if (isImage) {
                                     const originalSizeKb = Math.round(
-                                      f.size / 1024
+                                      f.size / 1024,
                                     );
                                     console.log(
-                                      `[UploadButton] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`
+                                      `[UploadButton] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`,
                                     );
                                     try {
                                       const webp = await compressImageToWebp(
                                         f,
-                                        0.8
+                                        0.8,
                                       );
                                       const webpSizeKb = Math.round(
-                                        webp.size / 1024
+                                        webp.size / 1024,
                                       );
                                       console.log(
-                                        `[UploadButton] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`
+                                        `[UploadButton] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`,
                                       );
                                       processed.push(webp);
                                     } catch (err) {
                                       console.error(
                                         "[UploadButton] Error convirtiendo a WebP, usando original",
-                                        err
+                                        err,
                                       );
                                       processed.push(f);
                                     }
@@ -4441,8 +4442,8 @@ export default function TicketsBoard({
                                       `[UploadButton] Archivo no imagen: name=${
                                         f.name
                                       }, type=${f.type}, size=${Math.round(
-                                        f.size / 1024
-                                      )} KB`
+                                        f.size / 1024,
+                                      )} KB`,
                                     );
                                     processed.push(f);
                                   }
@@ -4459,7 +4460,7 @@ export default function TicketsBoard({
 
                               await uploadTicketFiles(
                                 selectedTicket.codigo,
-                                renamedFiles
+                                renamedFiles,
                               );
                               toast({ title: "Archivos subidos" });
                               setEditFiles([]);
@@ -4584,7 +4585,7 @@ export default function TicketsBoard({
                                     <span className="text-[10px] text-slate-400">
                                       {c.created_at
                                         ? new Date(c.created_at).toLocaleString(
-                                            "es-ES"
+                                            "es-ES",
                                           )
                                         : ""}
                                     </span>
@@ -4735,7 +4736,11 @@ export default function TicketsBoard({
                                 // Alumnos solo ven tickets resueltos, pausados o en progreso
                                 if (!isStudent) return true;
                                 const statusKey = coerceStatus(t.estado);
-                                return ["RESUELTO", "PAUSADO", "EN_PROGRESO"].includes(statusKey);
+                                return [
+                                  "RESUELTO",
+                                  "PAUSADO",
+                                  "EN_PROGRESO",
+                                ].includes(statusKey);
                               })
                               .sort((a, b) => {
                                 const at = a.created_at
@@ -4765,7 +4770,7 @@ export default function TicketsBoard({
                                               day: "2-digit",
                                               month: "short",
                                               year: "numeric",
-                                            }
+                                            },
                                           )
                                         : "—"}
                                     </TableCell>
@@ -4799,7 +4804,7 @@ export default function TicketsBoard({
                                           className="h-7 w-7 p-0"
                                           onClick={() => {
                                             const codigo = String(
-                                              t.codigo || ""
+                                              t.codigo || "",
                                             ).trim();
                                             if (!codigo) return;
                                             setHistoryDetailCodigo(codigo);
@@ -4816,12 +4821,12 @@ export default function TicketsBoard({
                                           className="h-7 w-7 p-0"
                                           onClick={() => {
                                             const codigo = String(
-                                              t.codigo || ""
+                                              t.codigo || "",
                                             ).trim();
                                             if (!codigo) return;
                                             window.open(
                                               `/admin/tickets-board/${codigo}`,
-                                              "_blank"
+                                              "_blank",
                                             );
                                           }}
                                           disabled={!t.codigo}
@@ -4882,7 +4887,7 @@ export default function TicketsBoard({
                                       <span className="text-[10px] text-slate-500">
                                         {note.created_at
                                           ? new Date(
-                                              note.created_at
+                                              note.created_at,
                                             ).toLocaleDateString()
                                           : ""}
                                       </span>
@@ -4897,7 +4902,7 @@ export default function TicketsBoard({
                                         onClick={() => {
                                           setEditingInternalNoteId(note.id);
                                           setEditingInternalNoteText(
-                                            note.contenido
+                                            note.contenido,
                                           );
                                         }}
                                       >
@@ -4923,7 +4928,7 @@ export default function TicketsBoard({
                                       value={editingInternalNoteText}
                                       onChange={(e) =>
                                         setEditingInternalNoteText(
-                                          e.target.value
+                                          e.target.value,
                                         )
                                       }
                                       className="min-h-[60px] text-sm"
@@ -5158,13 +5163,13 @@ export default function TicketsBoard({
                               current: "ELIMINADO",
                               at: new Date().toISOString(),
                             },
-                          })
+                          }),
                         );
                       }
                     } catch {}
                     // Quitar de la lista y cerrar drawer
                     setTickets((prev) =>
-                      prev.filter((t) => t.codigo !== selectedTicket.codigo)
+                      prev.filter((t) => t.codigo !== selectedTicket.codigo),
                     );
                     setDrawerOpen(false);
                     toast({ title: `${uiTicket} eliminado` });
