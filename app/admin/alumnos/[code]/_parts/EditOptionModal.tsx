@@ -103,7 +103,8 @@ export default function EditOptionModal({
       // Pedido explícito: no enviar nicho por ahora.
 
       // Si ya está en pausa y quiere agregar más pausas, solo necesitamos las fechas
-      const isAddingPauseToAlreadyPaused = isCurrentlyPaused && isPaused && pauseRange?.start && pauseRange?.end;
+      const isAddingPauseToAlreadyPaused =
+        isCurrentlyPaused && isPaused && pauseRange?.start && pauseRange?.end;
 
       // Si NO está en pausa y quiere pausar, enviar estado + fechas
       // Si YA está en pausa, solo enviar fechas (no cambiar estado)
@@ -141,7 +142,7 @@ export default function EditOptionModal({
 
       // El endpoint acepta form-data y ahora también soporta estado, fecha_desde, fecha_hasta
       const url = buildUrl(
-        `/client/update/client/${encodeURIComponent(clientCode)}`
+        `/client/update/client/${encodeURIComponent(clientCode)}`,
       );
       const token = typeof window !== "undefined" ? getAuthToken() : null;
       const res = await fetch(url, {
@@ -155,8 +156,8 @@ export default function EditOptionModal({
       }
       toast({
         title: "Actualizado",
-        description: isAddingPauseToAlreadyPaused 
-          ? "Nueva pausa agregada correctamente" 
+        description: isAddingPauseToAlreadyPaused
+          ? "Nueva pausa agregada correctamente"
           : "Campos guardados correctamente",
       });
       // Limpiar el pauseRange después de guardar para permitir agregar otra pausa
@@ -228,7 +229,8 @@ export default function EditOptionModal({
                 {isCurrentlyPaused && (
                   <div className="mt-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
                     <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
-                      El alumno ya está en pausa. Puedes agregar períodos de pausa adicionales.
+                      El alumno ya está en pausa. Puedes agregar períodos de
+                      pausa adicionales.
                     </p>
                     <Button
                       type="button"

@@ -82,9 +82,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [pF4, setPF4] = useState<string>("");
   const [pF5, setPF5] = useState<string>("");
   const [ticketsCount, setTicketsCount] = useState<number | undefined>(
-    undefined
+    undefined,
   );
-  
+
   // Estado para editar fecha de ingreso
   const [editIngresoOpen, setEditIngresoOpen] = useState(false);
   const [tempIngreso, setTempIngreso] = useState<string>("");
@@ -96,21 +96,21 @@ export default function StudentDetailContent({ code }: { code: string }) {
       try {
         // Fetch the student directly from the API using the search code
         const url = `/client/get/clients?page=1&search=${encodeURIComponent(
-          code
+          code,
         )}`;
         const json = await apiFetch<any>(url);
         const rows: any[] = Array.isArray(json?.data)
           ? json.data
           : Array.isArray(json?.clients?.data)
-          ? json.clients.data
-          : Array.isArray(json?.getClients?.data)
-          ? json.getClients.data
-          : [];
+            ? json.clients.data
+            : Array.isArray(json?.getClients?.data)
+              ? json.getClients.data
+              : [];
         const rawSelected =
           rows.find(
             (r) =>
               String(r.codigo ?? r.code ?? "").toLowerCase() ===
-              code.toLowerCase()
+              code.toLowerCase(),
           ) ||
           rows[0] ||
           null;
@@ -130,7 +130,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 null,
               teamMembers: Array.isArray(rawSelected.teamMembers)
                 ? rawSelected.teamMembers
-                : rawSelected.equipo ?? rawSelected.alumnos ?? [],
+                : (rawSelected.equipo ?? rawSelected.alumnos ?? []),
               contrato: rawSelected.contrato ?? null,
               raw: rawSelected,
             } as any)
@@ -179,13 +179,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
           try {
             setStage(
               ((s.stage || s.raw?.etapa || "").toUpperCase() as Stage) ||
-                "ONBOARDING"
+                "ONBOARDING",
             );
           } catch {
             // keep existing stage if parsing fails
           }
           setPIngreso(
-            s.ingreso ?? s.joinDate ?? s.raw?.ingreso ?? s.raw?.joinDate ?? ""
+            s.ingreso ?? s.joinDate ?? s.raw?.ingreso ?? s.raw?.joinDate ?? "",
           );
           setSalida(s.salida ?? s.raw?.salida ?? "");
           setLastActivity(s.lastActivity ?? s.raw?.ultima_actividad ?? "");
@@ -202,7 +202,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
         // Error en listado (posible 401/403 para alumno). Fallback directo a detalle único.
         try {
           const j = await apiFetch<any>(
-            `/client/get/cliente/${encodeURIComponent(code)}`
+            `/client/get/cliente/${encodeURIComponent(code)}`,
           );
           const r = j?.data || j;
           if (r && (r.codigo || r.code || r.id)) {
@@ -216,7 +216,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               lastActivity: r.ultima_actividad ?? r.lastActivity ?? null,
               teamMembers: Array.isArray(r.teamMembers)
                 ? r.teamMembers
-                : r.equipo ?? r.alumnos ?? [],
+                : (r.equipo ?? r.alumnos ?? []),
               contrato: r.contrato ?? null,
               raw: r,
             } as any;
@@ -274,18 +274,18 @@ export default function StudentDetailContent({ code }: { code: string }) {
   async function fetchPhaseHistory(codeToFetch: string) {
     try {
       const histUrl = `/client/get/cliente-etapas/${encodeURIComponent(
-        codeToFetch
+        codeToFetch,
       )}`;
       const jh = await apiFetch<any>(histUrl);
       const rows: any[] = Array.isArray(jh?.data)
         ? jh.data
         : Array.isArray(jh?.data?.data)
-        ? jh.data.data
-        : Array.isArray(jh?.rows)
-        ? jh.rows
-        : Array.isArray(jh)
-        ? jh
-        : [];
+          ? jh.data.data
+          : Array.isArray(jh?.rows)
+            ? jh.rows
+            : Array.isArray(jh)
+              ? jh
+              : [];
 
       setPhaseHistory(
         rows
@@ -295,10 +295,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
               r.codigo_cliente ?? r.codigo ?? r.alumno ?? codeToFetch,
             etapa_id: String(r.etapa_id ?? r.etapa ?? r.fase ?? r.stage ?? ""),
             created_at: String(
-              r.created_at ?? r.fecha ?? r.createdAt ?? r.updated_at ?? ""
+              r.created_at ?? r.fecha ?? r.createdAt ?? r.updated_at ?? "",
             ),
           }))
-          .filter((x) => Boolean(x.etapa_id))
+          .filter((x) => Boolean(x.etapa_id)),
       );
     } catch (e) {
       setPhaseHistory(null);
@@ -308,7 +308,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   async function loadCoaches(alumnoCode: string) {
     try {
       const qUrl = `/client/get/clients-coaches?alumno=${encodeURIComponent(
-        alumnoCode
+        alumnoCode,
       )}`;
       const j = await apiFetch<any>(qUrl);
       const rows = Array.isArray(j?.data) ? j.data : [];
@@ -333,7 +333,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   async function assignCoaches(codes: string[]) {
     if (!student?.code) return;
     const unique = Array.from(
-      new Set((codes || []).map((c) => String(c ?? "").trim()).filter(Boolean))
+      new Set((codes || []).map((c) => String(c ?? "").trim()).filter(Boolean)),
     );
     if (unique.length === 0) return;
 
@@ -377,7 +377,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       console.warn(
         "removeCoach called without student.code or coachId",
         student?.code,
-        coachId
+        coachId,
       );
       return;
     }
@@ -533,8 +533,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
     if (!statusHistory) return [];
     return statusHistory
       .filter((h) => {
-        const isPaused = String(h.estado_id || "").toUpperCase().includes("PAUSADO") || 
-                         String(h.estado_id || "").toUpperCase().includes("PAUSA");
+        const isPaused =
+          String(h.estado_id || "")
+            .toUpperCase()
+            .includes("PAUSADO") ||
+          String(h.estado_id || "")
+            .toUpperCase()
+            .includes("PAUSA");
         return isPaused && h.fecha_desde && h.fecha_hasta;
       })
       .map((h) => ({
@@ -546,7 +551,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
   const mergedPauseIntervals = useMemo(() => {
     const allRanges: Array<{ start: Date; end: Date }> = [];
-    
+
     // Usar pausas del endpoint de historial de estatus
     for (const h of pausesFromStatusHistory || []) {
       const s = parseMaybe(h.start);
@@ -554,7 +559,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       if (!s || !e) continue;
       allRanges.push({ start: toDayDate(s), end: toDayDate(e) });
     }
-    
+
     if (allRanges.length === 0) return [] as Array<{ start: Date; end: Date }>;
 
     allRanges.sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -588,7 +593,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     const msPerDay = 24 * 60 * 60 * 1000;
     const daysSinceStart = Math.max(
       0,
-      Math.round((today.getTime() - startDay.getTime()) / msPerDay)
+      Math.round((today.getTime() - startDay.getTime()) / msPerDay),
     );
 
     // Días pausados acumulados hasta hoy (sin doble conteo)
@@ -646,7 +651,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   }
 
   const canSeeAdminAccessInfo = ["admin", "equipo", "atc"].includes(
-    String((user as any)?.role ?? "").toLowerCase()
+    String((user as any)?.role ?? "").toLowerCase(),
   );
 
   return (
@@ -683,7 +688,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               statusLabel={
                 (student?.state ?? student?.raw?.estado ?? "").replace?.(
                   "_",
-                  " "
+                  " ",
                 ) ??
                 student?.state ??
                 student?.raw?.estado ??
@@ -704,7 +709,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         setLastTaskAt(iso);
                         try {
                           const th = await getClienteTareas(
-                            student.code || code
+                            student.code || code,
                           );
                           setTasksHistory(th);
                         } catch {}
@@ -787,7 +792,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           className="p-1 rounded hover:bg-muted transition-colors"
                           title="Editar fecha de ingreso"
                           onClick={() => {
-                            setTempIngreso(pIngreso || accessStats.startDay.toISOString().split('T')[0]);
+                            setTempIngreso(
+                              pIngreso ||
+                                accessStats.startDay
+                                  .toISOString()
+                                  .split("T")[0],
+                            );
                             setEditIngresoOpen(true);
                           }}
                         >
@@ -856,12 +866,17 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           {pausesFromStatusHistory
                             .slice()
                             .sort(
-                              (a, b) => new Date(b.start).getTime() - new Date(a.start).getTime()
+                              (a, b) =>
+                                new Date(b.start).getTime() -
+                                new Date(a.start).getTime(),
                             )
                             .map((r, idx) => {
                               const startDate = toDayDate(new Date(r.start));
                               const endDate = toDayDate(new Date(r.end));
-                              const days = daysBetweenInclusive(startDate, endDate);
+                              const days = daysBetweenInclusive(
+                                startDate,
+                                endDate,
+                              );
                               const today = toDayDate(new Date());
                               const isActive =
                                 today >= startDate && today <= endDate;
@@ -872,8 +887,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="text-sm font-medium">
-                                      {fmtES(r.start)} →{" "}
-                                      {fmtES(r.end)}
+                                      {fmtES(r.start)} → {fmtES(r.end)}
                                     </div>
                                     <div className="flex items-center gap-2">
                                       {isActive ? (
@@ -924,16 +938,16 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 onUpdated={async () => {
                   try {
                     const url = `/client/get/clients?page=1&search=${encodeURIComponent(
-                      student.code || code
+                      student.code || code,
                     )}`;
                     const json = await apiFetch<any>(url);
                     const rows: any[] = Array.isArray(json?.data)
                       ? json.data
                       : Array.isArray(json?.clients?.data)
-                      ? json.clients.data
-                      : Array.isArray(json?.getClients?.data)
-                      ? json.getClients.data
-                      : [];
+                        ? json.clients.data
+                        : Array.isArray(json?.getClients?.data)
+                          ? json.getClients.data
+                          : [];
                     const s =
                       rows
                         .map((r) => ({
@@ -947,14 +961,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
                             r.ultima_actividad ?? r.lastActivity ?? null,
                           teamMembers: Array.isArray(r.teamMembers)
                             ? r.teamMembers
-                            : r.equipo ?? r.alumnos ?? [],
+                            : (r.equipo ?? r.alumnos ?? []),
                           contrato: r.contrato ?? null,
                           raw: r,
                         }))
                         .find(
                           (x) =>
                             (x.code ?? "").toLowerCase() ===
-                            (student.code || code).toLowerCase()
+                            (student.code || code).toLowerCase(),
                         ) ||
                       rows[0] ||
                       null;
@@ -983,16 +997,16 @@ export default function StudentDetailContent({ code }: { code: string }) {
           onSaved={async () => {
             // refresh student tras guardar (estado/etapa/nicho)
             const url = `/client/get/clients?page=1&search=${encodeURIComponent(
-              code
+              code,
             )}`;
             const json = await apiFetch<any>(url);
             const rows: any[] = Array.isArray(json?.data)
               ? json.data
               : Array.isArray(json?.clients?.data)
-              ? json.clients.data
-              : Array.isArray(json?.getClients?.data)
-              ? json.getClients.data
-              : [];
+                ? json.clients.data
+                : Array.isArray(json?.getClients?.data)
+                  ? json.getClients.data
+                  : [];
             const s =
               rows
                 .map(
@@ -1008,13 +1022,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         r.ultima_actividad ?? r.lastActivity ?? null,
                       teamMembers: Array.isArray(r.teamMembers)
                         ? r.teamMembers
-                        : r.equipo ?? r.alumnos ?? [],
+                        : (r.equipo ?? r.alumnos ?? []),
                       contrato: r.contrato ?? null,
                       raw: r,
-                    } as any)
+                    }) as any,
                 )
                 .find(
-                  (x) => (x.code ?? "").toLowerCase() === code.toLowerCase()
+                  (x) => (x.code ?? "").toLowerCase() === code.toLowerCase(),
                 ) ||
               rows[0] ||
               null;
@@ -1048,7 +1062,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               <Input
                 id="fecha-ingreso"
                 type="date"
-                value={tempIngreso ? tempIngreso.split('T')[0] : ''}
+                value={tempIngreso ? tempIngreso.split("T")[0] : ""}
                 onChange={(e) => setTempIngreso(e.target.value)}
                 className="mt-1"
               />
@@ -1229,18 +1243,18 @@ function byDateAsc(a: Date, b: Date) {
 }
 
 async function fetchFase5StartDateISO(
-  studentCode: string
+  studentCode: string,
 ): Promise<string | null> {
   try {
     const histUrl = `/client/get/cliente-etapas/${encodeURIComponent(
-      studentCode
+      studentCode,
     )}`;
     const jh = await apiFetch<any>(histUrl);
     const rows = Array.isArray(jh?.data) ? jh.data : [];
 
     const dates = rows
       .filter((r: any) =>
-        isFase5(r?.etapa_id ?? r?.etapa ?? r?.fase ?? r?.stage)
+        isFase5(r?.etapa_id ?? r?.etapa ?? r?.fase ?? r?.stage),
       )
       .map((r: any) => parseMaybe(r?.created_at ?? r?.fecha ?? r?.createdAt))
       .filter((d: Date | null): d is Date => Boolean(d))
@@ -1336,19 +1350,19 @@ function AdsMetricsForm({
     (async () => {
       try {
         const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
-          studentCode
+          studentCode,
         )}`;
         const j = await apiFetch<any>(url);
         if (!alive) return;
         const rows: any[] = Array.isArray(j?.data)
           ? j.data
           : Array.isArray(j)
-          ? j
-          : [];
+            ? j
+            : [];
         const mapped = rows
           .map((r) => {
             const name = String(
-              r?.coach_nombre ?? r?.name ?? r?.nombre ?? ""
+              r?.coach_nombre ?? r?.name ?? r?.nombre ?? "",
             ).trim();
             if (!name) return null;
             return {
@@ -1363,7 +1377,7 @@ function AdsMetricsForm({
           puesto?: string | null;
         }>;
         const uniqByName = Array.from(
-          new Map(mapped.map((c) => [c.name, c])).values()
+          new Map(mapped.map((c) => [c.name, c])).values(),
         ).sort((a, b) => a.name.localeCompare(b.name, "es"));
         setAssignedCoaches(uniqByName);
       } catch {
@@ -1407,7 +1421,7 @@ function AdsMetricsForm({
   }
   function pctOf(
     part?: string | number | null,
-    total?: string | number | null
+    total?: string | number | null,
   ): string {
     const p = toNum(part as any);
     const t = toNum(total as any);
@@ -1516,11 +1530,11 @@ function AdsMetricsForm({
   }, [data.compra_carnada, data.visitas]);
 
   const view = {
-    roas: data.auto_roas ? roasCalc ?? data.roas : data.roas,
-    eff_ads: data.auto_eff ? effAdsCalc ?? data.eff_ads : data.eff_ads,
-    eff_pago: data.auto_eff ? effPagoCalc ?? data.eff_pago : data.eff_pago,
+    roas: data.auto_roas ? (roasCalc ?? data.roas) : data.roas,
+    eff_ads: data.auto_eff ? (effAdsCalc ?? data.eff_ads) : data.eff_ads,
+    eff_pago: data.auto_eff ? (effPagoCalc ?? data.eff_pago) : data.eff_pago,
     eff_compra: data.auto_eff
-      ? effCompraCalc ?? data.eff_compra
+      ? (effCompraCalc ?? data.eff_compra)
       : data.eff_compra,
   } as const;
 
@@ -1798,8 +1812,8 @@ function AdsMetricsForm({
         {loading
           ? "Cargando métricas…"
           : saving
-          ? "Guardando…"
-          : "Cambios guardados"}
+            ? "Guardando…"
+            : "Cambios guardados"}
       </div>
       <Card>
         <CardHeader className="pb-3">
@@ -2000,7 +2014,7 @@ function AdsMetricsForm({
                     onChange={(e) =>
                       onChange(
                         "eff_compra",
-                        sanitizePercentInput(e.target.value)
+                        sanitizePercentInput(e.target.value),
                       )
                     }
                   />
