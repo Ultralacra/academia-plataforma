@@ -120,15 +120,13 @@ export function AppSidebar() {
     const alumnoMatch = pathname?.match(/^\/admin\/alumnos\/([^\/?#]+)/i);
     const alumnoCodeInPath = alumnoMatch?.[1];
     const userRole = (user?.role || "").toLowerCase();
-    
+
     // Debug: verificar el rol del usuario
     console.log("User role:", user?.role, "Normalized:", userRole);
-    
+
     switch (userRole) {
       case "sales":
-        return [
-          { title: "CRM", url: "/admin/crm", icon: Users },
-        ] as MenuItem[];
+        return [{ title: "CRM", url: "/admin/crm", icon: Users }] as MenuItem[];
       case "admin":
         return (
           alumnoCodeInPath
@@ -432,22 +430,22 @@ export function AppSidebar() {
     userRoleForLabel === "admin"
       ? "Administrador"
       : userRoleForLabel === "coach"
-      ? "Coach"
-      : userRoleForLabel === "equipo"
-      ? "Equipo"
-      : userRoleForLabel === "student"
-      ? "Estudiante"
-      : userRoleForLabel === "sales"
-      ? "Ventas"
-      : "Invitado";
+        ? "Coach"
+        : userRoleForLabel === "equipo"
+          ? "Equipo"
+          : userRoleForLabel === "student"
+            ? "Estudiante"
+            : userRoleForLabel === "sales"
+              ? "Ventas"
+              : "Invitado";
 
   const [metricsOpen, setMetricsOpen] = useState(false);
   const roleKey = (
     userRoleForLabel === "student"
       ? "alumno"
       : userRoleForLabel === "coach" || userRoleForLabel === "equipo"
-      ? "coach"
-      : "admin"
+        ? "coach"
+        : "admin"
   ) as "admin" | "alumno" | "coach";
 
   // Sumar contadores persistentes por chatId (Socket.IO) guardados en localStorage
@@ -482,7 +480,7 @@ export function AppSidebar() {
     return () => {
       window.removeEventListener(
         "chat:unread-count-updated",
-        onCountUpdated as any
+        onCountUpdated as any,
       );
       window.removeEventListener("storage", onStorage);
     };
@@ -620,7 +618,7 @@ export function AppSidebar() {
                                   "group relative overflow-hidden rounded-md px-2.5 py-1.5 text-sm",
                                   active
                                     ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                    : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                                    : "hover:bg-sidebar-accent/50 text-sidebar-foreground",
                                 )}
                               >
                                 <Link
@@ -631,7 +629,7 @@ export function AppSidebar() {
                                   <span
                                     className={cn(
                                       "absolute left-2 top-1/2 -translate-y-1/2 h-[6px] w-[6px] rounded-full bg-amber-500 transition-opacity",
-                                      active ? "opacity-100" : "opacity-0"
+                                      active ? "opacity-100" : "opacity-0",
                                     )}
                                   />
                                   <Icon
@@ -639,7 +637,7 @@ export function AppSidebar() {
                                       "h-4 w-4",
                                       active
                                         ? "text-sidebar-accent-foreground"
-                                        : "text-muted-foreground"
+                                        : "text-muted-foreground",
                                     )}
                                   />
                                   <span className="truncate flex items-center gap-2">
@@ -669,7 +667,7 @@ export function AppSidebar() {
 
                     // Grupo “Métricas”
                     const isAnyChildActive = item.children?.some(
-                      (c) => !!c.url && bestActiveUrl === c.url
+                      (c) => !!c.url && bestActiveUrl === c.url,
                     );
 
                     return (
@@ -681,7 +679,7 @@ export function AppSidebar() {
                             "group flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-sm",
                             metricsOpen || isAnyChildActive
                               ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                              : "hover:bg-sidebar-accent/50 text-sidebar-foreground",
                           )}
                         >
                           <span className="flex items-center gap-2.5">
@@ -689,7 +687,7 @@ export function AppSidebar() {
                               className={cn(
                                 "h-4 w-4",
                                 (metricsOpen || isAnyChildActive) &&
-                                  "text-sidebar-accent-foreground"
+                                  "text-sidebar-accent-foreground",
                               )}
                             />
                             <span className="truncate">{item.title}</span>
@@ -697,7 +695,7 @@ export function AppSidebar() {
                           <ChevronDown
                             className={cn(
                               "h-4 w-4 transition-transform text-muted-foreground",
-                              metricsOpen ? "rotate-180" : "rotate-0"
+                              metricsOpen ? "rotate-180" : "rotate-0",
                             )}
                           />
                         </button>
@@ -708,7 +706,7 @@ export function AppSidebar() {
                             "mt-1 grid overflow-hidden transition-all",
                             metricsOpen
                               ? "grid-rows-[1fr] opacity-100"
-                              : "grid-rows-[0fr] opacity-0"
+                              : "grid-rows-[0fr] opacity-0",
                           )}
                         >
                           <div className="min-h-0">
@@ -725,14 +723,14 @@ export function AppSidebar() {
                                         "relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
                                         active
                                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                          : "hover:bg-sidebar-accent/50 text-sidebar-foreground"
+                                          : "hover:bg-sidebar-accent/50 text-sidebar-foreground",
                                       )}
                                     >
                                       {/* Dot activo */}
                                       <span
                                         className={cn(
                                           "absolute left-0 top-1/2 -translate-y-1/2 h-[6px] w-[6px] rounded-full bg-amber-500",
-                                          active ? "opacity-100" : "opacity-0"
+                                          active ? "opacity-100" : "opacity-0",
                                         )}
                                       />
                                       <CIcon
@@ -740,7 +738,7 @@ export function AppSidebar() {
                                           "h-4 w-4",
                                           active
                                             ? "text-sidebar-accent-foreground"
-                                            : "text-muted-foreground"
+                                            : "text-muted-foreground",
                                         )}
                                       />
                                       <span className="truncate">
