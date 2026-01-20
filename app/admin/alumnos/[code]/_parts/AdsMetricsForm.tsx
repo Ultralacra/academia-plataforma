@@ -30,18 +30,18 @@ function isFase5(etapaId: unknown) {
 }
 
 async function fetchFase5StartDateISO(
-  studentCode: string
+  studentCode: string,
 ): Promise<string | null> {
   try {
     const histUrl = `/client/get/cliente-etapas/${encodeURIComponent(
-      studentCode
+      studentCode,
     )}`;
     const jh = await apiFetch<any>(histUrl);
     const rows = Array.isArray(jh?.data) ? jh.data : [];
 
     const dates = rows
       .filter((r: any) =>
-        isFase5(r?.etapa_id ?? r?.etapa ?? r?.fase ?? r?.stage)
+        isFase5(r?.etapa_id ?? r?.etapa ?? r?.fase ?? r?.stage),
       )
       .map((r: any) => parseMaybe(r?.created_at ?? r?.fecha ?? r?.createdAt))
       .filter((d: Date | null): d is Date => Boolean(d))
@@ -161,9 +161,11 @@ export default function AdsMetricsForm({
   }, [assignedCoaches]);
 
   const coachAdsAssigned = useMemo(() => {
-    return assignedCoaches.find((c) => 
-      norm(c.area) === "TECNICO" && norm(c.puesto) === "COACH_TECNICO"
-    ) || null;
+    return (
+      assignedCoaches.find(
+        (c) => norm(c.area) === "TECNICO" && norm(c.puesto) === "COACH_TECNICO",
+      ) || null
+    );
   }, [assignedCoaches]);
 
   useEffect(() => {
@@ -171,19 +173,19 @@ export default function AdsMetricsForm({
     (async () => {
       try {
         const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
-          studentCode
+          studentCode,
         )}`;
         const j = await apiFetch<any>(url);
         if (!alive) return;
         const rows: any[] = Array.isArray(j?.data)
           ? j.data
           : Array.isArray(j)
-          ? j
-          : [];
+            ? j
+            : [];
         const mapped = rows
           .map((r) => {
             const name = String(
-              r?.coach_nombre ?? r?.name ?? r?.nombre ?? ""
+              r?.coach_nombre ?? r?.name ?? r?.nombre ?? "",
             ).trim();
             if (!name) return null;
             return {
@@ -198,7 +200,7 @@ export default function AdsMetricsForm({
           puesto?: string | null;
         }>;
         const uniqByName = Array.from(
-          new Map(mapped.map((c) => [c.name, c])).values()
+          new Map(mapped.map((c) => [c.name, c])).values(),
         ).sort((a, b) => a.name.localeCompare(b.name, "es"));
         setAssignedCoaches(uniqByName);
       } catch {
@@ -244,7 +246,7 @@ export default function AdsMetricsForm({
   }
   function pctOf(
     part?: string | number | null,
-    total?: string | number | null
+    total?: string | number | null,
   ): string {
     const p = toNum(part as any);
     const t = toNum(total as any);
@@ -363,11 +365,11 @@ export default function AdsMetricsForm({
   }, [data.compra_carnada, data.visitas]);
 
   const view = {
-    roas: data.auto_roas ? roasCalc ?? data.roas : data.roas,
-    eff_ads: data.auto_eff ? effAdsCalc ?? data.eff_ads : data.eff_ads,
-    eff_pago: data.auto_eff ? effPagoCalc ?? data.eff_pago : data.eff_pago,
+    roas: data.auto_roas ? (roasCalc ?? data.roas) : data.roas,
+    eff_ads: data.auto_eff ? (effAdsCalc ?? data.eff_ads) : data.eff_ads,
+    eff_pago: data.auto_eff ? (effPagoCalc ?? data.eff_pago) : data.eff_pago,
     eff_compra: data.auto_eff
-      ? effCompraCalc ?? data.eff_compra
+      ? (effCompraCalc ?? data.eff_compra)
       : data.eff_compra,
   } as const;
 
@@ -471,7 +473,7 @@ export default function AdsMetricsForm({
         "Visitas:",
         visitasN,
         "Pagos iniciados:",
-        pagosN
+        pagosN,
       );
 
       const effAdsRatio = effAdsCalc != null ? Number(effAdsCalc) : null;
@@ -487,7 +489,7 @@ export default function AdsMetricsForm({
         "Pago iniciado (pagos/visitas):",
         effPagoRatio,
         "Compra (carnada/visitas):",
-        effCompraRatio
+        effCompraRatio,
       );
       console.log(
         "[ADS] Efectividades (%) → Ads (clics/alcance):",
@@ -495,7 +497,7 @@ export default function AdsMetricsForm({
         "Pago iniciado (pagos/visitas):",
         effPagoPct != null ? `${effPagoPct.toFixed(1)}%` : null,
         "Compra (carnada/visitas):",
-        effCompraPct != null ? `${effCompraPct.toFixed(1)}%` : null
+        effCompraPct != null ? `${effCompraPct.toFixed(1)}%` : null,
       );
 
       const dispEffAds = fmtRatioToPercent(view.eff_ads);
@@ -507,7 +509,7 @@ export default function AdsMetricsForm({
         "Pago iniciado (pagos/visitas):",
         `${dispEffPago}%`,
         "Compra (carnada/visitas):",
-        `${dispEffCompra}%`
+        `${dispEffCompra}%`,
       );
     } catch (e) {
       console.warn("[ADS] Log error", e);
@@ -552,8 +554,8 @@ export default function AdsMetricsForm({
         {loading
           ? "Cargando métricas…"
           : saving
-          ? "Guardando…"
-          : "Cambios guardados"}
+            ? "Guardando…"
+            : "Cambios guardados"}
       </div>
       <Card>
         <CardHeader className="pb-3">
@@ -899,7 +901,7 @@ export default function AdsMetricsForm({
                     onChange={(e) =>
                       onChange(
                         "eff_compra",
-                        sanitizePercentInput(e.target.value)
+                        sanitizePercentInput(e.target.value),
                       )
                     }
                   />
@@ -1015,7 +1017,7 @@ export default function AdsMetricsForm({
                     onChange={(e) =>
                       onChange(
                         "fase",
-                        e.target.value === "sin-fase" ? "" : e.target.value
+                        e.target.value === "sin-fase" ? "" : e.target.value,
                       )
                     }
                     className="w-full h-9 rounded-md border px-3 text-sm"

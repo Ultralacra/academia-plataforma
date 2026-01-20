@@ -4731,6 +4731,12 @@ export default function TicketsBoard({
                           <TableBody>
                             {previousTickets
                               .slice()
+                              .filter((t) => {
+                                // Alumnos solo ven tickets resueltos, pausados o en progreso
+                                if (!isStudent) return true;
+                                const statusKey = coerceStatus(t.estado);
+                                return ["RESUELTO", "PAUSADO", "EN_PROGRESO"].includes(statusKey);
+                              })
                               .sort((a, b) => {
                                 const at = a.created_at
                                   ? new Date(a.created_at).getTime()

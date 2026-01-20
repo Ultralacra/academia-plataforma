@@ -1342,9 +1342,11 @@ function AdsMetricsForm({
   }, [assignedCoaches]);
 
   const coachAdsAssigned = useMemo(() => {
-    return assignedCoaches.find((c) => 
-      c.area === "TECNICO" && c.puesto === "COACH_TECNICO"
-    ) || null;
+    return (
+      assignedCoaches.find(
+        (c) => c.area === "TECNICO" && c.puesto === "COACH_TECNICO",
+      ) || null
+    );
   }, [assignedCoaches]);
 
   useEffect(() => {
