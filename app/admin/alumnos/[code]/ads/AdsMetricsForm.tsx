@@ -137,8 +137,39 @@ export default function AdsMetricsForm({
   });
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
+  const [coachTecnico, setCoachTecnico] = useState<string>("");
   const saveTimerRef = useRef<number | null>(null);
   const didInitRef = useRef<boolean>(false);
+
+  // Cargar coaches del alumno y buscar el coach técnico
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const qUrl = `/client/get/clients-coaches?alumno=${encodeURIComponent(
+          studentCode
+        )}`;
+        const j = await apiFetch<any>(qUrl);
+        const rows = Array.isArray(j?.data) ? j.data : [];
+        
+        // Buscar el coach con area "TECNICO" y puesto "COACH_TECNICO"
+        const tecnico = rows.find(
+          (r: any) =>
+            String(r.area || "").toUpperCase() === "TECNICO" &&
+            String(r.puesto || "").toUpperCase() === "COACH_TECNICO"
+        );
+        
+        if (mounted && tecnico) {
+          setCoachTecnico(tecnico.coach_nombre || tecnico.name || "");
+        }
+      } catch (e) {
+        console.error("Error loading coaches", e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [studentCode]);
 
   function fmtPercentNoScale(n?: number | null): string {
     if (n == null || !Number.isFinite(Number(n))) return "—";
@@ -663,11 +694,12 @@ export default function AdsMetricsForm({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Coach de Plataformas</Label>
+                  <Label>Coach Técnico</Label>
                   <Input
                     placeholder="Nombre"
-                    value={data.coach_plat || ""}
-                    onChange={(e) => onChange("coach_plat", e.target.value)}
+                    value={coachTecnico || "No asignado"}
+                    disabled
+                    className="bg-muted"
                   />
                 </div>
               </CardContent>
@@ -835,7 +867,7 @@ export default function AdsMetricsForm({
                   Copy: <b>{data.coach_copy || "—"}</b>
                 </div>
                 <div>
-                  Plataformas: <b>{data.coach_plat || "—"}</b>
+                  Técnico: <b>{data.coach_plat || "—"}</b>
                 </div>
               </CardContent>
             </Card>

@@ -161,7 +161,9 @@ export default function AdsMetricsForm({
   }, [assignedCoaches]);
 
   const coachAdsAssigned = useMemo(() => {
-    return assignedCoaches.find((c) => norm(c.area).includes("ADS")) || null;
+    return assignedCoaches.find((c) => 
+      norm(c.area) === "TECNICO" && norm(c.puesto) === "COACH_TECNICO"
+    ) || null;
   }, [assignedCoaches]);
 
   useEffect(() => {
@@ -1048,7 +1050,7 @@ export default function AdsMetricsForm({
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>Coach de Plataformas</Label>
+                  <Label>Coach Técnico</Label>
                   <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
                     <span className="font-medium">
                       {coachAdsAssigned?.name || "—"}
@@ -1202,7 +1204,7 @@ export default function AdsMetricsForm({
                   Copy: <b>{data.coach_copy || "—"}</b>
                 </div>
                 <div>
-                  Plataformas: <b>{data.coach_plat || "—"}</b>
+                  Técnico: <b>{data.coach_plat || "—"}</b>
                 </div>
               </div>
             </div>
