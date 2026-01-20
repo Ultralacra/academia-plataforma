@@ -67,28 +67,29 @@ export default function EditOptionModal({
     setEstado(current?.estado);
     setEtapa(current?.etapa);
     setNicho(current?.nicho);
-    // Cargar rango previo (si existe) de localStorage
-    try {
-      const key = clientCode ? `student-pause:${clientCode}` : null;
-      if (key && typeof window !== "undefined") {
-        const raw = window.localStorage.getItem(key);
-        if (raw) {
-          const parsed = JSON.parse(raw);
-          setPauseRange({ start: parsed.start, end: parsed.end });
-        } else {
-          setPauseRange(null);
-        }
-      }
-    } catch {
-      setPauseRange(null);
-    }
+    // Limpiar pauseRange al abrir el modal
+    setPauseRange(null);
   }, [current, open]);
+
+  // Determinar si el estado ACTUAL del estudiante ya es PAUSADO
+  const isCurrentlyPaused = (() => {
+    const label = String(current?.estado || "").toUpperCase();
+    return label.includes("PAUSADO") || label.includes("PAUSA");
+  })();
 
   async function save() {
     if (!clientCode) return;
     setSaving(true);
     try {
       const fd = new FormData();
+
+      // Detectar si el estado seleccionado es PAUSADO
+      const isPaused = (() => {
+        const match = estados.find((x) => x.key === estado);
+        const label = String(match?.value || estado || "").toUpperCase();
+        return label.includes("PAUSADO") || label.includes("PAUSA");
+      })();
+
       // Solo enviar en form-data lo que se quiera editar (campo cambiado)
       // No enviar nombre ni valores existentes.
       const wantsEstado =
@@ -101,8 +102,26 @@ export default function EditOptionModal({
         etapa !== current?.etapa;
       // Pedido explícito: no enviar nicho por ahora.
 
-      if (wantsEstado && estado) fd.set("estado", String(estado));
-      if (wantsEtapa && etapa) fd.set("etapa", String(etapa));
+      // Si ya está en pausa y quiere agregar más pausas, solo necesitamos las fechas
+      const isAddingPauseToAlreadyPaused = isCurrentlyPaused && isPaused && pauseRange?.start && pauseRange?.end;
+
+      // Si NO está en pausa y quiere pausar, enviar estado + fechas
+      // Si YA está en pausa, solo enviar fechas (no cambiar estado)
+      if (isAddingPauseToAlreadyPaused) {
+        // Solo agregar fechas, no enviar estado
+        fd.set("fecha_desde", String(pauseRange.start));
+        fd.set("fecha_hasta", String(pauseRange.end));
+      } else {
+        // Lógica normal: enviar estado si cambió
+        if (wantsEstado && estado) fd.set("estado", String(estado));
+        if (wantsEtapa && etapa) fd.set("etapa", String(etapa));
+
+        // Si se está poniendo en pausa (desde un estado no-pausado), agregar fechas
+        if (wantsEstado && isPaused && pauseRange?.start && pauseRange?.end) {
+          fd.set("fecha_desde", String(pauseRange.start));
+          fd.set("fecha_hasta", String(pauseRange.end));
+        }
+      }
 
       if ([...fd.keys()].length === 0) {
         toast({
@@ -112,81 +131,15 @@ export default function EditOptionModal({
         setSaving(false);
         return;
       }
+
       // Si se selecciona PAUSADO y no tenemos rango, primero pedir rango
-      const isPaused = (() => {
-        // Detectar por etiqueta humana si existe en catálogo
-        const match = estados.find((x) => x.key === estado);
-        const label = String(match?.value || estado || "").toUpperCase();
-        return label.includes("PAUSADO");
-      })();
-      if (wantsEstado && isPaused && !pauseRange?.start && !pauseRange?.end) {
+      if (isPaused && !pauseRange?.start && !pauseRange?.end) {
         setPauseOpen(true);
         setSaving(false);
         return; // esperar confirmación del modal; el usuario pulsará Guardar de nuevo
       }
 
-      // Guardar en localStorage el rango si estamos en pausado y existe rango
-      try {
-        const key = `student-pause:${clientCode}`;
-        if (typeof window !== "undefined") {
-          const nowIso = new Date().toISOString();
-          const readExisting = () => {
-            try {
-              const raw = window.localStorage.getItem(key);
-              if (!raw) return null;
-              return JSON.parse(raw);
-            } catch {
-              return null;
-            }
-          };
-
-          const existing = readExisting();
-          const existingHistory: any[] = Array.isArray(existing?.history)
-            ? existing.history
-            : existing && existing.start && existing.end
-            ? [{ start: existing.start, end: existing.end, setAt: nowIso }]
-            : [];
-
-          if (isPaused && pauseRange?.start && pauseRange?.end) {
-            const next = {
-              current: { start: pauseRange.start, end: pauseRange.end },
-              history: [
-                ...existingHistory,
-                { start: pauseRange.start, end: pauseRange.end, setAt: nowIso },
-              ],
-            };
-            window.localStorage.setItem(key, JSON.stringify(next));
-            try {
-              window.dispatchEvent(
-                new CustomEvent("student:pause-changed", {
-                  detail: {
-                    code: clientCode,
-                    current: next.current,
-                    historyCount: next.history.length,
-                  },
-                })
-              );
-            } catch {}
-          } else if (!isPaused) {
-            // si se sale de PAUSADO, mantener historial pero quitar 'current'
-            const next =
-              existingHistory.length > 0
-                ? { current: null, history: existingHistory }
-                : null;
-            if (next) window.localStorage.setItem(key, JSON.stringify(next));
-            else window.localStorage.removeItem(key);
-            try {
-              window.dispatchEvent(
-                new CustomEvent("student:pause-changed", {
-                  detail: { code: clientCode, current: null },
-                })
-              );
-            } catch {}
-          }
-        }
-      } catch {}
-
-      // El endpoint acepta form-data y ahora también soporta estado
+      // El endpoint acepta form-data y ahora también soporta estado, fecha_desde, fecha_hasta
       const url = buildUrl(
         `/client/update/client/${encodeURIComponent(clientCode)}`
       );
@@ -202,8 +155,12 @@ export default function EditOptionModal({
       }
       toast({
         title: "Actualizado",
-        description: "Campos guardados correctamente",
+        description: isAddingPauseToAlreadyPaused 
+          ? "Nueva pausa agregada correctamente" 
+          : "Campos guardados correctamente",
       });
+      // Limpiar el pauseRange después de guardar para permitir agregar otra pausa
+      setPauseRange(null);
       onOpenChange(false);
       onSaved?.();
     } catch (e) {
@@ -262,9 +219,26 @@ export default function EditOptionModal({
                 </Select>
                 {pauseRange?.start && pauseRange?.end && (
                   <div className="mt-2 text-[11px] text-muted-foreground">
-                    Pausa seleccionada:{" "}
+                    Nueva pausa:{" "}
                     {new Date(pauseRange.start).toLocaleDateString()} –{" "}
                     {new Date(pauseRange.end).toLocaleDateString()}
+                  </div>
+                )}
+                {/* Si ya está pausado, mostrar botón para agregar más pausas */}
+                {isCurrentlyPaused && (
+                  <div className="mt-3 p-3 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                    <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
+                      El alumno ya está en pausa. Puedes agregar períodos de pausa adicionales.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => setPauseOpen(true)}
+                    >
+                      + Agregar nueva pausa
+                    </Button>
                   </div>
                 )}
               </div>

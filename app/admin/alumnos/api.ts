@@ -706,6 +706,8 @@ export type ClienteEstatusHist = {
   codigo_cliente?: string | null;
   estado_id: string;
   created_at: string;
+  fecha_desde?: string | null;
+  fecha_hasta?: string | null;
 };
 
 export async function getClienteEstatus(alumnoCode: string): Promise<ClienteEstatusHist[]> {
@@ -726,6 +728,8 @@ export async function getClienteEstatus(alumnoCode: string): Promise<ClienteEsta
     // El API devuelve 'estatus_id' (MEMBRESIA, PAUSADO, etc). Priorizar ese campo.
     estado_id: String(r.estatus_id ?? r.estado_id ?? r.estado ?? r.status ?? ''),
     created_at: r.created_at ?? r.fecha ?? r.updated_at ?? new Date().toISOString(),
+    fecha_desde: r.fecha_desde ?? null,
+    fecha_hasta: r.fecha_hasta ?? null,
   }));
 }
 

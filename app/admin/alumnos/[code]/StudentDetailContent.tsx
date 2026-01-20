@@ -28,9 +28,15 @@ import SessionsStudentPanel from "./_parts/SessionsStudentPanel";
 import BonosPanel from "./_parts/BonosPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { getStudentTickets } from "../api";
 import Link from "next/link";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -78,16 +84,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [ticketsCount, setTicketsCount] = useState<number | undefined>(
     undefined
   );
-  const [pauseInfo, setPauseInfo] = useState<{
-    start: string;
-    end: string;
-    daysElapsed: number;
-    totalDays: number;
-  } | null>(null);
-
-  const [pauseHistory, setPauseHistory] = useState<
-    Array<{ start: string; end: string; setAt: string | null }>
-  >([]);
+  
+  // Estado para editar fecha de ingreso
+  const [editIngresoOpen, setEditIngresoOpen] = useState(false);
+  const [tempIngreso, setTempIngreso] = useState<string>("");
 
   useEffect(() => {
     let alive = true;
@@ -257,98 +257,18 @@ export default function StudentDetailContent({ code }: { code: string }) {
     };
   }, [code]);
 
-  // Cargar/derivar pausa desde localStorage
-  // Función para calcular y actualizar la info de pausa desde localStorage
-  function computePauseFromStorage() {
-    try {
-      const key = `student-pause:${code}`;
-      const raw =
-        typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-      if (!raw) {
-        setPauseInfo(null);
-        setPauseHistory([]);
-        return;
-      }
-      const parsed = JSON.parse(raw) || {};
-
-      // Compatibilidad: formato antiguo {start, end}
-      const currentStart =
-        parsed?.current?.start ?? parsed?.start ?? parsed?.currentStart ?? null;
-      const currentEnd =
-        parsed?.current?.end ?? parsed?.end ?? parsed?.currentEnd ?? null;
-
-      const historyRaw: any[] = Array.isArray(parsed?.history)
-        ? parsed.history
-        : parsed?.start && parsed?.end
-        ? [{ start: parsed.start, end: parsed.end, setAt: null }]
-        : [];
-
-      const history = historyRaw
-        .map((h) => ({
-          start: String(h?.start ?? ""),
-          end: String(h?.end ?? ""),
-          setAt: h?.setAt ? String(h.setAt) : null,
-        }))
-        .filter((h) => Boolean(h.start) && Boolean(h.end));
-      setPauseHistory(history);
-
-      if (!currentStart || !currentEnd) {
-        setPauseInfo(null);
-        return;
-      }
-
-      const s = new Date(String(currentStart));
-      const e = new Date(String(currentEnd));
-      s.setHours(0, 0, 0, 0);
-      e.setHours(0, 0, 0, 0);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const msPerDay = 24 * 60 * 60 * 1000;
-      const totalDays = Math.max(
-        1,
-        Math.round((e.getTime() - s.getTime()) / msPerDay) + 1
-      );
-      const daysElapsed = Math.min(
-        totalDays,
-        Math.max(0, Math.round((today.getTime() - s.getTime()) / msPerDay) + 1)
-      );
-      setPauseInfo({
-        start: s.toISOString(),
-        end: e.toISOString(),
-        daysElapsed,
-        totalDays,
-      });
-    } catch {
-      setPauseInfo(null);
-      setPauseHistory([]);
-    }
+  // Función para guardar fecha de ingreso (preparado para backend)
+  async function handleSaveIngreso() {
+    if (!tempIngreso) return;
+    // TODO: Enviar al backend cuando esté listo
+    // await apiFetch(`/client/update/client/${code}`, { method: 'PUT', body: formData con 'ingreso' });
+    setPIngreso(tempIngreso);
+    setEditIngresoOpen(false);
+    toast({
+      title: "Fecha actualizada",
+      description: "La fecha de ingreso se ha actualizado localmente.",
+    });
   }
-
-  useEffect(() => {
-    computePauseFromStorage();
-    const onStorage = (ev: StorageEvent) => {
-      if (ev.key === `student-pause:${code}`) computePauseFromStorage();
-    };
-    const onPauseChanged = (ev: Event) => {
-      try {
-        const anyEv = ev as CustomEvent<any>;
-        if (!anyEv?.detail) return;
-        if (anyEv.detail.code !== code) return;
-        // leer de storage para mantener una sola fuente
-        computePauseFromStorage();
-      } catch {}
-    };
-    if (typeof window !== "undefined") {
-      window.addEventListener("storage", onStorage);
-      window.addEventListener("student:pause-changed", onPauseChanged);
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("storage", onStorage);
-        window.removeEventListener("student:pause-changed", onPauseChanged);
-      }
-    };
-  }, [code]);
 
   // Cargar historial de etapas una vez y bajo demanda
   async function fetchPhaseHistory(codeToFetch: string) {
@@ -584,6 +504,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
     codigo_cliente?: string | null;
     estado_id: string;
     created_at: string;
+    fecha_desde?: string | null;
+    fecha_hasta?: string | null;
   }> | null>(null);
   const [tasksHistory, setTasksHistory] = useState<Array<{
     id: number | string;
@@ -606,20 +528,33 @@ export default function StudentDetailContent({ code }: { code: string }) {
     return Math.round((bb - aa) / msPerDay) + 1;
   }
 
+  // Extraer pausas del historial de estatus (solo registros con PAUSADO y fechas válidas)
+  const pausesFromStatusHistory = useMemo(() => {
+    if (!statusHistory) return [];
+    return statusHistory
+      .filter((h) => {
+        const isPaused = String(h.estado_id || "").toUpperCase().includes("PAUSADO") || 
+                         String(h.estado_id || "").toUpperCase().includes("PAUSA");
+        return isPaused && h.fecha_desde && h.fecha_hasta;
+      })
+      .map((h) => ({
+        start: h.fecha_desde!,
+        end: h.fecha_hasta!,
+        setAt: h.created_at,
+      }));
+  }, [statusHistory]);
+
   const mergedPauseIntervals = useMemo(() => {
     const allRanges: Array<{ start: Date; end: Date }> = [];
-    for (const h of pauseHistory || []) {
+    
+    // Usar pausas del endpoint de historial de estatus
+    for (const h of pausesFromStatusHistory || []) {
       const s = parseMaybe(h.start);
       const e = parseMaybe(h.end);
       if (!s || !e) continue;
       allRanges.push({ start: toDayDate(s), end: toDayDate(e) });
     }
-    // Asegurar que la pausa actual esté incluida (aunque no esté en history por algún motivo)
-    if (pauseInfo?.start && pauseInfo?.end) {
-      const s = parseMaybe(pauseInfo.start);
-      const e = parseMaybe(pauseInfo.end);
-      if (s && e) allRanges.push({ start: toDayDate(s), end: toDayDate(e) });
-    }
+    
     if (allRanges.length === 0) return [] as Array<{ start: Date; end: Date }>;
 
     allRanges.sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -641,7 +576,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       }
     }
     return merged;
-  }, [pauseHistory, pauseInfo]);
+  }, [pausesFromStatusHistory]);
 
   const accessStats = useMemo(() => {
     const ingresoIso = pIngreso || student?.ingreso || student?.raw?.ingreso;
@@ -759,7 +694,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               faseActual={faseActual}
               ingreso={pIngreso}
               salida={salida}
-              pausedRange={pauseInfo}
+              pausedRange={null}
               onSaveLastTask={
                 canEditMeta
                   ? async (localValue) => {
@@ -843,9 +778,22 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   <div className="mt-3 space-y-2 text-sm">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">Ingreso</span>
-                      <span className="font-medium">
-                        {fmtES(accessStats.startDay.toISOString())}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium">
+                          {fmtES(accessStats.startDay.toISOString())}
+                        </span>
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-muted transition-colors"
+                          title="Editar fecha de ingreso"
+                          onClick={() => {
+                            setTempIngreso(pIngreso || accessStats.startDay.toISOString().split('T')[0]);
+                            setEditIngresoOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                        </button>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">
@@ -897,33 +845,35 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
                     <div className="pt-2 border-t border-border">
                       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Historial de pausas
+                        Historial de pausas ({pausesFromStatusHistory.length})
                       </div>
-                      {mergedPauseIntervals.length === 0 ? (
+                      {pausesFromStatusHistory.length === 0 ? (
                         <p className="mt-2 text-sm text-muted-foreground">
                           Sin pausas registradas.
                         </p>
                       ) : (
                         <div className="mt-2 space-y-2">
-                          {mergedPauseIntervals
+                          {pausesFromStatusHistory
                             .slice()
                             .sort(
-                              (a, b) => b.start.getTime() - a.start.getTime()
+                              (a, b) => new Date(b.start).getTime() - new Date(a.start).getTime()
                             )
                             .map((r, idx) => {
-                              const days = daysBetweenInclusive(r.start, r.end);
+                              const startDate = toDayDate(new Date(r.start));
+                              const endDate = toDayDate(new Date(r.end));
+                              const days = daysBetweenInclusive(startDate, endDate);
                               const today = toDayDate(new Date());
                               const isActive =
-                                today >= r.start && today <= r.end;
+                                today >= startDate && today <= endDate;
                               return (
                                 <div
-                                  key={`${r.start.toISOString()}-${r.end.toISOString()}-${idx}`}
+                                  key={`pause-${idx}-${r.start}-${r.end}`}
                                   className="rounded-md border border-border bg-muted/30 p-2"
                                 >
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="text-sm font-medium">
-                                      {fmtES(r.start.toISOString())} →{" "}
-                                      {fmtES(r.end.toISOString())}
+                                      {fmtES(r.start)} →{" "}
+                                      {fmtES(r.end)}
                                     </div>
                                     <div className="flex items-center gap-2">
                                       {isActive ? (
@@ -939,15 +889,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                       </span>
                                     </div>
                                   </div>
+                                  {r.setAt && (
+                                    <div className="text-[10px] text-muted-foreground mt-1">
+                                      Registrada: {fmtES(r.setAt)}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
-                          {pauseHistory.length > mergedPauseIntervals.length ? (
-                            <p className="text-[11px] text-muted-foreground">
-                              * Algunas pausas se consolidan si fueron
-                              extensiones/solapes.
-                            </p>
-                          ) : null}
                         </div>
                       )}
                     </div>
@@ -1070,10 +1019,6 @@ export default function StudentDetailContent({ code }: { code: string }) {
               rows[0] ||
               null;
             setStudent(s as any);
-            // actualizar pausa en tiempo real tras guardar
-            try {
-              computePauseFromStorage();
-            } catch {}
             // refrescar historiales inmediatamente
             try {
               const targetCode = (s as any)?.code || code;
@@ -1090,6 +1035,35 @@ export default function StudentDetailContent({ code }: { code: string }) {
           }}
         />
       )}
+
+      {/* Modal para editar fecha de ingreso */}
+      <Dialog open={editIngresoOpen} onOpenChange={setEditIngresoOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar fecha de ingreso</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="fecha-ingreso">Fecha de ingreso</Label>
+              <Input
+                id="fecha-ingreso"
+                type="date"
+                value={tempIngreso ? tempIngreso.split('T')[0] : ''}
+                onChange={(e) => setTempIngreso(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setEditIngresoOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveIngreso} disabled={!tempIngreso}>
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Se eliminó el botón flotante de chat; ahora está en una pestaña */}
 
