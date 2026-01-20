@@ -52,6 +52,7 @@ export function CreateTicketModal({
   defaultStudentCode?: string;
 }) {
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // const [creating, setCreating] = useState(false); // Replaced by flowStage
   const [flowStage, setFlowStage] = useState<
     "form" | "creating" | "uploading" | "success"
@@ -112,7 +113,9 @@ export function CreateTicketModal({
   const selectedStudent = useMemo(() => {
     if (!selectedStudentId) return null;
     const wanted = String(selectedStudentId);
-    return students.find((s) => String((s.code as any) ?? s.id) === wanted) ?? null;
+    return (
+      students.find((s) => String((s.code as any) ?? s.id) === wanted) ?? null
+    );
   }, [students, selectedStudentId]);
 
   const normalizeEstado = (value?: string | null) => {
@@ -155,6 +158,7 @@ export function CreateTicketModal({
       setNewLink("");
       setFiles([]);
       setFlowStage("form");
+      setLoadError(null);
 
       // Load data
       loadData();
@@ -164,6 +168,7 @@ export function CreateTicketModal({
   async function loadData() {
     try {
       setLoading(true);
+      setLoadError(null);
       const [studentsData, typesData] = await Promise.all([
         getAllStudents(),
         getOpciones("tipo_ticket"),
@@ -175,8 +180,9 @@ export function CreateTicketModal({
       if (defaultStudentCode) {
         const wanted = String(defaultStudentCode);
         const found =
-          studentsData.find((s) => String((s.code as any) ?? s.id) === wanted) ??
-          null;
+          studentsData.find(
+            (s) => String((s.code as any) ?? s.id) === wanted,
+          ) ?? null;
         if (found) {
           setSelectedStudentId(String((found.code as any) ?? found.id));
           setSelectedStudentMeta({
@@ -189,6 +195,7 @@ export function CreateTicketModal({
       }
     } catch (e) {
       console.error(e);
+      setLoadError("Ocurrió un error al cargar los usuarios");
       toast({ title: "Error cargando datos iniciales" });
     } finally {
       setLoading(false);
@@ -202,7 +209,7 @@ export function CreateTicketModal({
       .filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
-          (s.code && String(s.code).toLowerCase().includes(q))
+          (s.code && String(s.code).toLowerCase().includes(q)),
       )
       .slice(0, 10);
   }, [students, studentQuery]);
@@ -218,7 +225,7 @@ export function CreateTicketModal({
     if (!incoming?.length) return;
     setFiles((prev) => {
       const seen = new Set(
-        prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`)
+        prev.map((f) => `${f.name}|${f.size}|${f.lastModified}`),
       );
       const next = [...prev];
       for (const f of incoming) {
@@ -261,17 +268,17 @@ export function CreateTicketModal({
         const ext = (file.type || "").includes("png")
           ? "png"
           : (file.type || "").includes("jpeg")
-          ? "jpg"
-          : (file.type || "").includes("webp")
-          ? "webp"
-          : "bin";
+            ? "jpg"
+            : (file.type || "").includes("webp")
+              ? "webp"
+              : "bin";
         const ts = new Date()
           .toISOString()
           .replace(/[:.]/g, "-")
           .replace("T", "_")
           .slice(0, 19);
         pastedFiles.push(
-          new File([file], `pasted-${ts}.${ext}`, { type: file.type })
+          new File([file], `pasted-${ts}.${ext}`, { type: file.type }),
         );
       } else {
         pastedFiles.push(file);
@@ -328,11 +335,11 @@ export function CreateTicketModal({
           ) {
             try {
               console.log(
-                `[CreateTicket] Convirtiendo audio a MP3: ${fileToUpload.name}`
+                `[CreateTicket] Convirtiendo audio a MP3: ${fileToUpload.name}`,
               );
               fileToUpload = await convertBlobToMp3(fileToUpload);
               console.log(
-                `[CreateTicket] Audio convertido: ${fileToUpload.name}`
+                `[CreateTicket] Audio convertido: ${fileToUpload.name}`,
               );
             } catch (e) {
               console.error("Error converting audio to mp3 in modal", e);
@@ -456,17 +463,40 @@ export function CreateTicketModal({
           {/* Alumno Search */}
           <div className="space-y-2">
             <Label>Alumno</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <Input
-                placeholder="Buscar por nombre..."
-                value={studentQuery}
-                onChange={(e) => setStudentQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
+            {loading ? (
+              <div className="flex items-center gap-2 h-10 px-3 border rounded-md bg-slate-50 dark:bg-zinc-800">
+                <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                <span className="text-sm text-slate-500 dark:text-slate-400">
+                  Cargando usuarios...
+                </span>
+              </div>
+            ) : loadError ? (
+              <div className="flex items-center justify-between gap-2 h-10 px-3 border border-red-200 rounded-md bg-red-50 dark:bg-red-900/20 dark:border-red-800">
+                <span className="text-sm text-red-600 dark:text-red-400">
+                  {loadError}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-red-600 hover:bg-red-100 dark:text-red-400 dark:hover:bg-red-900/30"
+                  onClick={() => loadData()}
+                >
+                  Reintentar
+                </Button>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  placeholder="Buscar por nombre..."
+                  value={studentQuery}
+                  onChange={(e) => setStudentQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            )}
 
-            {studentQuery && !selectedStudentId && (
+            {!loading && studentQuery && !selectedStudentId && (
               <div className="border rounded-md p-2 bg-slate-50 max-h-40 overflow-y-auto space-y-1 mt-1">
                 {filteredStudents.length === 0 ? (
                   <div className="text-sm text-slate-500 px-2">
@@ -511,15 +541,13 @@ export function CreateTicketModal({
                 )}
               </div>
             )}
-            {selectedStudentId && (
+            {!loading && selectedStudentId && (
               <div className="flex items-center justify-between bg-violet-50 text-violet-700 px-3 py-2 rounded-md text-sm border border-violet-200 mt-1">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span>
                       Alumno seleccionado:{" "}
-                      <strong>
-                        {selected?.name || studentQuery || "—"}
-                      </strong>
+                      <strong>{selected?.name || studentQuery || "—"}</strong>
                     </span>
                     {selected?.state ? (
                       <Badge
