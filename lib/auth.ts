@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "coach" | "student" | "equipo" | "atc";
+export type UserRole = "admin" | "coach" | "student" | "equipo" | "atc" | "sales";
 
 export interface User {
   id: string | number;
@@ -31,14 +31,19 @@ class AuthService {
     const isStudent = (s: string) => ["alumno", "student", "cliente", "usuario", "user"].includes(s);
     const isAtc = (s: string) =>
       ["atc", "support", "soporte", "atencion", "atención", "customer_support"].includes(s);
+    const isSales = (s: string) => ["sales", "ventas", "venta"].includes(s);
 
+    // Priorizar rol específico sobre tipo genérico
     if (isAdmin(v)) return "admin";
+    if (isSales(v)) return "sales";
     if (isEquipo(v)) return "equipo";
     if (isAtc(v)) return "atc";
     if (isStudent(v)) return "student";
     if (v === "coach") return "coach";
 
+    // Solo si no hay rol válido, revisar el tipo
     if (isAdmin(t)) return "admin";
+    if (isSales(t)) return "sales";
     if (isEquipo(t)) return "equipo";
     if (isAtc(t)) return "atc";
     if (isStudent(t)) return "student";

@@ -59,6 +59,10 @@ export function useAuth() {
           router.push("/admin/tickets-board");
           break
         }
+        case "sales": {
+          router.push("/admin/crm");
+          break
+        }
         case "student": {
           const code = (user as any)?.codigo || "RvA_5Qxoezfxlxxj"
           router.push(`/admin/alumnos/${code}`)

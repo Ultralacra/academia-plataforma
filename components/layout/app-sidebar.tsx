@@ -119,7 +119,16 @@ export function AppSidebar() {
     // Detectar si estamos en la ficha de un alumno para añadir acceso directo al chat del alumno
     const alumnoMatch = pathname?.match(/^\/admin\/alumnos\/([^\/?#]+)/i);
     const alumnoCodeInPath = alumnoMatch?.[1];
-    switch (user?.role) {
+    const userRole = (user?.role || "").toLowerCase();
+    
+    // Debug: verificar el rol del usuario
+    console.log("User role:", user?.role, "Normalized:", userRole);
+    
+    switch (userRole) {
+      case "sales":
+        return [
+          { title: "CRM", url: "/admin/crm", icon: Users },
+        ] as MenuItem[];
       case "admin":
         return (
           alumnoCodeInPath
@@ -416,24 +425,27 @@ export function AppSidebar() {
       default:
         return [] as MenuItem[];
     }
-  }, [user?.role, (user as any)?.codigo, pathname]);
+  }, [user, pathname]);
 
+  const userRoleForLabel = (user?.role || "").toLowerCase();
   const roleLabel =
-    user?.role === "admin"
+    userRoleForLabel === "admin"
       ? "Administrador"
-      : user?.role === "coach"
+      : userRoleForLabel === "coach"
       ? "Coach"
-      : user?.role === "equipo"
+      : userRoleForLabel === "equipo"
       ? "Equipo"
-      : user?.role === "student"
+      : userRoleForLabel === "student"
       ? "Estudiante"
+      : userRoleForLabel === "sales"
+      ? "Ventas"
       : "Invitado";
 
   const [metricsOpen, setMetricsOpen] = useState(false);
   const roleKey = (
-    user?.role === "student"
+    userRoleForLabel === "student"
       ? "alumno"
-      : user?.role === "coach" || user?.role === "equipo"
+      : userRoleForLabel === "coach" || userRoleForLabel === "equipo"
       ? "coach"
       : "admin"
   ) as "admin" | "alumno" | "coach";
