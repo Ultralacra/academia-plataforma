@@ -20,6 +20,7 @@ import {
   ChevronsUpDown,
   Check,
   X,
+  Loader2,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -51,7 +52,7 @@ import Link from "next/link";
 
 function getUniqueCoaches(students: StudentRow[]) {
   const allCoaches = students.flatMap(
-    (s) => s.teamMembers?.map((tm) => tm.name) ?? []
+    (s) => s.teamMembers?.map((tm) => tm.name) ?? [],
   );
   return Array.from(new Set(allCoaches)).filter(Boolean).sort();
 }
@@ -60,7 +61,7 @@ function getCoachMetrics(students: StudentRow[]) {
   const total = students.length;
   const fases = ["F1", "F2", "F3", "F4", "F5"];
   const porFase = Object.fromEntries(
-    fases.map((f) => [f, students.filter((s) => s.stage === f).length])
+    fases.map((f) => [f, students.filter((s) => s.stage === f).length]),
   );
   const tickets = students.reduce((acc, s) => acc + (s.ticketsCount ?? 0), 0);
   return { total, porFase, tickets };
@@ -127,19 +128,22 @@ export default function StudentsContent() {
   const [coaches, setCoaches] = useState<CoachTeam[]>([]);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedCoachName, setSelectedCoachName] = useState<string | null>(
-    null
+    null,
   );
   const [coachCodes, setCoachCodes] = useState<Set<string> | null>(null);
   const [coachCodesLoading, setCoachCodesLoading] = useState(false);
   const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
+  const [serverPage, setServerPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [filterStage, setFilterStage] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<string | null>(null);
   const [openCoach, setOpenCoach] = useState(false);
 
   // Edición inline de fase (etapa)
   const [etapas, setEtapas] = useState<Array<{ key: string; value: string }>>(
-    []
+    [],
   );
   const [openStageFor, setOpenStageFor] = useState<string | null>(null);
   const [updatingStageFor, setUpdatingStageFor] = useState<string | null>(null);
@@ -167,27 +171,50 @@ export default function StudentsContent() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        // 1) Traer alumnos (1000) y aplicar filtro local por search
-        const items = await getAllStudents();
-        const filtered = search
-          ? items.filter(
-              (s) =>
-                (s.name ?? "").toLowerCase().includes(search.toLowerCase()) ||
-                (s.code ?? "").toLowerCase().includes(search.toLowerCase()) ||
-                (s.state ?? "").toLowerCase().includes(search.toLowerCase())
-            )
-          : items;
-        setAll(filtered);
+        // 1) Traer alumnos paginados (25) desde backend. Si hay búsqueda, usar `search` del endpoint.
+        const items = await getAllStudents({
+          page: 1,
+          pageSize: PAGE_SIZE,
+          search: search.trim() ? search.trim() : undefined,
+        });
+        setAll(items);
         setPage(1);
+        setServerPage(1);
+        setHasMore((items?.length ?? 0) >= PAGE_SIZE);
       } catch (e) {
         console.error(e);
         setAll([]);
+        setHasMore(false);
       } finally {
         setLoading(false);
       }
     }, 350);
     return () => clearTimeout(t);
   }, [search]);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const next = serverPage + 1;
+      const items = await getAllStudents({
+        page: next,
+        pageSize: PAGE_SIZE,
+        search: search.trim() ? search.trim() : undefined,
+      });
+      setAll((prev) => [...prev, ...(items ?? [])]);
+      setServerPage(next);
+      setHasMore((items?.length ?? 0) >= PAGE_SIZE);
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Ocurrió un error al cargar más estudiantes",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   // Cargar coaches desde equipos (una sola vez)
   useEffect(() => {
@@ -200,7 +227,7 @@ export default function StudentsContent() {
       } catch (e) {
         // fallback: inferir de alumnos
         const inferred = getUniqueCoaches(all).map(
-          (name, idx) => ({ id: idx + 1, name } as CoachTeam)
+          (name, idx) => ({ id: idx + 1, name }) as CoachTeam,
         );
         setCoaches(inferred);
       }
@@ -250,7 +277,7 @@ export default function StudentsContent() {
   useEffect(() => {
     if (coaches.length === 0 && !loading && all.length > 0) {
       const inferred = getUniqueCoaches(all).map(
-        (name, idx) => ({ id: idx + 1, name } as CoachTeam)
+        (name, idx) => ({ id: idx + 1, name }) as CoachTeam,
       );
       setCoaches(inferred);
     }
@@ -321,8 +348,8 @@ export default function StudentsContent() {
     const name = selectedCoachName ?? "";
     return all.filter((s) =>
       s.teamMembers?.some(
-        (tm) => (tm.name ?? "").toLowerCase() === name.toLowerCase()
-      )
+        (tm) => (tm.name ?? "").toLowerCase() === name.toLowerCase(),
+      ),
     );
   }, [all, coach, selectedCoachId, selectedCoachName, coachCodes]);
 
@@ -333,11 +360,11 @@ export default function StudentsContent() {
       new Set(
         (filtered || [])
           .map((s) => (s.stage && s.stage.trim() ? s.stage.trim() : ""))
-          .filter(Boolean)
-      )
+          .filter(Boolean),
+      ),
     ).sort();
     const hasNoStage = (filtered || []).some(
-      (s) => !s.stage || !String(s.stage).trim()
+      (s) => !s.stage || !String(s.stage).trim(),
     );
     return hasNoStage ? [NO_STAGE, ...base] : base;
   }, [filtered]);
@@ -349,13 +376,13 @@ export default function StudentsContent() {
       new Set(
         (filtered || [])
           .map((s) =>
-            s.state && String(s.state).trim() ? String(s.state).trim() : ""
+            s.state && String(s.state).trim() ? String(s.state).trim() : "",
           )
-          .filter(Boolean)
-      )
+          .filter(Boolean),
+      ),
     ).sort();
     const hasNoState = (filtered || []).some(
-      (s) => !s.state || !String(s.state).trim()
+      (s) => !s.state || !String(s.state).trim(),
     );
     return hasNoState ? [NO_STATE, ...base] : base;
   }, [filtered]);
@@ -413,7 +440,7 @@ export default function StudentsContent() {
   };
 
   const hasFilters = Boolean(
-    search || coach !== "todos" || filterStage || filterState
+    search || coach !== "todos" || filterStage || filterState,
   );
 
   async function handleCreateStudent() {
@@ -482,7 +509,7 @@ export default function StudentsContent() {
                     coach !== "todos"
                       ? "border-blue-500/60 ring-1 ring-blue-500/10"
                       : "border-border hover:border-gray-300 dark:hover:border-gray-600",
-                    "focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-500"
+                    "focus-visible:ring-2 focus-visible:ring-blue-500/30 focus-visible:border-blue-500",
                   )}
                 >
                   <span className="flex min-w-0 items-center gap-2">
@@ -491,7 +518,7 @@ export default function StudentsContent() {
                         "h-4 w-4 flex-shrink-0",
                         coach !== "todos"
                           ? "text-blue-600 dark:text-blue-400"
-                          : "text-muted-foreground"
+                          : "text-muted-foreground",
                       )}
                     />
                     <span
@@ -499,7 +526,7 @@ export default function StudentsContent() {
                         "truncate",
                         coach !== "todos"
                           ? "text-foreground"
-                          : "text-muted-foreground"
+                          : "text-muted-foreground",
                       )}
                     >
                       {selectedCoachName || "Seleccionar coach"}
@@ -753,7 +780,7 @@ export default function StudentsContent() {
                       "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
                       active
                         ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-card text-foreground border-border hover:bg-accent"
+                        : "bg-card text-foreground border-border hover:bg-accent",
                     )}
                   >
                     {it}
@@ -791,7 +818,7 @@ export default function StudentsContent() {
                       "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
                       active
                         ? "bg-blue-600 text-white border-blue-600"
-                        : "bg-card text-foreground border-border hover:bg-accent"
+                        : "bg-card text-foreground border-border hover:bg-accent",
                     )}
                   >
                     {it}
@@ -860,7 +887,7 @@ export default function StudentsContent() {
                       {student.code ? (
                         <Link
                           href={`/admin/alumnos/${encodeURIComponent(
-                            student.code
+                            student.code,
                           )}`}
                           className="hover:text-blue-600 dark:hover:text-blue-400"
                         >
@@ -876,20 +903,20 @@ export default function StudentsContent() {
                         const classes = v.includes("COPY")
                           ? "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300"
                           : v.includes("F1")
-                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
-                          : v.includes("F2")
-                          ? "bg-lime-100 dark:bg-lime-500/20 text-lime-800 dark:text-lime-300"
-                          : v.includes("F3")
-                          ? "bg-cyan-100 dark:bg-cyan-500/20 text-cyan-800 dark:text-cyan-300"
-                          : v.includes("F4")
-                          ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
-                          : v.includes("F5")
-                          ? "bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300"
-                          : v.includes("ONBOARD")
-                          ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-800 dark:text-indigo-300"
-                          : v
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-muted text-muted-foreground";
+                            ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300"
+                            : v.includes("F2")
+                              ? "bg-lime-100 dark:bg-lime-500/20 text-lime-800 dark:text-lime-300"
+                              : v.includes("F3")
+                                ? "bg-cyan-100 dark:bg-cyan-500/20 text-cyan-800 dark:text-cyan-300"
+                                : v.includes("F4")
+                                  ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
+                                  : v.includes("F5")
+                                    ? "bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300"
+                                    : v.includes("ONBOARD")
+                                      ? "bg-indigo-100 dark:bg-indigo-500/20 text-indigo-800 dark:text-indigo-300"
+                                      : v
+                                        ? "bg-muted text-muted-foreground"
+                                        : "bg-muted text-muted-foreground";
 
                         const canEdit = Boolean(student.code);
                         const code = String(student.code || "");
@@ -923,7 +950,7 @@ export default function StudentsContent() {
                                   "inline-flex items-center gap-1 rounded hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
                                   isUpdating
                                     ? "opacity-60 cursor-not-allowed"
-                                    : "cursor-pointer"
+                                    : "cursor-pointer",
                                 )}
                               >
                                 {badge}
@@ -973,13 +1000,13 @@ export default function StudentsContent() {
                                             prev.map((r) =>
                                               r.code === student.code
                                                 ? { ...r, stage: nextKey }
-                                                : r
-                                            )
+                                                : r,
+                                            ),
                                           );
                                           try {
                                             await updateClientEtapa(
                                               code,
-                                              nextKey
+                                              nextKey,
                                             );
                                             toast({
                                               title: "Fase actualizada",
@@ -992,14 +1019,14 @@ export default function StudentsContent() {
                                               prev.map((r) =>
                                                 r.code === student.code
                                                   ? { ...r, stage: prevStage }
-                                                  : r
-                                              )
+                                                  : r,
+                                              ),
                                             );
                                             toast({
                                               title: "Error",
                                               description: getSpanishApiError(
                                                 e,
-                                                "No se pudo actualizar la fase"
+                                                "No se pudo actualizar la fase",
                                               ),
                                               variant: "destructive",
                                             });
@@ -1032,12 +1059,12 @@ export default function StudentsContent() {
                         const classes = v.includes("INACTIVO")
                           ? "bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300"
                           : v.includes("ACTIVO")
-                          ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
-                          : v.includes("PROCESO")
-                          ? "bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-300"
-                          : v
-                          ? "bg-muted text-muted-foreground"
-                          : "bg-muted text-muted-foreground";
+                            ? "bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300"
+                            : v.includes("PROCESO")
+                              ? "bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-300"
+                              : v
+                                ? "bg-muted text-muted-foreground"
+                                : "bg-muted text-muted-foreground";
                         return (
                           <span
                             className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${classes}`}
@@ -1092,6 +1119,24 @@ export default function StudentsContent() {
               >
                 Siguiente
               </button>
+              {hasMore && page >= totalPages && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                >
+                  {loadingMore ? (
+                    <span className="inline-flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cargando...
+                    </span>
+                  ) : (
+                    "Cargar más"
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         )}

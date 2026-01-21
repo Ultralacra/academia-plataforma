@@ -240,9 +240,22 @@ function cleanClientName(raw: any): string {
   return s || '—';
 }
 
-// 1) Alumnos — usa el endpoint directo con page=1&pageSize=1000
-export async function getAllStudents(): Promise<StudentRow[]> {
-  const path = '/client/get/clients?page=1&pageSize=1000';
+// 1) Alumnos — endpoint con soporte de paginación y búsqueda
+export async function getAllStudents(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}): Promise<StudentRow[]> {
+  const page = params?.page ?? 1;
+  const pageSize = params?.pageSize ?? 1000;
+  const search = String(params?.search ?? "").trim();
+
+  const qs = new URLSearchParams();
+  qs.set("page", String(page));
+  qs.set("pageSize", String(pageSize));
+  if (search) qs.set("search", search);
+
+  const path = `/client/get/clients?${qs.toString()}`;
   const json = await fetchJson<any>(path);
 
   // Puede venir como { data: [...] } o { clients: { data: [...] } } o { getClients: { data: [...] } }

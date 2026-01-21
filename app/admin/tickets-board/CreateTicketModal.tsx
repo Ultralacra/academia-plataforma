@@ -81,6 +81,10 @@ export function CreateTicketModal({
 
   // Data state
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [types, setTypes] = useState<{ key: string; value: string }[]>([]);
   const [inactivePaymentConfirmOpen, setInactivePaymentConfirmOpen] =
     useState(false);
@@ -170,10 +174,12 @@ export function CreateTicketModal({
       setLoading(true);
       setLoadError(null);
       const [studentsData, typesData] = await Promise.all([
-        getAllStudents(),
+        getAllStudents({ page: 1, pageSize: PAGE_SIZE }),
         getOpciones("tipo_ticket"),
       ]);
       setStudents(studentsData);
+      setPage(1);
+      setHasMore((studentsData?.length ?? 0) >= PAGE_SIZE);
       setTypes(typesData);
       if (typesData.length > 0) setType(typesData[0].key);
 
@@ -199,6 +205,30 @@ export function CreateTicketModal({
       toast({ title: "Error cargando datos iniciales" });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadMoreStudents() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const nextPage = page + 1;
+      const more = await getAllStudents({
+        page: nextPage,
+        pageSize: PAGE_SIZE,
+      });
+      if (more && more.length > 0) {
+        setStudents((prev) => [...prev, ...more]);
+        setPage(nextPage);
+        setHasMore(more.length >= PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error(err);
+      setLoadError("Ocurrió un error al cargar más usuarios");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -538,6 +568,24 @@ export function CreateTicketModal({
                       </div>
                     </div>
                   ))
+                )}
+                {hasMore && (
+                  <div className="flex items-center justify-center mt-2">
+                    {loadingMore ? (
+                      <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Cargando...</span>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => loadMoreStudents()}
+                      >
+                        Cargar más
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
