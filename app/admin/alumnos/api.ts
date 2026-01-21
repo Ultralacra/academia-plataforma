@@ -241,11 +241,19 @@ function cleanClientName(raw: any): string {
 }
 
 // 1) Alumnos — endpoint con soporte de paginación y búsqueda
-export async function getAllStudents(params?: {
+export type StudentsPagedResult = {
+  items: StudentRow[];
+  total: number | null;
+  page: number;
+  pageSize: number;
+  totalPages: number | null;
+};
+
+export async function getAllStudentsPaged(params?: {
   page?: number;
   pageSize?: number;
   search?: string;
-}): Promise<StudentRow[]> {
+}): Promise<StudentsPagedResult> {
   const page = params?.page ?? 1;
   const pageSize = params?.pageSize ?? 1000;
   const search = String(params?.search ?? "").trim();
@@ -286,7 +294,27 @@ export async function getAllStudents(params?: {
     ticketsCount: r.tickets ?? r.ticketsCount ?? null,
   }));
 
-  return items;
+  const toNumOrNull = (v: any): number | null => {
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  return {
+    items,
+    total: toNumOrNull(json?.total ?? json?.clients?.total ?? json?.getClients?.total),
+    page: toNumOrNull(json?.page) ?? page,
+    pageSize: toNumOrNull(json?.pageSize) ?? pageSize,
+    totalPages: toNumOrNull(json?.totalPages),
+  };
+}
+
+export async function getAllStudents(params?: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}): Promise<StudentRow[]> {
+  const res = await getAllStudentsPaged(params);
+  return res.items;
 }
 
 // 2) Coaches (desde equipos)
@@ -652,6 +680,27 @@ export async function updateClientEtapa(clientCode: string, etapa: string): Prom
   const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
   const fd = new FormData();
   fd.set('etapa', String(etapa));
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: 'PUT',
+    body: fd,
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  return await res.json().catch(() => ({}));
+}
+
+// Actualizar fecha de ingreso del cliente (usa FormData por compatibilidad con backend)
+// Enviar como key: ingreso (YYYY-MM-DD o ISO). Si viene vacío, se limpia.
+export async function updateClientIngreso(clientCode: string, ingreso: string | null): Promise<any> {
+  if (!clientCode) throw new Error('clientCode requerido');
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
+  const fd = new FormData();
+  fd.set('ingreso', String(ingreso ?? ''));
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const res = await fetch(url, {
     method: 'PUT',

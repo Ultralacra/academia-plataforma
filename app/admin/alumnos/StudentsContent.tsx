@@ -4,11 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { StudentRow, CoachTeam } from "./api";
 import {
   getAllStudents,
+  getAllStudentsPaged,
   getAllCoachesFromTeams,
   getCoachStudentsByCoachId,
   createStudent,
   getOpciones,
   updateClientEtapa,
+  updateClientIngreso,
 } from "./api";
 import {
   Search,
@@ -21,6 +23,7 @@ import {
   Check,
   X,
   Loader2,
+  Pencil,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -85,18 +88,39 @@ const clean = (s: string) => s.replaceAll(".", "");
 
 function fmtDateSmart(value?: string | null) {
   if (!value) return "—";
-  if (value.includes("T")) {
-    const d = new Date(value);
-    if (!isNaN(d.getTime())) return clean(dtDateTime.format(d));
+  // Si viene ISO con T, extraer solo la parte de fecha para evitar desfase
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+  if (isoMatch) {
+    // formato YYYY-MM-DD sin parsear como Date (evita timezone)
+    const [, y, m, d] = isoMatch;
+    const fake = new Date(Number(y), Number(m) - 1, Number(d));
+    return clean(dtDateOnly.format(fake));
   }
+  // Si es YYYY-MM-DD puro
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) {
-    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-    return clean(dtDateOnly.format(d));
+    const fake = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return clean(dtDateOnly.format(fake));
   }
+  // Fallback: parsear como Date normal
   const d = new Date(value);
   if (!isNaN(d.getTime())) return clean(dtDateTime.format(d));
   return value;
+}
+
+function toDateInputValue(value?: string | null) {
+  if (!value) return "";
+  // Si viene ISO YYYY-MM-DDTHH:mm:ss.sssZ → extraer YYYY-MM-DD
+  const iso = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  // Fallback: parsear fecha y formatear
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+  // Usar UTC para evitar desfase de timezone
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 function stageRank(stage?: string | null) {
@@ -137,9 +161,21 @@ export default function StudentsContent() {
   const [serverPage, setServerPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [serverTotal, setServerTotal] = useState<number | null>(null);
+  const [serverTotalPages, setServerTotalPages] = useState<number | null>(null);
   const [filterStage, setFilterStage] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<string | null>(null);
   const [openCoach, setOpenCoach] = useState(false);
+
+  // Edición de fecha de ingreso
+  const [openIngreso, setOpenIngreso] = useState(false);
+  const [ingresoFor, setIngresoFor] = useState<{
+    code: string;
+    name: string;
+    prev: string | null;
+  } | null>(null);
+  const [draftIngreso, setDraftIngreso] = useState("");
+  const [savingIngreso, setSavingIngreso] = useState(false);
 
   // Edición inline de fase (etapa)
   const [etapas, setEtapas] = useState<Array<{ key: string; value: string }>>(
@@ -171,20 +207,29 @@ export default function StudentsContent() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        // 1) Traer alumnos paginados (25) desde backend. Si hay búsqueda, usar `search` del endpoint.
-        const items = await getAllStudents({
+        // 1) Traer alumnos paginados (25) desde backend. Si hay búsqueda, usar `search` del endpoint..
+        const res = await getAllStudentsPaged({
           page: 1,
           pageSize: PAGE_SIZE,
           search: search.trim() ? search.trim() : undefined,
         });
+        const items = res.items;
         setAll(items);
         setPage(1);
         setServerPage(1);
-        setHasMore((items?.length ?? 0) >= PAGE_SIZE);
+        setServerTotal(res.total ?? null);
+        setServerTotalPages(res.totalPages ?? null);
+        if (res.totalPages != null) {
+          setHasMore((res.page ?? 1) < res.totalPages);
+        } else {
+          setHasMore((items?.length ?? 0) >= PAGE_SIZE);
+        }
       } catch (e) {
         console.error(e);
         setAll([]);
         setHasMore(false);
+        setServerTotal(null);
+        setServerTotalPages(null);
       } finally {
         setLoading(false);
       }
@@ -197,14 +242,21 @@ export default function StudentsContent() {
     setLoadingMore(true);
     try {
       const next = serverPage + 1;
-      const items = await getAllStudents({
+      const res = await getAllStudentsPaged({
         page: next,
         pageSize: PAGE_SIZE,
         search: search.trim() ? search.trim() : undefined,
       });
+      const items = res.items;
       setAll((prev) => [...prev, ...(items ?? [])]);
       setServerPage(next);
-      setHasMore((items?.length ?? 0) >= PAGE_SIZE);
+      setServerTotal(res.total ?? serverTotal ?? null);
+      setServerTotalPages(res.totalPages ?? serverTotalPages ?? null);
+      if (res.totalPages != null) {
+        setHasMore(next < res.totalPages);
+      } else {
+        setHasMore((items?.length ?? 0) >= PAGE_SIZE);
+      }
     } catch (e) {
       console.error(e);
       toast({
@@ -213,6 +265,60 @@ export default function StudentsContent() {
       });
     } finally {
       setLoadingMore(false);
+    }
+  };
+
+  const openIngresoEditor = (student: StudentRow) => {
+    if (!student.code) return;
+    setIngresoFor({
+      code: String(student.code),
+      name: String(student.name ?? ""),
+      prev: student.joinDate ?? null,
+    });
+    setDraftIngreso(toDateInputValue(student.joinDate));
+    setOpenIngreso(true);
+  };
+
+  const saveIngreso = async () => {
+    if (!ingresoFor) return;
+    const code = ingresoFor.code;
+    const next = draftIngreso.trim() ? draftIngreso.trim() : null;
+
+    setSavingIngreso(true);
+    // optimista
+    setAll((prev) =>
+      prev.map((r) =>
+        String(r.code ?? "") === code ? { ...r, joinDate: next } : r,
+      ),
+    );
+
+    try {
+      await updateClientIngreso(code, next);
+      toast({
+        title: "Ingreso actualizado",
+        description: `${ingresoFor.name} → ${fmtDateSmart(next)}`,
+      });
+      setOpenIngreso(false);
+      setIngresoFor(null);
+    } catch (e) {
+      // rollback
+      setAll((prev) =>
+        prev.map((r) =>
+          String(r.code ?? "") === code
+            ? { ...r, joinDate: ingresoFor.prev }
+            : r,
+        ),
+      );
+      toast({
+        title: "Error",
+        description: getSpanishApiError(
+          e,
+          "No se pudo actualizar la fecha de ingreso",
+        ),
+        variant: "destructive",
+      });
+    } finally {
+      setSavingIngreso(false);
     }
   };
 
@@ -495,6 +601,62 @@ export default function StudentsContent() {
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
+      <Dialog
+        open={openIngreso}
+        onOpenChange={(o) => {
+          setOpenIngreso(o);
+          if (!o) setIngresoFor(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar fecha de ingreso</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="text-sm">
+              <span className="text-muted-foreground">Alumno:</span>{" "}
+              <span className="font-medium">{ingresoFor?.name ?? "—"}</span>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Ingreso</label>
+              <Input
+                type="date"
+                value={draftIngreso}
+                onChange={(e) => setDraftIngreso(e.target.value)}
+              />
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDraftIngreso("")}
+              className="h-9"
+              disabled={savingIngreso}
+            >
+              Limpiar fecha
+            </Button>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setOpenIngreso(false)}
+              disabled={savingIngreso}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={saveIngreso}
+              disabled={savingIngreso || !ingresoFor}
+            >
+              {savingIngreso ? "Guardando…" : "Guardar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div className="mb-6 space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="w-full sm:w-80">
@@ -723,6 +885,19 @@ export default function StudentsContent() {
                   <Users className="h-4 w-4" />
                   Alumnos asignados
                 </div>
+                {(() => {
+                  const loaded = all.length;
+                  const st = serverTotal ?? loaded;
+                  if (!st) return null;
+                  return (
+                    <div className="text-[11px] text-muted-foreground -mt-1 mb-2">
+                      Cargados {Math.min(loaded, st)} de {st}
+                      {serverTotalPages != null
+                        ? ` · API ${serverPage}/${serverTotalPages}`
+                        : ""}
+                    </div>
+                  );
+                })()}
                 <p className="text-3xl font-bold text-foreground">
                   {coachMetrics.total}
                 </p>
@@ -1075,7 +1250,31 @@ export default function StudentsContent() {
                       })()}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
-                      {fmtDateSmart(student.joinDate)}
+                      <div className="flex items-center gap-2">
+                        <span>{fmtDateSmart(student.joinDate)}</span>
+                        {student.code && (
+                          <button
+                            type="button"
+                            onClick={() => openIngresoEditor(student)}
+                            disabled={
+                              savingIngreso &&
+                              ingresoFor?.code === String(student.code)
+                            }
+                            title="Editar fecha de ingreso"
+                            aria-label={`Editar ingreso de ${student.name}`}
+                            className={cn(
+                              "inline-flex items-center justify-center rounded p-1",
+                              "hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/30",
+                              savingIngreso &&
+                                ingresoFor?.code === String(student.code)
+                                ? "opacity-60 cursor-not-allowed"
+                                : "cursor-pointer",
+                            )}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {fmtDateSmart(student.lastActivity)}
@@ -1096,11 +1295,7 @@ export default function StudentsContent() {
         </div>
 
         {!loading && pageItems.length > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border/50 bg-muted/30 text-xs">
-            <div className="text-muted-foreground">
-              Mostrando {(page - 1) * PAGE_SIZE + 1} a{" "}
-              {Math.min(page * PAGE_SIZE, total)} de {total} estudiantes
-            </div>
+          <div className="flex items-center justify-end px-4 py-3 border-t border-border/50 bg-muted/30 text-xs">
             <div className="flex items-center gap-2">
               <button
                 className="px-2 py-1 rounded-md border border-border bg-card disabled:opacity-40 hover:bg-accent"

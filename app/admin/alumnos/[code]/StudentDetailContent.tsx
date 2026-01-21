@@ -260,14 +260,32 @@ export default function StudentDetailContent({ code }: { code: string }) {
   // Función para guardar fecha de ingreso (preparado para backend)
   async function handleSaveIngreso() {
     if (!tempIngreso) return;
-    // TODO: Enviar al backend cuando esté listo
-    // await apiFetch(`/client/update/client/${code}`, { method: 'PUT', body: formData con 'ingreso' });
-    setPIngreso(tempIngreso);
-    setEditIngresoOpen(false);
-    toast({
-      title: "Fecha actualizada",
-      description: "La fecha de ingreso se ha actualizado localmente.",
-    });
+    try {
+      // Importar updateClientIngreso desde ../api
+      const { updateClientIngreso } = await import("../api");
+      await updateClientIngreso(code, tempIngreso);
+      setPIngreso(tempIngreso);
+      // Actualizar el objeto student también
+      if (student) {
+        setStudent({
+          ...student,
+          ingreso: tempIngreso,
+          raw: { ...student.raw, ingreso: tempIngreso },
+        });
+      }
+      setEditIngresoOpen(false);
+      toast({
+        title: "Fecha de ingreso actualizada",
+        description: `Guardado: ${tempIngreso}`,
+      });
+    } catch (e: any) {
+      console.error(e);
+      toast({
+        title: "Error al actualizar fecha de ingreso",
+        description: String(e?.message ?? e ?? ""),
+        variant: "destructive",
+      });
+    }
   }
 
   // Cargar historial de etapas una vez y bajo demanda
