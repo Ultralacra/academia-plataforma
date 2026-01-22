@@ -36,6 +36,12 @@ import { getPublicAppOrigin } from "@/lib/public-app-origin";
 
 type EditorMode = "create" | "edit";
 
+function genEventCodigo() {
+  const year = new Date().getFullYear();
+  const rand = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `EVT-${year}-${rand}`;
+}
+
 function toDateInputValue(value: unknown) {
   const s = typeof value === "string" ? value : "";
   if (!s) return "";
@@ -104,10 +110,6 @@ export function EventsOriginsManager() {
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
 
-  const [configMedium, setConfigMedium] = React.useState("");
-  const [configSource, setConfigSource] = React.useState("");
-  const [configCampaignId, setConfigCampaignId] = React.useState("");
-
   const resetForm = React.useCallback(() => {
     setCodigo("");
     setEventCodigo("");
@@ -115,9 +117,6 @@ export function EventsOriginsManager() {
     setDescription("");
     setStartDate("");
     setEndDate("");
-    setConfigMedium("");
-    setConfigSource("");
-    setConfigCampaignId("");
   }, []);
 
   const load = React.useCallback(async () => {
@@ -169,6 +168,7 @@ export function EventsOriginsManager() {
   const openCreate = React.useCallback(() => {
     setMode("create");
     resetForm();
+    setEventCodigo(genEventCodigo());
     setOpen(true);
   }, [resetForm]);
 
@@ -184,11 +184,6 @@ export function EventsOriginsManager() {
       setDescription(String(origin?.description ?? ""));
       setStartDate(toDateInputValue((origin as any)?.start_date));
       setEndDate(toDateInputValue((origin as any)?.end_date));
-
-      const cfg: any = (origin as any)?.config;
-      setConfigMedium(String(cfg?.medium ?? ""));
-      setConfigSource(String(cfg?.source ?? ""));
-      setConfigCampaignId(String(cfg?.campaign_id ?? ""));
     } catch (err: any) {
       toast({
         title: "Error",
@@ -205,22 +200,15 @@ export function EventsOriginsManager() {
     const base: any = {
       name: name || undefined,
       description: description || undefined,
-      event_codigo: String(eventCodigo || "").trim() || undefined,
+      event_codigo:
+        String(eventCodigo || "")
+          .trim()
+          .toUpperCase() || genEventCodigo(),
       start_date: toIsoStart(startDate),
       end_date: toIsoEnd(endDate),
     };
 
-    const config: any = {
-      medium: String(configMedium || "").trim() || undefined,
-      source: String(configSource || "").trim() || undefined,
-      campaign_id: String(configCampaignId || "").trim() || undefined,
-    };
-    const hasConfig = Object.values(config).some((v) => v !== undefined);
-
-    const payload = {
-      ...base,
-      ...(hasConfig ? { config } : {}),
-    };
+    const payload = { ...base };
 
     setSaving(true);
     try {
@@ -244,9 +232,6 @@ export function EventsOriginsManager() {
     }
   }, [
     codigo,
-    configCampaignId,
-    configMedium,
-    configSource,
     description,
     endDate,
     eventCodigo,
@@ -329,16 +314,16 @@ export function EventsOriginsManager() {
                           variant="outline"
                           onClick={async () => {
                             const eventCodigoRow = String(
-                              (it as any)?.event_codigo || ""
+                              (it as any)?.event_codigo || "",
                             ).trim();
                             const fallbackCodigo = String(
-                              it?.codigo || ""
+                              it?.codigo || "",
                             ).trim();
                             const code = eventCodigoRow || fallbackCodigo;
                             if (!code) return;
                             const origin = getPublicAppOrigin();
                             const url = `${origin}/booking/${encodeURIComponent(
-                              code
+                              code,
                             )}`;
                             try {
                               await navigator.clipboard.writeText(url);
@@ -353,7 +338,7 @@ export function EventsOriginsManager() {
                           }}
                           disabled={
                             !String(
-                              (it as any)?.event_codigo || it?.codigo || ""
+                              (it as any)?.event_codigo || it?.codigo || "",
                             ).trim()
                           }
                           aria-label="Copiar link del formulario"
@@ -364,7 +349,7 @@ export function EventsOriginsManager() {
                         <Button asChild size="sm" variant="outline">
                           <Link
                             href={`/admin/crm/campanas/${encodeURIComponent(
-                              String(it.codigo)
+                              String(it.codigo),
                             )}`}
                           >
                             Detalle
@@ -405,11 +390,22 @@ export function EventsOriginsManager() {
 
             <div className="grid gap-1">
               <Label>Event código (event_codigo)</Label>
-              <Input
-                value={eventCodigo}
-                onChange={(e) => setEventCodigo(e.target.value)}
-                placeholder="EVT-2026-01"
-              />
+              <div className="flex gap-2">
+                <Input
+                  value={eventCodigo}
+                  onChange={(e) => setEventCodigo(e.target.value.toUpperCase())}
+                  placeholder="EVT-2026-XXXXXX"
+                />
+                {mode === "create" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setEventCodigo(genEventCodigo())}
+                  >
+                    Generar
+                  </Button>
+                ) : null}
+              </div>
             </div>
 
             <div className="grid gap-1">
@@ -445,40 +441,8 @@ export function EventsOriginsManager() {
               />
             </div>
 
-            <div className="grid gap-3">
-              <Label>Config</Label>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    medium
-                  </Label>
-                  <Input
-                    value={configMedium}
-                    onChange={(e) => setConfigMedium(e.target.value)}
-                    placeholder="web"
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    source
-                  </Label>
-                  <Input
-                    value={configSource}
-                    onChange={(e) => setConfigSource(e.target.value)}
-                    placeholder="google_ads"
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    campaign_id
-                  </Label>
-                  <Input
-                    value={configCampaignId}
-                    onChange={(e) => setConfigCampaignId(e.target.value)}
-                    placeholder="gads-1234"
-                  />
-                </div>
-              </div>
+            <div className="text-xs text-muted-foreground">
+              Nota: ya no pedimos Config (medium/source/campaign_id) al crear.
             </div>
           </div>
 

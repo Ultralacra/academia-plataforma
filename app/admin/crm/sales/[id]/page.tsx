@@ -78,16 +78,72 @@ function Content({ id }: { id: string }) {
         .filter(Boolean)
     : [];
 
+  const toDateInput = (v: any) => {
+    const s = typeof v === "string" ? v.trim() : "";
+    if (!s) return "";
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  };
+
+  const pay: any = salePayload?.payment ?? {};
+  const plan0: any = Array.isArray(pay?.plans) ? pay.plans[0] : null;
+  const ex: any = pay?.exception_2_installments ?? null;
+  const stdScheduleRaw: any =
+    pay?.installments_schedule ??
+    pay?.installments?.schedule ??
+    pay?.installments?.items ??
+    plan0?.installments?.schedule ??
+    plan0?.installments?.items ??
+    null;
+  const stdScheduleList = Array.isArray(stdScheduleRaw) ? stdScheduleRaw : [];
+  const customRaw: any = pay?.custom_installments ?? plan0?.custom_installments;
+  const customList = Array.isArray(customRaw) ? customRaw : [];
+  const paymentCustomInstallments = customList.length
+    ? customList.map((it: any, idx: number) => ({
+        id: String(it?.id || `ci_${idx}`),
+        amount: String(it?.amount ?? ""),
+        dueDate: toDateInput(it?.due_date ?? it?.dueDate ?? ""),
+      }))
+    : ex
+      ? [
+          {
+            id: "ci_0",
+            amount: String(ex?.first_amount ?? ""),
+            dueDate: "",
+          },
+          {
+            id: "ci_1",
+            amount: String(ex?.second_amount ?? ""),
+            dueDate: toDateInput(ex?.second_due_date ?? ""),
+          },
+        ]
+      : [];
+
   const initial: Partial<CloseSaleInput> = {
     fullName: salePayload?.name || "",
     email: salePayload?.email || "",
     phone: salePayload?.phone || "",
     program: salePayload?.program || "",
     bonuses: rawBonuses,
-    paymentMode: salePayload?.payment?.mode || "",
-    paymentAmount: salePayload?.payment?.amount || "",
-    paymentPlatform: salePayload?.payment?.platform || "hotmart",
-    nextChargeDate: salePayload?.payment?.nextChargeDate || "",
+    paymentMode: pay?.mode || "",
+    paymentAmount: pay?.amount || "",
+    paymentPaidAmount: pay?.paid_amount || "",
+    paymentPlanType: pay?.plan_type || undefined,
+    paymentInstallmentsCount: pay?.installments?.count ?? undefined,
+    paymentInstallmentAmount: pay?.installments?.amount ?? undefined,
+    paymentInstallmentsSchedule: stdScheduleList.length
+      ? stdScheduleList.map((it: any, idx: number) => ({
+          id: String(it?.id || `si_${idx}`),
+          amount: String(it?.amount ?? ""),
+          dueDate: toDateInput(it?.due_date ?? it?.dueDate ?? ""),
+        }))
+      : [],
+    paymentFirstInstallmentAmount: ex?.first_amount ?? undefined,
+    paymentSecondInstallmentAmount: ex?.second_amount ?? undefined,
+    paymentSecondInstallmentDate: toDateInput(ex?.second_due_date ?? ""),
+    paymentCustomInstallments,
+    paymentExceptionNotes: ex?.notes ?? plan0?.notes ?? "",
+    paymentPlatform: pay?.platform || "hotmart",
+    nextChargeDate: pay?.nextChargeDate || "",
     contractThirdParty: !!salePayload?.contract?.thirdParty,
     notes: salePayload?.notes || "",
     status: salePayload?.status || undefined,

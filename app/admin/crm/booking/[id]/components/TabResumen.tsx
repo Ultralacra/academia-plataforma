@@ -85,6 +85,30 @@ export function TabResumen({
               </div>
               <div className="grid grid-cols-1 gap-2 text-sm">
                 <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Evento</span>
+                  <span className="truncate">
+                    {p.event_codigo || p.eventCodigo || "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Origen</span>
+                  <span className="truncate">
+                    {p.origin_codigo || p.origen || p.originCodigo || "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Agenda</span>
+                  <span className="truncate">
+                    {p.selected_date || p.selectedDate
+                      ? `${fmtDate(p.selected_date || p.selectedDate)}${
+                          p.selected_time || p.selectedTime
+                            ? ` · ${String(p.selected_time || p.selectedTime)}`
+                            : ""
+                        }`
+                      : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">Instagram</span>
                   <span className="truncate">
                     {p.instagram_user || p.instagramUser || "—"}
@@ -139,7 +163,7 @@ export function TabResumen({
                   </span>
                   <span className="truncate">
                     {callOutcomeLabel(
-                      p.call_outcome || p.callOutcome || p.call?.outcome
+                      p.call_outcome || p.callOutcome || p.call?.outcome,
                     )}
                   </span>
                 </div>
@@ -161,7 +185,7 @@ export function TabResumen({
                       ? "—"
                       : String(
                           p.payment_amount ??
-                            effectiveSalePayload?.payment?.amount
+                            effectiveSalePayload?.payment?.amount,
                         )}
                   </span>
                 </div>
@@ -172,7 +196,7 @@ export function TabResumen({
                     effectiveSalePayload?.payment?.nextChargeDate
                       ? fmtDate(
                           p.next_charge_date ||
-                            effectiveSalePayload?.payment?.nextChargeDate
+                            effectiveSalePayload?.payment?.nextChargeDate,
                         )
                       : "—"}
                   </span>
@@ -187,8 +211,8 @@ export function TabResumen({
                     {Array.isArray(p.reminders)
                       ? p.reminders.length
                       : Array.isArray(p.call?.reminders)
-                      ? p.call.reminders.length
-                      : 0}
+                        ? p.call.reminders.length
+                        : 0}
                   </span>
                 </div>
               </div>
@@ -217,11 +241,19 @@ export function TabResumen({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="new">Nuevo</SelectItem>
+                    <SelectItem value="new">Lead Nuevo</SelectItem>
                     <SelectItem value="contacted">Contactado</SelectItem>
-                    <SelectItem value="qualified">Calificado</SelectItem>
-                    <SelectItem value="won">Ganado</SelectItem>
-                    <SelectItem value="lost">Perdido</SelectItem>
+                    <SelectItem value="appointment_attended">
+                      Cita Atendida
+                    </SelectItem>
+                    <SelectItem value="active_follow_up">
+                      Seguimiento Activo
+                    </SelectItem>
+                    <SelectItem value="pending_payment">
+                      Pendiente de Pago
+                    </SelectItem>
+                    <SelectItem value="won">Cerrado – Ganado</SelectItem>
+                    <SelectItem value="lost">Cerrado – Perdido</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -241,17 +273,72 @@ export function TabResumen({
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__empty__">—</SelectItem>
-                    <SelectItem value="interesado">Interesado</SelectItem>
-                    <SelectItem value="en_seguimiento">
-                      En seguimiento
+
+                    <SelectItem value="conversation_started">
+                      Contactado · Conversación iniciada
                     </SelectItem>
-                    <SelectItem value="pendiente_pago">
-                      Pendiente de pago
+                    <SelectItem value="appointment_scheduled">
+                      Contactado · Cita agendada
                     </SelectItem>
-                    <SelectItem value="reagendar">Reagendar</SelectItem>
-                    <SelectItem value="no_responde">No responde</SelectItem>
-                    <SelectItem value="no_califica">No califica</SelectItem>
-                    <SelectItem value="no_interesado">No interesado</SelectItem>
+                    <SelectItem value="appointment_cancelled">
+                      Contactado · Cita cancelada
+                    </SelectItem>
+                    <SelectItem value="appointment_rescheduled">
+                      Contactado · Cita reprogramada
+                    </SelectItem>
+                    <SelectItem value="no_response">
+                      Contactado · No responde
+                    </SelectItem>
+                    <SelectItem value="no_show">
+                      Contactado · No show
+                    </SelectItem>
+
+                    <SelectItem value="diagnosis_done">
+                      Cita atendida · Diagnóstico realizado
+                    </SelectItem>
+                    <SelectItem value="offer_not_presented">
+                      Cita atendida · Oferta no presentada
+                    </SelectItem>
+                    <SelectItem value="offer_presented">
+                      Cita atendida · Oferta presentada
+                    </SelectItem>
+
+                    <SelectItem value="interested_evaluating">
+                      Seguimiento · Interesado (evaluando)
+                    </SelectItem>
+                    <SelectItem value="waiting_response">
+                      Seguimiento · Esperando respuesta
+                    </SelectItem>
+                    <SelectItem value="waiting_approval">
+                      Seguimiento · Esperando aprobación
+                    </SelectItem>
+                    <SelectItem value="cold">Seguimiento · Frío</SelectItem>
+
+                    <SelectItem value="reserve">
+                      Pendiente de pago · Reserva
+                    </SelectItem>
+                    <SelectItem value="card_unlocking">
+                      Pendiente de pago · Gestión de tarjetas/límite
+                    </SelectItem>
+                    <SelectItem value="getting_money">
+                      Pendiente de pago · Consiguiendo el dinero
+                    </SelectItem>
+
+                    <SelectItem value="lost_price_too_high">
+                      Perdido · Precio muy alto
+                    </SelectItem>
+                    <SelectItem value="lost_no_urgency">
+                      Perdido · No tiene urgencia
+                    </SelectItem>
+                    <SelectItem value="lost_trust">
+                      Perdido · Confianza
+                    </SelectItem>
+                    <SelectItem value="lost_external_decision">
+                      Perdido · Decisión externa
+                    </SelectItem>
+                    <SelectItem value="lost_no_response_exhausted">
+                      Perdido · No respondió (proceso agotado)
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -33,7 +33,6 @@ interface TabVentaProps {
   setDraft: React.Dispatch<
     React.SetStateAction<Partial<CloseSaleInput> | null>
   >;
-  setPaymentProof: React.Dispatch<React.SetStateAction<any>>;
   setSaleDraftPayload: React.Dispatch<React.SetStateAction<any>>;
 }
 
@@ -45,7 +44,6 @@ export function TabVenta({
   hasReserva,
   reserveAmountRaw,
   setDraft,
-  setPaymentProof,
   setSaleDraftPayload,
 }: TabVentaProps) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
@@ -98,7 +96,6 @@ export function TabVenta({
           autoSave={false}
           persistMode="local"
           onChange={(f: CloseSaleInput) => setDraft({ ...f })}
-          onPaymentProofChange={setPaymentProof}
           onSalePayloadChange={setSaleDraftPayload}
           onDone={() => {
             toast({

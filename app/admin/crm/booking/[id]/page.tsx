@@ -33,7 +33,7 @@ function Content({ id }: { id: string }) {
   const [loading, setLoading] = React.useState(true);
   const [record, setRecord] = React.useState<any | null>(null);
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
-    null
+    null,
   );
   // Congelamos los valores iniciales del formulario para evitar loops.
   // Motivo: `draft` se actualiza con cada tecla para la vista previa; si `initial`
@@ -41,20 +41,12 @@ function Content({ id }: { id: string }) {
   const [frozenSaleInitial, setFrozenSaleInitial] =
     React.useState<Partial<CloseSaleInput> | null>(null);
   const [saleDraftPayload, setSaleDraftPayload] = React.useState<any | null>(
-    null
+    null,
   );
-  const [paymentProof, setPaymentProof] = React.useState<{
-    dataUrl: string;
-    name?: string;
-    type?: string;
-    size?: number;
-  } | null>(null);
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [snapshotSaving, setSnapshotSaving] = React.useState(false);
 
-  // Guardado temporal en navegador (localStorage)
-  // Backend desactivado por ahora.
-  void createLeadSnapshot;
+  // Guardado en navegador (localStorage) como fallback.
   const localStorageKey = React.useMemo(() => `crm:booking:${id}`, [id]);
   const hydratedRef = React.useRef<string | null>(null);
   const didHydrateFromLocalStorageRef = React.useRef(false);
@@ -69,7 +61,6 @@ function Content({ id }: { id: string }) {
       if (parsed?.draft) setDraft(parsed.draft);
       if (parsed?.saleDraftPayload)
         setSaleDraftPayload(parsed.saleDraftPayload);
-      if (parsed?.paymentProof) setPaymentProof(parsed.paymentProof);
     } catch {}
   }, [localStorageKey]);
 
@@ -91,13 +82,12 @@ function Content({ id }: { id: string }) {
           record,
           draft,
           saleDraftPayload,
-          paymentProof,
         };
         localStorage.setItem(localStorageKey, JSON.stringify(next));
       } catch {}
     }, 250);
     return () => window.clearTimeout(t);
-  }, [draft, localStorageKey, paymentProof, record, saleDraftPayload]);
+  }, [draft, localStorageKey, record, saleDraftPayload]);
 
   const applyRecordPatch = React.useCallback((patch: Record<string, any>) => {
     setRecord((prev: any | null) => {
@@ -216,7 +206,7 @@ function Content({ id }: { id: string }) {
         if (!silent) setLoading(false);
       }
     },
-    [hydrateFromLocalStorage, id]
+    [hydrateFromLocalStorage, id],
   );
 
   const toLeadIsoDateOrNull = (v?: string | null) => {
@@ -247,7 +237,7 @@ function Content({ id }: { id: string }) {
         payment_amount: d.paymentAmount ?? undefined,
         payment_platform: (d as any).paymentPlatform ?? undefined,
         next_charge_date: toLeadIsoDateOrNull(
-          (d as any).nextChargeDate ?? null
+          (d as any).nextChargeDate ?? null,
         ),
         payment_has_reserve: (d as any).paymentHasReserve ? 1 : 0,
         payment_reserve_amount: (d as any).paymentHasReserve
@@ -273,10 +263,10 @@ function Content({ id }: { id: string }) {
           (d as any).contractCompanyCountry ?? undefined,
       } as Record<string, any>;
     },
-    []
+    [],
   );
 
-  const buildSnapshotContext = () => {
+  const buildSnapshotContext = React.useCallback(() => {
     if (!record) return null;
 
     const p = (leadForUi as any) || (record as any) || {};
@@ -290,14 +280,21 @@ function Content({ id }: { id: string }) {
       if (
         v === "new" ||
         v === "contacted" ||
-        v === "qualified" ||
+        v === "appointment_attended" ||
+        v === "active_follow_up" ||
+        v === "pending_payment" ||
         v === "won" ||
         v === "lost"
       )
         return v;
       if (v === "nuevo") return "new";
       if (v === "contactado") return "contacted";
-      if (v === "calificado") return "qualified";
+      if (v === "cita atendida" || v === "cita_atendida")
+        return "appointment_attended";
+      if (v === "seguimiento activo" || v === "seguimiento_activo")
+        return "active_follow_up";
+      if (v === "pendiente de pago" || v === "pendiente_pago")
+        return "pending_payment";
       if (v === "ganado") return "won";
       if (v === "perdido") return "lost";
       return "new";
@@ -305,12 +302,14 @@ function Content({ id }: { id: string }) {
 
     const leadStatus = normalizeLeadStatus(p.status);
     const leadStageLabel = (() => {
-      if (leadStatus === "new") return "Nuevo";
+      if (leadStatus === "new") return "Lead Nuevo";
       if (leadStatus === "contacted") return "Contactado";
-      if (leadStatus === "qualified") return "Calificado";
-      if (leadStatus === "won") return "Ganado";
-      if (leadStatus === "lost") return "Perdido";
-      return "Nuevo";
+      if (leadStatus === "appointment_attended") return "Cita Atendida";
+      if (leadStatus === "active_follow_up") return "Seguimiento Activo";
+      if (leadStatus === "pending_payment") return "Pendiente de Pago";
+      if (leadStatus === "won") return "Cerrado – Ganado";
+      if (leadStatus === "lost") return "Cerrado – Perdido";
+      return "Lead Nuevo";
     })();
 
     const leadDisposition = String(p.lead_disposition ?? "");
@@ -342,7 +341,7 @@ function Content({ id }: { id: string }) {
     })();
 
     const salePaymentMode = String(
-      salePayload?.payment?.mode || ""
+      salePayload?.payment?.mode || "",
     ).toLowerCase();
     const draftPaymentHasReserve = (draft as any)?.paymentHasReserve;
     const draftPaymentReserveAmount = (draft as any)?.paymentReserveAmount;
@@ -384,21 +383,86 @@ function Content({ id }: { id: string }) {
     const entityId = String(entityIdRaw ?? id).trim();
 
     const leadStageOptions = [
-      { value: "new", label: "Nuevo" },
+      { value: "new", label: "Lead Nuevo" },
       { value: "contacted", label: "Contactado" },
-      { value: "qualified", label: "Calificado" },
-      { value: "won", label: "Ganado" },
-      { value: "lost", label: "Perdido" },
+      { value: "appointment_attended", label: "Cita Atendida" },
+      { value: "active_follow_up", label: "Seguimiento Activo" },
+      { value: "pending_payment", label: "Pendiente de Pago" },
+      { value: "won", label: "Cerrado – Ganado" },
+      { value: "lost", label: "Cerrado – Perdido" },
     ];
     const leadDispositionOptions = [
       { value: "", label: "—" },
-      { value: "interesado", label: "Interesado" },
-      { value: "en_seguimiento", label: "En seguimiento" },
-      { value: "pendiente_pago", label: "Pendiente de pago" },
-      { value: "reagendar", label: "Reagendar" },
-      { value: "no_responde", label: "No responde" },
-      { value: "no_califica", label: "No califica" },
-      { value: "no_interesado", label: "No interesado" },
+
+      // 2. Contactado
+      {
+        value: "conversation_started",
+        label: "Contactado · Conversación iniciada",
+      },
+      { value: "appointment_scheduled", label: "Contactado · Cita agendada" },
+      { value: "appointment_cancelled", label: "Contactado · Cita cancelada" },
+      {
+        value: "appointment_rescheduled",
+        label: "Contactado · Cita reprogramada",
+      },
+      { value: "no_response", label: "Contactado · No responde" },
+      { value: "no_show", label: "Contactado · No show" },
+
+      // 3. Cita atendida
+      {
+        value: "diagnosis_done",
+        label: "Cita atendida · Diagnóstico realizado",
+      },
+      {
+        value: "offer_not_presented",
+        label: "Cita atendida · Oferta no presentada",
+      },
+      {
+        value: "offer_presented",
+        label: "Cita atendida · Oferta presentada",
+      },
+
+      // 4. Seguimiento activo
+      {
+        value: "interested_evaluating",
+        label: "Seguimiento · Interesado (evaluando)",
+      },
+      { value: "waiting_response", label: "Seguimiento · Esperando respuesta" },
+      {
+        value: "waiting_approval",
+        label: "Seguimiento · Esperando aprobación",
+      },
+      { value: "cold", label: "Seguimiento · Frío" },
+
+      // 5. Pendiente de pago
+      { value: "reserve", label: "Pendiente de pago · Reserva" },
+      {
+        value: "card_unlocking",
+        label: "Pendiente de pago · Gestión de tarjetas/límite",
+      },
+      {
+        value: "getting_money",
+        label: "Pendiente de pago · Consiguiendo el dinero",
+      },
+
+      // 7. Cerrado – Perdido (motivo obligatorio)
+      {
+        value: "lost_price_too_high",
+        label: "Perdido · Precio muy alto",
+      },
+      {
+        value: "lost_no_urgency",
+        label: "Perdido · No tiene urgencia",
+      },
+      { value: "lost_trust", label: "Perdido · Confianza" },
+      {
+        value: "lost_external_decision",
+        label: "Perdido · Decisión externa",
+      },
+      {
+        value: "lost_no_response_exhausted",
+        label: "Perdido · No respondió (proceso agotado)",
+      },
     ];
 
     return {
@@ -418,7 +482,7 @@ function Content({ id }: { id: string }) {
       leadStageOptions,
       leadDispositionOptions,
     } as const;
-  };
+  }, [draft, id, leadForUi, record]);
 
   const handleSaveChanges = React.useCallback(async () => {
     if (!record) return;
@@ -426,6 +490,20 @@ function Content({ id }: { id: string }) {
 
     const ctx = buildSnapshotContext();
     if (!ctx) return;
+
+    // Validación: si está en Perdido, es obligatorio registrar un solo motivo.
+    if (String(ctx.leadStatus || "").toLowerCase() === "lost") {
+      const motive = String(ctx.leadDisposition || "").trim();
+      if (!motive) {
+        toast({
+          title: "Falta el motivo",
+          description:
+            "Para guardar un lead en Perdido debes seleccionar un motivo (en la pestaña Notas).",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
 
     // Nota: algunos leads no traen source_entity_id/entity_id desde el backend.
     // En ese caso usamos el `codigo` del lead como fallback para source.entity_id.
@@ -439,16 +517,6 @@ function Content({ id }: { id: string }) {
       ...(leadForUi || record),
       ...(patch || {}),
       ...(saleDraftPayload ? { sale: saleDraftPayload } : {}),
-      ...(paymentProof
-        ? {
-            payment_proof: {
-              dataUrl: paymentProof.dataUrl,
-              name: paymentProof.name,
-              type: paymentProof.type,
-              size: paymentProof.size,
-            },
-          }
-        : {}),
     };
 
     setSnapshotSaving(true);
@@ -507,8 +575,16 @@ function Content({ id }: { id: string }) {
         draft: draft ?? undefined,
       };
 
-      // Guardado backend desactivado temporalmente.
-      // await createLeadSnapshot({ codigo: id, source: {...}, snapshot })
+      await createLeadSnapshot({
+        codigo: id,
+        source: {
+          record_id: ctx.recordId,
+          entity: ctx.entity,
+          entity_id: ctx.entityId,
+        },
+        snapshot,
+      });
+
       try {
         const next = {
           version: 1,
@@ -516,32 +592,49 @@ function Content({ id }: { id: string }) {
           record,
           draft,
           saleDraftPayload,
-          paymentProof,
           last_snapshot: snapshot,
         };
         localStorage.setItem(localStorageKey, JSON.stringify(next));
       } catch {}
 
+      try {
+        await load({ silent: true });
+      } catch {}
+
       toast({
-        title: "Guardado local",
-        description: "Se guardó en tu navegador (localStorage).",
+        title: "Guardado",
+        description: "Se guardó el snapshot y se actualizó el lead.",
       });
     } catch (err: any) {
+      try {
+        const next = {
+          version: 1,
+          saved_at: new Date().toISOString(),
+          record,
+          draft,
+          saleDraftPayload,
+        };
+        localStorage.setItem(localStorageKey, JSON.stringify(next));
+      } catch {}
+
       toast({
         title: "Error",
-        description: err?.message || "No se pudieron guardar los cambios",
+        description:
+          err?.message ||
+          "No se pudo guardar en backend (se dejó un borrador local)",
         variant: "destructive",
       });
     } finally {
       setSnapshotSaving(false);
     }
   }, [
+    buildSnapshotContext,
+    load,
     draft,
     draftToLeadPatch,
     id,
     leadForUi,
     localStorageKey,
-    paymentProof,
     record,
     saleDraftPayload,
     snapshotSaving,
@@ -556,16 +649,23 @@ function Content({ id }: { id: string }) {
   // --- Derivados del lead/venta (hooks SIEMPRE se ejecutan, antes de returns) ---
   const p = React.useMemo(
     () => (leadForUi as any) || (record as any) || {},
-    [leadForUi, record]
+    [leadForUi, record],
   );
   const salePayload = React.useMemo(() => (p as any).sale || {}, [p]);
   const effectiveSalePayload = React.useMemo(
     () => saleDraftPayload || salePayload,
-    [saleDraftPayload, salePayload]
+    [saleDraftPayload, salePayload],
   );
 
   const initialBase: Partial<CloseSaleInput> = React.useMemo(() => {
     if (!record) return {} as any;
+
+    const toDateInput = (v: any) => {
+      const s = typeof v === "string" ? v.trim() : "";
+      if (!s) return "";
+      // soporta YYYY-MM-DD o ISO
+      return s.length >= 10 ? s.slice(0, 10) : s;
+    };
 
     const toBonusesArray = (v: any) => {
       if (Array.isArray(v)) return v;
@@ -577,35 +677,92 @@ function Content({ id }: { id: string }) {
       return [];
     };
 
+    const pay: any = salePayload?.payment ?? {};
+    const plan0: any = Array.isArray(pay?.plans) ? pay.plans[0] : null;
+    const ex: any =
+      pay?.exception_2_installments ?? pay?.exception2Installments ?? null;
+    const stdScheduleRaw: any =
+      pay?.installments_schedule ??
+      pay?.installments?.schedule ??
+      pay?.installments?.items ??
+      plan0?.installments?.schedule ??
+      plan0?.installments?.items ??
+      null;
+    const stdScheduleList = Array.isArray(stdScheduleRaw)
+      ? stdScheduleRaw
+      : [];
+    const customRaw: any =
+      pay?.custom_installments ?? plan0?.custom_installments ?? null;
+    const customList = Array.isArray(customRaw) ? customRaw : [];
+
+    const paymentCustomInstallments = customList.length
+      ? customList.map((it: any, idx: number) => ({
+          id: String(it?.id || `ci_${idx}`),
+          amount: String(it?.amount ?? ""),
+          dueDate: toDateInput(it?.due_date ?? it?.dueDate ?? ""),
+        }))
+      : ex
+        ? [
+            {
+              id: "ci_0",
+              amount: String(ex?.first_amount ?? ""),
+              dueDate: "",
+            },
+            {
+              id: "ci_1",
+              amount: String(ex?.second_amount ?? ""),
+              dueDate: toDateInput(ex?.second_due_date ?? ""),
+            },
+          ]
+        : [];
+
+    const paymentInstallmentsSchedule = stdScheduleList.length
+      ? stdScheduleList.map((it: any, idx: number) => ({
+          id: String(it?.id || `si_${idx}`),
+          amount: String(it?.amount ?? ""),
+          dueDate: toDateInput(it?.due_date ?? it?.dueDate ?? ""),
+        }))
+      : [];
+
     return {
       fullName: p.name || salePayload?.name || "",
       email: p.email || salePayload?.email || "",
       phone: p.phone || salePayload?.phone || "",
       program: salePayload?.program ?? "",
       bonuses: toBonusesArray(salePayload?.bonuses),
-      paymentMode: salePayload?.payment?.mode ?? "",
-      paymentAmount: salePayload?.payment?.amount ?? "",
+      paymentMode: pay?.mode ?? "",
+      paymentAmount: pay?.amount ?? "",
+      paymentPaidAmount: pay?.paid_amount ?? "",
+      paymentPlanType: pay?.plan_type ?? undefined,
+      paymentInstallmentsCount: pay?.installments?.count ?? undefined,
+      paymentInstallmentAmount: pay?.installments?.amount ?? undefined,
+      paymentInstallmentsSchedule,
+      paymentFirstInstallmentAmount: ex?.first_amount ?? undefined,
+      paymentSecondInstallmentAmount: ex?.second_amount ?? undefined,
+      paymentSecondInstallmentDate: toDateInput(ex?.second_due_date ?? ""),
+      paymentCustomInstallments,
+      paymentExceptionNotes: ex?.notes ?? plan0?.notes ?? "",
       paymentHasReserve: !!(
-        salePayload?.payment?.hasReserve ||
-        salePayload?.payment?.reserveAmount ||
-        salePayload?.payment?.reservationAmount ||
-        salePayload?.payment?.reserva ||
-        salePayload?.payment?.deposit ||
-        salePayload?.payment?.downPayment ||
-        salePayload?.payment?.anticipo ||
+        pay?.hasReserve ||
+        pay?.reserveAmount ||
+        pay?.reservationAmount ||
+        pay?.reserva ||
+        pay?.deposit ||
+        pay?.downPayment ||
+        pay?.anticipo ||
         /reserva|apartado|señ?a|anticipo/i.test(
-          String(salePayload?.payment?.mode || "").toLowerCase()
+          String(pay?.mode || "").toLowerCase(),
         )
       ),
-      paymentReserveAmount: (salePayload?.payment?.reserveAmount ??
-        salePayload?.payment?.reservationAmount ??
-        salePayload?.payment?.reserva ??
-        salePayload?.payment?.deposit ??
-        salePayload?.payment?.downPayment ??
-        salePayload?.payment?.anticipo ??
+      paymentReserveAmount: (pay?.reserveAmount ??
+        pay?.reservationAmount ??
+        pay?.reserva ??
+        pay?.deposit ??
+        pay?.downPayment ??
+        pay?.anticipo ??
         "") as any,
-      paymentPlatform: salePayload?.payment?.platform ?? "hotmart",
-      nextChargeDate: salePayload?.payment?.nextChargeDate ?? "",
+      paymentPlatform: pay?.platform ?? "hotmart",
+      nextChargeDate: pay?.nextChargeDate ?? "",
       contractThirdParty: !!salePayload?.contract?.thirdParty,
       contractPartyName: salePayload?.contract?.party?.name || p.name || "",
       contractPartyEmail: salePayload?.contract?.party?.email || p.email || "",
@@ -664,14 +821,21 @@ function Content({ id }: { id: string }) {
     if (
       v === "new" ||
       v === "contacted" ||
-      v === "qualified" ||
+      v === "appointment_attended" ||
+      v === "active_follow_up" ||
+      v === "pending_payment" ||
       v === "won" ||
       v === "lost"
     )
       return v;
     if (v === "nuevo") return "new";
     if (v === "contactado") return "contacted";
-    if (v === "calificado") return "qualified";
+    if (v === "cita atendida" || v === "cita_atendida")
+      return "appointment_attended";
+    if (v === "seguimiento activo" || v === "seguimiento_activo")
+      return "active_follow_up";
+    if (v === "pendiente de pago" || v === "pendiente_pago")
+      return "pending_payment";
     if (v === "ganado") return "won";
     if (v === "perdido") return "lost";
     return "new";
@@ -679,12 +843,14 @@ function Content({ id }: { id: string }) {
 
   const leadStatus = normalizeLeadStatus(p.status);
   const leadStageLabel = (() => {
-    if (leadStatus === "new") return "Nuevo";
+    if (leadStatus === "new") return "Lead Nuevo";
     if (leadStatus === "contacted") return "Contactado";
-    if (leadStatus === "qualified") return "Calificado";
-    if (leadStatus === "won") return "Ganado";
-    if (leadStatus === "lost") return "Perdido";
-    return "Nuevo";
+    if (leadStatus === "appointment_attended") return "Cita Atendida";
+    if (leadStatus === "active_follow_up") return "Seguimiento Activo";
+    if (leadStatus === "pending_payment") return "Pendiente de Pago";
+    if (leadStatus === "won") return "Cerrado – Ganado";
+    if (leadStatus === "lost") return "Cerrado – Perdido";
+    return "Lead Nuevo";
   })();
 
   const leadDisposition = String(p.lead_disposition ?? "");
@@ -716,7 +882,7 @@ function Content({ id }: { id: string }) {
   })();
 
   const salePaymentMode = String(
-    salePayload?.payment?.mode || ""
+    salePayload?.payment?.mode || "",
   ).toLowerCase();
   const draftPaymentHasReserve = (draft as any)?.paymentHasReserve;
   const draftPaymentReserveAmount = (draft as any)?.paymentReserveAmount;
@@ -791,13 +957,13 @@ function Content({ id }: { id: string }) {
   const bonusesList: string[] = Array.isArray((draft as any)?.bonuses)
     ? ((draft as any).bonuses as string[])
     : Array.isArray(initial?.bonuses)
-    ? (initial.bonuses as string[])
-    : [];
+      ? (initial.bonuses as string[])
+      : [];
 
   const planSummary = (() => {
     const plan0 = (effectiveSalePayload as any)?.payment?.plans?.[0];
     const type = String(
-      plan0?.type || (effectiveSalePayload as any)?.payment?.plan_type || ""
+      plan0?.type || (effectiveSalePayload as any)?.payment?.plan_type || "",
     )
       .trim()
       .toLowerCase();
@@ -874,11 +1040,11 @@ function Content({ id }: { id: string }) {
           <TabsTrigger value="resumen" className="text-xs sm:text-sm">
             Resumen
           </TabsTrigger>
-          <TabsTrigger value="seguimiento" className="text-xs sm:text-sm">
-            Seguimiento
-          </TabsTrigger>
           <TabsTrigger value="venta" className="text-xs sm:text-sm">
             Venta
+          </TabsTrigger>
+          <TabsTrigger value="seguimiento" className="text-xs sm:text-sm">
+            Seguimiento
           </TabsTrigger>
           <TabsTrigger value="notas" className="text-xs sm:text-sm">
             Notas
@@ -904,10 +1070,6 @@ function Content({ id }: { id: string }) {
           />
         </TabsContent>
 
-        <TabsContent value="seguimiento" className="mt-6">
-          <TabSeguimiento id={id} p={p} applyRecordPatch={applyRecordPatch} />
-        </TabsContent>
-
         <TabsContent value="venta" className="mt-6">
           <TabVenta
             id={id}
@@ -917,15 +1079,36 @@ function Content({ id }: { id: string }) {
             hasReserva={hasReserva}
             reserveAmountRaw={reserveAmountRaw}
             setDraft={setDraft}
-            setPaymentProof={setPaymentProof}
             setSaleDraftPayload={setSaleDraftPayload}
           />
         </TabsContent>
 
+        <TabsContent value="seguimiento" className="mt-6">
+          <TabSeguimiento id={id} p={p} applyRecordPatch={applyRecordPatch} />
+        </TabsContent>
+
         <TabsContent value="notas" className="mt-6">
-          <TabNotas p={p} />
+          <TabNotas p={p} user={user} applyRecordPatch={applyRecordPatch} />
         </TabsContent>
       </Tabs>
+
+      <div className="sticky bottom-0 z-40 -mx-6 mt-8 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/75">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-xs text-muted-foreground">
+            Los cambios se aplican al presionar "Guardar cambios".
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleSaveChanges}
+              disabled={snapshotSaving}
+              className="bg-teal-600 text-white border border-teal-700 hover:bg-teal-600 hover:text-white focus-visible:ring-teal-300"
+            >
+              {snapshotSaving ? "Guardando..." : "Guardar cambios"}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

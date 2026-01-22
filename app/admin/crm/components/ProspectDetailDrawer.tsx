@@ -34,6 +34,8 @@ import {
   CreditCard,
   Package,
   Settings,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 import { crmService } from "@/lib/crm-service";
 import { useAuth } from "@/hooks/use-auth";
@@ -105,7 +107,7 @@ export function ProspectDetailDrawer({
     try {
       const all = await listMetadata();
       const found = (all.items || []).find(
-        (r: any) => String(r?.entity_id) === String(prospectId)
+        (r: any) => String(r?.entity_id) === String(prospectId),
       );
       if (found) {
         setMeta(found as any);
@@ -130,9 +132,26 @@ export function ProspectDetailDrawer({
         <div className="flex flex-col h-full">
           <div className="border-b px-5 py-3 bg-gradient-to-r from-slate-50 to-white flex-shrink-0">
             <SheetHeader>
-              <SheetTitle className="text-base font-semibold">
-                Detalle de prospecto
-              </SheetTitle>
+              <div className="flex items-center justify-between">
+                <div>
+                  <SheetTitle className="text-base font-semibold">
+                    Detalle de prospecto
+                  </SheetTitle>
+                  <div className="text-sm text-muted-foreground mt-0.5">
+                    {core?.nombre ??
+                      (meta ? String((meta as any)?.payload?.name || "") : "")}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Cerrar
+                  </Button>
+                </div>
+              </div>
             </SheetHeader>
           </div>
           <div className="flex-1 overflow-y-auto bg-slate-50">
@@ -164,12 +183,12 @@ export function ProspectDetailDrawer({
                     <div className="bg-white rounded-lg border p-4">
                       <div className="space-y-3">
                         <div>
-                          <h3 className="text-lg font-semibold">
+                          <h3 className="text-lg font-semibold truncate">
                             {core.nombre}
                           </h3>
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-2 mt-2">
                             <Badge variant="outline" className="text-xs">
-                              {core.etapaPipeline}
+                              {core.etapaPipeline || "—"}
                             </Badge>
                             {core.score && (
                               <Badge variant="secondary" className="text-xs">
@@ -179,34 +198,34 @@ export function ProspectDetailDrawer({
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2 text-sm pt-2">
+                        <div className="grid grid-cols-2 gap-2 text-sm pt-3">
                           <div className="flex items-center gap-2 text-slate-600">
-                            <Mail className="h-3.5 w-3.5 flex-shrink-0" />
+                            <Mail className="h-4 w-4 flex-shrink-0" />
                             <span className="truncate">
                               {core.email || "—"}
                             </span>
                           </div>
                           <div className="flex items-center gap-2 text-slate-600">
-                            <Phone className="h-3.5 w-3.5 flex-shrink-0" />
+                            <Phone className="h-4 w-4 flex-shrink-0" />
                             <span className="truncate">
                               {core.telefono || "—"}
                             </span>
                           </div>
                           <div className="flex items-center gap-2 text-slate-600">
-                            <Tags className="h-3.5 w-3.5 flex-shrink-0" />
+                            <Tags className="h-4 w-4 flex-shrink-0" />
                             <span className="truncate">
                               {core.canalFuente || "—"}
                             </span>
                           </div>
                           <div className="flex items-center gap-2 text-slate-600">
-                            <Users className="h-3.5 w-3.5 flex-shrink-0" />
+                            <Users className="h-4 w-4 flex-shrink-0" />
                             <span className="truncate">
                               {core.ownerNombre || "—"}
                             </span>
                           </div>
                           {core.pais && (
                             <div className="flex items-center gap-2 text-slate-600 col-span-2">
-                              <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                              <MapPin className="h-4 w-4 flex-shrink-0" />
                               <span className="truncate">
                                 {core.pais}
                                 {core.ciudad ? ` · ${core.ciudad}` : ""}
@@ -255,7 +274,8 @@ export function ProspectDetailDrawer({
                           }
                         }}
                       >
-                        Pago confirmado
+                        <CreditCard className="mr-2" size={14} /> Pago
+                        confirmado
                       </Button>
                       <Button
                         size="sm"
@@ -265,7 +285,7 @@ export function ProspectDetailDrawer({
                           if (
                             crmService.sendContract(
                               core.id,
-                              `https://sign.example.com/${core.id}`
+                              `https://sign.example.com/${core.id}`,
                             )
                           ) {
                             toast({ title: "Contrato enviado" });
@@ -274,7 +294,7 @@ export function ProspectDetailDrawer({
                           }
                         }}
                       >
-                        Enviar contrato
+                        <FileText className="mr-2" size={14} /> Enviar contrato
                       </Button>
                       <Button
                         size="sm"
@@ -288,7 +308,7 @@ export function ProspectDetailDrawer({
                           }
                         }}
                       >
-                        Marcar firmado
+                        <Check className="mr-2" size={14} /> Marcar firmado
                       </Button>
                       <Button
                         size="sm"
@@ -302,7 +322,7 @@ export function ProspectDetailDrawer({
                           }
                         }}
                       >
-                        Activar acceso
+                        <Package className="mr-2" size={14} /> Activar acceso
                       </Button>
                       <Button
                         size="sm"
@@ -316,7 +336,7 @@ export function ProspectDetailDrawer({
                           }
                         }}
                       >
-                        Convertir a alumno
+                        <Users className="mr-2" size={14} /> Convertir a alumno
                       </Button>
                     </div>
                   </div>
@@ -341,12 +361,12 @@ export function ProspectDetailDrawer({
                     status === "won"
                       ? "bg-emerald-100 text-emerald-700"
                       : status === "lost"
-                      ? "bg-rose-100 text-rose-700"
-                      : status === "qualified"
-                      ? "bg-amber-100 text-amber-700"
-                      : status === "contacted"
-                      ? "bg-sky-100 text-sky-700"
-                      : "bg-slate-100 text-slate-700";
+                        ? "bg-rose-100 text-rose-700"
+                        : status === "qualified"
+                          ? "bg-amber-100 text-amber-700"
+                          : status === "contacted"
+                            ? "bg-sky-100 text-sky-700"
+                            : "bg-slate-100 text-slate-700";
                   const budget = p.monthlyBudget
                     ? String(p.monthlyBudget)
                     : null;
@@ -448,7 +468,9 @@ export function ProspectDetailDrawer({
                                       {p.name || meta.entity}
                                     </h3>
                                     <div className="flex items-center gap-2 mt-1">
-                                      <Badge className="capitalize text-xs">
+                                      <Badge
+                                        className={`capitalize text-xs ${statusColor}`}
+                                      >
                                         {String(p.status || "new")}
                                       </Badge>
                                     </div>
@@ -460,9 +482,9 @@ export function ProspectDetailDrawer({
                                     onClick={() => {
                                       window.open(
                                         `/admin/crm/sales/${encodeURIComponent(
-                                          String(meta.id)
+                                          String(meta.id),
                                         )}`,
-                                        "_blank"
+                                        "_blank",
                                       );
                                     }}
                                   >
@@ -542,7 +564,7 @@ export function ProspectDetailDrawer({
                                       pay.nextChargeDate
                                         ? String(pay.nextChargeDate).slice(
                                             0,
-                                            10
+                                            10,
                                           )
                                         : ""
                                     }
@@ -601,15 +623,15 @@ export function ProspectDetailDrawer({
                                       const list = Array.isArray(p.bonuses)
                                         ? (p.bonuses as string[])
                                         : p.bonuses
-                                        ? String(p.bonuses)
-                                            .split(",")
-                                            .map((s) => s.trim())
-                                            .filter(Boolean)
-                                        : [];
+                                          ? String(p.bonuses)
+                                              .split(",")
+                                              .map((s) => s.trim())
+                                              .filter(Boolean)
+                                          : [];
                                       if (!list || list.length === 0)
                                         return "—";
                                       const labels = list.map(
-                                        (k) => BONOS_BY_KEY[k]?.title || k
+                                        (k) => BONOS_BY_KEY[k]?.title || k,
                                       );
                                       return labels.join(", ");
                                     })()}
@@ -1121,9 +1143,9 @@ export function ProspectDetailDrawer({
                                     onClick={() => {
                                       window.open(
                                         `/admin/crm/sales/${encodeURIComponent(
-                                          String(meta.id)
+                                          String(meta.id),
                                         )}`,
-                                        "_blank"
+                                        "_blank",
                                       );
                                     }}
                                   >
@@ -1221,7 +1243,7 @@ export function ProspectDetailDrawer({
                                       pay.nextChargeDate
                                         ? String(pay.nextChargeDate).slice(
                                             0,
-                                            10
+                                            10,
                                           )
                                         : ""
                                     }
@@ -1415,7 +1437,7 @@ export function ProspectDetailDrawer({
                               const data = JSON.stringify(
                                 meta.payload,
                                 null,
-                                2
+                                2,
                               );
                               const blob = new Blob([data], {
                                 type: "application/json",

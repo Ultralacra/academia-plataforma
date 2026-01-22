@@ -87,6 +87,7 @@ function CrmContent() {
     telefono?: string;
     canal?: string;
     etapa: "Nuevo" | "Contactado" | "Calificado" | "Ganado" | "Perdido";
+    ownerCodigo?: string;
     pais?: string;
     ciudad?: string;
     tags?: string[];
@@ -145,7 +146,7 @@ function CrmContent() {
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityDay, setAvailabilityDay] = useState<Date>(
-    () => new Date()
+    () => new Date(),
   );
   const [availability, setAvailability] = useState<{
     google_email: string;
@@ -186,7 +187,7 @@ function CrmContent() {
       if (filterCodigo) {
         // Usar endpoint de leads por usuario
         const response = await apiFetch<{ data: Lead[] }>(
-          `/leads/user/${filterCodigo}`
+          `/leads/user/${filterCodigo}`,
         );
         items = response.data || [];
         setShowingMyLeads(true);
@@ -204,6 +205,7 @@ function CrmContent() {
         telefono: l.phone || undefined,
         canal: l.source || undefined,
         etapa: mapLeadStatusToEtapa(l.status),
+        ownerCodigo: l.owner_codigo ?? undefined,
         creado: l.created_at || undefined,
         actualizado: l.updated_at || undefined,
         remote: true,
@@ -411,7 +413,7 @@ function CrmContent() {
       0,
       0,
       0,
-      0
+      0,
     );
     const end = new Date(
       d.getFullYear(),
@@ -420,7 +422,7 @@ function CrmContent() {
       23,
       59,
       59,
-      999
+      999,
     );
     return { start, end };
   };
@@ -436,7 +438,7 @@ function CrmContent() {
       const current = new Date(
         start.getFullYear(),
         start.getMonth(),
-        start.getDate()
+        start.getDate(),
       );
       const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
 
@@ -478,7 +480,7 @@ function CrmContent() {
           !Number.isNaN(slot.start.getTime()) &&
           !Number.isNaN(slot.end.getTime()) &&
           slot.end >= dayStart &&
-          slot.start <= dayEnd
+          slot.start <= dayEnd,
       )
       .sort((a, b) => a.start.getTime() - b.start.getTime());
 
@@ -496,7 +498,7 @@ function CrmContent() {
       hourEnd.setHours(hour, 59, 59, 999);
 
       return busyForDay.some(
-        (slot) => slot.start < hourEnd && slot.end > hourStart
+        (slot) => slot.start < hourEnd && slot.end > hourStart,
       );
     };
 
@@ -508,7 +510,7 @@ function CrmContent() {
       hourEnd.setHours(hour + 1, 0, 0, 0);
 
       return busyForDay.filter(
-        (slot) => slot.start < hourEnd && slot.end > hourStart
+        (slot) => slot.start < hourEnd && slot.end > hourStart,
       );
     };
 
@@ -595,7 +597,7 @@ function CrmContent() {
                     {busyEvents.map((event, idx) => {
                       const startTime = event.start.toLocaleTimeString(
                         "es-ES",
-                        { hour: "2-digit", minute: "2-digit" }
+                        { hour: "2-digit", minute: "2-digit" },
                       );
                       const endTime = event.end.toLocaleTimeString("es-ES", {
                         hour: "2-digit",
@@ -662,6 +664,8 @@ function CrmContent() {
     useState<string>("all");
   // Owner eliminado de la tabla; mantenemos estado por compatibilidad UI pero podría retirarse luego.
   const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
+  const [createdFrom, setCreatedFrom] = useState<string>("");
+  const [createdTo, setCreatedTo] = useState<string>("");
   const [openCreate, setOpenCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
@@ -688,9 +692,24 @@ function CrmContent() {
         : true;
       const byEtapa = etapaFiltro === "all" ? true : p.etapa === etapaFiltro;
       const byCanal = canalFiltro === "all" ? true : p.canal === canalFiltro;
-      return hayQ && byEtapa && byCanal; // Owner filtrado removido
+      const byOwner =
+        ownerFiltro === "all" ? true : (p.ownerCodigo ?? "") === ownerFiltro;
+
+      const createdAtStr = p.creado ? String(p.creado) : "";
+      const createdAt = createdAtStr ? new Date(createdAtStr) : null;
+      const fromDate = createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
+      const toDate = createdTo ? new Date(`${createdTo}T23:59:59`) : null;
+      const byCreated =
+        !fromDate && !toDate
+          ? true
+          : createdAt instanceof Date && !Number.isNaN(createdAt.getTime())
+            ? (!fromDate || createdAt >= fromDate) &&
+              (!toDate || createdAt <= toDate)
+            : false;
+
+      return hayQ && byEtapa && byCanal && byOwner && byCreated;
     });
-  }, [q, etapaFiltro, canalFiltro, ownerFiltro, rows]);
+  }, [q, etapaFiltro, canalFiltro, ownerFiltro, createdFrom, createdTo, rows]);
 
   // Métricas desde rows (metadata) en vez de mock
   const gmFromRows = useMemo<CrmGlobalMetrics>(() => {
@@ -765,7 +784,7 @@ function CrmContent() {
   const canales = useMemo(
     () =>
       Array.from(new Set(rows.map((r) => r.canal).filter(Boolean))) as string[],
-    [rows]
+    [rows],
   );
 
   // Mapeo de ID de origen a nombre
@@ -774,7 +793,24 @@ function CrmContent() {
     const origin = leadOrigins.find((o) => o.codigo === originId);
     return origin?.name || originId;
   };
-  const owners: string[] = []; // Owner eliminado
+  const owners = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const u of salesUsers) {
+      const codigo = String(u.codigo || "").trim();
+      if (!codigo) continue;
+      const label = String(u.name || u.email || codigo).trim();
+      map.set(codigo, label);
+    }
+    for (const r of rows) {
+      const codigo = String(r.ownerCodigo || "").trim();
+      if (!codigo) continue;
+      if (!map.has(codigo)) map.set(codigo, codigo);
+    }
+    return Array.from(map.entries()).map(([value, label]) => ({
+      value,
+      label,
+    }));
+  }, [salesUsers, rows]);
 
   const saleStatusClass = (s?: string) => {
     const v = String(s || "").toLowerCase();
@@ -1008,15 +1044,18 @@ function CrmContent() {
                   selectedCampaignForMetrics === "all"
                     ? rows
                     : rows.filter(
-                        (r) => r.canal === selectedCampaignForMetrics
+                        (r) => r.canal === selectedCampaignForMetrics,
                       );
 
                 // Calcular métricas
-                const statusMetrics = filteredRows.reduce((acc, r) => {
-                  const status = r.etapa || "sin etapa";
-                  acc[status] = (acc[status] || 0) + 1;
-                  return acc;
-                }, {} as Record<string, number>);
+                const statusMetrics = filteredRows.reduce(
+                  (acc, r) => {
+                    const status = r.etapa || "sin etapa";
+                    acc[status] = (acc[status] || 0) + 1;
+                    return acc;
+                  },
+                  {} as Record<string, number>,
+                );
 
                 const campaignName =
                   selectedCampaignForMetrics === "all"
@@ -1065,6 +1104,10 @@ function CrmContent() {
                 setCanal={setCanalFiltro}
                 owner={ownerFiltro}
                 setOwner={setOwnerFiltro}
+                createdFrom={createdFrom}
+                setCreatedFrom={setCreatedFrom}
+                createdTo={createdTo}
+                setCreatedTo={setCreatedTo}
                 etapas={etapas}
                 canales={canales}
                 owners={owners}
@@ -1073,6 +1116,8 @@ function CrmContent() {
                   setEtapaFiltro("all");
                   setCanalFiltro("all");
                   setOwnerFiltro("all");
+                  setCreatedFrom("");
+                  setCreatedTo("");
                 }}
               />
               {/* Toggle de vista compacto con iconos, arriba a la derecha */}
@@ -1168,8 +1213,8 @@ function CrmContent() {
                                   prev.map((r) =>
                                     r.id === p.id
                                       ? { ...r, etapa: nextEtapa as any }
-                                      : r
-                                  )
+                                      : r,
+                                  ),
                                 );
                                 try {
                                   await updateLead(p.id, {
@@ -1185,8 +1230,8 @@ function CrmContent() {
                                     prev.map((r) =>
                                       r.id === p.id
                                         ? { ...r, etapa: prevEtapa as any }
-                                        : r
-                                    )
+                                        : r,
+                                    ),
                                   );
                                   toast({
                                     title: "Error",
@@ -1227,7 +1272,7 @@ function CrmContent() {
                               </button>
                               <Link
                                 href={`/admin/crm/booking/${encodeURIComponent(
-                                  p.id
+                                  p.id,
                                 )}`}
                                 aria-label={`Ver detalle de ${p.nombre}`}
                                 title="Ver detalle"
@@ -1270,7 +1315,7 @@ function CrmContent() {
                   }))}
                   onOpenDetail={(p) =>
                     router.push(
-                      `/admin/crm/booking/${encodeURIComponent(p.id)}`
+                      `/admin/crm/booking/${encodeURIComponent(p.id)}`,
                     )
                   }
                   onMoved={() => reload()}
@@ -1332,12 +1377,12 @@ function CrmContent() {
                     p.etapa === "Nuevo"
                       ? "nuevo"
                       : p.etapa === "Contactado"
-                      ? "contactado"
-                      : p.etapa === "Calificado"
-                      ? "calificado"
-                      : p.etapa === "Ganado"
-                      ? "ganado"
-                      : "perdido",
+                        ? "contactado"
+                        : p.etapa === "Calificado"
+                          ? "calificado"
+                          : p.etapa === "Ganado"
+                            ? "ganado"
+                            : "perdido",
                   ownerId: null,
                   ownerNombre: "(Sin owner)",
                   pais: null,

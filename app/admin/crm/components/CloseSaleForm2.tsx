@@ -32,6 +32,13 @@ import {
 const STATIC_PROGRAM = "HOTSELLING PRO";
 
 type PaymentPlanType = "contado" | "cuotas" | "excepcion_2_cuotas" | "reserva";
+type PaymentPricingPreset = "lista" | "descuento";
+
+type PaymentCustomInstallment = {
+  id: string;
+  amount: string;
+  dueDate: string; // YYYY-MM-DD
+};
 
 export type PaymentPlatform =
   | "hotmart"
@@ -53,11 +60,14 @@ export interface CloseSaleInput {
   paymentAmount: string;
   paymentPaidAmount?: string;
   paymentPlanType?: PaymentPlanType;
+  paymentPricingPreset?: PaymentPricingPreset;
   paymentInstallmentsCount?: number;
   paymentInstallmentAmount?: string;
+  paymentInstallmentsSchedule?: PaymentCustomInstallment[];
   paymentFirstInstallmentAmount?: string;
   paymentSecondInstallmentAmount?: string;
   paymentSecondInstallmentDate?: string; // YYYY-MM-DD
+  paymentCustomInstallments?: PaymentCustomInstallment[];
   paymentExceptionNotes?: string;
 
   reservePaidDate?: string; // YYYY-MM-DD
@@ -144,6 +154,68 @@ function isoPlusDays(days: number) {
   return d.toISOString().slice(0, 10);
 }
 
+function isoDatePlusDays(baseIsoDate: string, days: number) {
+  const base = String(baseIsoDate || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return isoPlusDays(days);
+  try {
+    const d = new Date(`${base}T00:00:00.000Z`);
+    if (Number.isNaN(d.getTime())) return isoPlusDays(days);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  } catch {
+    return isoPlusDays(days);
+  }
+}
+
+function normalizeInstallmentsSchedule(
+  input: unknown,
+): PaymentCustomInstallment[] {
+  if (!Array.isArray(input)) return [];
+  return (input as any[])
+    .map((it: any, idx: number) => ({
+      id: String(it?.id || `si_${idx}`),
+      amount: String(it?.amount ?? ""),
+      dueDate: String(it?.dueDate ?? it?.due_date ?? ""),
+    }))
+    .filter(Boolean);
+}
+
+function buildStandardScheduleFromCount(
+  prev: PaymentCustomInstallment[],
+  count: number,
+  amount: string,
+) {
+  const safeCount = Math.max(1, Math.min(24, Number(count) || 1));
+  const base = Array.isArray(prev) ? prev : [];
+  const next: PaymentCustomInstallment[] = [];
+
+  for (let i = 0; i < safeCount; i++) {
+    const existing = base[i];
+    if (existing) {
+      next.push({
+        id: existing.id,
+        amount: i === 0 ? String(existing.amount ?? amount) : String(existing.amount ?? amount),
+        dueDate: String(existing.dueDate || ""),
+      });
+      continue;
+    }
+
+    const lastDate = next.length
+      ? String(next[next.length - 1]?.dueDate || "")
+      : "";
+    const dueDate = lastDate
+      ? isoDatePlusDays(lastDate, 30)
+      : isoPlusDays(i * 30);
+    next.push({
+      id: `si_${Date.now()}_${i}`,
+      amount: String(amount || ""),
+      dueDate,
+    });
+  }
+
+  return next;
+}
+
 function toNumberOrNull(v?: string | null) {
   if (v === null || v === undefined) return null;
   const n = Number(String(v).replace(/[^0-9.]/g, ""));
@@ -182,7 +254,7 @@ function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
     next_charge_date: toLeadIsoDateOrNull(payment?.nextChargeDate ?? null),
     payment_has_reserve: payment?.hasReserve ? 1 : 0,
     payment_reserve_amount: payment?.hasReserve
-      ? payment?.reserveAmount ?? null
+      ? (payment?.reserveAmount ?? null)
       : null,
 
     sale_notes: salePayload?.notes ?? null,
@@ -207,7 +279,6 @@ function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
 export function CloseSaleForm({
   onDone,
   onChange,
-  onPaymentProofChange,
   onSalePayloadChange,
   initial,
   mode = "create",
@@ -220,14 +291,6 @@ export function CloseSaleForm({
 }: {
   onDone?: () => void;
   onChange?: (form: CloseSaleInput) => void;
-  onPaymentProofChange?: (
-    proof: {
-      dataUrl: string;
-      name?: string;
-      type?: string;
-      size?: number;
-    } | null
-  ) => void;
   onSalePayloadChange?: (payload: any) => void;
   initial?: Partial<CloseSaleInput> & { status?: string };
   mode?: Mode;
@@ -254,6 +317,62 @@ export function CloseSaleForm({
     return "contado";
   })();
 
+  const initialCustomInstallments: PaymentCustomInstallment[] = (() => {
+    const raw = (initial as any)?.paymentCustomInstallments;
+    if (Array.isArray(raw) && raw.length) {
+      return raw
+        .map((it: any, idx: number) => ({
+          id: String(it?.id || `ci_${idx}_${Date.now()}`),
+          amount: String(it?.amount ?? ""),
+          dueDate: String(it?.dueDate ?? ""),
+        }))
+        .filter(Boolean);
+    }
+
+    if (inferredInitialPlanType !== "excepcion_2_cuotas") return [];
+
+    const first = String(
+      (initial as any)?.paymentFirstInstallmentAmount ?? "",
+    ).trim();
+    const second = String(
+      (initial as any)?.paymentSecondInstallmentAmount ?? "",
+    ).trim();
+    const secondDate = String(
+      (initial as any)?.paymentSecondInstallmentDate ?? "",
+    ).trim();
+
+    return [
+      {
+        id: `ci_0_${Date.now()}`,
+        amount: first || "",
+        dueDate: isoPlusDays(0),
+      },
+      {
+        id: `ci_1_${Date.now()}`,
+        amount: second || "",
+        dueDate: secondDate || isoPlusDays(30),
+      },
+    ];
+  })();
+
+  const initialInstallmentsSchedule: PaymentCustomInstallment[] = (() => {
+    const raw = (initial as any)?.paymentInstallmentsSchedule;
+    const parsed = normalizeInstallmentsSchedule(raw);
+    if (parsed.length) return parsed;
+
+    if (inferredInitialPlanType !== "cuotas") return [];
+
+    const cnt = Number((initial as any)?.paymentInstallmentsCount ?? 0) || 0;
+    const amt = String((initial as any)?.paymentInstallmentAmount ?? "");
+    const safeCount = cnt > 0 ? cnt : 0;
+    if (!safeCount) return [];
+    return Array.from({ length: Math.max(1, safeCount) }).map((_, idx) => ({
+      id: `si_${idx}`,
+      amount: String(amt || ""),
+      dueDate: isoPlusDays(idx * 30),
+    }));
+  })();
+
   const [form, setForm] = useState<CloseSaleInput>({
     fullName: initial?.fullName || "",
     email: initial?.email || "",
@@ -264,14 +383,19 @@ export function CloseSaleForm({
     paymentAmount: initial?.paymentAmount || "",
     paymentPaidAmount: (initial as any)?.paymentPaidAmount || "",
     paymentPlanType: inferredInitialPlanType,
+    paymentPricingPreset:
+      ((initial as any)?.paymentPricingPreset as PaymentPricingPreset) ||
+      "descuento",
     paymentInstallmentsCount: (initial as any)?.paymentInstallmentsCount,
     paymentInstallmentAmount: (initial as any)?.paymentInstallmentAmount,
+    paymentInstallmentsSchedule: initialInstallmentsSchedule,
     paymentFirstInstallmentAmount: (initial as any)
       ?.paymentFirstInstallmentAmount,
     paymentSecondInstallmentAmount: (initial as any)
       ?.paymentSecondInstallmentAmount,
     paymentSecondInstallmentDate: (initial as any)
       ?.paymentSecondInstallmentDate,
+    paymentCustomInstallments: initialCustomInstallments,
     paymentExceptionNotes: (initial as any)?.paymentExceptionNotes || "",
     reservePaidDate: (initial as any)?.reservePaidDate,
     reserveRemainingDueDate: (initial as any)?.reserveRemainingDueDate,
@@ -310,17 +434,9 @@ export function CloseSaleForm({
     notes: initial?.notes || "",
   });
 
-  const [paymentProof, setPaymentProof] = useState<{
-    file?: File;
-    dataUrl?: string;
-    name?: string;
-    type?: string;
-    size?: number;
-  } | null>(null);
-
   const [productConfigOpen, setProductConfigOpen] = useState(false);
   const [productConfigValue, setProductConfigValue] = useState<string>(
-    String(form.program || STATIC_PROGRAM)
+    String(form.program || STATIC_PROGRAM),
   );
 
   // Propagar cambios en vivo al padre para vista previa en tiempo real
@@ -332,7 +448,7 @@ export function CloseSaleForm({
   }, [JSON.stringify(form)]);
 
   // Helper para construir payload compatible con metadata
-  const buildSalePayload = (withProof = true) => {
+  const buildSalePayload = () => {
     const closer = user
       ? {
           id: (user as any).id ?? user.email ?? user.name ?? "",
@@ -346,27 +462,70 @@ export function CloseSaleForm({
       programKey === "PRO"
         ? PRICING.PRO
         : programKey === "FOUNDATION"
-        ? PRICING.FOUNDATION
-        : null;
+          ? PRICING.FOUNDATION
+          : null;
 
     const planType: PaymentPlanType =
       (form.paymentPlanType as PaymentPlanType | undefined) ?? "contado";
 
+    const installmentsScheduleUi = normalizeInstallmentsSchedule(
+      (form as any).paymentInstallmentsSchedule,
+    );
+    const installmentsSchedule = installmentsScheduleUi
+      .map((it, idx) => ({
+        index: idx + 1,
+        amount: String(it.amount || ""),
+        due_date: String(it.dueDate || ""),
+      }))
+      .filter((it) => {
+        const n = toNumberOrNull(it.amount);
+        return n !== null || Boolean(it.due_date);
+      });
+
+    const customInstallmentsUi: PaymentCustomInstallment[] = Array.isArray(
+      (form as any).paymentCustomInstallments,
+    )
+      ? (((form as any).paymentCustomInstallments as any[]) || [])
+          .map((it: any, idx: number) => ({
+            id: String(it?.id || `ci_${idx}`),
+            amount: String(it?.amount ?? ""),
+            dueDate: String(it?.dueDate ?? ""),
+          }))
+          .filter(Boolean)
+      : [];
+
+    const customInstallments = customInstallmentsUi
+      .map((it, idx) => ({
+        index: idx + 1,
+        amount: String(it.amount || ""),
+        due_date: String(it.dueDate || ""),
+      }))
+      .filter((it) => {
+        const n = toNumberOrNull(it.amount);
+        return n !== null || Boolean(it.due_date);
+      });
+
     const defaultInstallments = pricing?.discount.installments;
     const defaultCashTotal = pricing?.discount.cashTotal;
+    const defaultInstallmentsTotal =
+      defaultInstallments &&
+      defaultInstallments.count &&
+      defaultInstallments.amount
+        ? defaultInstallments.count * defaultInstallments.amount
+        : null;
 
     const installmentsCount =
       planType === "cuotas"
         ? Number(
-            form.paymentInstallmentsCount ?? defaultInstallments?.count ?? 0
+            form.paymentInstallmentsCount ?? defaultInstallments?.count ?? 0,
           )
         : planType === "excepcion_2_cuotas"
-        ? 2
-        : 0;
+          ? Math.max(2, customInstallmentsUi.length || 2)
+          : 0;
     const installmentAmount =
       planType === "cuotas"
         ? String(
-            form.paymentInstallmentAmount ?? defaultInstallments?.amount ?? ""
+            form.paymentInstallmentAmount ?? defaultInstallments?.amount ?? "",
           )
         : "";
 
@@ -378,15 +537,29 @@ export function CloseSaleForm({
         return String(form.paymentAmount || defaultCashTotal || "");
       }
       if (planType === "cuotas") {
+        if (installmentsSchedule.length) {
+          const sum = installmentsSchedule.reduce((acc, it) => {
+            const n = toNumberOrNull(it.amount);
+            return acc + (n ?? 0);
+          }, 0);
+          if (Number.isFinite(sum) && sum > 0) return String(sum);
+        }
         const a = toNumberOrNull(installmentAmount);
         if (a !== null && installmentsCount > 0)
           return String(a * installmentsCount);
-        return String(form.paymentAmount || "");
+        return String(form.paymentAmount || defaultInstallmentsTotal || "");
       }
       if (planType === "excepcion_2_cuotas") {
+        if (customInstallments.length) {
+          const sum = customInstallments.reduce((acc, it) => {
+            const n = toNumberOrNull(it.amount);
+            return acc + (n ?? 0);
+          }, 0);
+          if (Number.isFinite(sum) && sum > 0) return String(sum);
+        }
         if (firstAmountNum !== null && secondAmountNum !== null)
           return String(firstAmountNum + secondAmountNum);
-        return String(form.paymentAmount || "");
+        return String(form.paymentAmount || defaultCashTotal || "");
       }
       // reserva
       return String(form.paymentAmount || defaultCashTotal || "");
@@ -396,7 +569,7 @@ export function CloseSaleForm({
       if (String(form.paymentPaidAmount || "").trim())
         return String(form.paymentPaidAmount);
       if (planType === "excepcion_2_cuotas")
-        return String(form.paymentFirstInstallmentAmount || "");
+        return String(customInstallmentsUi?.[0]?.amount ?? form.paymentFirstInstallmentAmount ?? "");
       if (planType === "reserva")
         return String(form.paymentReserveAmount || "");
       if (planType === "contado") return computedTotalCommitted;
@@ -406,7 +579,10 @@ export function CloseSaleForm({
     const computedPaymentMode = (() => {
       if (planType === "contado") return "pago_total";
       if (planType === "cuotas") return `${installmentsCount}_cuotas`;
-      if (planType === "excepcion_2_cuotas") return "excepcion_2_cuotas";
+      if (planType === "excepcion_2_cuotas")
+        return installmentsCount === 2
+          ? "excepcion_2_cuotas"
+          : `excepcion_${installmentsCount}_cuotas`;
       return "reserva";
     })();
 
@@ -426,17 +602,26 @@ export function CloseSaleForm({
             amount: installmentAmount || null,
             period_days: 30,
             next_due_date: form.paymentSecondInstallmentDate || isoPlusDays(30),
+            schedule: installmentsSchedule.length ? installmentsSchedule : null,
           },
           total: computedTotalCommitted || null,
           paid_amount: computedPaidAmount || null,
         };
       }
       if (planType === "excepcion_2_cuotas") {
+        const firstUi = customInstallmentsUi?.[0];
+        const secondUi = customInstallmentsUi?.[1];
         return {
           type: "excepcion_2_cuotas" as const,
-          first_amount: form.paymentFirstInstallmentAmount || null,
-          second_amount: form.paymentSecondInstallmentAmount || null,
-          second_due_date: form.paymentSecondInstallmentDate || null,
+          first_amount:
+            firstUi?.amount || form.paymentFirstInstallmentAmount || null,
+          second_amount:
+            secondUi?.amount || form.paymentSecondInstallmentAmount || null,
+          second_due_date:
+            secondUi?.dueDate || form.paymentSecondInstallmentDate || null,
+          custom_installments: customInstallments.length
+            ? customInstallments
+            : null,
           notes: form.paymentExceptionNotes || null,
           total: computedTotalCommitted || null,
           paid_amount: computedPaidAmount || null,
@@ -480,16 +665,34 @@ export function CloseSaleForm({
                 period_days: 30,
                 next_due_date:
                   form.paymentSecondInstallmentDate || isoPlusDays(30),
+                schedule: installmentsSchedule.length ? installmentsSchedule : null,
               }
+            : null,
+        installments_schedule:
+          planType === "cuotas" && installmentsSchedule.length
+            ? installmentsSchedule
             : null,
         exception_2_installments:
           planType === "excepcion_2_cuotas"
             ? {
-                first_amount: form.paymentFirstInstallmentAmount || null,
-                second_amount: form.paymentSecondInstallmentAmount || null,
-                second_due_date: form.paymentSecondInstallmentDate || null,
+                first_amount:
+                  customInstallmentsUi?.[0]?.amount ||
+                  form.paymentFirstInstallmentAmount ||
+                  null,
+                second_amount:
+                  customInstallmentsUi?.[1]?.amount ||
+                  form.paymentSecondInstallmentAmount ||
+                  null,
+                second_due_date:
+                  customInstallmentsUi?.[1]?.dueDate ||
+                  form.paymentSecondInstallmentDate ||
+                  null,
                 notes: form.paymentExceptionNotes || null,
               }
+            : null,
+        custom_installments:
+          planType === "excepcion_2_cuotas" && customInstallments.length
+            ? customInstallments
             : null,
         reserve:
           planType === "reserva"
@@ -511,10 +714,14 @@ export function CloseSaleForm({
         platform: form.paymentPlatform,
         nextChargeDate:
           planType === "excepcion_2_cuotas"
-            ? form.paymentSecondInstallmentDate || null
+            ? (
+                customInstallmentsUi?.[1]?.dueDate ||
+                form.paymentSecondInstallmentDate ||
+                null
+              )
             : planType === "cuotas"
-            ? form.paymentSecondInstallmentDate || isoPlusDays(30)
-            : form.nextChargeDate || null,
+              ? form.paymentSecondInstallmentDate || isoPlusDays(30)
+              : form.nextChargeDate || null,
       },
       contract: {
         thirdParty: !!form.contractThirdParty,
@@ -544,53 +751,48 @@ export function CloseSaleForm({
       status: initial?.status || "payment_verification_pending",
       notes: form.notes || null,
     };
-    if (withProof && paymentProof?.dataUrl) {
-      p.payment.proof = {
-        name: paymentProof.name,
-        type: paymentProof.type,
-        size: paymentProof.size,
-        dataUrl: paymentProof.dataUrl,
-      };
-    }
     return p;
   };
 
   useEffect(() => {
     try {
-      onSalePayloadChange?.(buildSalePayload(true));
+      onSalePayloadChange?.(buildSalePayload());
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(form), paymentProof?.dataUrl]);
+  }, [JSON.stringify(form)]);
 
   // Autosave: persistir cambios en modo edición sin recargar
   useEffect(() => {
     if (persistMode === "local") return; // Skip autosave in local mode
     if (!autoSave) return;
     if (mode !== "edit") return;
-    const handle = setTimeout(async () => {
-      try {
-        const salePayload = buildSalePayload(false);
-        if (entity === "sale") {
-          if (!recordId) return;
-          await updateMetadataPayload(String(recordId), salePayload as any);
-        } else {
-          // booking: guardar dentro del lead (plano) vía /v1/leads/:codigo
-          if (leadCodigo) {
-            await updateLeadPatch(
-              String(leadCodigo),
-              salePayloadToLeadPatch(salePayload)
-            );
-          } else if (recordId) {
-            // fallback legacy
-            await updateMetadataPayload(String(recordId), {
-              sale: salePayload,
-            } as any);
+    const handle = setTimeout(
+      async () => {
+        try {
+          const salePayload = buildSalePayload();
+          if (entity === "sale") {
+            if (!recordId) return;
+            await updateMetadataPayload(String(recordId), salePayload as any);
+          } else {
+            // booking: guardar dentro del lead (plano) vía /v1/leads/:codigo
+            if (leadCodigo) {
+              await updateLeadPatch(
+                String(leadCodigo),
+                salePayloadToLeadPatch(salePayload),
+              );
+            } else if (recordId) {
+              // fallback legacy
+              await updateMetadataPayload(String(recordId), {
+                sale: salePayload,
+              } as any);
+            }
           }
+        } catch (e) {
+          // silencioso para no molestar al usuario mientras escribe
         }
-      } catch (e) {
-        // silencioso para no molestar al usuario mientras escribe
-      }
-    }, Math.max(200, autoSaveDelay || 600));
+      },
+      Math.max(200, autoSaveDelay || 600),
+    );
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoSave, autoSaveDelay, mode, recordId, entity, JSON.stringify(form)]);
@@ -611,6 +813,9 @@ export function CloseSaleForm({
           (initial as any)?.paymentPaidAmount ?? prev.paymentPaidAmount,
         paymentPlanType:
           (initial as any)?.paymentPlanType ?? prev.paymentPlanType,
+        paymentPricingPreset:
+          ((initial as any)?.paymentPricingPreset as PaymentPricingPreset) ??
+          prev.paymentPricingPreset,
         paymentInstallmentsCount:
           (initial as any)?.paymentInstallmentsCount ??
           prev.paymentInstallmentsCount,
@@ -690,7 +895,7 @@ export function CloseSaleForm({
     setSubmitting(true);
     try {
       if (mode === "edit" && (recordId || leadCodigo)) {
-        const salePayload: any = buildSalePayload(true);
+        const salePayload: any = buildSalePayload();
         if (entity === "sale") {
           if (!recordId)
             throw new Error("recordId requerido para editar una venta");
@@ -699,7 +904,7 @@ export function CloseSaleForm({
           if (leadCodigo) {
             await updateLeadPatch(
               String(leadCodigo),
-              salePayloadToLeadPatch(salePayload)
+              salePayloadToLeadPatch(salePayload),
             );
           } else {
             // fallback legacy
@@ -766,14 +971,6 @@ export function CloseSaleForm({
             ts: Date.now(),
           },
         };
-        if (paymentProof?.dataUrl) {
-          payload.payment.proof = {
-            name: paymentProof.name,
-            type: paymentProof.type,
-            size: paymentProof.size,
-            dataUrl: paymentProof.dataUrl,
-          };
-        }
 
         const saved = await createMetadata({
           entity: "sale",
@@ -809,7 +1006,6 @@ export function CloseSaleForm({
           contractParties: [],
           notes: "",
         });
-        setPaymentProof(null);
       }
     } catch (e: any) {
       toast({
@@ -955,7 +1151,7 @@ export function CloseSaleForm({
                             setProductConfigOpen(open);
                             if (open)
                               setProductConfigValue(
-                                String(form.program || STATIC_PROGRAM)
+                                String(form.program || STATIC_PROGRAM),
                               );
                           }}
                         >
@@ -1051,7 +1247,7 @@ export function CloseSaleForm({
                     {form.bonuses && form.bonuses.length > 0
                       ? ` (${
                           form.bonuses.filter((k) =>
-                            BONOS_CONTRACTUALES.some((b) => b.key === k)
+                            BONOS_CONTRACTUALES.some((b) => b.key === k),
                           ).length
                         })`
                       : ""}
@@ -1120,7 +1316,7 @@ export function CloseSaleForm({
                     {form.bonuses && form.bonuses.length > 0
                       ? ` (${
                           form.bonuses.filter((k) =>
-                            BONOS_EXTRA.some((b) => b.key === k)
+                            BONOS_EXTRA.some((b) => b.key === k),
                           ).length
                         })`
                       : ""}
@@ -1192,20 +1388,29 @@ export function CloseSaleForm({
                   programKey === "PRO"
                     ? PRICING.PRO
                     : programKey === "FOUNDATION"
-                    ? PRICING.FOUNDATION
-                    : null;
+                      ? PRICING.FOUNDATION
+                      : null;
 
                 const plan = (form.paymentPlanType ||
                   "contado") as PaymentPlanType;
-                const stdInstallments = pricing?.discount.installments;
-                const stdCash = pricing?.discount.cashTotal;
+                const preset = (form.paymentPricingPreset ||
+                  "descuento") as PaymentPricingPreset;
+
+                const stdInstallments =
+                  preset === "lista"
+                    ? pricing?.list.installments
+                    : pricing?.discount.installments;
+                const stdCash =
+                  preset === "lista"
+                    ? pricing?.list.total
+                    : pricing?.discount.cashTotal;
 
                 const stdPlanLabel =
                   programKey === "PRO"
                     ? "PRO"
                     : programKey === "FOUNDATION"
-                    ? "FOUNDATION"
-                    : "—";
+                      ? "FOUNDATION"
+                      : "—";
 
                 const stdQuotaCount = stdInstallments?.count ?? 0;
                 const stdQuotaAmount = stdInstallments?.amount ?? 0;
@@ -1225,7 +1430,7 @@ export function CloseSaleForm({
                             USD {pricing.list.total.toLocaleString("en-US")} ·{" "}
                             {pricing.list.installments.count} cuotas de USD{" "}
                             {pricing.list.installments.amount.toLocaleString(
-                              "en-US"
+                              "en-US",
                             )}
                           </div>
                           <div>
@@ -1237,7 +1442,7 @@ export function CloseSaleForm({
                             · {pricing.discount.installments.count} cuotas de
                             USD{" "}
                             {pricing.discount.installments.amount.toLocaleString(
-                              "en-US"
+                              "en-US",
                             )}{" "}
                             (cada 30 días)
                           </div>
@@ -1249,7 +1454,7 @@ export function CloseSaleForm({
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="space-y-1.5">
                         <Label>Tipo de pago *</Label>
                         <Select
@@ -1270,28 +1475,49 @@ export function CloseSaleForm({
                             if (nextPlan === "cuotas" && stdInstallments) {
                               const total =
                                 stdInstallments.count * stdInstallments.amount;
+                              const schedule = buildStandardScheduleFromCount(
+                                [],
+                                stdInstallments.count,
+                                String(stdInstallments.amount),
+                              );
                               setForm({
                                 ...form,
                                 paymentPlanType: nextPlan,
                                 paymentMode: `${stdInstallments.count}_cuotas`,
                                 paymentInstallmentsCount: stdInstallments.count,
                                 paymentInstallmentAmount: String(
-                                  stdInstallments.amount
+                                  stdInstallments.amount,
                                 ),
+                                paymentInstallmentsSchedule: schedule,
                                 paymentAmount: String(total),
                                 paymentPaidAmount: "",
-                                paymentSecondInstallmentDate: isoPlusDays(30),
+                                paymentSecondInstallmentDate:
+                                  schedule?.[1]?.dueDate || isoPlusDays(30),
                               });
                               return;
                             }
                             if (nextPlan === "excepcion_2_cuotas") {
+                              const nowId = Date.now();
                               setForm({
                                 ...form,
                                 paymentPlanType: nextPlan,
                                 paymentMode: "excepcion_2_cuotas",
                                 paymentFirstInstallmentAmount: "1995",
+                                paymentPaidAmount: "1995",
                                 paymentSecondInstallmentAmount: "",
                                 paymentSecondInstallmentDate: isoPlusDays(30),
+                                paymentCustomInstallments: [
+                                  {
+                                    id: `ci_0_${nowId}`,
+                                    amount: "1995",
+                                    dueDate: isoPlusDays(0),
+                                  },
+                                  {
+                                    id: `ci_1_${nowId}`,
+                                    amount: "",
+                                    dueDate: isoPlusDays(30),
+                                  },
+                                ],
                                 paymentExceptionNotes: "",
                               });
                               return;
@@ -1332,16 +1558,65 @@ export function CloseSaleForm({
                       </div>
 
                       <div className="space-y-1.5">
-                        <Label>Monto total comprometido (USD) *</Label>
-                        <Input
-                          placeholder="$"
-                          className={inputAccent}
-                          value={form.paymentAmount}
-                          onChange={(e) =>
-                            setForm({ ...form, paymentAmount: e.target.value })
-                          }
-                          required
-                        />
+                        <Label>Tarifa *</Label>
+                        <Select
+                          value={preset}
+                          onValueChange={(v) => {
+                            const nextPreset = v as PaymentPricingPreset;
+                            const nextStdInstallments =
+                              nextPreset === "lista"
+                                ? pricing?.list.installments
+                                : pricing?.discount.installments;
+                            const nextStdCash =
+                              nextPreset === "lista"
+                                ? pricing?.list.total
+                                : pricing?.discount.cashTotal;
+
+                            // Si el usuario cambia la tarifa, re-aplicamos los valores estándar
+                            // solo para planes "contado" y "cuotas" (para no romper excepciones/reserva).
+                            if (plan === "contado" && nextStdCash) {
+                              setForm({
+                                ...form,
+                                paymentPricingPreset: nextPreset,
+                                paymentAmount: String(nextStdCash),
+                                paymentPaidAmount: String(nextStdCash),
+                              });
+                              return;
+                            }
+                            if (plan === "cuotas" && nextStdInstallments) {
+                              const total =
+                                nextStdInstallments.count *
+                                nextStdInstallments.amount;
+                              setForm({
+                                ...form,
+                                paymentPricingPreset: nextPreset,
+                                paymentMode: `${nextStdInstallments.count}_cuotas`,
+                                paymentInstallmentsCount:
+                                  nextStdInstallments.count,
+                                paymentInstallmentAmount: String(
+                                  nextStdInstallments.amount,
+                                ),
+                                paymentAmount: String(total),
+                              });
+                              return;
+                            }
+
+                            setForm({
+                              ...form,
+                              paymentPricingPreset: nextPreset,
+                            });
+                          }}
+                        >
+                          <SelectTrigger className={`w-full ${selectAccent}`}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="descuento">
+                              Descuento estándar
+                            </SelectItem>
+                            <SelectItem value="lista">Precio lista</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
 
                       <div className="space-y-1.5">
@@ -1406,32 +1681,179 @@ export function CloseSaleForm({
 
                     {plan === "cuotas" ? (
                       <div className="rounded-md border border-slate-200 bg-white p-3 text-sm">
-                        <div className="font-semibold">Cuotas estándar</div>
-                        <div className="mt-1 text-xs text-slate-600">
-                          En “Cuotas estándar” el número de cuotas y el monto
-                          por cuota son fijos según el producto (plan
-                          preconfigurado). Si necesitas cambiar cuotas o montos,
-                          usa “Excepción: 2 cuotas personalizadas”.
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold">
+                              Plan en cuotas (editable)
+                            </div>
+                            <div className="mt-1 text-xs text-slate-600">
+                              Puedes aumentar/disminuir el número de cuotas y/o
+                              el monto por cuota. El total se recalcula
+                              automáticamente.
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9"
+                              onClick={() => {
+                                const cur = Number(
+                                  form.paymentInstallmentsCount ?? stdQuotaCount,
+                                );
+                                const next = Math.max(1, (Number.isFinite(cur) ? cur : 0) - 1);
+                                const amt = toNumberOrNull(
+                                  String(
+                                    form.paymentInstallmentAmount ?? stdQuotaAmount,
+                                  ),
+                                );
+                                const total =
+                                  amt !== null ? String(amt * next) : form.paymentAmount;
+                                const schedule = buildStandardScheduleFromCount(
+                                  normalizeInstallmentsSchedule(
+                                    (form as any).paymentInstallmentsSchedule,
+                                  ),
+                                  next,
+                                  String(form.paymentInstallmentAmount ?? stdQuotaAmount),
+                                );
+                                setForm({
+                                  ...form,
+                                  paymentInstallmentsCount: next,
+                                  paymentMode: `${next}_cuotas`,
+                                  paymentInstallmentsSchedule: schedule,
+                                  paymentSecondInstallmentDate:
+                                    schedule?.[1]?.dueDate ||
+                                    form.paymentSecondInstallmentDate ||
+                                    isoPlusDays(30),
+                                  paymentAmount: total || "",
+                                });
+                              }}
+                            >
+                              -1
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9"
+                              onClick={() => {
+                                const cur = Number(
+                                  form.paymentInstallmentsCount ?? stdQuotaCount,
+                                );
+                                const next = Math.min(24, (Number.isFinite(cur) ? cur : 0) + 1);
+                                const amt = toNumberOrNull(
+                                  String(
+                                    form.paymentInstallmentAmount ?? stdQuotaAmount,
+                                  ),
+                                );
+                                const total =
+                                  amt !== null ? String(amt * next) : form.paymentAmount;
+                                const schedule = buildStandardScheduleFromCount(
+                                  normalizeInstallmentsSchedule(
+                                    (form as any).paymentInstallmentsSchedule,
+                                  ),
+                                  next,
+                                  String(form.paymentInstallmentAmount ?? stdQuotaAmount),
+                                );
+                                setForm({
+                                  ...form,
+                                  paymentInstallmentsCount: next,
+                                  paymentMode: `${next}_cuotas`,
+                                  paymentInstallmentsSchedule: schedule,
+                                  paymentSecondInstallmentDate:
+                                    schedule?.[1]?.dueDate ||
+                                    form.paymentSecondInstallmentDate ||
+                                    isoPlusDays(30),
+                                  paymentAmount: total || "",
+                                });
+                              }}
+                            >
+                              +1 cuota
+                            </Button>
+                          </div>
                         </div>
                         <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="space-y-1.5">
                             <Label>Número de cuotas</Label>
                             <Input
                               className={inputAccent}
-                              value={String(
-                                form.paymentInstallmentsCount ?? stdQuotaCount
-                              )}
-                              readOnly
+                              type="number"
+                              min={1}
+                              max={24}
+                              value={String(form.paymentInstallmentsCount ?? stdQuotaCount)}
+                              onChange={(e) => {
+                                const next = Math.max(
+                                  1,
+                                  Math.min(24, Number(e.target.value || 0) || 1),
+                                );
+                                const amt = toNumberOrNull(
+                                  String(
+                                    form.paymentInstallmentAmount ?? stdQuotaAmount,
+                                  ),
+                                );
+                                const total = amt !== null ? String(amt * next) : "";
+                                const schedule = buildStandardScheduleFromCount(
+                                  normalizeInstallmentsSchedule(
+                                    (form as any).paymentInstallmentsSchedule,
+                                  ),
+                                  next,
+                                  String(form.paymentInstallmentAmount ?? stdQuotaAmount),
+                                );
+                                setForm({
+                                  ...form,
+                                  paymentInstallmentsCount: next,
+                                  paymentMode: `${next}_cuotas`,
+                                  paymentInstallmentsSchedule: schedule,
+                                  paymentSecondInstallmentDate:
+                                    schedule?.[1]?.dueDate ||
+                                    form.paymentSecondInstallmentDate ||
+                                    isoPlusDays(30),
+                                  paymentAmount: total || form.paymentAmount || "",
+                                });
+                              }}
                             />
                           </div>
                           <div className="space-y-1.5">
                             <Label>Monto por cuota (USD)</Label>
                             <Input
                               className={inputAccent}
-                              value={String(
-                                form.paymentInstallmentAmount ?? stdQuotaAmount
-                              )}
-                              readOnly
+                              placeholder="$"
+                              value={String(form.paymentInstallmentAmount ?? stdQuotaAmount)}
+                              onChange={(e) => {
+                                const amt = toNumberOrNull(e.target.value);
+                                const count = Number(
+                                  form.paymentInstallmentsCount ?? stdQuotaCount,
+                                );
+                                const safeCount =
+                                  Number.isFinite(count) && count > 0 ? count : 1;
+                                const total =
+                                  amt !== null ? String(amt * safeCount) : "";
+                                const prevSchedule = normalizeInstallmentsSchedule(
+                                  (form as any).paymentInstallmentsSchedule,
+                                );
+                                const schedule = (prevSchedule.length
+                                  ? prevSchedule
+                                  : buildStandardScheduleFromCount(
+                                      [],
+                                      safeCount,
+                                      e.target.value,
+                                    )
+                                ).map((it) => ({
+                                  ...it,
+                                  amount: e.target.value,
+                                }));
+                                setForm({
+                                  ...form,
+                                  paymentInstallmentAmount: e.target.value,
+                                  paymentMode: `${safeCount}_cuotas`,
+                                  paymentInstallmentsSchedule: schedule,
+                                  paymentSecondInstallmentDate:
+                                    schedule?.[1]?.dueDate ||
+                                    form.paymentSecondInstallmentDate ||
+                                    isoPlusDays(30),
+                                  paymentAmount: total || form.paymentAmount || "",
+                                });
+                              }}
                             />
                           </div>
                           <div className="space-y-1.5">
@@ -1443,66 +1865,336 @@ export function CloseSaleForm({
                             />
                           </div>
                         </div>
+
+                        {(() => {
+                          const count = Number(
+                            form.paymentInstallmentsCount ?? stdQuotaCount,
+                          );
+                          const safeCount =
+                            Number.isFinite(count) && count > 0 ? count : 1;
+                          const baseAmount = String(
+                            form.paymentInstallmentAmount ?? stdQuotaAmount,
+                          );
+                          const current = normalizeInstallmentsSchedule(
+                            (form as any).paymentInstallmentsSchedule,
+                          );
+                          const schedule = current.length
+                            ? buildStandardScheduleFromCount(
+                                current,
+                                safeCount,
+                                baseAmount,
+                              )
+                            : buildStandardScheduleFromCount(
+                                [],
+                                safeCount,
+                                baseAmount,
+                              );
+
+                          const setSchedule = (next: PaymentCustomInstallment[]) => {
+                            const next2 = next?.[1]?.dueDate || "";
+                            setForm({
+                              ...form,
+                              paymentInstallmentsSchedule: next,
+                              paymentSecondInstallmentDate:
+                                next2 || form.paymentSecondInstallmentDate || isoPlusDays(30),
+                              nextChargeDate:
+                                next2 || form.nextChargeDate || "",
+                            });
+                          };
+
+                          return (
+                            <div className="mt-4 space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-xs text-slate-500">
+                                  Configura monto y fecha por cuota (igual que personalizadas).
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9"
+                                  onClick={() => {
+                                    const nextCount = Math.min(24, safeCount + 1);
+                                    const nextSchedule = buildStandardScheduleFromCount(
+                                      schedule,
+                                      nextCount,
+                                      baseAmount,
+                                    );
+                                    setForm({
+                                      ...form,
+                                      paymentInstallmentsCount: nextCount,
+                                      paymentMode: `${nextCount}_cuotas`,
+                                      paymentInstallmentsSchedule: nextSchedule,
+                                      paymentSecondInstallmentDate:
+                                        nextSchedule?.[1]?.dueDate ||
+                                        form.paymentSecondInstallmentDate ||
+                                        isoPlusDays(30),
+                                    });
+                                  }}
+                                >
+                                  Agregar cuota
+                                </Button>
+                              </div>
+
+                              <div className="space-y-2">
+                                {schedule.map((it, idx) => (
+                                  <div
+                                    key={it.id}
+                                    className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-md border border-slate-200 bg-slate-50 p-3"
+                                  >
+                                    <div className="md:col-span-2">
+                                      <Label className="text-xs text-slate-600">
+                                        Cuota
+                                      </Label>
+                                      <div className="h-10 flex items-center text-sm font-medium">
+                                        #{idx + 1}
+                                      </div>
+                                    </div>
+
+                                    <div className="md:col-span-5 space-y-1.5">
+                                      <Label>Monto (USD) *</Label>
+                                      <Input
+                                        placeholder="$"
+                                        className={inputAccent}
+                                        value={it.amount}
+                                        onChange={(e) => {
+                                          const next = schedule.map((x, i) =>
+                                            i === idx
+                                              ? { ...x, amount: e.target.value }
+                                              : x,
+                                          );
+                                          setSchedule(next);
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div className="md:col-span-5 space-y-1.5">
+                                      <Label>Fecha de pago *</Label>
+                                      <Input
+                                        type="date"
+                                        className={inputAccent}
+                                        value={it.dueDate || ""}
+                                        onChange={(e) => {
+                                          const next = schedule.map((x, i) =>
+                                            i === idx
+                                              ? { ...x, dueDate: e.target.value }
+                                              : x,
+                                          );
+                                          setSchedule(next);
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div className="md:col-span-12 flex justify-end">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-9"
+                                        disabled={schedule.length <= 1}
+                                        onClick={() => {
+                                          if (schedule.length <= 1) return;
+                                          const next = schedule.filter((_, i) => i !== idx);
+                                          const nextCount = Math.max(1, schedule.length - 1);
+                                          setForm({
+                                            ...form,
+                                            paymentInstallmentsCount: nextCount,
+                                            paymentMode: `${nextCount}_cuotas`,
+                                            paymentInstallmentsSchedule: next,
+                                            paymentSecondInstallmentDate:
+                                              next?.[1]?.dueDate ||
+                                              form.paymentSecondInstallmentDate ||
+                                              isoPlusDays(30),
+                                          });
+                                        }}
+                                      >
+                                        Quitar
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ) : null}
 
                     {plan === "excepcion_2_cuotas" ? (
                       <div className="rounded-md border border-slate-200 bg-white p-3 text-sm space-y-3">
                         <div className="font-semibold">
-                          Excepción: 2 cuotas personalizadas
+                          Cuotas personalizadas (excepción)
                         </div>
                         <div className="text-xs text-slate-600">
-                          Condiciones: máximo 2 cuotas · 2da cuota dentro de 30
-                          días · 1ra cuota mínimo 50% del valor con descuento
-                          (mínimo USD 1,995).
+                          Agrega las cuotas necesarias. Sugerimos fechas cada 30
+                          días y que la primera cuota sea la más alta.
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="space-y-1.5">
-                            <Label>Monto primera cuota (USD) *</Label>
-                            <Input
-                              placeholder="$"
-                              className={inputAccent}
-                              value={form.paymentFirstInstallmentAmount || ""}
-                              onChange={(e) =>
-                                setForm({
-                                  ...form,
-                                  paymentFirstInstallmentAmount: e.target.value,
-                                  paymentPaidAmount: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>Monto segunda cuota (USD) *</Label>
-                            <Input
-                              placeholder="$"
-                              className={inputAccent}
-                              value={form.paymentSecondInstallmentAmount || ""}
-                              onChange={(e) =>
-                                setForm({
-                                  ...form,
-                                  paymentSecondInstallmentAmount:
-                                    e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>Fecha pago 2da cuota *</Label>
-                            <Input
-                              type="date"
-                              className={inputAccent}
-                              value={form.paymentSecondInstallmentDate || ""}
-                              onChange={(e) =>
-                                setForm({
-                                  ...form,
-                                  paymentSecondInstallmentDate: e.target.value,
-                                  nextChargeDate: e.target.value,
-                                })
-                              }
-                            />
-                          </div>
-                        </div>
+                        {(() => {
+                          const custom: PaymentCustomInstallment[] = Array.isArray(
+                            (form as any).paymentCustomInstallments,
+                          )
+                            ? (((form as any).paymentCustomInstallments as any[]) || [])
+                                .map((it: any, idx: number) => ({
+                                  id: String(it?.id || `ci_${idx}`),
+                                  amount: String(it?.amount ?? ""),
+                                  dueDate: String(it?.dueDate ?? ""),
+                                }))
+                                .filter(Boolean)
+                            : [];
+
+                          const safeCustom = custom.length
+                            ? custom
+                            : [
+                                {
+                                  id: "ci_0_fallback",
+                                  amount: String(
+                                    form.paymentFirstInstallmentAmount || "",
+                                  ),
+                                  dueDate: isoPlusDays(0),
+                                },
+                                {
+                                  id: "ci_1_fallback",
+                                  amount: String(
+                                    form.paymentSecondInstallmentAmount || "",
+                                  ),
+                                  dueDate:
+                                    String(form.paymentSecondInstallmentDate || "") ||
+                                    isoPlusDays(30),
+                                },
+                              ];
+
+                          const updateCustom = (next: PaymentCustomInstallment[]) => {
+                            const first = next[0];
+                            const second = next[1];
+                            setForm({
+                              ...form,
+                              paymentCustomInstallments: next,
+                              paymentFirstInstallmentAmount: first?.amount || "",
+                              paymentSecondInstallmentAmount: second?.amount || "",
+                              paymentSecondInstallmentDate: second?.dueDate || "",
+                              nextChargeDate: second?.dueDate || form.nextChargeDate || "",
+                            });
+                          };
+
+                          const canRemove = safeCustom.length > 2;
+
+                          return (
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-xs text-slate-500">
+                                  Total = suma de cuotas · Próximo cobro = fecha de la cuota #2
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="h-9"
+                                  onClick={() => {
+                                    const lastWithDate = [...safeCustom]
+                                      .reverse()
+                                      .find((x) => String(x.dueDate || "").trim());
+                                    const nextDue = lastWithDate?.dueDate
+                                      ? isoDatePlusDays(lastWithDate.dueDate, 30)
+                                      : isoPlusDays(30);
+                                    updateCustom([
+                                      ...safeCustom,
+                                      {
+                                        id: `ci_${Date.now()}`,
+                                        amount: "",
+                                        dueDate: nextDue,
+                                      },
+                                    ]);
+                                  }}
+                                >
+                                  Agregar cuota
+                                </Button>
+                              </div>
+
+                              <div className="space-y-2">
+                                {safeCustom.map((it, idx) => (
+                                  <div
+                                    key={it.id}
+                                    className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-md border border-slate-200 bg-slate-50 p-3"
+                                  >
+                                    <div className="md:col-span-2">
+                                      <Label className="text-xs text-slate-600">
+                                        Cuota
+                                      </Label>
+                                      <div className="h-10 flex items-center text-sm font-medium">
+                                        #{idx + 1}
+                                      </div>
+                                    </div>
+
+                                    <div className="md:col-span-5 space-y-1.5">
+                                      <Label>Monto (USD) *</Label>
+                                      <Input
+                                        placeholder="$"
+                                        className={inputAccent}
+                                        value={it.amount}
+                                        onChange={(e) => {
+                                          const next = safeCustom.map((x, i) =>
+                                            i === idx
+                                              ? { ...x, amount: e.target.value }
+                                              : x,
+                                          );
+                                          // Mantener comportamiento previo: la primera cuota marca “pagado” por defecto
+                                          if (idx === 0) {
+                                            setForm({
+                                              ...form,
+                                              paymentPaidAmount: e.target.value,
+                                              paymentCustomInstallments: next,
+                                              paymentFirstInstallmentAmount:
+                                                next[0]?.amount || "",
+                                              paymentSecondInstallmentAmount:
+                                                next[1]?.amount || "",
+                                              paymentSecondInstallmentDate:
+                                                next[1]?.dueDate || "",
+                                              nextChargeDate:
+                                                next[1]?.dueDate || form.nextChargeDate || "",
+                                            });
+                                            return;
+                                          }
+                                          updateCustom(next);
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div className="md:col-span-5 space-y-1.5">
+                                      <Label>Fecha de pago *</Label>
+                                      <Input
+                                        type="date"
+                                        className={inputAccent}
+                                        value={it.dueDate || ""}
+                                        onChange={(e) => {
+                                          const next = safeCustom.map((x, i) =>
+                                            i === idx
+                                              ? { ...x, dueDate: e.target.value }
+                                              : x,
+                                          );
+                                          updateCustom(next);
+                                        }}
+                                      />
+                                    </div>
+
+                                    <div className="md:col-span-12 flex justify-end">
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        className="h-9"
+                                        disabled={!canRemove}
+                                        onClick={() => {
+                                          if (!canRemove) return;
+                                          const next = safeCustom.filter((_, i) => i !== idx);
+                                          updateCustom(next);
+                                        }}
+                                      >
+                                        Quitar
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <div className="space-y-1.5">
                           <Label>Observaciones (justificación) *</Label>
                           <Textarea
@@ -1602,7 +2294,7 @@ export function CloseSaleForm({
                             if (!files || files.length === 0) return;
                             const created_at = new Date().toISOString();
                             const existing = Array.isArray(
-                              form.paymentAttachments
+                              form.paymentAttachments,
                             )
                               ? form.paymentAttachments
                               : [];
@@ -1653,7 +2345,7 @@ export function CloseSaleForm({
                                     setForm({
                                       ...form,
                                       paymentAttachments: (Array.isArray(
-                                        form.paymentAttachments
+                                        form.paymentAttachments,
                                       )
                                         ? form.paymentAttachments
                                         : []
@@ -1671,66 +2363,6 @@ export function CloseSaleForm({
                             Sin adjuntos.
                           </div>
                         )}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <Label>Comprobante principal (imagen)</Label>
-                        <div className="text-xs text-slate-600 mb-2">
-                          Se guarda como base64 en el snapshot.
-                        </div>
-                        <Input
-                          type="file"
-                          accept="image/*"
-                          className={inputAccent}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) {
-                              setPaymentProof(null);
-                              onPaymentProofChange?.(null);
-                              return;
-                            }
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              const next = {
-                                file,
-                                dataUrl: String(reader.result || ""),
-                                name: file.name,
-                                type: file.type,
-                                size: file.size,
-                              };
-                              setPaymentProof(next);
-                              onPaymentProofChange?.({
-                                dataUrl: next.dataUrl,
-                                name: next.name,
-                                type: next.type,
-                                size: next.size,
-                              });
-                            };
-                            reader.readAsDataURL(file);
-                          }}
-                        />
-                        {paymentProof?.dataUrl ? (
-                          <div className="mt-2 space-y-2">
-                            <img
-                              src={paymentProof.dataUrl}
-                              alt="Comprobante"
-                              className="max-h-40 rounded border"
-                            />
-                            <div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setPaymentProof(null);
-                                  onPaymentProofChange?.(null);
-                                }}
-                              >
-                                Quitar comprobante
-                              </Button>
-                            </div>
-                          </div>
-                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1940,7 +2572,7 @@ export function CloseSaleForm({
                                     phone: prev.phone,
                                   },
                                   ...((prev.contractParties || []).slice(
-                                    1
+                                    1,
                                   ) as any),
                                 ],
                               }))

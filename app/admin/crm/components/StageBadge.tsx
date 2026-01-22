@@ -4,6 +4,10 @@ import { cn } from "@/lib/utils";
 
 // Mapeo de estilos inspirado en tonos suaves tipo HubSpot
 const STAGE_STYLES: Record<string, { base: string; ring: string }> = {
+  "Lead Nuevo": {
+    base: "bg-orange-50 text-orange-700 border border-orange-200",
+    ring: "focus:ring-orange-300",
+  },
   Nuevo: {
     base: "bg-orange-50 text-orange-700 border border-orange-200",
     ring: "focus:ring-orange-300",
@@ -12,13 +16,33 @@ const STAGE_STYLES: Record<string, { base: string; ring: string }> = {
     base: "bg-teal-50 text-teal-700 border border-teal-200",
     ring: "focus:ring-teal-300",
   },
+  "Cita Atendida": {
+    base: "bg-sky-50 text-sky-700 border border-sky-200",
+    ring: "focus:ring-sky-300",
+  },
+  "Seguimiento Activo": {
+    base: "bg-indigo-50 text-indigo-700 border border-indigo-200",
+    ring: "focus:ring-indigo-300",
+  },
+  "Pendiente de Pago": {
+    base: "bg-amber-50 text-amber-800 border border-amber-200",
+    ring: "focus:ring-amber-300",
+  },
   Calificado: {
     base: "bg-sky-50 text-sky-700 border border-sky-200",
     ring: "focus:ring-sky-300",
   },
+  "Cerrado – Ganado": {
+    base: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+    ring: "focus:ring-emerald-300",
+  },
   Ganado: {
     base: "bg-emerald-50 text-emerald-700 border border-emerald-200",
     ring: "focus:ring-emerald-300",
+  },
+  "Cerrado – Perdido": {
+    base: "bg-rose-50 text-rose-700 border border-rose-200",
+    ring: "focus:ring-rose-300",
   },
   Perdido: {
     base: "bg-rose-50 text-rose-700 border border-rose-200",
@@ -43,7 +67,7 @@ export function StageBadge({
         "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium shadow-sm",
         style.base,
         style.ring,
-        className
+        className,
       )}
     >
       <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />

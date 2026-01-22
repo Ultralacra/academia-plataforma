@@ -20,6 +20,10 @@ export function ProspectFilters({
   setCanal,
   owner,
   setOwner,
+  createdFrom,
+  setCreatedFrom,
+  createdTo,
+  setCreatedTo,
   etapas,
   canales,
   owners,
@@ -33,13 +37,17 @@ export function ProspectFilters({
   setCanal: (v: string) => void;
   owner: string;
   setOwner: (v: string) => void;
+  createdFrom: string;
+  setCreatedFrom: (v: string) => void;
+  createdTo: string;
+  setCreatedTo: (v: string) => void;
   etapas: string[];
   canales: string[];
-  owners: string[];
+  owners: Array<{ value: string; label: string }>;
   onClear: () => void;
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
         <Input
@@ -79,6 +87,25 @@ export function ProspectFilters({
           </SelectContent>
         </Select>
       </div>
+
+      <div>
+        <Label className="sr-only">Desde</Label>
+        <Input
+          type="date"
+          className="h-10"
+          value={createdFrom}
+          onChange={(e) => setCreatedFrom(e.target.value)}
+        />
+      </div>
+      <div>
+        <Label className="sr-only">Hasta</Label>
+        <Input
+          type="date"
+          className="h-10"
+          value={createdTo}
+          onChange={(e) => setCreatedTo(e.target.value)}
+        />
+      </div>
       <div className="flex gap-2">
         <div className="flex-1">
           <Select value={owner} onValueChange={setOwner}>
@@ -88,8 +115,8 @@ export function ProspectFilters({
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
               {owners.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
                 </SelectItem>
               ))}
             </SelectContent>
