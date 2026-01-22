@@ -253,15 +253,18 @@ export async function getAllStudentsPaged(params?: {
   page?: number;
   pageSize?: number;
   search?: string;
+  estado?: string;
 }): Promise<StudentsPagedResult> {
   const page = params?.page ?? 1;
   const pageSize = params?.pageSize ?? 1000;
   const search = String(params?.search ?? "").trim();
+  const estado = String(params?.estado ?? "").trim();
 
   const qs = new URLSearchParams();
   qs.set("page", String(page));
   qs.set("pageSize", String(pageSize));
   if (search) qs.set("search", search);
+  if (estado) qs.set("estado", estado);
 
   const path = `/client/get/clients?${qs.toString()}`;
   const json = await fetchJson<any>(path);

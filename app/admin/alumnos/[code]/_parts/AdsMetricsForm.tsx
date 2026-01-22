@@ -8,7 +8,21 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api-config";
+import {
+  Eye,
+  Trash2,
+  PlusCircle,
+  FileText,
+  Link as LinkIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { isoDay, parseMaybe } from "./detail-utils";
 
@@ -148,6 +162,61 @@ export default function AdsMetricsForm({
   const [assignedCoaches, setAssignedCoaches] = useState<
     Array<{ name: string; area?: string | null; puesto?: string | null }>
   >([]);
+  const [adsForms, setAdsForms] = useState<any[]>([]);
+  const [showNewNote, setShowNewNote] = useState<boolean>(false);
+  const [newNoteObs, setNewNoteObs] = useState<string>("");
+  const [newNoteInterv, setNewNoteInterv] = useState<string>("");
+  const [newNoteEnlaces, setNewNoteEnlaces] = useState<string>("");
+  const [newNoteLinks, setNewNoteLinks] = useState<
+    Array<{ name?: string; url: string }>
+  >([]);
+  const [newNoteLinkName, setNewNoteLinkName] = useState<string>("");
+  const [newNoteLinkUrl, setNewNoteLinkUrl] = useState<string>("");
+  const [newNoteFiles, setNewNoteFiles] = useState<
+    Array<{ id: string; name: string; type: string; size: number; url: string }>
+  >([]);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
+    null,
+  );
+  const [selectedInstanceDetailed, setSelectedInstanceDetailed] = useState<
+    any | null
+  >(null);
+  const [showHistory, setShowHistory] = useState<boolean>(false);
+
+  function addNewNoteLink() {
+    const url = (newNoteLinkUrl || "").trim();
+    if (!url) return;
+    setNewNoteLinks((prev) => [...prev, { name: newNoteLinkName || url, url }]);
+    setNewNoteLinkName("");
+    setNewNoteLinkUrl("");
+  }
+
+  function onPickNewNoteFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const add = files.map((f) => ({
+      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      name: f.name,
+      type: f.type || "application/octet-stream",
+      size: f.size,
+      url: URL.createObjectURL(f),
+    }));
+    setNewNoteFiles((prev) => [...prev, ...add]);
+    try {
+      e.target.value = "";
+    } catch {}
+  }
+
+  function removeNewNoteFile(id: string) {
+    setNewNoteFiles((prev) => {
+      const it = prev.find((x) => x.id === id);
+      if (it?.url)
+        try {
+          URL.revokeObjectURL(it.url);
+        } catch {}
+      return prev.filter((x) => x.id !== id);
+    });
+  }
 
   const norm = (v: unknown) =>
     String(v ?? "")
@@ -311,6 +380,239 @@ export default function AdsMetricsForm({
     };
   }, [studentCode]);
 
+  // Cargar lista completa de forms ADS (soporta respuesta anidada en data.data)
+  async function fetchAdsForms() {
+    try {
+      const url = `/ads-forms/get/ads-forms?codigo_alumno=${encodeURIComponent(
+        studentCode,
+      )}`;
+      const j = await apiFetch<any>(url);
+      const rows: any[] = Array.isArray(j?.data?.data)
+        ? j.data.data
+        : Array.isArray(j?.data)
+          ? j.data
+          : Array.isArray(j)
+            ? j
+            : [];
+      const mapped = rows
+        .map((r) => {
+          if (!r) return null;
+          // conservar objeto entero, pero normalizar campos
+          const item = {
+            id: r.id ?? r.codigo ?? String(Math.random()).slice(2),
+            codigo: r.codigo ?? r.id ?? null,
+            tipo: String(r.tipo ?? r.title ?? r.titulo ?? "").trim(),
+            observaciones: r.observaciones ?? r.obs ?? null,
+            intervencion_sugerida:
+              r.intervencion_sugerida ?? r.intervencion ?? null,
+            enlaces: Array.isArray(r.enlaces) ? r.enlaces : [],
+            archivos: Array.isArray(r.archivos) ? r.archivos : [],
+            raw: r,
+          };
+          if (!item.tipo) return null;
+          return item;
+        })
+        .filter(Boolean) as any[];
+      setAdsForms(mapped);
+    } catch (e) {
+      console.error("No se pudieron cargar ads-forms:", e);
+      setAdsForms([]);
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!mounted) return;
+      await fetchAdsForms();
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const formsOfPhase = useMemo(() => {
+    if (!data.fase) return [] as any[];
+    return adsForms.filter((f) => String(f.tipo) === String(data.fase));
+  }, [adsForms, data.fase]);
+
+  const selectedInstance = useMemo(() => {
+    if (selectedInstanceId)
+      return (
+        selectedInstanceDetailed ??
+        adsForms.find((f) => f.id === selectedInstanceId) ??
+        null
+      );
+    return formsOfPhase[0] ?? null;
+  }, [adsForms, selectedInstanceId, formsOfPhase]);
+
+  function formatFormLabel(f: any) {
+    const d =
+      f?.raw?.created_at ?? f?.raw?.createdAt ?? f?.raw?.fecha ?? f?.raw?.date;
+    const dt = parseMaybe(d);
+    const when = dt
+      ? dt.toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })
+      : String(d || f.id);
+    return `${when} — ${f.tipo}`;
+  }
+
+  // Fetch single form by codigo (detailed view)
+  async function fetchFormByCodigo(codigo: string) {
+    try {
+      const url = `/ads-forms/get/ads-form/${encodeURIComponent(String(codigo))}`;
+      const j = await apiFetch<any>(url);
+      const r = j?.data ?? j;
+      if (!r) return null;
+      const item = {
+        id: r.id ?? r.codigo ?? String(Math.random()).slice(2),
+        codigo: r.codigo ?? r.id ?? null,
+        tipo: String(r.tipo ?? r.title ?? r.titulo ?? "").trim(),
+        observaciones: r.observaciones ?? r.obs ?? null,
+        intervencion_sugerida:
+          r.intervencion_sugerida ?? r.intervencion ?? null,
+        enlaces: Array.isArray(r.enlaces) ? r.enlaces : [],
+        archivos: Array.isArray(r.archivos) ? r.archivos : [],
+        raw: r,
+      };
+      return item;
+    } catch (e) {
+      console.error("Error fetching form by codigo", e);
+      return null;
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!selectedInstanceId) {
+        setSelectedInstanceDetailed(null);
+        return;
+      }
+      const f = adsForms.find(
+        (x) => x.id === selectedInstanceId || x.codigo === selectedInstanceId,
+      );
+      const codigo = f?.codigo ?? selectedInstanceId;
+      if (!codigo) {
+        setSelectedInstanceDetailed(f ?? null);
+        return;
+      }
+      const detailed = await fetchFormByCodigo(codigo);
+      if (mounted) setSelectedInstanceDetailed(detailed ?? f ?? null);
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [selectedInstanceId, adsForms]);
+
+  async function handleDeleteForm(f: any) {
+    try {
+      const codigo = f.codigo || f.id;
+      if (!codigo) return;
+      await apiFetch(
+        `/ads-forms/delete/ads-form/${encodeURIComponent(String(codigo))}`,
+        { method: "DELETE" },
+      );
+      await fetchAdsForms();
+      setSelectedInstanceId(null);
+    } catch (e) {
+      console.error("Error deleting form", e);
+    }
+  }
+
+  async function handleCreateForm() {
+    try {
+      const payload = {
+        tipo: data.fase || "",
+        observaciones: newNoteObs || "",
+        intervencion_sugerida: newNoteInterv || "",
+        enlaces:
+          newNoteLinks.length > 0
+            ? newNoteLinks.map((l) => l.url)
+            : newNoteEnlaces
+              ? newNoteEnlaces
+                  .split("\n")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : [],
+        archivos: newNoteFiles.map((f) => ({
+          name: f.name,
+          mime_type: f.type,
+          size: f.size,
+          key: `ads-forms/${new Date().toISOString().slice(0, 10)}/${f.name}`,
+          url: f.url,
+        })),
+      } as any;
+      // Intentar crear via endpoint público (si existe)
+      let createdCodigo: string | null = null;
+      try {
+        const j = await apiFetch(`/ads-forms/create/ads-form`, {
+          method: "POST",
+          body: JSON.stringify({ ...payload, codigo_alumno: studentCode }),
+        });
+        const res = j?.data ?? j;
+        createdCodigo = res?.codigo ?? res?.id ?? res?.codigo_alumno ?? null;
+      } catch (e) {
+        // fallback: no existe endpoint, añadir localmente
+        const newItem = {
+          id: `local_${Date.now()}`,
+          codigo: `local_${Date.now()}`,
+          tipo: payload.tipo,
+          observaciones: payload.observaciones,
+          intervencion_sugerida: payload.intervencion_sugerida,
+          enlaces: payload.enlaces,
+          archivos: payload.archivos || [],
+          raw: { created_at: new Date().toISOString() },
+        };
+        setAdsForms((prev) => [newItem, ...prev]);
+        createdCodigo = newItem.codigo;
+      }
+
+      await fetchAdsForms();
+      // seleccionar la nota creada en el historial si existe
+      if (createdCodigo) {
+        setSelectedInstanceId(String(createdCodigo));
+      }
+
+      setShowNewNote(false);
+      setNewNoteObs("");
+      setNewNoteInterv("");
+      setNewNoteEnlaces("");
+      setNewNoteLinks([]);
+      setNewNoteLinkName("");
+      setNewNoteLinkUrl("");
+      // revoke object URLs
+      newNoteFiles.forEach((f) => {
+        try {
+          if (f.url) URL.revokeObjectURL(f.url);
+        } catch {}
+      });
+      setNewNoteFiles([]);
+    } catch (e) {
+      console.error("Error creating form", e);
+    }
+  }
+
+  const selectedForm = useMemo(() => {
+    if (!data.fase) return null;
+    return (
+      adsForms.find((f: any) => String(f.tipo) === String(data.fase)) ?? null
+    );
+  }, [adsForms, data.fase]);
+
+  // Inicializar fase_data con valores del form seleccionado si está vacío
+  useEffect(() => {
+    if (!selectedForm) return;
+    const phaseKey = selectedForm.tipo || String(selectedForm.id || "");
+    const existing = data.fase_data?.[phaseKey] || {};
+    const next = {
+      obs: existing.obs || selectedForm.observaciones || "",
+      interv_sugerida:
+        existing.interv_sugerida || selectedForm.intervencion_sugerida || "",
+    };
+    onChange("fase_data", { ...(data.fase_data || {}), [phaseKey]: next });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedForm?.id]);
+
   // Autosave con debounce al cambiar datos
   useEffect(() => {
     if (!didInitRef.current) return;
@@ -412,6 +714,52 @@ export default function AdsMetricsForm({
       setNewLinkName("");
       setNewLinkUrl("");
     } catch {}
+  }
+
+  // Importar enlaces/archivos desde el formulario seleccionado
+  function addAttachmentFromForm(item: {
+    name?: string;
+    url?: string;
+    kind?: "link" | "file";
+  }) {
+    if (!item?.url) return;
+    const entry = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      kind:
+        (item.kind as any) || (item.url?.startsWith("http") ? "link" : "file"),
+      name: item.name || item.url || "archivo",
+      url: item.url,
+    } as any;
+    const next = [...(data.adjuntos || []), entry];
+    onChange("adjuntos", next as any);
+  }
+
+  function copyObservacionesFromForm() {
+    if (!selectedForm) return;
+    const phase = data.fase || selectedForm.tipo || "sin-fase";
+    const currentPhaseData = data.fase_data?.[phase] || {};
+    const nextPhaseData = {
+      ...currentPhaseData,
+      obs: selectedForm.observaciones || "",
+    };
+    onChange("fase_data", {
+      ...(data.fase_data || {}),
+      [phase]: nextPhaseData,
+    });
+  }
+
+  function copyIntervFromForm() {
+    if (!selectedForm) return;
+    const phase = data.fase || selectedForm.tipo || "sin-fase";
+    const currentPhaseData = data.fase_data?.[phase] || {};
+    const nextPhaseData = {
+      ...currentPhaseData,
+      interv_sugerida: selectedForm.intervencion_sugerida || "",
+    };
+    onChange("fase_data", {
+      ...(data.fase_data || {}),
+      [phase]: nextPhaseData,
+    });
   }
 
   function removeSavedAttachment(id: string) {
@@ -549,675 +897,1063 @@ export default function AdsMetricsForm({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="text-sm text-muted-foreground">
-        {loading
-          ? "Cargando métricas…"
-          : saving
-            ? "Guardando…"
-            : "Cambios guardados"}
-      </div>
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">
-            Métricas ADS {studentName ? `— ${studentName}` : ""}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label>Fecha inicio</Label>
-              <Input
-                type="date"
-                value={data.fecha_inicio || ""}
-                onChange={(e) => onChange("fecha_inicio", e.target.value)}
-              />
+    <>
+      <div className="space-y-6">
+        <div className="text-sm text-muted-foreground">
+          {loading
+            ? "Cargando métricas…"
+            : saving
+              ? "Guardando…"
+              : "Cambios guardados"}
+        </div>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              Métricas ADS {studentName ? `— ${studentName}` : ""}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label>Fecha inicio</Label>
+                <Input
+                  type="date"
+                  value={data.fecha_inicio || ""}
+                  onChange={(e) => onChange("fecha_inicio", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Fecha asignación</Label>
+                <Input
+                  type="date"
+                  value={data.fecha_asignacion || ""}
+                  onChange={(e) => onChange("fecha_asignacion", e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Fecha fin</Label>
+                <Input
+                  type="date"
+                  value={data.fecha_fin || ""}
+                  onChange={(e) => onChange("fecha_fin", e.target.value)}
+                />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Fecha asignación</Label>
-              <Input
-                type="date"
-                value={data.fecha_asignacion || ""}
-                onChange={(e) => onChange("fecha_asignacion", e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Fecha fin</Label>
-              <Input
-                type="date"
-                value={data.fecha_fin || ""}
-                onChange={(e) => onChange("fecha_fin", e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Rendimiento</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Inversión (USD)</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.inversion || ""}
-                    onChange={(e) => onChange("inversion", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Facturación (USD)</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.facturacion || ""}
-                    onChange={(e) => onChange("facturacion", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label>ROAS</Label>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>Auto</span>
-                      <Switch
-                        checked={!!data.auto_roas}
-                        onCheckedChange={(v) => onChange("auto_roas", v)}
-                      />
-                    </div>
-                  </div>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0.00"
-                    disabled={data.auto_roas}
-                    value={data.auto_roas ? view.roas || "" : data.roas || ""}
-                    onChange={(e) => onChange("roas", e.target.value)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Notas y adjuntos</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Observaciones</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder="Notas, comentarios, enlaces…"
-                    value={data.fase_data?.[data.fase || "sin-fase"]?.obs || ""}
-                    onChange={(e) => {
-                      const phase = data.fase || "sin-fase";
-                      const currentPhaseData = data.fase_data?.[phase] || {};
-                      const nextPhaseData = {
-                        ...currentPhaseData,
-                        obs: e.target.value,
-                      };
-                      onChange("fase_data", {
-                        ...(data.fase_data || {}),
-                        [phase]: nextPhaseData,
-                      });
-                    }}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Intervención sugerida</Label>
-                  <Textarea
-                    rows={3}
-                    placeholder="Descripción de la intervención"
-                    value={
-                      data.fase_data?.[data.fase || "sin-fase"]
-                        ?.interv_sugerida || ""
-                    }
-                    onChange={(e) => {
-                      const phase = data.fase || "sin-fase";
-                      const currentPhaseData = data.fase_data?.[phase] || {};
-                      const nextPhaseData = {
-                        ...currentPhaseData,
-                        interv_sugerida: e.target.value,
-                      };
-                      onChange("fase_data", {
-                        ...(data.fase_data || {}),
-                        [phase]: nextPhaseData,
-                      });
-                    }}
-                  />
-                </div>
-
-                <div className="pt-2 space-y-2">
-                  <div className="text-xs text-muted-foreground">
-                    Adjuntar enlaces
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Rendimiento</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Inversión (USD)</Label>
                     <Input
-                      className="md:col-span-2"
-                      placeholder="Nombre (opcional)"
-                      value={newLinkName}
-                      onChange={(e) => setNewLinkName(e.target.value)}
-                    />
-                    <Input
-                      className="md:col-span-3"
-                      placeholder="https://…"
-                      value={newLinkUrl}
-                      onChange={(e) => setNewLinkUrl(e.target.value)}
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.inversion || ""}
+                      onChange={(e) => onChange("inversion", e.target.value)}
                     />
                   </div>
-                  <div>
-                    <Button type="button" size="sm" onClick={addLinkAttachment}>
-                      Agregar enlace
-                    </Button>
+                  <div className="space-y-1.5">
+                    <Label>Facturación (USD)</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.facturacion || ""}
+                      onChange={(e) => onChange("facturacion", e.target.value)}
+                    />
                   </div>
-                  {(data.adjuntos || []).filter((a) => a.kind === "link")
-                    .length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">
-                        Enlaces guardados
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {(data.adjuntos || [])
-                          .filter((a) => a.kind === "link")
-                          .map((a) => (
-                            <div
-                              key={a.id}
-                              className="flex items-center gap-2 rounded border px-2 py-1"
-                            >
-                              <a
-                                href={a.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-xs text-primary hover:underline"
-                                title={a.url}
-                              >
-                                {a.name || a.url}
-                              </a>
-                              <button
-                                type="button"
-                                className="text-[11px] text-muted-foreground hover:text-destructive"
-                                onClick={() => removeSavedAttachment(a.id)}
-                              >
-                                Quitar
-                              </button>
-                            </div>
-                          ))}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Label>ROAS</Label>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>Auto</span>
+                        <Switch
+                          checked={!!data.auto_roas}
+                          onCheckedChange={(v) => onChange("auto_roas", v)}
+                        />
                       </div>
                     </div>
-                  )}
-                </div>
-
-                <div className="pt-3 space-y-2">
-                  <div className="text-xs text-muted-foreground">
-                    Adjuntar archivos (solo esta sesión)
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0.00"
+                      disabled={data.auto_roas}
+                      value={data.auto_roas ? view.roas || "" : data.roas || ""}
+                      onChange={(e) => onChange("roas", e.target.value)}
+                    />
                   </div>
-                  <input type="file" multiple onChange={onPickSessionFiles} />
-                  {sessionFiles.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="text-xs text-muted-foreground">
-                        Archivos de la sesión
-                      </div>
-                      <div className="flex flex-col gap-1">
-                        {sessionFiles.map((f) => (
-                          <div
-                            key={f.id}
-                            className="flex items-center justify-between text-xs rounded border px-2 py-1"
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Notas y adjuntos</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {data.fase && (
+                    <div className="mb-3 p-3 border rounded bg-muted/5">
+                      <div className="flex items-center justify-between">
+                        <div className="text-sm font-medium">
+                          Formulario: {data.fase}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setShowNewNote(true)}
                           >
-                            <div className="truncate">
-                              {f.name}{" "}
-                              <span className="text-muted-foreground">
-                                ({(f.size / 1024).toFixed(0)} KB)
-                              </span>
+                            <PlusCircle className="mr-2" size={14} />
+                            Nueva nota
+                          </Button>
+                        </div>
+                      </div>
+                      {Array.isArray(formsOfPhase) &&
+                        formsOfPhase.length > 0 && (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            <div className="font-semibold">
+                              Notas disponibles
                             </div>
-                            <div className="flex items-center gap-2">
-                              <a
-                                href={f.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-primary hover:underline"
-                              >
-                                Ver
-                              </a>
-                              <button
-                                type="button"
-                                className="hover:text-destructive"
-                                onClick={() => removeSessionFile(f.id)}
-                              >
-                                Quitar
-                              </button>
+                            <div className="flex flex-col gap-1 mt-2">
+                              {showHistory ? (
+                                formsOfPhase.map((f: any) => (
+                                  <div
+                                    key={f.id}
+                                    className="flex items-center justify-between text-sm rounded border px-3 py-2"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div className="text-muted-foreground">
+                                        <FileText size={16} />
+                                      </div>
+                                      <div className="truncate">
+                                        {formatFormLabel(f)}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        size="xs"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          setSelectedInstanceId(f.id);
+                                          setShowHistory(false);
+                                        }}
+                                      >
+                                        <Eye size={14} />
+                                      </Button>
+                                      <Button
+                                        size="xs"
+                                        variant="ghost"
+                                        onClick={() => handleDeleteForm(f)}
+                                      >
+                                        <Trash2 size={14} />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))
+                              ) : (
+                                // Mostrar solo la primera por defecto (o la seleccionada)
+                                <div className="flex items-center justify-between text-sm rounded border px-3 py-2">
+                                  <div className="flex items-center gap-3">
+                                    <div className="text-muted-foreground">
+                                      <FileText size={16} />
+                                    </div>
+                                    <div className="truncate">
+                                      {formatFormLabel(
+                                        selectedInstance ?? formsOfPhase[0],
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="xs"
+                                      variant="ghost"
+                                      onClick={() => setShowHistory(true)}
+                                    >
+                                      <Eye size={14} className="mr-2" />{" "}
+                                      Historial
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">
-                        Nota: los archivos no se guardan en el servidor ni en
-                        localStorage. Usa enlaces para persistir referencias
-                        (Drive, YouTube, etc.).
+                        )}
+
+                      {selectedInstance && selectedInstance.observaciones && (
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          <div className="font-semibold">
+                            Observaciones del form
+                          </div>
+                          <div className="truncate">
+                            {selectedInstance.observaciones}
+                          </div>
+                        </div>
+                      )}
+                      {selectedInstance &&
+                        selectedInstance.intervencion_sugerida && (
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            <div className="font-semibold">
+                              Intervención sugerida
+                            </div>
+                            <div className="truncate">
+                              {selectedInstance.intervencion_sugerida}
+                            </div>
+                          </div>
+                        )}
+
+                      {selectedInstance?.enlaces?.length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-xs text-muted-foreground">
+                            Enlaces del formulario
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {selectedInstance.enlaces.map(
+                              (l: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center gap-2 rounded border px-2 py-1"
+                                >
+                                  <a
+                                    href={l.url || l}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-sm text-primary hover:underline"
+                                  >
+                                    {l.name || l.url || String(l)}
+                                  </a>
+                                  <Button
+                                    size="xs"
+                                    variant="ghost"
+                                    onClick={() =>
+                                      addAttachmentFromForm({
+                                        name: l.name,
+                                        url: l.url || l,
+                                        kind: "link",
+                                      })
+                                    }
+                                  >
+                                    <LinkIcon size={14} />
+                                  </Button>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedInstance?.archivos?.length > 0 && (
+                        <div className="mt-3">
+                          <div className="text-xs text-muted-foreground">
+                            Archivos del formulario
+                          </div>
+                          <div className="flex flex-col gap-2 mt-2">
+                            {selectedInstance.archivos.map(
+                              (f: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center justify-between rounded border px-2 py-1 text-xs"
+                                >
+                                  <div className="truncate">
+                                    {f.name ||
+                                      f.filename ||
+                                      f.title ||
+                                      f.url ||
+                                      String(f)}
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {f.url ? (
+                                      <a
+                                        href={f.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-primary hover:underline"
+                                      >
+                                        Ver
+                                      </a>
+                                    ) : null}
+                                    <Button
+                                      size="xs"
+                                      variant="ghost"
+                                      onClick={() =>
+                                        addAttachmentFromForm({
+                                          name: f.name || f.filename || f.title,
+                                          url: f.url,
+                                          kind: "file",
+                                        })
+                                      }
+                                    >
+                                      <FileText size={14} />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ),
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={copyObservacionesFromForm}
+                        >
+                          Usar observaciones del form
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={copyIntervFromForm}
+                        >
+                          Usar intervención sugerida
+                        </Button>
                       </div>
                     </div>
                   )}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                  <div className="space-y-1.5">
+                    <Label>Observaciones</Label>
+                    <Textarea
+                      rows={3}
+                      placeholder="Notas, comentarios, enlaces…"
+                      value={
+                        data.fase_data?.[data.fase || "sin-fase"]?.obs || ""
+                      }
+                      onChange={(e) => {
+                        const phase = data.fase || "sin-fase";
+                        const currentPhaseData = data.fase_data?.[phase] || {};
+                        const nextPhaseData = {
+                          ...currentPhaseData,
+                          obs: e.target.value,
+                        };
+                        onChange("fase_data", {
+                          ...(data.fase_data || {}),
+                          [phase]: nextPhaseData,
+                        });
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Intervención sugerida</Label>
+                    <Textarea
+                      rows={3}
+                      placeholder="Descripción de la intervención"
+                      value={
+                        data.fase_data?.[data.fase || "sin-fase"]
+                          ?.interv_sugerida || ""
+                      }
+                      onChange={(e) => {
+                        const phase = data.fase || "sin-fase";
+                        const currentPhaseData = data.fase_data?.[phase] || {};
+                        const nextPhaseData = {
+                          ...currentPhaseData,
+                          interv_sugerida: e.target.value,
+                        };
+                        onChange("fase_data", {
+                          ...(data.fase_data || {}),
+                          [phase]: nextPhaseData,
+                        });
+                      }}
+                    />
+                  </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Embudo</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Alcance</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.alcance || ""}
-                    onChange={(e) => onChange("alcance", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Clics</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.clics || ""}
-                    onChange={(e) => onChange("clics", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Visitas</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.visitas || ""}
-                    onChange={(e) => onChange("visitas", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Pagos iniciados</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.pagos || ""}
-                    onChange={(e) => onChange("pagos", e.target.value)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Efectividades (%)</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 gap-3">
-                <div className="space-y-1">
-                  <Label>Carga de página (visitas/clics)</Label>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0%"
-                    disabled
-                    value={`${data.carga_pagina || "0"}%`}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Ads (clics/alcance)</Label>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0.0"
-                    disabled
-                    value={
-                      view.eff_ads != null
-                        ? `${(Number(view.eff_ads) * 100).toFixed(1)}%`
-                        : ""
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Pago iniciado (pagos/visitas)</Label>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0%"
-                    disabled={data.auto_eff}
-                    value={`${
-                      data.auto_eff
-                        ? fmtRatioToPercent(view.eff_pago)
-                        : fmtManualPercent(data.eff_pago)
-                    }%`}
-                    onChange={(e) =>
-                      onChange("eff_pago", sanitizePercentInput(e.target.value))
-                    }
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>Compra (carnada/visitas)</Label>
-                  <Input
-                    inputMode="decimal"
-                    placeholder="0%"
-                    disabled={data.auto_eff}
-                    value={`${
-                      data.auto_eff
-                        ? fmtRatioToPercent(view.eff_compra)
-                        : fmtManualPercent(data.eff_compra)
-                    }%`}
-                    onChange={(e) =>
-                      onChange(
-                        "eff_compra",
-                        sanitizePercentInput(e.target.value),
-                      )
-                    }
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="pt-2 space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      Adjuntar enlaces
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                      <Input
+                        className="md:col-span-2"
+                        placeholder="Nombre (opcional)"
+                        value={newLinkName}
+                        onChange={(e) => setNewLinkName(e.target.value)}
+                      />
+                      <Input
+                        className="md:col-span-3"
+                        placeholder="https://…"
+                        value={newLinkUrl}
+                        onChange={(e) => setNewLinkUrl(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={addLinkAttachment}
+                      >
+                        Agregar enlace
+                      </Button>
+                    </div>
+                    {(data.adjuntos || []).filter((a) => a.kind === "link")
+                      .length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">
+                          Enlaces guardados
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(data.adjuntos || [])
+                            .filter((a) => a.kind === "link")
+                            .map((a) => (
+                              <div
+                                key={a.id}
+                                className="flex items-center gap-2 rounded border px-2 py-1"
+                              >
+                                <a
+                                  href={a.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs text-primary hover:underline"
+                                  title={a.url}
+                                >
+                                  {a.name || a.url}
+                                </a>
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => removeSavedAttachment(a.id)}
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Compras</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Carnada</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.compra_carnada || ""}
-                    onChange={(e) => onChange("compra_carnada", e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Bump 1</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.compra_bump1 || ""}
-                    onChange={(e) => onChange("compra_bump1", e.target.value)}
-                  />
-                  <div className="text-[11px] text-muted-foreground">
-                    Efectividad: {pctOf(data.compra_bump1, data.compra_carnada)}
+                  <div className="pt-3 space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      Adjuntar archivos (solo esta sesión)
+                    </div>
+                    <input type="file" multiple onChange={onPickSessionFiles} />
+                    {sessionFiles.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground">
+                          Archivos de la sesión
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {sessionFiles.map((f) => (
+                            <div
+                              key={f.id}
+                              className="flex items-center justify-between text-xs rounded border px-2 py-1"
+                            >
+                              <div className="truncate">
+                                {f.name}{" "}
+                                <span className="text-muted-foreground">
+                                  ({(f.size / 1024).toFixed(0)} KB)
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={f.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  Ver
+                                </a>
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() => removeSessionFile(f.id)}
+                                >
+                                  <Trash2 size={14} />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          Nota: los archivos no se guardan en el servidor ni en
+                          localStorage. Usa enlaces para persistir referencias
+                          (Drive, YouTube, etc.).
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Bump 2</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.compra_bump2 || ""}
-                    onChange={(e) => onChange("compra_bump2", e.target.value)}
-                  />
-                  <div className="text-[11px] text-muted-foreground">
-                    Efectividad: {pctOf(data.compra_bump2, data.compra_carnada)}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>OTO 1</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.compra_oto1 || ""}
-                    onChange={(e) => onChange("compra_oto1", e.target.value)}
-                  />
-                  <div className="text-[11px] text-muted-foreground">
-                    Efectividad: {pctOf(data.compra_oto1, data.compra_carnada)}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>OTO 2</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.compra_oto2 || ""}
-                    onChange={(e) => onChange("compra_oto2", e.target.value)}
-                  />
-                  <div className="text-[11px] text-muted-foreground">
-                    Efectividad: {pctOf(data.compra_oto2, data.compra_carnada)}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Downsell</Label>
-                  <Input
-                    inputMode="numeric"
-                    placeholder="0"
-                    value={data.compra_downsell || ""}
-                    onChange={(e) =>
-                      onChange("compra_downsell", e.target.value)
-                    }
-                  />
-                  <div className="text-[11px] text-muted-foreground">
-                    Efectividad:{" "}
-                    {pctOf(data.compra_downsell, data.compra_carnada)}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Estado</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Label>Pauta activa</Label>
-                  <Switch
-                    checked={!!data.pauta_activa}
-                    onCheckedChange={(v) => onChange("pauta_activa", v)}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label>¿Requiere intervención?</Label>
-                  <Switch
-                    checked={!!data.requiere_interv}
-                    onCheckedChange={(v) => onChange("requiere_interv", v)}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Fase</Label>
-                  <select
-                    value={data.fase ? data.fase : "sin-fase"}
-                    onChange={(e) =>
-                      onChange(
-                        "fase",
-                        e.target.value === "sin-fase" ? "" : e.target.value,
-                      )
-                    }
-                    className="w-full h-9 rounded-md border px-3 text-sm"
-                  >
-                    <option value="sin-fase">Sin fase</option>
-                    <option value="Fase de testeo">Fase de testeo</option>
-                    <option value="Fase de optimización">
-                      Fase de optimización
-                    </option>
-                    <option value="Fase de Escala">Fase de Escala</option>
-                  </select>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Coaches</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Coach de Copy</Label>
-                  <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
-                    <span className="font-medium">
-                      {coachCopyAssigned?.name || "—"}
-                    </span>
-                    {coachCopyAssigned?.area ? (
-                      <Badge variant="secondary">
-                        {String(coachCopyAssigned.area)}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Coach Técnico</Label>
-                  <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
-                    <span className="font-medium">
-                      {coachAdsAssigned?.name || "—"}
-                    </span>
-                    {coachAdsAssigned?.area ? (
-                      <Badge variant="secondary">
-                        {String(coachAdsAssigned.area)}
-                      </Badge>
-                    ) : null}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Vista previa</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-5 text-sm">
-          <div className="space-y-1.5">
-            <div className="font-medium text-muted-foreground">Rendimiento</div>
-            <div>
-              ROAS: <b>{view.roas ?? "—"}</b>
+                </CardContent>
+              </Card>
             </div>
-            <div>
-              Inversión: <b>{fmtMoney(data.inversion)}</b>
-            </div>
-            <div>
-              Facturación: <b>{fmtMoney(data.facturacion)}</b>
-            </div>
-          </div>
 
-          <Separator />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Embudo</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Alcance</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.alcance || ""}
+                      onChange={(e) => onChange("alcance", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Clics</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.clics || ""}
+                      onChange={(e) => onChange("clics", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Visitas</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.visitas || ""}
+                      onChange={(e) => onChange("visitas", e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Pagos iniciados</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.pagos || ""}
+                      onChange={(e) => onChange("pagos", e.target.value)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Efectividades (%)</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 gap-3">
+                  <div className="space-y-1">
+                    <Label>Carga de página (visitas/clics)</Label>
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0%"
+                      disabled
+                      value={`${data.carga_pagina || "0"}%`}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Ads (clics/alcance)</Label>
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0.0"
+                      disabled
+                      value={
+                        view.eff_ads != null
+                          ? `${(Number(view.eff_ads) * 100).toFixed(1)}%`
+                          : ""
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Pago iniciado (pagos/visitas)</Label>
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0%"
+                      disabled={data.auto_eff}
+                      value={`${
+                        data.auto_eff
+                          ? fmtRatioToPercent(view.eff_pago)
+                          : fmtManualPercent(data.eff_pago)
+                      }%`}
+                      onChange={(e) =>
+                        onChange(
+                          "eff_pago",
+                          sanitizePercentInput(e.target.value),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Compra (carnada/visitas)</Label>
+                    <Input
+                      inputMode="decimal"
+                      placeholder="0%"
+                      disabled={data.auto_eff}
+                      value={`${
+                        data.auto_eff
+                          ? fmtRatioToPercent(view.eff_compra)
+                          : fmtManualPercent(data.eff_compra)
+                      }%`}
+                      onChange={(e) =>
+                        onChange(
+                          "eff_compra",
+                          sanitizePercentInput(e.target.value),
+                        )
+                      }
+                    />
+                  </div>
+                </CardContent>
+              </Card>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <div className="font-medium text-muted-foreground">Embudo</div>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                <div>
-                  Alcance: <b>{fmtNum(data.alcance)}</b>
-                </div>
-                <div>
-                  Clics: <b>{fmtNum(data.clics)}</b>
-                </div>
-                <div>
-                  Visitas: <b>{fmtNum(data.visitas)}</b>
-                </div>
-                <div>
-                  Pagos: <b>{fmtNum(data.pagos)}</b>
-                </div>
-                <div className="col-span-2">
-                  Carga pág: <b>{fmtPct(data.carga_pagina)}</b>
-                </div>
-              </div>
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Compras</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Carnada</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.compra_carnada || ""}
+                      onChange={(e) =>
+                        onChange("compra_carnada", e.target.value)
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Bump 1</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.compra_bump1 || ""}
+                      onChange={(e) => onChange("compra_bump1", e.target.value)}
+                    />
+                    <div className="text-[11px] text-muted-foreground">
+                      Efectividad:{" "}
+                      {pctOf(data.compra_bump1, data.compra_carnada)}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Bump 2</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.compra_bump2 || ""}
+                      onChange={(e) => onChange("compra_bump2", e.target.value)}
+                    />
+                    <div className="text-[11px] text-muted-foreground">
+                      Efectividad:{" "}
+                      {pctOf(data.compra_bump2, data.compra_carnada)}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>OTO 1</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.compra_oto1 || ""}
+                      onChange={(e) => onChange("compra_oto1", e.target.value)}
+                    />
+                    <div className="text-[11px] text-muted-foreground">
+                      Efectividad:{" "}
+                      {pctOf(data.compra_oto1, data.compra_carnada)}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>OTO 2</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.compra_oto2 || ""}
+                      onChange={(e) => onChange("compra_oto2", e.target.value)}
+                    />
+                    <div className="text-[11px] text-muted-foreground">
+                      Efectividad:{" "}
+                      {pctOf(data.compra_oto2, data.compra_carnada)}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Downsell</Label>
+                    <Input
+                      inputMode="numeric"
+                      placeholder="0"
+                      value={data.compra_downsell || ""}
+                      onChange={(e) =>
+                        onChange("compra_downsell", e.target.value)
+                      }
+                    />
+                    <div className="text-[11px] text-muted-foreground">
+                      Efectividad:{" "}
+                      {pctOf(data.compra_downsell, data.compra_carnada)}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Estado</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label>Pauta activa</Label>
+                    <Switch
+                      checked={!!data.pauta_activa}
+                      onCheckedChange={(v) => onChange("pauta_activa", v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label>¿Requiere intervención?</Label>
+                    <Switch
+                      checked={!!data.requiere_interv}
+                      onCheckedChange={(v) => onChange("requiere_interv", v)}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Fase</Label>
+                    <select
+                      value={data.fase ? data.fase : "sin-fase"}
+                      onChange={(e) =>
+                        onChange(
+                          "fase",
+                          e.target.value === "sin-fase" ? "" : e.target.value,
+                        )
+                      }
+                      className="w-full h-9 rounded-md border px-3 text-sm"
+                    >
+                      <option value="sin-fase">Sin fase</option>
+                      {/* Mostrar primero los títulos obtenidos desde /v1/ads-forms/get/ads-forms */}
+                      {adsForms.length > 0 ? (
+                        Array.from(new Set(adsForms.map((f) => f.tipo))).map(
+                          (t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ),
+                        )
+                      ) : (
+                        // Fallback a opciones antiguas si no se cargaron forms
+                        <>
+                          <option value="Fase de testeo">Fase de testeo</option>
+                          <option value="Fase de optimización">
+                            Fase de optimización
+                          </option>
+                          <option value="Fase de Escala">Fase de Escala</option>
+                        </>
+                      )}
+                    </select>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Coaches</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Coach de Copy</Label>
+                    <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
+                      <span className="font-medium">
+                        {coachCopyAssigned?.name || "—"}
+                      </span>
+                      {coachCopyAssigned?.area ? (
+                        <Badge variant="secondary">
+                          {String(coachCopyAssigned.area)}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Coach Técnico</Label>
+                    <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
+                      <span className="font-medium">
+                        {coachAdsAssigned?.name || "—"}
+                      </span>
+                      {coachAdsAssigned?.area ? (
+                        <Badge variant="secondary">
+                          {String(coachAdsAssigned.area)}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Vista previa</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-5 text-sm">
             <div className="space-y-1.5">
               <div className="font-medium text-muted-foreground">
-                Efectividades
+                Rendimiento
               </div>
               <div>
-                Ads: <b>{fmtPct(view.eff_ads)}</b>{" "}
-                <span className="text-[10px] text-muted-foreground">
-                  ({view.eff_ads})
-                </span>
+                ROAS: <b>{view.roas ?? "—"}</b>
               </div>
               <div>
-                Pago iniciado: <b>{fmtPct(view.eff_pago)}</b>
+                Inversión: <b>{fmtMoney(data.inversion)}</b>
               </div>
               <div>
-                Compra: <b>{fmtPct(view.eff_compra)}</b>
+                Facturación: <b>{fmtMoney(data.facturacion)}</b>
               </div>
             </div>
-          </div>
 
-          <Separator />
+            <Separator />
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <div className="font-medium text-muted-foreground mb-2">
-                Compras
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <div className="font-medium text-muted-foreground">Embudo</div>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  <div>
+                    Alcance: <b>{fmtNum(data.alcance)}</b>
+                  </div>
+                  <div>
+                    Clics: <b>{fmtNum(data.clics)}</b>
+                  </div>
+                  <div>
+                    Visitas: <b>{fmtNum(data.visitas)}</b>
+                  </div>
+                  <div>
+                    Pagos: <b>{fmtNum(data.pagos)}</b>
+                  </div>
+                  <div className="col-span-2">
+                    Carga pág: <b>{fmtPct(data.carga_pagina)}</b>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {(
-                  [
-                    ["Carnada", data.compra_carnada],
-                    ["B1", data.compra_bump1],
-                    ["B2", data.compra_bump2],
-                    ["O1", data.compra_oto1],
-                    ["O2", data.compra_oto2],
-                    ["Dn", data.compra_downsell],
-                  ] as const
-                )
-                  .filter(([, v]) => toNum(v) && toNum(v)! > 0)
-                  .map(([k, v]) => (
-                    <span
-                      key={k}
-                      className="inline-flex items-center rounded bg-muted px-2 py-1 text-xs"
-                    >
-                      {k}: {fmtNum(v)}
-                    </span>
-                  ))}
-                {!toNum(data.compra_carnada) &&
-                  !toNum(data.compra_bump1) &&
-                  !toNum(data.compra_bump2) &&
-                  !toNum(data.compra_oto1) &&
-                  !toNum(data.compra_oto2) &&
-                  !toNum(data.compra_downsell) && (
-                    <span className="text-sm text-muted-foreground">
-                      Sin registros
-                    </span>
-                  )}
-              </div>
-            </div>
-            <div>
-              <div className="font-medium text-muted-foreground mb-2">
-                Estado y fase
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
-                    data.pauta_activa ? "border-border" : "border-border"
-                  }`}
-                >
-                  {data.pauta_activa ? "Pauta activa" : "Pauta inactiva"}
-                </span>
-                <span
-                  className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
-                    data.requiere_interv
-                      ? "bg-rose-900/20 text-rose-300"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {data.requiere_interv
-                    ? "Requiere intervención"
-                    : "Sin intervención"}
-                </span>
-                <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs border-border">
-                  {data.fase || "Sin fase"}
-                </span>
-              </div>
-            </div>
-            <div>
-              <div className="font-medium text-muted-foreground mb-2">
-                Coaches
-              </div>
-              <div className="grid grid-cols-1 gap-1">
-                <div>
-                  Copy: <b>{data.coach_copy || "—"}</b>
+              <div className="space-y-1.5">
+                <div className="font-medium text-muted-foreground">
+                  Efectividades
                 </div>
                 <div>
-                  Técnico: <b>{data.coach_plat || "—"}</b>
+                  Ads: <b>{fmtPct(view.eff_ads)}</b>{" "}
+                  <span className="text-[10px] text-muted-foreground">
+                    ({view.eff_ads})
+                  </span>
+                </div>
+                <div>
+                  Pago iniciado: <b>{fmtPct(view.eff_pago)}</b>
+                </div>
+                <div>
+                  Compra: <b>{fmtPct(view.eff_compra)}</b>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div className="text-[11px] text-muted-foreground">
-            Guardado local automáticamente. Esta vista no envía datos al
-            servidor.
+            <Separator />
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <div className="font-medium text-muted-foreground mb-2">
+                  Compras
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["Carnada", data.compra_carnada],
+                      ["B1", data.compra_bump1],
+                      ["B2", data.compra_bump2],
+                      ["O1", data.compra_oto1],
+                      ["O2", data.compra_oto2],
+                      ["Dn", data.compra_downsell],
+                    ] as const
+                  )
+                    .filter(([, v]) => toNum(v) && toNum(v)! > 0)
+                    .map(([k, v]) => (
+                      <span
+                        key={k}
+                        className="inline-flex items-center rounded bg-muted px-2 py-1 text-xs"
+                      >
+                        {k}: {fmtNum(v)}
+                      </span>
+                    ))}
+                  {!toNum(data.compra_carnada) &&
+                    !toNum(data.compra_bump1) &&
+                    !toNum(data.compra_bump2) &&
+                    !toNum(data.compra_oto1) &&
+                    !toNum(data.compra_oto2) &&
+                    !toNum(data.compra_downsell) && (
+                      <span className="text-sm text-muted-foreground">
+                        Sin registros
+                      </span>
+                    )}
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-muted-foreground mb-2">
+                  Estado y fase
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs ${
+                      data.pauta_activa ? "border-border" : "border-border"
+                    }`}
+                  >
+                    {data.pauta_activa ? "Pauta activa" : "Pauta inactiva"}
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ${
+                      data.requiere_interv
+                        ? "bg-rose-900/20 text-rose-300"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {data.requiere_interv
+                      ? "Requiere intervención"
+                      : "Sin intervención"}
+                  </span>
+                  <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs border-border">
+                    {data.fase || "Sin fase"}
+                  </span>
+                </div>
+              </div>
+              <div>
+                <div className="font-medium text-muted-foreground mb-2">
+                  Coaches
+                </div>
+                <div className="grid grid-cols-1 gap-1">
+                  <div>
+                    Copy: <b>{data.coach_copy || "—"}</b>
+                  </div>
+                  <div>
+                    Técnico: <b>{data.coach_plat || "—"}</b>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-muted-foreground">
+              Guardado local automáticamente. Esta vista no envía datos al
+              servidor.
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+      <Dialog open={showNewNote} onOpenChange={(v) => setShowNewNote(!!v)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Nueva nota {data.fase ? `— ${data.fase}` : ""}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div className="space-y-1">
+              <Label>Observaciones</Label>
+              <Textarea
+                value={newNoteObs}
+                onChange={(e) => setNewNoteObs(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Intervención sugerida</Label>
+              <Textarea
+                value={newNoteInterv}
+                onChange={(e) => setNewNoteInterv(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Enlaces</Label>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                <Input
+                  className="md:col-span-2"
+                  placeholder="Nombre (opcional)"
+                  value={newNoteLinkName}
+                  onChange={(e) => setNewNoteLinkName(e.target.value)}
+                />
+                <Input
+                  className="md:col-span-3"
+                  placeholder="https://…"
+                  value={newNoteLinkUrl}
+                  onChange={(e) => setNewNoteLinkUrl(e.target.value)}
+                />
+              </div>
+              <div>
+                <Button type="button" size="sm" onClick={addNewNoteLink}>
+                  Agregar enlace
+                </Button>
+              </div>
+              {newNoteLinks.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">Enlaces</div>
+                  <div className="flex flex-wrap gap-2">
+                    {newNoteLinks.map((l, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 rounded border px-2 py-1"
+                      >
+                        <a
+                          href={l.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          {l.name || l.url}
+                        </a>
+                        <button
+                          type="button"
+                          className="text-[11px] text-muted-foreground hover:text-destructive"
+                          onClick={() =>
+                            setNewNoteLinks((prev) =>
+                              prev.filter((_, idx) => idx !== i),
+                            )
+                          }
+                        >
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-3 space-y-2">
+                <div className="text-xs text-muted-foreground">
+                  Adjuntar archivos
+                </div>
+                <input type="file" multiple onChange={onPickNewNoteFiles} />
+                {newNoteFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs text-muted-foreground">
+                      Archivos
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      {newNoteFiles.map((f) => (
+                        <div
+                          key={f.id}
+                          className="flex items-center justify-between text-xs rounded border px-2 py-1"
+                        >
+                          <div className="truncate">
+                            {f.name}{" "}
+                            <span className="text-muted-foreground">
+                              ({(f.size / 1024).toFixed(0)} KB)
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={f.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              Ver
+                            </a>
+                            <button
+                              type="button"
+                              className="hover:text-destructive"
+                              onClick={() => removeNewNoteFile(f.id)}
+                            >
+                              Quitar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          <DialogFooter>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => setShowNewNote(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreateForm}>Crear nota</Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

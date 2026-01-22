@@ -148,6 +148,7 @@ export default function StudentsContent() {
   const [coach, setCoach] = useState<string>("todos"); // formato: "todos" | `id:${id}` | `name:${name}`
   const [loading, setLoading] = useState(true);
   const [all, setAll] = useState<StudentRow[]>([]);
+  const [allFull, setAllFull] = useState<StudentRow[]>([]);
   const [search, setSearch] = useState("");
   const [coaches, setCoaches] = useState<CoachTeam[]>([]);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
@@ -156,7 +157,7 @@ export default function StudentsContent() {
   );
   const [coachCodes, setCoachCodes] = useState<Set<string> | null>(null);
   const [coachCodesLoading, setCoachCodesLoading] = useState(false);
-  const PAGE_SIZE = 25;
+  const PAGE_SIZE = 50;
   const [page, setPage] = useState(1);
   const [serverPage, setServerPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -207,11 +208,15 @@ export default function StudentsContent() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        // 1) Traer alumnos paginados (25) desde backend. Si hay búsqueda, usar `search` del endpoint..
+        // 1) Traer alumnos paginados (50) desde backend. Si hay búsqueda o estado, usar `search`/`estado` del endpoint.
         const res = await getAllStudentsPaged({
           page: 1,
           pageSize: PAGE_SIZE,
           search: search.trim() ? search.trim() : undefined,
+          estado:
+            filterState && filterState !== "Sin estado"
+              ? filterState
+              : undefined,
         });
         const items = res.items;
         setAll(items);
@@ -235,7 +240,7 @@ export default function StudentsContent() {
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [search]);
+  }, [search, filterState]);
 
   const loadMore = async () => {
     if (loadingMore || !hasMore) return;
@@ -246,6 +251,8 @@ export default function StudentsContent() {
         page: next,
         pageSize: PAGE_SIZE,
         search: search.trim() ? search.trim() : undefined,
+        estado:
+          filterState && filterState !== "Sin estado" ? filterState : undefined,
       });
       const items = res.items;
       setAll((prev) => [...prev, ...(items ?? [])]);
@@ -342,6 +349,26 @@ export default function StudentsContent() {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cargar lista completa de alumnos (para construir filtros globales)
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        // Intentar traer hasta 50 alumnos para construir filtros (petición limitada)
+        const rows = await getAllStudents({ page: 1, pageSize: 50 });
+        if (!active) return;
+        setAllFull(rows ?? []);
+      } catch (e) {
+        if (!active) return;
+        console.error("Error cargando lista completa de alumnos:", e);
+        setAllFull([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Cargar catálogo de etapas (para edición inline de fase)
@@ -459,39 +486,41 @@ export default function StudentsContent() {
     );
   }, [all, coach, selectedCoachId, selectedCoachName, coachCodes]);
 
-  // valores únicos de fases del listado filtrado por coach/buscador
+  // valores únicos de fases (usar la lista completa `allFull` si está disponible para mostrar todas las opciones)
   const uniqueStages = useMemo(() => {
     const NO_STAGE = "Sin fase";
+    const source = allFull && allFull.length > 0 ? allFull : filtered || [];
     const base = Array.from(
       new Set(
-        (filtered || [])
+        (source || [])
           .map((s) => (s.stage && s.stage.trim() ? s.stage.trim() : ""))
           .filter(Boolean),
       ),
     ).sort();
-    const hasNoStage = (filtered || []).some(
+    const hasNoStage = (source || []).some(
       (s) => !s.stage || !String(s.stage).trim(),
     );
     return hasNoStage ? [NO_STAGE, ...base] : base;
-  }, [filtered]);
+  }, [filtered, allFull]);
 
-  // valores únicos de estado del listado filtrado por coach/buscador
+  // valores únicos de estado (usar la lista completa `allFull` si está disponible para mostrar todas las opciones)
   const uniqueStates = useMemo(() => {
     const NO_STATE = "Sin estado";
+    const source = allFull && allFull.length > 0 ? allFull : filtered || [];
     const base = Array.from(
       new Set(
-        (filtered || [])
+        (source || [])
           .map((s) =>
             s.state && String(s.state).trim() ? String(s.state).trim() : "",
           )
           .filter(Boolean),
       ),
     ).sort();
-    const hasNoState = (filtered || []).some(
+    const hasNoState = (source || []).some(
       (s) => !s.state || !String(s.state).trim(),
     );
     return hasNoState ? [NO_STATE, ...base] : base;
-  }, [filtered]);
+  }, [filtered, allFull]);
 
   // aplicar filtro por fase adicional
   const finalRows = useMemo(() => {
