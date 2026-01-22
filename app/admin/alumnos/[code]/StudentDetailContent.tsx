@@ -45,6 +45,7 @@ import {
   getClienteEstatus,
   getClienteTareas,
   updateClientLastTask,
+  updateClientNombre,
 } from "../api";
 import {
   Select,
@@ -73,6 +74,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [stage, setStage] = useState<Stage>("ONBOARDING");
   const [statusSint, setStatusSint] = useState<StatusSint>("EN_CURSO");
   const [pIngreso, setPIngreso] = useState<string>("");
+  const [editNameOpen, setEditNameOpen] = useState(false);
+  const [tempName, setTempName] = useState<string>("");
   const [salida, setSalida] = useState<string>("");
   const [lastActivity, setLastActivity] = useState<string>("");
   const [lastTaskAt, setLastTaskAt] = useState<string>("");
@@ -524,6 +527,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
     created_at: string;
     fecha_desde?: string | null;
     fecha_hasta?: string | null;
+    tipo?: string | null;
+    motivo?: string | null;
   }> | null>(null);
   const [tasksHistory, setTasksHistory] = useState<Array<{
     id: number | string;
@@ -564,6 +569,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
         start: h.fecha_desde!,
         end: h.fecha_hasta!,
         setAt: h.created_at,
+        tipo: h.tipo ?? null,
+        motivo: h.motivo ?? null,
       }));
   }, [statusHistory]);
 
@@ -694,7 +701,72 @@ export default function StudentDetailContent({ code }: { code: string }) {
             toast({ title: "No se pudo eliminar el alumno" });
           }
         }}
+        canEditName={(user?.role ?? "").toLowerCase() !== "student"}
+        onEditName={() => {
+          const currentName = String(student?.name ?? "").trim();
+          setTempName(currentName);
+          setEditNameOpen(true);
+        }}
       />
+
+      <Dialog open={editNameOpen} onOpenChange={setEditNameOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar nombre</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Nombre</Label>
+              <Input
+                value={tempName}
+                onChange={(e) => setTempName(e.target.value)}
+                placeholder="Nombre del alumno"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setEditNameOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const nextName = String(tempName ?? "").trim();
+                    if (!nextName) {
+                      toast({
+                        title: "Nombre requerido",
+                        description: "Escribe un nombre válido",
+                      });
+                      return;
+                    }
+                    const clientCode = student?.code || code;
+                    await updateClientNombre(clientCode, nextName);
+                    setStudent((prev: any) => {
+                      if (!prev) return prev;
+                      return {
+                        ...prev,
+                        name: nextName,
+                        raw: { ...(prev.raw || {}), nombre: nextName },
+                      };
+                    });
+                    toast({ title: "Nombre actualizado" });
+                    setEditNameOpen(false);
+                  } catch (e) {
+                    console.error(e);
+                    toast({ title: "No se pudo actualizar el nombre" });
+                  }
+                }}
+              >
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Mi perfil (detalle) */}
       <>
@@ -885,8 +957,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
                             .slice()
                             .sort(
                               (a, b) =>
-                                new Date(b.start).getTime() -
-                                new Date(a.start).getTime(),
+                                new Date(b.setAt || b.start).getTime() -
+                                new Date(a.setAt || a.start).getTime(),
                             )
                             .map((r, idx) => {
                               const startDate = toDayDate(new Date(r.start));
@@ -908,6 +980,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                       {fmtES(r.start)} → {fmtES(r.end)}
                                     </div>
                                     <div className="flex items-center gap-2">
+                                      {r.tipo ? (
+                                        <Badge
+                                          variant="outline"
+                                          className="h-5"
+                                        >
+                                          {String(r.tipo).toUpperCase()}
+                                        </Badge>
+                                      ) : null}
                                       {isActive ? (
                                         <Badge
                                           variant="secondary"
@@ -921,6 +1001,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                       </span>
                                     </div>
                                   </div>
+                                  {r.motivo ? (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                      Motivo: {r.motivo}
+                                    </div>
+                                  ) : null}
                                   {r.setAt && (
                                     <div className="text-[10px] text-muted-foreground mt-1">
                                       Registrada: {fmtES(r.setAt)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { TicketIcon, Trash2, User } from "lucide-react";
+import { Pencil, TicketIcon, Trash2, User } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -35,6 +35,8 @@ export default function Header({
   canDelete,
   onDelete,
   hideCodeAndTickets,
+  canEditName,
+  onEditName,
 }: {
   name: string;
   code: string;
@@ -45,6 +47,8 @@ export default function Header({
   canDelete?: boolean;
   onDelete?: () => void | Promise<void>;
   hideCodeAndTickets?: boolean;
+  canEditName?: boolean;
+  onEditName?: () => void;
 }) {
   // Nota: el conteo real de tickets se muestra desde el padre para evitar fetch doble.
   return (
@@ -54,9 +58,23 @@ export default function Header({
           <User className="h-6 w-6 text-blue-600 dark:text-blue-400" />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
-            {name}
-          </h1>
+          <div className="flex items-start gap-2">
+            <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
+              {name}
+            </h1>
+            {canEditName ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                title="Editar nombre"
+                onClick={() => onEditName?.()}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            ) : null}
+          </div>
           {code && !hideCodeAndTickets && (
             <div className="mt-1.5 flex items-center gap-2">
               <TooltipProvider>
@@ -103,7 +121,7 @@ export default function Header({
               apiState ? "estado" : apiStage ? "etapa" : "status_sint",
               (apiState && String(apiState)) ||
                 (apiStage && String(apiStage)) ||
-                status
+                status,
             )}`}
           >
             {(apiState && String(apiState)) ||

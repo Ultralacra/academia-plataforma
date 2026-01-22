@@ -9,9 +9,18 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
 import { es } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 type DateRange = { from?: Date; to?: Date };
 
@@ -23,10 +32,17 @@ export default function PauseDatesModal({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onConfirm: (range: { start: string; end: string }) => void;
+  onConfirm: (range: {
+    start: string;
+    end: string;
+    tipo: "CONTRACTUAL" | "EXTRAORDINARIA";
+    motivo: string;
+  }) => void;
   initialRange?: { start?: string; end?: string } | null;
 }) {
   const [range, setRange] = useState<DateRange>({});
+  const [tipo, setTipo] = useState<"CONTRACTUAL" | "EXTRAORDINARIA" | "">("");
+  const [motivo, setMotivo] = useState<string>("");
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -38,20 +54,26 @@ export default function PauseDatesModal({
     } else {
       setRange({});
     }
+    setTipo("");
+    setMotivo("");
   }, [open, initialRange?.start, initialRange?.end]);
 
-  const canSave = !!(
-    range.from &&
-    range.to &&
-    !isNaN(range.from.getTime()) &&
-    !isNaN(range.to.getTime())
-  );
+  const canSave =
+    !!(
+      range.from &&
+      range.to &&
+      !isNaN(range.from.getTime()) &&
+      !isNaN(range.to.getTime())
+    ) &&
+    (tipo === "CONTRACTUAL" || tipo === "EXTRAORDINARIA") &&
+    motivo.trim().length > 0;
 
   function toISO(d: Date) {
-    // normalizar a 00:00:00 UTC del día
-    const nd = new Date(d);
-    nd.setHours(0, 0, 0, 0);
-    return nd.toISOString();
+    // Normalizar a 00:00:00 UTC del día (sin corrimiento por zona horaria)
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const day = d.getDate();
+    return new Date(Date.UTC(y, m, day, 0, 0, 0, 0)).toISOString();
   }
 
   return (
@@ -64,6 +86,29 @@ export default function PauseDatesModal({
           <p className="text-xs text-muted-foreground">
             Define el rango en el que el alumno permanecerá en estado pausado.
           </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Tipo</Label>
+              <Select value={tipo} onValueChange={(v) => setTipo(v as any)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecciona tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CONTRACTUAL">Contractual</SelectItem>
+                  <SelectItem value="EXTRAORDINARIA">Extraordinaria</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Motivo</Label>
+              <Textarea
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                placeholder="Escribe el motivo de la pausa"
+                className="min-h-[72px]"
+              />
+            </div>
+          </div>
           <div className="flex justify-center">
             <Calendar
               mode="range"
@@ -81,7 +126,12 @@ export default function PauseDatesModal({
           <Button
             onClick={() => {
               if (!canSave) return;
-              onConfirm({ start: toISO(range.from!), end: toISO(range.to!) });
+              onConfirm({
+                start: toISO(range.from!),
+                end: toISO(range.to!),
+                tipo: tipo as any,
+                motivo: motivo.trim(),
+              });
               onOpenChange(false);
             }}
             disabled={!canSave}

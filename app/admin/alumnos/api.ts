@@ -715,6 +715,29 @@ export async function updateClientIngreso(clientCode: string, ingreso: string | 
   return await res.json().catch(() => ({}));
 }
 
+// Actualizar nombre del cliente (usa FormData por compatibilidad con backend)
+// Enviar como key: nombre (string). Si viene vacío, no se envía.
+export async function updateClientNombre(clientCode: string, nombre: string): Promise<any> {
+  if (!clientCode) throw new Error('clientCode requerido');
+  const name = String(nombre ?? '').trim();
+  if (!name) throw new Error('nombre requerido');
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
+  const fd = new FormData();
+  fd.set('nombre', name);
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: 'PUT',
+    body: fd,
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  return await res.json().catch(() => ({}));
+}
+
 // 12) Historial de tareas del cliente
 export type ClienteTareaHist = {
   id: number | string;
@@ -770,6 +793,8 @@ export type ClienteEstatusHist = {
   created_at: string;
   fecha_desde?: string | null;
   fecha_hasta?: string | null;
+  tipo?: string | null;
+  motivo?: string | null;
 };
 
 export async function getClienteEstatus(alumnoCode: string): Promise<ClienteEstatusHist[]> {
@@ -792,6 +817,8 @@ export async function getClienteEstatus(alumnoCode: string): Promise<ClienteEsta
     created_at: r.created_at ?? r.fecha ?? r.updated_at ?? new Date().toISOString(),
     fecha_desde: r.fecha_desde ?? null,
     fecha_hasta: r.fecha_hasta ?? null,
+    tipo: r.tipo ?? null,
+    motivo: r.motivo ?? r.razon ?? r.motivation ?? r.comentario ?? null,
   }));
 }
 

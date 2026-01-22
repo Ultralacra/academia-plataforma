@@ -48,6 +48,8 @@ export default function EditOptionModal({
   const [pauseRange, setPauseRange] = useState<{
     start?: string;
     end?: string;
+    tipo?: "CONTRACTUAL" | "EXTRAORDINARIA";
+    motivo?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -106,12 +108,21 @@ export default function EditOptionModal({
       const isAddingPauseToAlreadyPaused =
         isCurrentlyPaused && isPaused && pauseRange?.start && pauseRange?.end;
 
-      // Si NO está en pausa y quiere pausar, enviar estado + fechas
-      // Si YA está en pausa, solo enviar fechas (no cambiar estado)
+      const hasPauseDetails =
+        !!pauseRange?.start &&
+        !!pauseRange?.end &&
+        !!pauseRange?.tipo &&
+        !!pauseRange?.motivo;
+
+      // Si NO está en pausa y quiere pausar, enviar estado + fechas + tipo/motivo
+      // Si YA está en pausa y agrega otra pausa, reenviar estado + fechas + tipo/motivo
       if (isAddingPauseToAlreadyPaused) {
-        // Solo agregar fechas, no enviar estado
-        fd.set("fecha_desde", String(pauseRange.start));
-        fd.set("fecha_hasta", String(pauseRange.end));
+        const estadoToSend = String(estado ?? current?.estado ?? "").trim();
+        if (estadoToSend) fd.set("estado", estadoToSend);
+        if (pauseRange?.start) fd.set("fecha_desde", String(pauseRange.start));
+        if (pauseRange?.end) fd.set("fecha_hasta", String(pauseRange.end));
+        if (pauseRange?.tipo) fd.set("tipo", String(pauseRange.tipo));
+        if (pauseRange?.motivo) fd.set("motivo", String(pauseRange.motivo));
       } else {
         // Lógica normal: enviar estado si cambió
         if (wantsEstado && estado) fd.set("estado", String(estado));
@@ -121,6 +132,8 @@ export default function EditOptionModal({
         if (wantsEstado && isPaused && pauseRange?.start && pauseRange?.end) {
           fd.set("fecha_desde", String(pauseRange.start));
           fd.set("fecha_hasta", String(pauseRange.end));
+          if (pauseRange?.tipo) fd.set("tipo", String(pauseRange.tipo));
+          if (pauseRange?.motivo) fd.set("motivo", String(pauseRange.motivo));
         }
       }
 
@@ -133,8 +146,8 @@ export default function EditOptionModal({
         return;
       }
 
-      // Si se selecciona PAUSADO y no tenemos rango, primero pedir rango
-      if (isPaused && !pauseRange?.start && !pauseRange?.end) {
+      // Si se selecciona PAUSADO y no tenemos rango/tipo/motivo, primero pedirlos
+      if (isPaused && !hasPauseDetails) {
         setPauseOpen(true);
         setSaving(false);
         return; // esperar confirmación del modal; el usuario pulsará Guardar de nuevo
@@ -220,9 +233,19 @@ export default function EditOptionModal({
                 </Select>
                 {pauseRange?.start && pauseRange?.end && (
                   <div className="mt-2 text-[11px] text-muted-foreground">
-                    Nueva pausa:{" "}
-                    {new Date(pauseRange.start).toLocaleDateString()} –{" "}
+                    Nueva pausa{" "}
+                    {pauseRange?.tipo ? (
+                      <span className="font-medium">
+                        ({String(pauseRange.tipo).toUpperCase()})
+                      </span>
+                    ) : null}
+                    : {new Date(pauseRange.start).toLocaleDateString()} –{" "}
                     {new Date(pauseRange.end).toLocaleDateString()}
+                    {pauseRange?.motivo ? (
+                      <span className="block mt-1 text-[11px] text-muted-foreground">
+                        Motivo: {pauseRange.motivo}
+                      </span>
+                    ) : null}
                   </div>
                 )}
                 {/* Si ya está pausado, mostrar botón para agregar más pausas */}
