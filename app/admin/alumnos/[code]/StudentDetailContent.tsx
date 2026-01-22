@@ -473,7 +473,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     }
   }
 
-  const today = useMemo(() => new Date(isoDay(new Date())), []);
+  const today = useMemo(() => parseMaybe(isoDay(new Date())) ?? new Date(), []);
   const permanencia = useMemo(() => {
     if (!pIngreso) return 0;
     const start = parseMaybe(pIngreso) ?? today;

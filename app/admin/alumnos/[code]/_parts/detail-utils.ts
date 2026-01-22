@@ -15,6 +15,26 @@ export function isoDay(d: Date) {
 }
 export function parseMaybe(s?: string | null) {
   if (!s) return null
+
+  // IMPORTANT:
+  // - `new Date("YYYY-MM-DD")` se interpreta como UTC, y al formatear en zona local
+  //   puede verse como "un día antes" (por ejemplo en -05:00).
+  // - Para fechas "date-only" debemos parsear como fecha local.
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(s)
+  const isoMidnight = /^\d{4}-\d{2}-\d{2}T00:00:00(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/.test(
+    s,
+  )
+  if (dateOnly || isoMidnight) {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    if (m) {
+      const y = Number(m[1])
+      const month = Number(m[2]) - 1
+      const day = Number(m[3])
+      const dLocal = new Date(y, month, day)
+      return isNaN(dLocal.getTime()) ? null : dLocal
+    }
+  }
+
   const d = new Date(s)
   return isNaN(d.getTime()) ? null : d
 }
@@ -65,7 +85,7 @@ export type Phases = {
 export function buildPhasesFor(s: StudentItem, today = new Date()): Phases {
   const seed = (s.code || String(s.id) || s.name || "seed") + "|detail"
   const rng = makeRng(seed)
-  const T = new Date(isoDay(today))
+  const T = parseMaybe(isoDay(today)) || new Date()
   const yearAgo = addDays(T, -365)
 
   let start = parseMaybe(s.joinDate) || parseMaybe(s.lastActivity) || addDays(T, -90)
@@ -102,7 +122,7 @@ export function buildPhasesFor(s: StudentItem, today = new Date()): Phases {
 
 /* ===== Lifecycle + métricas rápidas ===== */
 export function buildLifecycleFor(s: StudentItem, p: Phases, today = new Date()) {
-  const T = new Date(isoDay(today))
+  const T = parseMaybe(isoDay(today)) || new Date()
   const seed = (s.code || String(s.id) || s.name || "seed") + "|lc"
   const rng = makeRng(seed)
 
