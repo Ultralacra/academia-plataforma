@@ -194,7 +194,10 @@ function buildStandardScheduleFromCount(
     if (existing) {
       next.push({
         id: existing.id,
-        amount: i === 0 ? String(existing.amount ?? amount) : String(existing.amount ?? amount),
+        amount:
+          i === 0
+            ? String(existing.amount ?? amount)
+            : String(existing.amount ?? amount),
         dueDate: String(existing.dueDate || ""),
       });
       continue;
@@ -569,7 +572,11 @@ export function CloseSaleForm({
       if (String(form.paymentPaidAmount || "").trim())
         return String(form.paymentPaidAmount);
       if (planType === "excepcion_2_cuotas")
-        return String(customInstallmentsUi?.[0]?.amount ?? form.paymentFirstInstallmentAmount ?? "");
+        return String(
+          customInstallmentsUi?.[0]?.amount ??
+            form.paymentFirstInstallmentAmount ??
+            "",
+        );
       if (planType === "reserva")
         return String(form.paymentReserveAmount || "");
       if (planType === "contado") return computedTotalCommitted;
@@ -665,7 +672,9 @@ export function CloseSaleForm({
                 period_days: 30,
                 next_due_date:
                   form.paymentSecondInstallmentDate || isoPlusDays(30),
-                schedule: installmentsSchedule.length ? installmentsSchedule : null,
+                schedule: installmentsSchedule.length
+                  ? installmentsSchedule
+                  : null,
               }
             : null,
         installments_schedule:
@@ -714,11 +723,9 @@ export function CloseSaleForm({
         platform: form.paymentPlatform,
         nextChargeDate:
           planType === "excepcion_2_cuotas"
-            ? (
-                customInstallmentsUi?.[1]?.dueDate ||
-                form.paymentSecondInstallmentDate ||
-                null
-              )
+            ? customInstallmentsUi?.[1]?.dueDate ||
+              form.paymentSecondInstallmentDate ||
+              null
             : planType === "cuotas"
               ? form.paymentSecondInstallmentDate || isoPlusDays(30)
               : form.nextChargeDate || null,
@@ -1700,22 +1707,32 @@ export function CloseSaleForm({
                               className="h-9"
                               onClick={() => {
                                 const cur = Number(
-                                  form.paymentInstallmentsCount ?? stdQuotaCount,
+                                  form.paymentInstallmentsCount ??
+                                    stdQuotaCount,
                                 );
-                                const next = Math.max(1, (Number.isFinite(cur) ? cur : 0) - 1);
+                                const next = Math.max(
+                                  1,
+                                  (Number.isFinite(cur) ? cur : 0) - 1,
+                                );
                                 const amt = toNumberOrNull(
                                   String(
-                                    form.paymentInstallmentAmount ?? stdQuotaAmount,
+                                    form.paymentInstallmentAmount ??
+                                      stdQuotaAmount,
                                   ),
                                 );
                                 const total =
-                                  amt !== null ? String(amt * next) : form.paymentAmount;
+                                  amt !== null
+                                    ? String(amt * next)
+                                    : form.paymentAmount;
                                 const schedule = buildStandardScheduleFromCount(
                                   normalizeInstallmentsSchedule(
                                     (form as any).paymentInstallmentsSchedule,
                                   ),
                                   next,
-                                  String(form.paymentInstallmentAmount ?? stdQuotaAmount),
+                                  String(
+                                    form.paymentInstallmentAmount ??
+                                      stdQuotaAmount,
+                                  ),
                                 );
                                 setForm({
                                   ...form,
@@ -1738,22 +1755,32 @@ export function CloseSaleForm({
                               className="h-9"
                               onClick={() => {
                                 const cur = Number(
-                                  form.paymentInstallmentsCount ?? stdQuotaCount,
+                                  form.paymentInstallmentsCount ??
+                                    stdQuotaCount,
                                 );
-                                const next = Math.min(24, (Number.isFinite(cur) ? cur : 0) + 1);
+                                const next = Math.min(
+                                  24,
+                                  (Number.isFinite(cur) ? cur : 0) + 1,
+                                );
                                 const amt = toNumberOrNull(
                                   String(
-                                    form.paymentInstallmentAmount ?? stdQuotaAmount,
+                                    form.paymentInstallmentAmount ??
+                                      stdQuotaAmount,
                                   ),
                                 );
                                 const total =
-                                  amt !== null ? String(amt * next) : form.paymentAmount;
+                                  amt !== null
+                                    ? String(amt * next)
+                                    : form.paymentAmount;
                                 const schedule = buildStandardScheduleFromCount(
                                   normalizeInstallmentsSchedule(
                                     (form as any).paymentInstallmentsSchedule,
                                   ),
                                   next,
-                                  String(form.paymentInstallmentAmount ?? stdQuotaAmount),
+                                  String(
+                                    form.paymentInstallmentAmount ??
+                                      stdQuotaAmount,
+                                  ),
                                 );
                                 setForm({
                                   ...form,
@@ -1780,24 +1807,34 @@ export function CloseSaleForm({
                               type="number"
                               min={1}
                               max={24}
-                              value={String(form.paymentInstallmentsCount ?? stdQuotaCount)}
+                              value={String(
+                                form.paymentInstallmentsCount ?? stdQuotaCount,
+                              )}
                               onChange={(e) => {
                                 const next = Math.max(
                                   1,
-                                  Math.min(24, Number(e.target.value || 0) || 1),
+                                  Math.min(
+                                    24,
+                                    Number(e.target.value || 0) || 1,
+                                  ),
                                 );
                                 const amt = toNumberOrNull(
                                   String(
-                                    form.paymentInstallmentAmount ?? stdQuotaAmount,
+                                    form.paymentInstallmentAmount ??
+                                      stdQuotaAmount,
                                   ),
                                 );
-                                const total = amt !== null ? String(amt * next) : "";
+                                const total =
+                                  amt !== null ? String(amt * next) : "";
                                 const schedule = buildStandardScheduleFromCount(
                                   normalizeInstallmentsSchedule(
                                     (form as any).paymentInstallmentsSchedule,
                                   ),
                                   next,
-                                  String(form.paymentInstallmentAmount ?? stdQuotaAmount),
+                                  String(
+                                    form.paymentInstallmentAmount ??
+                                      stdQuotaAmount,
+                                  ),
                                 );
                                 setForm({
                                   ...form,
@@ -1808,7 +1845,8 @@ export function CloseSaleForm({
                                     schedule?.[1]?.dueDate ||
                                     form.paymentSecondInstallmentDate ||
                                     isoPlusDays(30),
-                                  paymentAmount: total || form.paymentAmount || "",
+                                  paymentAmount:
+                                    total || form.paymentAmount || "",
                                 });
                               }}
                             />
@@ -1818,26 +1856,33 @@ export function CloseSaleForm({
                             <Input
                               className={inputAccent}
                               placeholder="$"
-                              value={String(form.paymentInstallmentAmount ?? stdQuotaAmount)}
+                              value={String(
+                                form.paymentInstallmentAmount ?? stdQuotaAmount,
+                              )}
                               onChange={(e) => {
                                 const amt = toNumberOrNull(e.target.value);
                                 const count = Number(
-                                  form.paymentInstallmentsCount ?? stdQuotaCount,
+                                  form.paymentInstallmentsCount ??
+                                    stdQuotaCount,
                                 );
                                 const safeCount =
-                                  Number.isFinite(count) && count > 0 ? count : 1;
+                                  Number.isFinite(count) && count > 0
+                                    ? count
+                                    : 1;
                                 const total =
                                   amt !== null ? String(amt * safeCount) : "";
-                                const prevSchedule = normalizeInstallmentsSchedule(
-                                  (form as any).paymentInstallmentsSchedule,
-                                );
-                                const schedule = (prevSchedule.length
-                                  ? prevSchedule
-                                  : buildStandardScheduleFromCount(
-                                      [],
-                                      safeCount,
-                                      e.target.value,
-                                    )
+                                const prevSchedule =
+                                  normalizeInstallmentsSchedule(
+                                    (form as any).paymentInstallmentsSchedule,
+                                  );
+                                const schedule = (
+                                  prevSchedule.length
+                                    ? prevSchedule
+                                    : buildStandardScheduleFromCount(
+                                        [],
+                                        safeCount,
+                                        e.target.value,
+                                      )
                                 ).map((it) => ({
                                   ...it,
                                   amount: e.target.value,
@@ -1851,7 +1896,8 @@ export function CloseSaleForm({
                                     schedule?.[1]?.dueDate ||
                                     form.paymentSecondInstallmentDate ||
                                     isoPlusDays(30),
-                                  paymentAmount: total || form.paymentAmount || "",
+                                  paymentAmount:
+                                    total || form.paymentAmount || "",
                                 });
                               }}
                             />
@@ -1890,13 +1936,17 @@ export function CloseSaleForm({
                                 baseAmount,
                               );
 
-                          const setSchedule = (next: PaymentCustomInstallment[]) => {
+                          const setSchedule = (
+                            next: PaymentCustomInstallment[],
+                          ) => {
                             const next2 = next?.[1]?.dueDate || "";
                             setForm({
                               ...form,
                               paymentInstallmentsSchedule: next,
                               paymentSecondInstallmentDate:
-                                next2 || form.paymentSecondInstallmentDate || isoPlusDays(30),
+                                next2 ||
+                                form.paymentSecondInstallmentDate ||
+                                isoPlusDays(30),
                               nextChargeDate:
                                 next2 || form.nextChargeDate || "",
                             });
@@ -1906,19 +1956,24 @@ export function CloseSaleForm({
                             <div className="mt-4 space-y-3">
                               <div className="flex items-center justify-between gap-3">
                                 <div className="text-xs text-slate-500">
-                                  Configura monto y fecha por cuota (igual que personalizadas).
+                                  Configura monto y fecha por cuota (igual que
+                                  personalizadas).
                                 </div>
                                 <Button
                                   type="button"
                                   variant="outline"
                                   className="h-9"
                                   onClick={() => {
-                                    const nextCount = Math.min(24, safeCount + 1);
-                                    const nextSchedule = buildStandardScheduleFromCount(
-                                      schedule,
-                                      nextCount,
-                                      baseAmount,
+                                    const nextCount = Math.min(
+                                      24,
+                                      safeCount + 1,
                                     );
+                                    const nextSchedule =
+                                      buildStandardScheduleFromCount(
+                                        schedule,
+                                        nextCount,
+                                        baseAmount,
+                                      );
                                     setForm({
                                       ...form,
                                       paymentInstallmentsCount: nextCount,
@@ -1976,7 +2031,10 @@ export function CloseSaleForm({
                                         onChange={(e) => {
                                           const next = schedule.map((x, i) =>
                                             i === idx
-                                              ? { ...x, dueDate: e.target.value }
+                                              ? {
+                                                  ...x,
+                                                  dueDate: e.target.value,
+                                                }
                                               : x,
                                           );
                                           setSchedule(next);
@@ -1992,8 +2050,13 @@ export function CloseSaleForm({
                                         disabled={schedule.length <= 1}
                                         onClick={() => {
                                           if (schedule.length <= 1) return;
-                                          const next = schedule.filter((_, i) => i !== idx);
-                                          const nextCount = Math.max(1, schedule.length - 1);
+                                          const next = schedule.filter(
+                                            (_, i) => i !== idx,
+                                          );
+                                          const nextCount = Math.max(
+                                            1,
+                                            schedule.length - 1,
+                                          );
                                           setForm({
                                             ...form,
                                             paymentInstallmentsCount: nextCount,
@@ -2028,17 +2091,21 @@ export function CloseSaleForm({
                           días y que la primera cuota sea la más alta.
                         </div>
                         {(() => {
-                          const custom: PaymentCustomInstallment[] = Array.isArray(
-                            (form as any).paymentCustomInstallments,
-                          )
-                            ? (((form as any).paymentCustomInstallments as any[]) || [])
-                                .map((it: any, idx: number) => ({
-                                  id: String(it?.id || `ci_${idx}`),
-                                  amount: String(it?.amount ?? ""),
-                                  dueDate: String(it?.dueDate ?? ""),
-                                }))
-                                .filter(Boolean)
-                            : [];
+                          const custom: PaymentCustomInstallment[] =
+                            Array.isArray(
+                              (form as any).paymentCustomInstallments,
+                            )
+                              ? (
+                                  ((form as any)
+                                    .paymentCustomInstallments as any[]) || []
+                                )
+                                  .map((it: any, idx: number) => ({
+                                    id: String(it?.id || `ci_${idx}`),
+                                    amount: String(it?.amount ?? ""),
+                                    dueDate: String(it?.dueDate ?? ""),
+                                  }))
+                                  .filter(Boolean)
+                              : [];
 
                           const safeCustom = custom.length
                             ? custom
@@ -2056,21 +2123,28 @@ export function CloseSaleForm({
                                     form.paymentSecondInstallmentAmount || "",
                                   ),
                                   dueDate:
-                                    String(form.paymentSecondInstallmentDate || "") ||
-                                    isoPlusDays(30),
+                                    String(
+                                      form.paymentSecondInstallmentDate || "",
+                                    ) || isoPlusDays(30),
                                 },
                               ];
 
-                          const updateCustom = (next: PaymentCustomInstallment[]) => {
+                          const updateCustom = (
+                            next: PaymentCustomInstallment[],
+                          ) => {
                             const first = next[0];
                             const second = next[1];
                             setForm({
                               ...form,
                               paymentCustomInstallments: next,
-                              paymentFirstInstallmentAmount: first?.amount || "",
-                              paymentSecondInstallmentAmount: second?.amount || "",
-                              paymentSecondInstallmentDate: second?.dueDate || "",
-                              nextChargeDate: second?.dueDate || form.nextChargeDate || "",
+                              paymentFirstInstallmentAmount:
+                                first?.amount || "",
+                              paymentSecondInstallmentAmount:
+                                second?.amount || "",
+                              paymentSecondInstallmentDate:
+                                second?.dueDate || "",
+                              nextChargeDate:
+                                second?.dueDate || form.nextChargeDate || "",
                             });
                           };
 
@@ -2080,7 +2154,8 @@ export function CloseSaleForm({
                             <div className="space-y-3">
                               <div className="flex items-center justify-between gap-3">
                                 <div className="text-xs text-slate-500">
-                                  Total = suma de cuotas · Próximo cobro = fecha de la cuota #2
+                                  Total = suma de cuotas · Próximo cobro = fecha
+                                  de la cuota #2
                                 </div>
                                 <Button
                                   type="button"
@@ -2089,9 +2164,14 @@ export function CloseSaleForm({
                                   onClick={() => {
                                     const lastWithDate = [...safeCustom]
                                       .reverse()
-                                      .find((x) => String(x.dueDate || "").trim());
+                                      .find((x) =>
+                                        String(x.dueDate || "").trim(),
+                                      );
                                     const nextDue = lastWithDate?.dueDate
-                                      ? isoDatePlusDays(lastWithDate.dueDate, 30)
+                                      ? isoDatePlusDays(
+                                          lastWithDate.dueDate,
+                                          30,
+                                        )
                                       : isoPlusDays(30);
                                     updateCustom([
                                       ...safeCustom,
@@ -2147,7 +2227,9 @@ export function CloseSaleForm({
                                               paymentSecondInstallmentDate:
                                                 next[1]?.dueDate || "",
                                               nextChargeDate:
-                                                next[1]?.dueDate || form.nextChargeDate || "",
+                                                next[1]?.dueDate ||
+                                                form.nextChargeDate ||
+                                                "",
                                             });
                                             return;
                                           }
@@ -2165,7 +2247,10 @@ export function CloseSaleForm({
                                         onChange={(e) => {
                                           const next = safeCustom.map((x, i) =>
                                             i === idx
-                                              ? { ...x, dueDate: e.target.value }
+                                              ? {
+                                                  ...x,
+                                                  dueDate: e.target.value,
+                                                }
                                               : x,
                                           );
                                           updateCustom(next);
@@ -2181,7 +2266,9 @@ export function CloseSaleForm({
                                         disabled={!canRemove}
                                         onClick={() => {
                                           if (!canRemove) return;
-                                          const next = safeCustom.filter((_, i) => i !== idx);
+                                          const next = safeCustom.filter(
+                                            (_, i) => i !== idx,
+                                          );
                                           updateCustom(next);
                                         }}
                                       >

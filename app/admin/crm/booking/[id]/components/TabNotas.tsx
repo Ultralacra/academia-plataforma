@@ -63,16 +63,12 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
 
   const formatReminder = (r: any) => {
     if (typeof r === "string") return { title: r, meta: "" };
-    if (!r || typeof r !== "object") return { title: String(r ?? ""), meta: "" };
+    if (!r || typeof r !== "object")
+      return { title: String(r ?? ""), meta: "" };
 
     const title =
       String(
-        r.title ??
-          r.text ??
-          r.message ??
-          r.note ??
-          r.name ??
-          "Recordatorio",
+        r.title ?? r.text ?? r.message ?? r.note ?? r.name ?? "Recordatorio",
       ).trim() || "Recordatorio";
 
     const atRaw = r.at ?? r.date ?? r.datetime ?? r.when ?? r.due_at;

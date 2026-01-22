@@ -27,7 +27,7 @@ function Content({ id }: { id: string }) {
   const [loading, setLoading] = React.useState(true);
   const [record, setRecord] = React.useState<MetadataRecord<any> | null>(null);
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
-    null
+    null,
   );
   const router = useRouter();
 
@@ -67,16 +67,16 @@ function Content({ id }: { id: string }) {
   }
 
   const isSale = record.entity === "sale";
-  const salePayload = isSale ? record.payload : record.payload?.sale ?? {};
+  const salePayload = isSale ? record.payload : (record.payload?.sale ?? {});
 
   const rawBonuses = Array.isArray(salePayload?.bonuses)
     ? (salePayload?.bonuses as string[])
     : typeof salePayload?.bonuses === "string"
-    ? String(salePayload?.bonuses)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
+      ? String(salePayload?.bonuses)
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
 
   const toDateInput = (v: any) => {
     const s = typeof v === "string" ? v.trim() : "";

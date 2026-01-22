@@ -688,9 +688,7 @@ function Content({ id }: { id: string }) {
       plan0?.installments?.schedule ??
       plan0?.installments?.items ??
       null;
-    const stdScheduleList = Array.isArray(stdScheduleRaw)
-      ? stdScheduleRaw
-      : [];
+    const stdScheduleList = Array.isArray(stdScheduleRaw) ? stdScheduleRaw : [];
     const customRaw: any =
       pay?.custom_installments ?? plan0?.custom_installments ?? null;
     const customList = Array.isArray(customRaw) ? customRaw : [];
