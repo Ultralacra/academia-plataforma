@@ -18,6 +18,7 @@ import { CHAT_HOST } from "@/lib/api-config";
 import { apiFetch } from "@/lib/api-config";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 // import { StudentChatNotifier } from "@/components/chat/StudentChatNotifier";
 import { StudentChatSkeleton } from "./StudentChatSkeleton";
 
@@ -40,14 +41,24 @@ export default function StudentCoachChatPanel({
     const n = norm(area).replace(/_/g, " "); // Normalizar guiones bajos a espacios
     return n.includes("ATENCION AL CLIENTE") || n.includes("SOPORTE");
   };
+  const isVSLCoach = (r: any) => {
+    const area = norm(r?.area ?? r?.coach_area ?? "").replace(/_/g, " ");
+    const puesto = norm(r?.puesto ?? r?.coach_puesto ?? "").replace(/_/g, " ");
+    const nombre = norm(r?.nombre ?? r?.coach_nombre ?? r?.name ?? "");
+    return area.includes("VSL") || puesto.includes("VSL") || nombre.includes("VSL");
+  };
   // Room base para token; no se usa en socketio directamente, pero mantiene consistencia
   const room = useMemo(() => `student:${(code || "").toLowerCase()}`, [code]);
+
+  // Pestañas: AC (Atención al Cliente) y VSL
+  const [channel, setChannel] = useState<"ac" | "vsl">("ac");
 
   // Catálogo de coaches
   const [teams, setTeams] = useState<TeamWithCounts[]>([]);
   const [teamsAll, setTeamsAll] = useState<TeamWithCounts[]>([]);
   const [teamsGlobal, setTeamsGlobal] = useState<TeamWithCounts[]>([]);
   const [coachRowsRaw, setCoachRowsRaw] = useState<any[]>([]);
+  const [teamsVSL, setTeamsVSL] = useState<TeamWithCounts[]>([]);
   const [searchText, setSearchText] = useState("");
   const [filterArea, setFilterArea] = useState<string | null>(null);
   const [filterPuesto, setFilterPuesto] = useState<string | null>(null);
@@ -66,6 +77,7 @@ export default function StudentCoachChatPanel({
   const [unreadBump, setUnreadBump] = useState<number>(0);
   const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [isLoadingCoaches, setIsLoadingCoaches] = useState(true);
+  const [isChangingChannel, setIsChangingChannel] = useState(false);
 
   const noCustomerCareCoaches = useMemo(() => {
     return !isLoadingCoaches && (teams?.length ?? 0) === 0;
@@ -84,12 +96,6 @@ export default function StudentCoachChatPanel({
 
   // Selección de destino (coach)
   const [targetCoachId, setTargetCoachId] = useState<string | null>(null);
-  const [targetTitle, setTargetTitle] = useState<string>(
-    studentName || "Conversación"
-  );
-  const [targetSubtitle, setTargetSubtitle] = useState<string | undefined>(
-    undefined
-  );
 
   const isChatOpen = !!selectedChatId || !!targetCoachId;
 
@@ -188,6 +194,9 @@ export default function StudentCoachChatPanel({
           hasCustomerCare((t as any).area)
         );
 
+        // Filtrar coaches VSL
+        const onlyVSL = asignados.filter((t) => isVSLCoach(t));
+
         console.log("🎯 COACHES DE ATENCIÓN AL CLIENTE FILTRADOS:");
         console.log(`   Total encontrados: ${onlyCustomerCare.length}`);
         if (onlyCustomerCare.length > 0) {
@@ -200,6 +209,19 @@ export default function StudentCoachChatPanel({
           });
         } else {
           console.log("   ⚠️ NO SE ENCONTRARON COACHES DE ATENCIÓN AL CLIENTE");
+        }
+        console.log("🎯 COACHES VSL FILTRADOS:");
+        console.log(`   Total encontrados: ${onlyVSL.length}`);
+        if (onlyVSL.length > 0) {
+          onlyVSL.forEach((c, idx) => {
+            console.log(
+              `   ${idx + 1}. ${c.nombre} (${c.codigo}) - Área: ${
+                (c as any).area
+              } - Puesto: ${c.puesto}`
+            );
+          });
+        } else {
+          console.log("   ⚠️ NO SE ENCONTRARON COACHES VSL");
         }
         console.log("═══════════════════════════════════════════════════════");
 
@@ -231,10 +253,17 @@ export default function StudentCoachChatPanel({
         }
 
         setTeams(onlyCustomerCare);
-        // Preseleccionar el primero disponible si no hay destino actual
-        if (!targetCoachId && onlyCustomerCare.length > 0) {
+        setTeamsVSL(onlyVSL);
+
+        // Determinar canal inicial: preferir AC si existe, sino VSL
+        const initialChannel: "ac" | "vsl" = onlyCustomerCare.length > 0 ? "ac" : onlyVSL.length > 0 ? "vsl" : "ac";
+        setChannel(initialChannel);
+
+        // Preseleccionar el primero disponible del canal inicial si no hay destino actual
+        const initialList = initialChannel === "ac" ? onlyCustomerCare : onlyVSL;
+        if (!targetCoachId && initialList.length > 0) {
           try {
-            const pick = onlyCustomerCare[0] as any;
+            const pick = initialList[0] as any;
             const firstCode = pick?.id ?? pick?.codigo ?? null; // Preferir ID
             if (firstCode != null) {
               setTargetCoachId(String(firstCode));
@@ -244,12 +273,13 @@ export default function StudentCoachChatPanel({
               console.log(`   ID: ${pick?.id}`);
               console.log(`   Área: ${pick?.area}`);
               console.log(`   Puesto: ${pick?.puesto}`);
+              console.log(`   Canal: ${initialChannel.toUpperCase()}`);
               console.log(
                 "═══════════════════════════════════════════════════════"
               );
             }
           } catch {}
-        } else if (onlyCustomerCare.length === 0) {
+        } else if (initialList.length === 0) {
           console.log(
             "⚠️ NO SE PUDO PRESELECCIONAR COACH: No hay coaches disponibles"
           );
@@ -303,31 +333,72 @@ export default function StudentCoachChatPanel({
     return Array.from(set.values()).sort();
   }, [teams]);
 
+  // Determinar si mostrar pestañas (solo si hay VSL Y AC o solo VSL)
+  const hasACCoaches = teams.length > 0;
+  const hasVSLCoaches = teamsVSL.length > 0;
+  const showTabs = hasACCoaches && hasVSLCoaches;
+
+  // Coaches activos según el canal seleccionado
+  const activeCoaches = useMemo(() => {
+    return channel === "vsl" ? teamsVSL : teams;
+  }, [channel, teams, teamsVSL]);
+
+  // Handler para cambio de canal
+  const handleChannelChange = (newChannel: "ac" | "vsl") => {
+    // Mostrar skeleton mientras cambia
+    setIsChangingChannel(true);
+    
+    setChannel(newChannel);
+    setSelectedChatId(null);
+    setCurrentOpenChatId(null);
+    manualSelectionRef.current = false;
+    
+    // Limpiar lista de chats para que se recargue con el nuevo filtro
+    setStudentChats([]);
+    
+    // Preseleccionar el primer coach del nuevo canal
+    // El título se calcula automáticamente via computedTitle/computedSubtitle
+    const list = newChannel === "vsl" ? teamsVSL : teams;
+    if (list.length > 0) {
+      const pick = list[0] as any;
+      const firstCode = pick?.id ?? pick?.codigo ?? null;
+      if (firstCode != null) {
+        setTargetCoachId(String(firstCode));
+      }
+    } else {
+      setTargetCoachId(null);
+    }
+    
+    // Forzar refresh de la lista de conversaciones con el nuevo filtro
+    setListSignal((n) => n + 1);
+    
+    // Ocultar skeleton después de un breve momento
+    setTimeout(() => {
+      setIsChangingChannel(false);
+    }, 300);
+  };
   const filteredCoaches = useMemo(() => {
     const q = searchText.trim().toLowerCase();
-    return (
-      teams
-        // Asegurar que solo mostramos Atención al Cliente (ya filtrado al cargar)
-        .filter((t) => hasCustomerCare(t.area))
-        .filter((t) => (filterArea ? t.area === filterArea : true))
-        .filter((t) => (filterPuesto ? t.puesto === filterPuesto : true))
-        .filter((t) =>
-          q
-            ? [t.nombre, t.codigo, t.puesto, t.area]
-                .map((x) => String(x ?? "").toLowerCase())
-                .some((s) => s.includes(q))
-            : true
-        )
-    );
-  }, [teams, searchText, filterArea, filterPuesto]);
+    // Usar activeCoaches según el canal seleccionado
+    return activeCoaches
+      .filter((t) => (filterArea ? t.area === filterArea : true))
+      .filter((t) => (filterPuesto ? t.puesto === filterPuesto : true))
+      .filter((t) =>
+        q
+          ? [t.nombre, t.codigo, t.puesto, t.area]
+              .map((x) => String(x ?? "").toLowerCase())
+              .some((s) => s.includes(q))
+          : true
+      );
+  }, [activeCoaches, searchText, filterArea, filterPuesto]);
 
   // Resolver ID del equipo para el coach seleccionado (preferir ID numérico para matching con backend)
   const resolvedEquipoCode = useMemo(() => {
     if (!targetCoachId) return null;
     const v = String(targetCoachId).trim();
 
-    // Intentar encontrar el objeto completo en los catálogos
-    const catalogs = [teamsAll, teams, teamsGlobal];
+    // Intentar encontrar el objeto completo en los catálogos (incluir teamsVSL)
+    const catalogs = [teamsAll, teams, teamsVSL, teamsGlobal];
     for (const list of catalogs) {
       try {
         const arr = Array.isArray(list) ? list : [];
@@ -371,26 +442,33 @@ export default function StudentCoachChatPanel({
   }, [code, targetCoachId, resolvedEquipoCode]);
 
   // Forzar remount del chat cuando cambiamos de destino o abrimos por chatId (esto dispara la lógica de find-or-create/join interna)
+  // Incluir el canal para asegurar conversaciones separadas entre AC y VSL
   const chatKey = useMemo(() => {
-    if (selectedChatId != null) return `cid:${String(selectedChatId)}`;
-    if (targetCoachId) return `coach:${String(targetCoachId)}`;
-    return `idle:${code}`;
-  }, [selectedChatId, targetCoachId, code]);
+    if (selectedChatId != null) return `cid:${String(selectedChatId)}:${channel}`;
+    if (targetCoachId) return `coach:${String(targetCoachId)}:${channel}`;
+    return `idle:${code}:${channel}`;
+  }, [selectedChatId, targetCoachId, code, channel]);
 
-  useEffect(() => {
+  // Calcular título y subtítulo como memo (más estable que useEffect)
+  const { computedTitle, computedSubtitle } = useMemo(() => {
     if (!targetCoachId) {
-      setTargetTitle("Soporte");
-      setTargetSubtitle("Atención al Cliente");
-      return;
+      return {
+        computedTitle: channel === "vsl" ? "Coach VSL" : "Soporte",
+        computedSubtitle: channel === "vsl" ? "Video Sales Letter" : "Atención al Cliente",
+      };
     }
-    const t = teams.find(
+    // Buscar en el catálogo correcto según el canal
+    const searchList = channel === "vsl" ? teamsVSL : teams;
+    const t = searchList.find(
       (x) =>
         String(x.id) === String(targetCoachId) ||
         String(x.codigo) === String(targetCoachId)
     );
-    setTargetTitle(t?.nombre || "Soporte");
-    setTargetSubtitle(t?.puesto || "Atención al Cliente");
-  }, [targetCoachId, teams, studentName]);
+    return {
+      computedTitle: t?.nombre || (channel === "vsl" ? "Coach VSL" : "Soporte"),
+      computedSubtitle: t?.puesto || (channel === "vsl" ? "Video Sales Letter" : "Atención al Cliente"),
+    };
+  }, [targetCoachId, teams, teamsVSL, channel]);
 
   // Al conectar, refrescar listado de mis chats (como alumno)
   useEffect(() => {
@@ -545,31 +623,45 @@ export default function StudentCoachChatPanel({
   };
 
   // Render
-  const showSkeleton = isLoadingCoaches || isLoadingChats;
+  const showInitialSkeleton = isLoadingCoaches || isLoadingChats;
 
   return (
     <>
-      {showSkeleton && <StudentChatSkeleton />}
+      {showInitialSkeleton && <StudentChatSkeleton />}
       <div
         className={`rounded-xl border border-border bg-card overflow-hidden ${
           fullHeight ? "h-full flex flex-col" : ""
-        } ${showSkeleton ? "hidden" : ""}`}
+        } ${showInitialSkeleton ? "hidden" : ""}`}
       >
         {/* <StudentChatNotifier studentCode={code} /> */}
         <div className="px-4 py-3 border-b border-border bg-card">
-          <h3 className="text-sm font-semibold text-foreground">
-            Chat del alumno
-          </h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-foreground">
+              Chat del alumno
+            </h3>
+            {showTabs && (
+              <Tabs value={channel} onValueChange={(v) => handleChannelChange(v as "ac" | "vsl")}>
+                <TabsList className="h-7">
+                  <TabsTrigger value="ac" className="text-xs px-3 py-1">
+                    Soporte
+                  </TabsTrigger>
+                  <TabsTrigger value="vsl" className="text-xs px-3 py-1">
+                    VSL
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
           {selectedCoach && (
             <div className="mt-1">
               <Badge
                 variant="secondary"
                 className="h-5 px-2 text-[10px] font-medium bg-muted text-muted-foreground border-border"
-                title="Soporte · Atención al Cliente"
+                title={channel === "vsl" ? "Coach VSL" : "Soporte · Atención al Cliente"}
               >
-                Soporte X Academy
+                {channel === "vsl" ? "Coach VSL" : "Soporte X Academy"}
                 <span className="ml-1 text-[10px] text-muted-foreground">
-                  · Atención al Cliente
+                  · {channel === "vsl" ? "Video Sales Letter" : "Atención al Cliente"}
                 </span>
               </Badge>
             </div>
@@ -615,9 +707,9 @@ export default function StudentCoachChatPanel({
                   ✕
                 </Button>
               </div>
-              {/* Filtros simplificados: área fija Atención al Cliente, dejamos solo búsqueda */}
+              {/* Filtros simplificados: área según canal */}
               <div className="text-[11px] text-muted-foreground">
-                Área: Atención al Cliente
+                Área: {channel === "vsl" ? "VSL" : "Atención al Cliente"}
               </div>
 
               {/* Coaches */}
@@ -629,9 +721,9 @@ export default function StudentCoachChatPanel({
                   {filteredCoaches.map((t) => {
                     const selected =
                       String(targetCoachId ?? "") ===
-                      String((t as any).codigo ?? t.id);
+                      String((t as any).id ?? (t as any).codigo);
                     const subtitle =
-                      t.puesto || "SOPORTE · ATENCIÓN AL CLIENTE";
+                      t.puesto || (channel === "vsl" ? "VSL" : "SOPORTE · ATENCIÓN AL CLIENTE");
                     const brandAvatarSrc =
                       "https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg";
                     return (
@@ -774,8 +866,6 @@ export default function StudentCoachChatPanel({
                             } catch {}
                             manualSelectionRef.current = true;
                             setTargetCoachId(null);
-                            setTargetTitle(studentName || "Conversación");
-                            setTargetSubtitle(undefined);
                             setSelectedChatId(id);
                             setCurrentOpenChatId(id ?? null);
                             if (id != null) {
@@ -849,6 +939,16 @@ export default function StudentCoachChatPanel({
                 return null; // placeholder para mantener orden visual
               })()}
               <div className="relative flex flex-col flex-1 min-h-0">
+                {/* Skeleton mientras cambia de canal */}
+                {isChangingChannel && (
+                  <div className="absolute inset-0 z-10 bg-card flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-muted animate-pulse" />
+                      <div className="w-32 h-4 bg-muted animate-pulse rounded" />
+                      <div className="w-24 h-3 bg-muted animate-pulse rounded" />
+                    </div>
+                  </div>
+                )}
                 <div
                   className={
                     noCustomerCareCoaches
@@ -860,8 +960,8 @@ export default function StudentCoachChatPanel({
                     key={chatKey}
                     room={room}
                     role="alumno"
-                    title={targetTitle}
-                    subtitle={targetSubtitle}
+                    title={computedTitle}
+                    subtitle={computedSubtitle}
                     variant="card"
                     className="flex-1 min-h-0 rounded-lg shadow-sm overflow-hidden"
                     precreateOnParticipants={false}
@@ -901,12 +1001,12 @@ export default function StudentCoachChatPanel({
                     onChatsList={(list) => {
                       const arr = Array.isArray(list) ? list : [];
 
-                      // FILTRO: Solo mostrar conversaciones con equipos de Atención al Cliente
+                      // FILTRO: Solo mostrar conversaciones según el canal activo (AC o VSL)
                       console.log(
                         "═══════════════════════════════════════════════════════"
                       );
                       console.log(
-                        "🔍 [CHAT ALUMNO] FILTRANDO CONVERSACIONES EXISTENTES"
+                        `🔍 [CHAT ALUMNO] FILTRANDO CONVERSACIONES PARA CANAL: ${channel.toUpperCase()}`
                       );
                       console.log(
                         "═══════════════════════════════════════════════════════"
@@ -954,21 +1054,34 @@ export default function StudentCoachChatPanel({
                           return false; // Si no identificamos al equipo, ocultar por seguridad
                         }
 
+                        // Filtrar según el canal activo
+                        const isVSL = isVSLCoach(t);
                         const isAC = hasCustomerCare(t.area);
-                        console.log(
-                          `${isAC ? "✅" : "❌"} Chat ${
-                            chat.id_chat || chat.id
-                          }: Coach ${t.nombre} (${sid}) - Área: ${t.area} ${
-                            isAC ? "👉 ES ATENCIÓN AL CLIENTE" : ""
-                          }`
-                        );
-
-                        return isAC;
+                        
+                        if (channel === "vsl") {
+                          console.log(
+                            `${isVSL ? "✅" : "❌"} Chat ${
+                              chat.id_chat || chat.id
+                            }: Coach ${t.nombre} (${sid}) - Área: ${t.area} ${
+                              isVSL ? "👉 ES VSL" : ""
+                            }`
+                          );
+                          return isVSL;
+                        } else {
+                          console.log(
+                            `${isAC ? "✅" : "❌"} Chat ${
+                              chat.id_chat || chat.id
+                            }: Coach ${t.nombre} (${sid}) - Área: ${t.area} ${
+                              isAC ? "👉 ES ATENCIÓN AL CLIENTE" : ""
+                            }`
+                          );
+                          return isAC;
+                        }
                       });
 
                       console.log("");
                       console.log(
-                        `✅ Conversaciones de Atención al Cliente: ${filtered.length}`
+                        `✅ Conversaciones de ${channel === "vsl" ? "VSL" : "Atención al Cliente"}: ${filtered.length}`
                       );
                       if (filtered.length > 0) {
                         console.log("📋 Lista de chats válidos:");
@@ -986,7 +1099,7 @@ export default function StudentCoachChatPanel({
                           console.log(
                             `   ${idx + 1}. Chat ID: ${chatId} - Coach: ${
                               t?.nombre
-                            } (${t?.codigo})`
+                            } (${t?.codigo}) - Canal: ${channel.toUpperCase()}`
                           );
                         });
                       }
@@ -995,6 +1108,7 @@ export default function StudentCoachChatPanel({
                       );
                       try {
                         console.log("[StudentCoachChatPanel] onChatsList", {
+                          channel,
                           original: arr.length,
                           filtered: filtered.length,
                           sample: filtered.slice(0, 5).map((it: any) => ({
@@ -1037,7 +1151,7 @@ export default function StudentCoachChatPanel({
                             "═══════════════════════════════════════════════════════"
                           );
                           console.log(
-                            "🔄 [AUTO-LOAD] CARGANDO CONVERSACIÓN EXISTENTE"
+                            `🔄 [AUTO-LOAD] CARGANDO CONVERSACIÓN DE ${channel.toUpperCase()}`
                           );
                           console.log(
                             "═══════════════════════════════════════════════════════"
@@ -1092,7 +1206,13 @@ export default function StudentCoachChatPanel({
                             ? String(coachP.id_equipo)
                             : null;
                           if (sid) {
-                            const t = (teamsAll.length ? teamsAll : teams).find(
+                            // Buscar primero en el catálogo del canal activo
+                            const channelList = channel === "vsl" ? teamsVSL : teams;
+                            const t = channelList.find(
+                              (x) =>
+                                String((x as any).codigo) === sid ||
+                                String(x.id) === sid
+                            ) || (teamsAll.length ? teamsAll : teams).find(
                               (x) =>
                                 String((x as any).codigo) === sid ||
                                 String(x.id) === sid
@@ -1104,10 +1224,9 @@ export default function StudentCoachChatPanel({
                                   String((x as any).codigo) === sid ||
                                   String(x.id) === sid
                               );
-                            setTargetTitle(tg?.nombre || "Soporte");
-                            setTargetSubtitle(
-                              tg?.puesto || "Atención al Cliente"
-                            );
+                            // El título se calcula automáticamente via computedTitle/computedSubtitle
+                            // Solo logueamos para depuración
+                            console.log("[onChatInfo] Coach encontrado:", tg?.nombre, "Canal:", channel);
                           }
                         }
                       } catch {}

@@ -7,6 +7,7 @@ import { dataService } from "@/lib/data-service";
 import { apiFetch } from "@/lib/api-config";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Ya no usamos un ID hardcodeado para "administración"; si no se especifica coachEquipoId,
 // intentaremos resolver el primer coach asignado al alumno vía dataService.getClientCoaches(code).
@@ -40,6 +41,21 @@ export default function StudentChatInline({
   const [resolvedEquipoName, setResolvedEquipoName] = React.useState<
     string | null
   >(null);
+
+  const [resolvedEquipoIdAC, setResolvedEquipoIdAC] = React.useState<
+    string | null
+  >(null);
+  const [resolvedEquipoNameAC, setResolvedEquipoNameAC] = React.useState<
+    string | null
+  >(null);
+  const [resolvedEquipoIdVSL, setResolvedEquipoIdVSL] = React.useState<
+    string | null
+  >(null);
+  const [resolvedEquipoNameVSL, setResolvedEquipoNameVSL] = React.useState<
+    string | null
+  >(null);
+
+  const [channel, setChannel] = React.useState<"ac" | "vsl">("ac");
   const [alumnoName, setAlumnoName] = React.useState<string | null>(null);
   const [coachMap, setCoachMap] = React.useState<
     Record<
@@ -90,26 +106,63 @@ export default function StudentChatInline({
           for (const k of keys) map[k!] = entry;
         }
         setCoachMap(map);
+        // Normaliza: quita acentos, pasa a mayúsculas, reemplaza _ y - por espacio
         const norm = (s?: string | null) =>
           String(s || "")
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[_-]/g, " ")
             .toUpperCase();
-        const isAC = (area?: string | null) =>
-          norm(area).includes("ATENCION AL CLIENTE");
+
+        const isAC = (area?: string | null) => {
+          const n = norm(area);
+          return (
+            n.includes("ATENCION AL CLIENTE") ||
+            n.includes("ATENCION CLIENTE") ||
+            n.includes("SOPORTE")
+          );
+        };
+
+        const isVSL = (r: any) => {
+          const area = norm(r?.area ?? r?.coach_area ?? null);
+          const puesto = norm(r?.puesto ?? r?.coach_puesto ?? null);
+          const nombre = norm(r?.coach_nombre ?? r?.name ?? null);
+          const match =
+            area.includes("VSL") ||
+            puesto.includes("VSL") ||
+            nombre.includes("VSL");
+          return match;
+        };
         const assigned = rows
           .map((r) => ({
             codigo: r.codigo_equipo ?? r.codigo_coach ?? r.codigo ?? null,
             area: r.area ?? null,
             nombre: r.coach_nombre ?? r.name ?? null,
+            raw: r,
           }))
           .filter((x) => x.codigo);
-        const preferred = assigned.find((x) => isAC(x.area)) || assigned[0];
-        const codeEquipo = preferred?.codigo ? String(preferred.codigo) : null;
+        const preferredAC = assigned.find((x) => isAC(x.area)) || null;
+        const preferredVSL = assigned.find((x) => isVSL(x.raw)) || null;
+
+        const codeEquipoAC = preferredAC?.codigo
+          ? String(preferredAC.codigo)
+          : null;
+        const codeEquipoVSL = preferredVSL?.codigo
+          ? String(preferredVSL.codigo)
+          : null;
+
+        // Elegir cuál será el chat activo por defecto.
+        const nextChannel: "ac" | "vsl" = codeEquipoAC
+          ? "ac"
+          : codeEquipoVSL
+            ? "vsl"
+            : "ac";
 
         // LOG CRÍTICO: Mostrar proceso de resolución del coach
         console.log("═══════════════════════════════════════════");
-        console.log("🔎 [CHAT ALUMNO] RESOLUCIÓN DE COACH");
+        console.log(
+          "🔎 [CHAT ALUMNO / StudentChatInline] RESOLUCIÓN DE COACHES",
+        );
         console.log("═══════════════════════════════════════════");
         console.log("👤 Alumno:", alumno);
         console.log("📊 Coaches asignados encontrados:", assigned.length);
@@ -118,25 +171,37 @@ export default function StudentChatInline({
             `  ${i + 1}. ${a.nombre || "(sin nombre)"} [${a.codigo}]`,
             {
               area: a.area || "(sin área)",
+              raw_puesto: a.raw?.puesto ?? "(sin puesto)",
               es_atencion_cliente: isAC(a.area) ? "✅ SÍ" : "❌ NO",
+              es_vsl: isVSL(a.raw) ? "✅ SÍ" : "❌ NO",
             },
           );
         });
-        console.log("⭐ Coach seleccionado:", {
-          codigo: codeEquipo || "(NINGUNO)",
-          nombre: preferred?.nombre || "(sin nombre)",
-          area: preferred?.area || "(sin área)",
+        console.log("⭐ Coach AC seleccionado:", {
+          codigo: codeEquipoAC || "(NINGUNO)",
+          nombre: preferredAC?.nombre || "(sin nombre)",
+          area: preferredAC?.area || "(sin área)",
           es_atencion_cliente:
-            preferred?.area && isAC(preferred.area) ? "✅ SÍ" : "❌ NO",
-          criterio:
-            preferred?.area && isAC(preferred.area)
-              ? "Área = Atención al Cliente"
-              : "Primer coach disponible (fallback)",
+            preferredAC?.area && isAC(preferredAC.area) ? "✅ SÍ" : "❌ NO",
         });
+        console.log("⭐ Coach VSL seleccionado:", {
+          codigo: codeEquipoVSL || "(NINGUNO)",
+          nombre: preferredVSL?.nombre || "(sin nombre)",
+          area: preferredVSL?.area || "(sin área)",
+          es_vsl: preferredVSL ? "✅ SÍ" : "❌ NO",
+        });
+        console.log("🏁 Canal inicial:", nextChannel);
         console.log("═══════════════════════════════════════════");
 
-        setResolvedEquipoId(codeEquipo);
-        setCoachResolution(codeEquipo ? "ready" : "missing");
+        setResolvedEquipoIdAC(codeEquipoAC);
+        setResolvedEquipoIdVSL(codeEquipoVSL);
+
+        const anyCoach = !!(codeEquipoAC || codeEquipoVSL);
+        setCoachResolution(anyCoach ? "ready" : "missing");
+        setChannel(nextChannel);
+        setResolvedEquipoId(
+          nextChannel === "ac" ? codeEquipoAC : codeEquipoVSL,
+        );
         try {
           const alumNom = rows?.[0]?.alumno_nombre
             ? String(rows[0].alumno_nombre)
@@ -144,17 +209,29 @@ export default function StudentChatInline({
           setAlumnoName(alumNom);
         } catch {}
         try {
-          const eqName = preferred?.nombre
-            ? String(preferred.nombre)
-            : codeEquipo && map[codeEquipo]?.name
-              ? String(map[codeEquipo].name)
+          const eqNameAC = preferredAC?.nombre
+            ? String(preferredAC.nombre)
+            : codeEquipoAC && map[codeEquipoAC]?.name
+              ? String(map[codeEquipoAC].name)
               : null;
-          setResolvedEquipoName(eqName);
+          const eqNameVSL = preferredVSL?.nombre
+            ? String(preferredVSL.nombre)
+            : codeEquipoVSL && map[codeEquipoVSL]?.name
+              ? String(map[codeEquipoVSL].name)
+              : null;
+
+          setResolvedEquipoNameAC(eqNameAC);
+          setResolvedEquipoNameVSL(eqNameVSL);
+          setResolvedEquipoName(nextChannel === "ac" ? eqNameAC : eqNameVSL);
         } catch {}
       } catch {
         if (alive) {
           setResolvedEquipoId(null);
           setResolvedEquipoName(null);
+          setResolvedEquipoIdAC(null);
+          setResolvedEquipoNameAC(null);
+          setResolvedEquipoIdVSL(null);
+          setResolvedEquipoNameVSL(null);
           setCoachResolution("missing");
         }
       }
@@ -163,6 +240,23 @@ export default function StudentChatInline({
       alive = false;
     };
   }, [code, coachIdFromProps]);
+
+  // Mantener resolvedEquipoId/resolvedEquipoName sincronizados con la pestaña activa.
+  React.useEffect(() => {
+    if (coachIdFromProps) return;
+    const nextId = channel === "ac" ? resolvedEquipoIdAC : resolvedEquipoIdVSL;
+    const nextName =
+      channel === "ac" ? resolvedEquipoNameAC : resolvedEquipoNameVSL;
+    setResolvedEquipoId(nextId || null);
+    setResolvedEquipoName(nextName || null);
+  }, [
+    channel,
+    resolvedEquipoIdAC,
+    resolvedEquipoIdVSL,
+    resolvedEquipoNameAC,
+    resolvedEquipoNameVSL,
+    coachIdFromProps,
+  ]);
 
   // Definimos participantes para que el servidor pueda hacer find-or-create del chat.
   const participants = React.useMemo(() => {
@@ -218,6 +312,23 @@ export default function StudentChatInline({
     [code, alumnoName, resolvedEquipoId, resolvedEquipoName, coachMap],
   );
 
+  const hasVslTab = React.useMemo(() => {
+    if (coachIdFromProps) return false;
+    if (!resolvedEquipoIdVSL) return false;
+    if (
+      resolvedEquipoIdVSL &&
+      resolvedEquipoIdAC &&
+      resolvedEquipoIdVSL === resolvedEquipoIdAC
+    )
+      return false;
+    return true;
+  }, [coachIdFromProps, resolvedEquipoIdVSL, resolvedEquipoIdAC]);
+
+  const hasAcTab = React.useMemo(() => {
+    if (coachIdFromProps) return true;
+    return !!resolvedEquipoIdAC;
+  }, [coachIdFromProps, resolvedEquipoIdAC]);
+
   return (
     <div className={className}>
       {coachResolution === "missing" ? (
@@ -229,40 +340,61 @@ export default function StudentChatInline({
             <Alert>
               <AlertTitle>No tienes coach asignado</AlertTitle>
               <AlertDescription>
-                No tienes un coach de Atención al Cliente asignado. Habla con un
-                administrador para que te asignen uno y puedas usar el chat.
+                No tienes un coach asignado (Atención al Cliente o VSL). Habla
+                con un administrador para que te asignen uno y puedas usar el
+                chat.
               </AlertDescription>
             </Alert>
           </CardContent>
         </Card>
       ) : (
-        <CoachChatInline
-          room={room}
-          role="alumno"
-          title={title}
-          subtitle={subtitle}
-          variant="card"
-          className="h-full"
-          // Activar precreateOnParticipants para que el alumno intente localizar
-          // y unirse automáticamente a la conversación existente al cargar.
-          precreateOnParticipants={true}
-          resolveName={resolveName}
-          socketio={{
-            url: SOCKET_URL || undefined,
-            idCliente: String(code),
-            idEquipo: resolvedEquipoId ? String(resolvedEquipoId) : undefined,
-            myUserCode: String(code),
-            participants,
-            // Solo creamos automáticamente si conocemos el id_equipo destino;
-            // si no, intentaremos localizar una conversación existente por cliente.
-            autoCreate: !!resolvedEquipoId,
-            autoJoin: true,
-          }}
-          listParams={{
-            participante_tipo: "cliente",
-            id_cliente: String(code),
-          }}
-        />
+        <div className="h-full flex flex-col min-h-0">
+          {!coachIdFromProps && hasVslTab && (
+            <div className="px-1 pb-2">
+              <Tabs value={channel} onValueChange={(v) => setChannel(v as any)}>
+                <TabsList>
+                  {hasAcTab && (
+                    <TabsTrigger value="ac">Atención al cliente</TabsTrigger>
+                  )}
+                  <TabsTrigger value="vsl">VSL</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          )}
+
+          <div className="flex-1 min-h-0">
+            <CoachChatInline
+              key={`${channel}:${resolvedEquipoId ?? "none"}`}
+              room={room}
+              role="alumno"
+              title={title}
+              subtitle={subtitle}
+              variant="card"
+              className="h-full"
+              // Activar precreateOnParticipants para que el alumno intente localizar
+              // y unirse automáticamente a la conversación existente al cargar.
+              precreateOnParticipants={true}
+              resolveName={resolveName}
+              socketio={{
+                url: SOCKET_URL || undefined,
+                idCliente: String(code),
+                idEquipo: resolvedEquipoId
+                  ? String(resolvedEquipoId)
+                  : undefined,
+                myUserCode: String(code),
+                participants,
+                // Solo creamos automáticamente si conocemos el id_equipo destino;
+                // si no, intentaremos localizar una conversación existente por cliente.
+                autoCreate: !!resolvedEquipoId,
+                autoJoin: true,
+              }}
+              listParams={{
+                participante_tipo: "cliente",
+                id_cliente: String(code),
+              }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

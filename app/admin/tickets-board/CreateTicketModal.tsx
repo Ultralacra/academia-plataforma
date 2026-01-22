@@ -85,6 +85,7 @@ export function CreateTicketModal({
   const PAGE_SIZE = 25;
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searching, setSearching] = useState(false);
   const [types, setTypes] = useState<{ key: string; value: string }[]>([]);
   const [inactivePaymentConfirmOpen, setInactivePaymentConfirmOpen] =
     useState(false);
@@ -232,16 +233,41 @@ export function CreateTicketModal({
     }
   }
 
+  // Buscar estudiantes en backend cuando el usuario escribe (debounce)
+  useEffect(() => {
+    let alive = true;
+    const q = String(studentQuery || "").trim();
+    if (!q) return; // no buscar si el query está vacío
+    const t = setTimeout(async () => {
+      try {
+        setSearching(true);
+        const res = await getAllStudents({
+          page: 1,
+          pageSize: PAGE_SIZE,
+          search: q,
+        });
+        if (!alive) return;
+        setStudents(Array.isArray(res) ? res : []);
+        setPage(1);
+        setHasMore((res?.length ?? 0) >= PAGE_SIZE);
+      } catch (e) {
+        console.error("Error buscando alumnos:", e);
+      } finally {
+        if (alive) setSearching(false);
+      }
+    }, 300);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [studentQuery]);
+
   const filteredStudents = React.useMemo(() => {
-    if (!studentQuery) return [];
-    const q = studentQuery.toLowerCase();
-    return students
-      .filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          (s.code && String(s.code).toLowerCase().includes(q)),
-      )
-      .slice(0, 10);
+    const q = String(studentQuery || "").trim();
+    if (!q) return [];
+    // Los resultados ya vienen filtrados desde el backend cuando hay query;
+    // además permitimos fallback a la lista local cargada.
+    return (students || []).slice(0, 10);
   }, [students, studentQuery]);
 
   const handleAddLink = () => {
