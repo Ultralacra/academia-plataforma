@@ -105,6 +105,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import ObservacionesSection from "./ObservacionesSection";
 import {
   getTicketFiles,
   getTicketFile,
@@ -310,7 +311,12 @@ export default function TicketsBoard({
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<
-    "general" | "respuesta" | "detalle" | "notas" | "anteriores"
+    | "general"
+    | "respuesta"
+    | "detalle"
+    | "notas"
+    | "anteriores"
+    | "observaciones"
   >("general");
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
@@ -347,7 +353,9 @@ export default function TicketsBoard({
 
   // Los alumnos solo pueden ver: bloquear pestañas/acciones privadas
   useEffect(() => {
-    if (isStudent && detailTab === "notas") setDetailTab("general");
+    if (isStudent && detailTab === "notas") {
+      setDetailTab("general");
+    }
   }, [isStudent, detailTab]);
 
   // Carga perezosa: historial de tickets del alumno solo cuando se abre la pestaña
@@ -3322,6 +3330,18 @@ export default function TicketsBoard({
                         Notas internas
                       </button>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => setDetailTab("observaciones")}
+                      className={`px-3 py-1.5 text-xs border-l ${
+                        detailTab === "observaciones"
+                          ? "bg-slate-900 text-white"
+                          : "hover:bg-gray-50"
+                      }`}
+                      title="Observaciones"
+                    >
+                      Observaciones
+                    </button>
                   </div>
                 </div>
 
@@ -4991,6 +5011,20 @@ export default function TicketsBoard({
                     </div>
                   </div>
                 )}
+
+                {/* Tab: Observaciones */}
+                <div
+                  className={detailTab === "observaciones" ? "block" : "hidden"}
+                >
+                  <div className="p-6">
+                    <ObservacionesSection
+                      ticketCode={selectedTicket?.codigo || ""}
+                      alumnoId={selectedTicket?.id_alumno || ""}
+                      coachId={user?.codigo || user?.id || ""}
+                      canEdit={canEdit}
+                    />
+                  </div>
+                </div>
               </>
             )}
           </div>

@@ -370,3 +370,138 @@ export async function getTickets(opts: {
       body: JSON.stringify({ url: payload.url, title: payload.title }),
     });
   }
+
+  // --- Observaciones 2.3 (Metadata/Tareas) ---
+
+  export type Observacion = {
+    id: number;
+    entity?: string | null;
+    entity_id?: string | null;
+    payload: {
+      fecha: string;
+      recomendacion: string;
+      area: string;
+      estado: boolean; // DEPRECATED: usar 'realizada' en su lugar
+      realizada?: boolean; // Nueva propiedad para marcar como completada (NO elimina del modal)
+      constancia: string; // JSON con {text?: string, files?: string[]}
+      constancia_texto?: string; // Texto de notas
+      creado_por_id: string;
+      creado_por_nombre?: string;
+      alumno_id: string;
+      alumno_nombre?: string;
+      ticket_codigo: string;
+      deleted?: boolean; // SOLO para eliminar del modal (soft delete)
+    };
+    created_at: string;
+  };
+
+  /**
+   * Obtiene las observaciones (metadata) de un ticket filtradas por alumno
+   * Endpoint: GET /v1/metadata?ticket_codigo=:ticketCode&alumno_id=:alumnoId
+   * NOTA: Solo filtra por 'deleted', las observaciones 'realizadas' se siguen mostrando
+   */
+  export async function getObservaciones(ticketCode: string, alumnoId?: string): Promise<Observacion[]> {
+    if (!ticketCode) return [];
+    let path = `/metadata?ticket_codigo=${encodeURIComponent(ticketCode)}`;
+    
+    // Filtrar por alumno_id si está disponible
+    if (alumnoId) {
+      path += `&alumno_id=${encodeURIComponent(alumnoId)}`;
+    }
+    
+    const res = await apiFetch<any>(path);
+    const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+    
+    // Filtrar SOLO las eliminadas con 'deleted: true'
+    // Las observaciones con 'realizada: true' se siguen mostrando (en verde)
+    return list.filter((obs: Observacion) => {
+      // No mostrar las marcadas como deleted (eliminadas del modal)
+      if (obs.payload?.deleted === true) return false;
+      
+      // Solo mostrar observaciones que tengan los campos necesarios para ser observaciones válidas
+      // (esto filtra las que quedaron solo con estado por actualizaciones parciales del backend)
+      if (!obs.payload?.recomendacion || !obs.payload?.area) return false;
+      
+      // Filtrar por alumno_id si está disponible
+      if (alumnoId && obs.payload?.alumno_id !== alumnoId) return false;
+      
+      return true;
+    }) as Observacion[];
+  }
+
+  /**
+   * Crea una nueva observación (metadata)
+   * Endpoint: POST /v1/metadata
+   * Body: { fecha, recomendacion, area, estado, constancia, creado_por_id, alumno_id, ticket_codigo }
+   */
+  export async function createObservacion(payload: {
+    fecha: string;
+    recomendacion: string;
+    area: string;
+    estado: boolean;
+    constancia: string;
+    constancia_texto?: string;
+    creado_por_id: string;
+    alumno_id: string;
+    ticket_codigo: string;
+  }) {
+    const path = `/metadata`;
+    return apiFetch<any>(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...payload,
+        realizada: false, // Por defecto no está realizada
+        deleted: false, // Por defecto no está eliminada
+      }),
+    });
+  }
+
+  /**
+   * Actualiza una observación existente
+   * Endpoint: PUT /v1/metadata/:id
+   */
+  export async function updateObservacion(
+    id: number,
+    payload: Partial<{
+      fecha: string;
+      recomendacion: string;
+      area: string;
+      estado: boolean;
+      realizada?: boolean; // Nueva propiedad para marcar como completada
+      constancia: string;
+      constancia_texto?: string;
+      creado_por_id?: string;
+      creado_por_nombre?: string;
+      alumno_id?: string;
+      alumno_nombre?: string;
+      ticket_codigo?: string;
+      deleted?: boolean;
+    }>
+  ) {
+    if (!id) throw new Error("ID de observación requerido");
+    const path = `/metadata/${id}`;
+    return apiFetch<any>(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...payload,
+        // Asegurarnos de que deleted sea false al actualizar (a menos que se especifique)
+        deleted: payload.deleted !== undefined ? payload.deleted : false,
+      }),
+    });
+  }
+
+  /**
+   * Marca una observación como eliminada (soft delete)
+   * Endpoint: PUT /v1/metadata/:id
+   */
+  export async function deleteObservacion(id: number) {
+    if (!id) throw new Error("ID de observación requerido");
+    const path = `/metadata/${id}`;
+    return apiFetch<any>(path, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ deleted: true }),
+    });
+  }

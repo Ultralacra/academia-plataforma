@@ -48,6 +48,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import VideoPlayer from "@/components/chat/VideoPlayer";
+import ObservacionesSection from "../ObservacionesSection";
+import { useAuth } from "@/hooks/use-auth";
 
 // Status types y estilos (copiados de TicketsBoard)
 type StatusKey =
@@ -122,6 +124,11 @@ function TicketDetailContent() {
   const params = useParams();
   const router = useRouter();
   const codigo = typeof params?.codigo === "string" ? params.codigo : "";
+  const { user } = useAuth();
+
+  // Determinar si el usuario puede editar
+  const isStudent = (user?.role || "").toLowerCase() === "student";
+  const canEdit = !isStudent;
 
   // Estados
   const [loading, setLoading] = useState(true);
@@ -293,7 +300,11 @@ function TicketDetailContent() {
   if (error) {
     return (
       <div className="p-6">
-        <Button variant="ghost" onClick={() => router.push("/admin/tickets-board")} className="mb-4">
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/admin/tickets-board")}
+          className="mb-4"
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
@@ -307,7 +318,11 @@ function TicketDetailContent() {
   if (!ticket) {
     return (
       <div className="p-6">
-        <Button variant="ghost" onClick={() => router.push("/admin/tickets-board")} className="mb-4">
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/admin/tickets-board")}
+          className="mb-4"
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
@@ -354,7 +369,10 @@ function TicketDetailContent() {
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
-        <Button variant="ghost" onClick={() => router.push("/admin/tickets-board")}>
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/admin/tickets-board")}
+        >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Volver
         </Button>
@@ -419,7 +437,7 @@ function TicketDetailContent() {
                     {formatDate(
                       ticket?.fecha_resolucion ??
                         ticket?.resolucion ??
-                        ticket?.resolved_at
+                        ticket?.resolved_at,
                     )}
                   </div>
                 </div>
@@ -474,7 +492,8 @@ function TicketDetailContent() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {coaches.map((c: any, idx: number) => {
-                  const name = typeof c === "string" ? c : c?.nombre ?? "Coach";
+                  const name =
+                    typeof c === "string" ? c : (c?.nombre ?? "Coach");
                   const area = typeof c === "string" ? null : c?.area;
                   return (
                     <span
@@ -778,6 +797,15 @@ function TicketDetailContent() {
               ))}
             </div>
           )}
+
+          {/* Sección de Observaciones 2.3 */}
+          <Separator className="my-4" />
+          <ObservacionesSection
+            ticketCode={codigo}
+            alumnoId={ticket?.id_alumno || ticket?.alumno_id || ""}
+            coachId={String(user?.codigo || user?.id || "")}
+            canEdit={canEdit}
+          />
         </CardContent>
       </Card>
 
