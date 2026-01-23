@@ -34,9 +34,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getStudentTickets } from "../api";
 import Link from "next/link";
-import { Eye, MessageSquare, Pencil } from "lucide-react";
+import { Eye, MessageSquare, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -63,7 +73,11 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
 import { deleteStudent } from "../api";
 import { useRouter } from "next/navigation";
-import { createMetadata, listMetadata, type MetadataRecord } from "@/lib/metadata";
+import {
+  createMetadata,
+  listMetadata,
+  type MetadataRecord,
+} from "@/lib/metadata";
 
 export default function StudentDetailContent({ code }: { code: string }) {
   const { user } = useAuth();
@@ -95,12 +109,35 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
   // Estado para editar vencimiento estimado (solo preview: no ejecuta endpoint)
   const [editVenceOpen, setEditVenceOpen] = useState(false);
-  const [tempVence, setTempVence] = useState<string>("");
+  const [tempMesesExtra, setTempMesesExtra] = useState<string>("0");
+  const [tempVenceTipo, setTempVenceTipo] = useState<
+    "contractual" | "extraordinaria" | "membresia"
+  >("contractual");
+  const [tempVenceMotivo, setTempVenceMotivo] = useState<string>("");
 
   // Metadata: vence estimado (persistente)
   const [venceMeta, setVenceMeta] = useState<MetadataRecord<any> | null>(null);
+  const [membresiaExts, setMembresiaExts] = useState<
+    Array<MetadataRecord<any>>
+  >([]);
   const [loadingVenceMeta, setLoadingVenceMeta] = useState(false);
   const [openVenceHistory, setOpenVenceHistory] = useState(false);
+
+  // Edición/corrección de extensiones de membresía (manteniendo histórico)
+  const [editMembresiaOpen, setEditMembresiaOpen] = useState(false);
+  const [editingMembresia, setEditingMembresia] =
+    useState<MetadataRecord<any> | null>(null);
+  const [tempMembresiaEstado, setTempMembresiaEstado] = useState<
+    "activa" | "anulada"
+  >("activa");
+  const [tempMembresiaMotivo, setTempMembresiaMotivo] = useState<string>("");
+  const [savingMembresia, setSavingMembresia] = useState(false);
+
+  const [confirmRemoveMembresiaOpen, setConfirmRemoveMembresiaOpen] =
+    useState(false);
+  const [removeMembresiaTarget, setRemoveMembresiaTarget] =
+    useState<MetadataRecord<any> | null>(null);
+  const [removingMembresia, setRemovingMembresia] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -301,10 +338,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
     }
   }
 
-  async function loadVenceMetadata(alumnoId: string | number | null | undefined) {
+  async function loadVenceMetadata(
+    alumnoId: string | number | null | undefined,
+  ) {
     const id = alumnoId ? String(alumnoId) : "";
     if (!id) {
       setVenceMeta(null);
+      setMembresiaExts([]);
       return;
     }
     setLoadingVenceMeta(true);
@@ -312,28 +352,89 @@ export default function StudentDetailContent({ code }: { code: string }) {
       // Backend puede no soportar query; cargamos y filtramos en cliente
       const res = await listMetadata<any>();
       const items = Array.isArray(res?.items) ? res.items : [];
-      const matches = items.filter((m) => {
+      const matchesBase = items.filter((m) => {
         if (!m) return false;
         if (m.entity !== "alumno_acceso_vence_estimado") return false;
         if (String(m.entity_id) !== id) return false;
         // Seguridad extra: si viene alumno_id en payload, debe coincidir
         const pid = (m as any)?.payload?.alumno_id;
-        if (pid !== undefined && pid !== null && String(pid) !== id) return false;
+        if (pid !== undefined && pid !== null && String(pid) !== id)
+          return false;
         return true;
       });
 
+      const matchesMembresia = items.filter((m) => {
+        if (!m) return false;
+        if (m.entity !== "alumno_acceso_extension_membresia") return false;
+        if (String(m.entity_id) !== id) return false;
+        const pid = (m as any)?.payload?.alumno_id;
+        if (pid !== undefined && pid !== null && String(pid) !== id)
+          return false;
+        return true;
+      });
+
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[admin/alumnos] metadata vence: matches", {
+          alumnoId: id,
+          totalItems: items.length,
+          matchesCount: matchesBase.length,
+          matches: matchesBase.map((m: any) => ({
+            id: m?.id,
+            entity: m?.entity,
+            entity_id: m?.entity_id,
+            updated_at: m?.updated_at ?? null,
+            created_at: m?.created_at ?? null,
+            vence_estimado: m?.payload?.vence_estimado ?? null,
+            meses_extra: m?.payload?.meses_extra ?? null,
+            vence_tipo: m?.payload?.vence_tipo ?? null,
+            vence_motivo: m?.payload?.vence_motivo ?? null,
+            ultimo_cambio_at: m?.payload?.ultimo_cambio_at ?? null,
+            historialCount: Array.isArray(m?.payload?.historial)
+              ? m.payload.historial.length
+              : 0,
+            payloadAlumnoId: m?.payload?.alumno_id ?? null,
+          })),
+          membresiaCount: matchesMembresia.length,
+        });
+      }
+
       // Si hay varios, tomamos el más reciente por updated_at/created_at/id
-      matches.sort((a: any, b: any) => {
+      matchesBase.sort((a: any, b: any) => {
         const ta = new Date(a?.updated_at || a?.created_at || 0).getTime();
         const tb = new Date(b?.updated_at || b?.created_at || 0).getTime();
         if (tb !== ta) return tb - ta;
         return Number(b?.id || 0) - Number(a?.id || 0);
       });
 
-      setVenceMeta(matches[0] ?? null);
+      const picked = matchesBase[0] ?? null;
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[admin/alumnos] metadata vence: picked", {
+          alumnoId: id,
+          pickedId: (picked as any)?.id ?? null,
+          pickedVence: (picked as any)?.payload?.vence_estimado ?? null,
+          pickedMesesExtra: (picked as any)?.payload?.meses_extra ?? null,
+          pickedTipo: (picked as any)?.payload?.vence_tipo ?? null,
+          pickedMotivo: (picked as any)?.payload?.vence_motivo ?? null,
+          pickedUltimoCambioAt:
+            (picked as any)?.payload?.ultimo_cambio_at ?? null,
+          pickedHistorial: (picked as any)?.payload?.historial ?? null,
+        });
+      }
+
+      setVenceMeta(picked);
+
+      // Membresía: mantenemos TODAS las extensiones como registros separados
+      matchesMembresia.sort((a: any, b: any) => {
+        const ta = new Date(a?.updated_at || a?.created_at || 0).getTime();
+        const tb = new Date(b?.updated_at || b?.created_at || 0).getTime();
+        if (tb !== ta) return tb - ta;
+        return Number(b?.id || 0) - Number(a?.id || 0);
+      });
+      setMembresiaExts(matchesMembresia as any);
     } catch (e) {
       console.warn("Error cargando metadata vence", e);
       setVenceMeta(null);
+      setMembresiaExts([]);
     } finally {
       setLoadingVenceMeta(false);
     }
@@ -347,11 +448,26 @@ export default function StudentDetailContent({ code }: { code: string }) {
   }, [student?.id]);
 
   async function handleSaveVence() {
-    if (!tempVence) return;
     if (!student?.id) {
       toast({
         title: "No se pudo guardar",
         description: "No hay ID de alumno",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const requiresMotivo = tempVenceTipo === "extraordinaria";
+    const mesesExtraNum = Number(tempMesesExtra);
+    const mesesExtra = Number.isFinite(mesesExtraNum)
+      ? Math.max(0, Math.round(mesesExtraNum))
+      : 0;
+    const effectiveMotivo = tempVenceMotivo.trim();
+
+    if (requiresMotivo && !effectiveMotivo) {
+      toast({
+        title: "No se pudo guardar",
+        description: "Debes indicar el motivo del ajuste extraordinario",
         variant: "destructive",
       });
       return;
@@ -366,6 +482,37 @@ export default function StudentDetailContent({ code }: { code: string }) {
     };
 
     try {
+      // Membresía: SIEMPRE crear una nueva extensión (no sobrescribir la existente)
+      if (tempVenceTipo === "membresia") {
+        if (mesesExtra <= 0) {
+          toast({
+            title: "No se pudo guardar",
+            description: "Selecciona meses de membresía (>= 1)",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        await createMetadata({
+          entity: "alumno_acceso_extension_membresia",
+          entity_id: alumnoId,
+          payload: {
+            alumno_id: Number(student.id),
+            alumno_codigo: code,
+            alumno_nombre: student?.name ?? null,
+            meses: mesesExtra,
+            motivo: effectiveMotivo || null,
+            created_at: now,
+            changed_by: changedBy,
+          },
+        });
+
+        await loadVenceMetadata(student.id);
+        setEditVenceOpen(false);
+        toast({ title: "Acceso actualizado" });
+        return;
+      }
+
       // 1) Si no tenemos metadata cargada, intentamos recargar antes de crear
       if (!venceMeta) {
         await loadVenceMetadata(student.id);
@@ -378,29 +525,66 @@ export default function StudentDetailContent({ code }: { code: string }) {
           { method: "GET" },
         );
         const curr = (detailResp as any)?.data ?? detailResp;
-        if (!curr || !curr.id) throw new Error("No existe metadata para actualizar");
+        if (!curr || !curr.id)
+          throw new Error("No existe metadata para actualizar");
 
         const prevPayload = (curr as any)?.payload ?? {};
-        const prevVence = prevPayload?.vence_estimado ?? null;
+        const prevExtraRaw = prevPayload?.meses_extra;
+        let prevExtra: number | null =
+          prevExtraRaw === undefined ||
+          prevExtraRaw === null ||
+          prevExtraRaw === ""
+            ? null
+            : Number(prevExtraRaw);
+        if (!Number.isFinite(prevExtra as any)) prevExtra = null;
+        if (
+          prevExtra === null &&
+          prevPayload?.vence_estimado &&
+          accessStats?.baseEstimatedEnd
+        ) {
+          const legacy = parseMaybe(String(prevPayload.vence_estimado));
+          if (legacy) {
+            const derived = Math.round(
+              diffDays(accessStats.baseEstimatedEnd, toDayDate(legacy)) / 30,
+            );
+            prevExtra = Math.max(0, derived);
+          }
+        }
+        const prevTipo = prevPayload?.vence_tipo ?? null;
+        const prevMotivo = prevPayload?.vence_motivo ?? null;
         const prevHistory = Array.isArray(prevPayload?.historial)
           ? prevPayload.historial
           : [];
 
-        // Agregar entrada al historial solo si realmente cambia
+        const monthsChanged = String(prevExtra ?? "") !== String(mesesExtra);
+
+        // Agregar entrada al historial solo si realmente cambia algo (meses/tipo/motivo)
         const nextHistory = [...prevHistory];
-        if (String(prevVence || "") !== String(tempVence)) {
+        const changed =
+          monthsChanged ||
+          String(prevTipo || "") !== String(tempVenceTipo) ||
+          String(prevMotivo || "") !== String(effectiveMotivo);
+        if (changed) {
           nextHistory.push({
             changed_at: now,
-            from: prevVence,
-            to: tempVence,
+            from_meses_extra: prevExtra,
+            to_meses_extra: mesesExtra,
+            from_total_meses: prevExtra === null ? null : 4 + prevExtra,
+            to_total_meses: 4 + mesesExtra,
+            tipo: tempVenceTipo,
+            motivo: effectiveMotivo || null,
             changed_by: changedBy,
           });
         }
 
-        // IMPORTANTE: no sobrescribir payload, solo actualizar vence_estimado + historial
+        // IMPORTANTE: no sobrescribir payload completo; migramos a meses_extra (sin fecha)
+        const { vence_estimado: _legacyVence, ...prevPayloadSansLegacy } =
+          prevPayload;
         const mergedPayload = {
-          ...prevPayload,
-          vence_estimado: tempVence,
+          ...prevPayloadSansLegacy,
+          meses_extra: mesesExtra,
+          vence_tipo: tempVenceTipo,
+          vence_motivo: effectiveMotivo || null,
           historial: nextHistory,
           ultimo_cambio_at: now,
           ultimo_cambio_por: changedBy,
@@ -423,6 +607,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
         const updated = (updateResp as any)?.data ?? updateResp;
         setVenceMeta(updated ?? null);
+
+        // Feedback claro: si solo cambió el motivo/tipo pero no los meses, no se verá extensión.
+        if (!monthsChanged) {
+          toast({
+            title: "Guardado",
+            description:
+              "Se guardó el motivo/tipo, pero los meses extra no cambiaron. Para sumar acceso, aumenta los meses extra.",
+          });
+        }
       } else {
         // 3) Si no existe, crear el metadata (uno por alumno)
         const payload = {
@@ -432,12 +625,18 @@ export default function StudentDetailContent({ code }: { code: string }) {
           creado_por_id: changedBy.id,
           creado_por_codigo: changedBy.codigo,
           creado_por_nombre: changedBy.nombre,
-          vence_estimado: tempVence,
+          meses_extra: mesesExtra,
+          vence_tipo: tempVenceTipo,
+          vence_motivo: effectiveMotivo || null,
           historial: [
             {
               changed_at: now,
-              from: null,
-              to: tempVence,
+              from_meses_extra: null,
+              to_meses_extra: mesesExtra,
+              from_total_meses: null,
+              to_total_meses: 4 + mesesExtra,
+              tipo: tempVenceTipo,
+              motivo: effectiveMotivo || null,
               changed_by: changedBy,
               reason: "create",
             },
@@ -453,9 +652,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       }
 
       setEditVenceOpen(false);
-      toast({
-        title: "Vence (estimado) actualizado",
-      });
+      toast({ title: "Acceso actualizado" });
     } catch (e: any) {
       console.error("Error guardando metadata vence", e);
       toast({
@@ -463,6 +660,202 @@ export default function StudentDetailContent({ code }: { code: string }) {
         description: String(e?.message ?? e ?? ""),
         variant: "destructive",
       });
+    }
+  }
+
+  function startEditMembresia(meta: MetadataRecord<any>) {
+    if (!meta) return;
+    setEditingMembresia(meta);
+    const monthsRaw = Number(
+      meta?.payload?.meses ?? meta?.payload?.meses_extra ?? 0,
+    );
+    const isAnulado =
+      Boolean((meta as any)?.payload?.anulado) ||
+      !Number.isFinite(monthsRaw) ||
+      monthsRaw <= 0;
+    setTempMembresiaEstado(isAnulado ? "anulada" : "activa");
+    setTempMembresiaMotivo(
+      String(
+        (meta as any)?.payload?.anulado_motivo ??
+          (meta as any)?.payload?.motivo ??
+          "",
+      ),
+    );
+    setEditMembresiaOpen(true);
+  }
+
+  async function handleSaveMembresiaEdit() {
+    if (!student?.id) {
+      toast({
+        title: "No se pudo guardar",
+        description: "No hay ID de alumno",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!editingMembresia?.id) {
+      toast({
+        title: "No se pudo guardar",
+        description: "No hay registro de membresía seleccionado",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const changedBy = {
+      id: user?.id ?? null,
+      codigo: (user as any)?.codigo ?? null,
+      nombre: (user as any)?.name ?? null,
+    };
+    const motivo = tempMembresiaMotivo.trim();
+    const isAnulando = tempMembresiaEstado === "anulada";
+    const meses = isAnulando ? 0 : 1; // regla: cada membresía suma +1; si fue error, se anula (0)
+
+    try {
+      setSavingMembresia(true);
+
+      const detailResp = await apiFetch<any>(
+        `/metadata/${encodeURIComponent(String(editingMembresia.id))}`,
+        { method: "GET" },
+      );
+      const curr = (detailResp as any)?.data ?? detailResp;
+      if (!curr || !curr.id)
+        throw new Error("No existe metadata para actualizar");
+
+      const prevPayload = (curr as any)?.payload ?? {};
+      const nextPayload: any = {
+        ...prevPayload,
+        meses,
+        motivo: motivo || null,
+        updated_at: now,
+        updated_by: changedBy,
+      };
+
+      if (isAnulando) {
+        nextPayload.anulado = true;
+        nextPayload.anulado_at = prevPayload?.anulado_at ?? now;
+        nextPayload.anulado_by = changedBy;
+        nextPayload.anulado_motivo =
+          motivo || prevPayload?.anulado_motivo || null;
+      } else {
+        nextPayload.anulado = false;
+        nextPayload.anulado_at = null;
+        nextPayload.anulado_by = null;
+        nextPayload.anulado_motivo = null;
+      }
+
+      const body = {
+        entity: curr.entity,
+        entity_id: curr.entity_id,
+        payload: nextPayload,
+      };
+
+      await apiFetch<any>(`/metadata/${encodeURIComponent(String(curr.id))}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      await loadVenceMetadata(student.id);
+      setEditMembresiaOpen(false);
+      setEditingMembresia(null);
+      toast({ title: "Membresía actualizada" });
+    } catch (e: any) {
+      console.error("Error actualizando membresía", e);
+      toast({
+        title: "No se pudo actualizar membresía",
+        description: String(e?.message ?? e ?? ""),
+        variant: "destructive",
+      });
+    } finally {
+      setSavingMembresia(false);
+    }
+  }
+
+  function startRemoveMembresia(meta: MetadataRecord<any>) {
+    if (!meta?.id) return;
+    setRemoveMembresiaTarget(meta);
+    setConfirmRemoveMembresiaOpen(true);
+  }
+
+  async function handleConfirmRemoveMembresia() {
+    if (!student?.id) {
+      toast({
+        title: "No se pudo quitar",
+        description: "No hay ID de alumno",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!removeMembresiaTarget?.id) {
+      toast({
+        title: "No se pudo quitar",
+        description: "No hay registro de membresía seleccionado",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const changedBy = {
+      id: user?.id ?? null,
+      codigo: (user as any)?.codigo ?? null,
+      nombre: (user as any)?.name ?? null,
+    };
+
+    try {
+      setRemovingMembresia(true);
+
+      const detailResp = await apiFetch<any>(
+        `/metadata/${encodeURIComponent(String(removeMembresiaTarget.id))}`,
+        { method: "GET" },
+      );
+      const curr = (detailResp as any)?.data ?? detailResp;
+      if (!curr || !curr.id)
+        throw new Error("No existe metadata para actualizar");
+
+      const prevPayload = (curr as any)?.payload ?? {};
+      const prevMotivo = String(prevPayload?.motivo ?? "").trim();
+      const nextPayload: any = {
+        ...prevPayload,
+        meses: 0,
+        anulado: true,
+        anulado_at: prevPayload?.anulado_at ?? now,
+        anulado_by: changedBy,
+        anulado_motivo:
+          String(prevPayload?.anulado_motivo ?? "").trim() ||
+          prevMotivo ||
+          "Anulada desde historial",
+        updated_at: now,
+        updated_by: changedBy,
+      };
+
+      const body = {
+        entity: curr.entity,
+        entity_id: curr.entity_id,
+        payload: nextPayload,
+      };
+
+      await apiFetch<any>(`/metadata/${encodeURIComponent(String(curr.id))}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      await loadVenceMetadata(student.id);
+      setConfirmRemoveMembresiaOpen(false);
+      setRemoveMembresiaTarget(null);
+      toast({ title: "Membresía quitada" });
+    } catch (e: any) {
+      console.error("Error quitando membresía", e);
+      toast({
+        title: "No se pudo quitar membresía",
+        description: String(e?.message ?? e ?? ""),
+        variant: "destructive",
+      });
+    } finally {
+      setRemovingMembresia(false);
     }
   }
 
@@ -726,6 +1119,40 @@ export default function StudentDetailContent({ code }: { code: string }) {
     return Math.round((bb - aa) / msPerDay) + 1;
   }
 
+  function isWeekday(d: Date) {
+    const day = d.getDay(); // 0=dom, 6=sáb
+    return day !== 0 && day !== 6;
+  }
+
+  // Cuenta días hábiles en (start, end] (excluye start, incluye end)
+  function businessDaysElapsed(startDay: Date, endDay: Date) {
+    const a = toDayDate(startDay);
+    const b = toDayDate(endDay);
+    if (b.getTime() <= a.getTime()) return 0;
+    let count = 0;
+    const d = new Date(a);
+    d.setDate(d.getDate() + 1);
+    while (d.getTime() <= b.getTime()) {
+      if (isWeekday(d)) count++;
+      d.setDate(d.getDate() + 1);
+    }
+    return count;
+  }
+
+  // Cuenta días hábiles en [start, end] (incluye ambos)
+  function businessDaysBetweenInclusive(startDay: Date, endDay: Date) {
+    const a = toDayDate(startDay);
+    const b = toDayDate(endDay);
+    if (b.getTime() < a.getTime()) return 0;
+    let count = 0;
+    const d = new Date(a);
+    while (d.getTime() <= b.getTime()) {
+      if (isWeekday(d)) count++;
+      d.setDate(d.getDate() + 1);
+    }
+    return count;
+  }
+
   // Extraer pausas del historial de estatus (solo registros con PAUSADO y fechas válidas)
   const pausesFromStatusHistory = useMemo(() => {
     if (!statusHistory) return [];
@@ -790,49 +1217,214 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
     const startDay = toDayDate(start);
     const today = toDayDate(new Date());
-    const msPerDay = 24 * 60 * 60 * 1000;
-    const daysSinceStart = Math.max(
+    // Días consumidos desde ingreso hasta hoy (hábiles, incluyendo el día de ingreso si es hábil)
+    const businessDaysSinceStart = Math.max(
       0,
-      Math.round((today.getTime() - startDay.getTime()) / msPerDay),
+      businessDaysBetweenInclusive(startDay, today),
     );
 
-    // Días pausados acumulados hasta hoy (sin doble conteo)
-    let pausedDaysElapsed = 0;
+    // Pausas acumuladas hasta hoy (sin doble conteo)
+    // - Hábiles: para descontar consumo
+    // - Calendario: para extender el vencimiento (mantener compatibilidad con lógica previa)
+    let pausedBusinessDaysElapsed = 0;
+    let pausedCalendarDaysElapsed = 0;
     for (const r of mergedPauseIntervals) {
       const a = r.start < startDay ? startDay : r.start;
       const b = r.end > today ? today : r.end;
-      pausedDaysElapsed += daysBetweenInclusive(a, b);
+      pausedBusinessDaysElapsed += businessDaysBetweenInclusive(a, b);
+      pausedCalendarDaysElapsed += daysBetweenInclusive(a, b);
     }
 
-    const effectiveDays = Math.max(0, daysSinceStart - pausedDaysElapsed);
+    const effectiveDays = Math.max(
+      0,
+      businessDaysSinceStart - pausedBusinessDaysElapsed,
+    );
     const PROGRAM_DAYS = 120; // 4 meses ~ 120 días (regla operativa)
 
-    // Vence: si existe metadata, usar ese vencimiento (último registrado)
-    // Importante: los días restantes y el estado (vigente/vencido) se basan en esta fecha.
-    const metaVenceIso = venceMeta?.payload?.vence_estimado
-      ? String(venceMeta.payload.vence_estimado)
+    // Base (sin metadata): 4 meses + días pausados
+    const baseEnd = addDays(startDay, PROGRAM_DAYS + pausedCalendarDaysElapsed);
+
+    // Vence: se calcula como 4 meses + pausas + meses_extra (si existe en metadata)
+    // Retrocompatibilidad: si existe un `vence_estimado` antiguo (fecha),
+    // 1) mostramos EXACTAMENTE esa fecha como vencimiento (para no cambiar lo configurado),
+    // 2) estimamos meses_extra solo para UI (aprox) y calculamos extensión real en días.
+    const metaExtraRaw = (venceMeta as any)?.payload?.meses_extra;
+    const metaExtraParsed =
+      metaExtraRaw === undefined || metaExtraRaw === null || metaExtraRaw === ""
+        ? null
+        : Number(metaExtraRaw);
+    let extraMonths: number | null =
+      metaExtraParsed !== null && Number.isFinite(metaExtraParsed)
+        ? Math.max(0, Math.round(metaExtraParsed))
+        : null;
+
+    const metaVenceIso = (venceMeta as any)?.payload?.vence_estimado
+      ? String((venceMeta as any).payload.vence_estimado)
       : null;
     const metaVence = metaVenceIso ? parseMaybe(metaVenceIso) : null;
+    const metaVenceDay = metaVence ? toDayDate(metaVence) : null;
 
-    const usedMetadataVence = Boolean(metaVence);
-    const estEnd = usedMetadataVence
-      ? toDayDate(metaVence as Date)
-      : addDays(startDay, PROGRAM_DAYS + pausedDaysElapsed);
+    // Helper: meses completos (calendario) entre dos fechas
+    const monthsBetweenFloor = (from: Date, to: Date) => {
+      const a = toDayDate(from);
+      const b = toDayDate(to);
+      if (b.getTime() <= a.getTime()) return 0;
+      const months =
+        (b.getFullYear() - a.getFullYear()) * 12 +
+        (b.getMonth() - a.getMonth());
+      // si el día del mes no alcanza, no cuenta el mes completo
+      const adj = b.getDate() < a.getDate() ? 1 : 0;
+      return Math.max(0, months - adj);
+    };
+
+    // Caso legacy: no hay meses_extra pero sí fecha configurada.
+    // - vencimiento real: metaVenceDay
+    // - extensión real: diferencia en días contra baseEnd
+    // - meses extra mostrados: diferencia de meses calendario (floor)
+    const legacyExtraDays =
+      extraMonths === null && metaVenceDay
+        ? Math.max(0, diffDays(baseEnd, metaVenceDay))
+        : 0;
+    if (extraMonths === null && metaVenceDay) {
+      extraMonths = monthsBetweenFloor(baseEnd, metaVenceDay);
+    }
+
+    const usedMetadataVence = extraMonths !== null || Boolean(metaVenceDay);
+    const normalizedExtraMonths = extraMonths ?? 0;
+    const membresiaAll = Array.isArray(membresiaExts) ? membresiaExts : [];
+    const membresiaActive = membresiaAll.filter((m: any) => {
+      const n = Number(m?.payload?.meses ?? m?.payload?.meses_extra ?? 0);
+      const isAnulado =
+        Boolean(m?.payload?.anulado) || !Number.isFinite(n) || n <= 0;
+      return !isAnulado;
+    });
+    const membresiaMonthsTotal = membresiaActive.reduce((acc, m: any) => {
+      const n = Number(m?.payload?.meses ?? m?.payload?.meses_extra ?? 0);
+      return acc + (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
+    }, 0);
+    const membresiaCount = membresiaActive.length;
+    const membresiaCountTotal = membresiaAll.length;
+    const membresiaAnuladasCount = Math.max(
+      0,
+      membresiaCountTotal - membresiaCount,
+    );
+
+    const totalMonths = 4 + normalizedExtraMonths + membresiaMonthsTotal;
+
+    // Si es legacy (vence_estimado sin meses_extra), respetar la fecha exacta.
+    // Si hay membresía además, sí se suma sobre la fecha legacy (30 días por mes de membresía).
+    const baseForEnd =
+      metaVenceDay && metaExtraParsed === null ? metaVenceDay : baseEnd;
+    const extraDaysFromMonths = normalizedExtraMonths * 30;
+    const membresiaDays = membresiaMonthsTotal * 30;
+
+    const estEnd =
+      metaVenceDay && metaExtraParsed === null
+        ? addDays(baseForEnd, membresiaDays)
+        : addDays(baseForEnd, extraDaysFromMonths + membresiaDays);
+
+    const extensionDaysFromMetadata =
+      metaVenceDay && metaExtraParsed === null
+        ? legacyExtraDays + membresiaDays
+        : extraDaysFromMonths + membresiaDays;
     const remaining = diffDays(today, estEnd);
     const isExpired = remaining <= 0;
     return {
       startDay,
       today,
-      daysSinceStart,
-      pausedDaysElapsed,
+      daysSinceStart: businessDaysSinceStart,
+      pausedBusinessDaysElapsed,
+      pausedCalendarDaysElapsed,
       effectiveDays,
       programDays: PROGRAM_DAYS,
       remainingDays: remaining,
       isExpired,
       estimatedEnd: estEnd,
+      baseEstimatedEnd: baseEnd,
       usedMetadataVence,
+      extensionDaysFromMetadata,
+      extraMonths: normalizedExtraMonths,
+      totalMonths,
+      membresiaMonthsTotal,
+      membresiaCount,
+      membresiaCountTotal,
+      membresiaAnuladasCount,
     };
-  }, [pIngreso, student?.ingreso, student?.raw?.ingreso, mergedPauseIntervals, venceMeta?.payload?.vence_estimado]);
+  }, [
+    pIngreso,
+    student?.ingreso,
+    student?.raw?.ingreso,
+    mergedPauseIntervals,
+    (venceMeta as any)?.payload?.meses_extra,
+    (venceMeta as any)?.payload?.vence_estimado,
+    membresiaExts,
+  ]);
+
+  const lastAccessLogKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (!student || !accessStats) return;
+
+    const venceShownIso = accessStats.estimatedEnd.toISOString();
+
+    const logKey = [
+      String(student.id ?? ""),
+      String(student.code ?? ""),
+      String(venceMeta?.payload?.vence_estimado ?? ""),
+      String((venceMeta as any)?.payload?.meses_extra ?? ""),
+      String(venceMeta?.payload?.vence_tipo ?? ""),
+      String(venceMeta?.payload?.vence_motivo ?? ""),
+      String(accessStats.estimatedEnd?.toISOString?.() ?? ""),
+      String(accessStats.baseEstimatedEnd?.toISOString?.() ?? ""),
+      String(accessStats.extensionDaysFromMetadata ?? ""),
+      String(accessStats.remainingDays ?? ""),
+      String(accessStats.pausedBusinessDaysElapsed ?? ""),
+    ].join("|");
+    if (lastAccessLogKeyRef.current === logKey) return;
+    lastAccessLogKeyRef.current = logKey;
+
+    console.log("[admin/alumnos] vencimiento acceso (UI)", {
+      student: {
+        id: student.id,
+        code: student.code,
+        name: student.name,
+        ingreso: student.ingreso ?? student.raw?.ingreso,
+      },
+      venceMeta: {
+        id: (venceMeta as any)?.id,
+        vence_estimado: venceMeta?.payload?.vence_estimado ?? null,
+        meses_extra: (venceMeta as any)?.payload?.meses_extra ?? null,
+        vence_tipo: venceMeta?.payload?.vence_tipo ?? null,
+        vence_motivo: venceMeta?.payload?.vence_motivo ?? null,
+        historialCount: (venceMeta?.payload?.historial || []).length,
+      },
+      accessStats: {
+        daysSinceStart: accessStats.daysSinceStart,
+        pausedBusinessDaysElapsed: accessStats.pausedBusinessDaysElapsed,
+        pausedCalendarDaysElapsed: accessStats.pausedCalendarDaysElapsed,
+        effectiveDays: accessStats.effectiveDays,
+        programDays: accessStats.programDays,
+        baseEstimatedEndISO: accessStats.baseEstimatedEnd.toISOString(),
+        estimatedEndISO: accessStats.estimatedEnd.toISOString(),
+        extensionDaysFromMetadata: accessStats.extensionDaysFromMetadata,
+        extraMonths: accessStats.extraMonths,
+        totalMonths: accessStats.totalMonths,
+        remainingDays: accessStats.remainingDays,
+        isExpired: accessStats.isExpired,
+        usedMetadataVence: accessStats.usedMetadataVence,
+      },
+      venceShown: {
+        iso: venceShownIso,
+        es: fmtES(venceShownIso as any),
+      },
+    });
+  }, [
+    student,
+    accessStats,
+    (venceMeta as any)?.payload?.meses_extra,
+    venceMeta?.payload?.vence_estimado,
+    (venceMeta?.payload?.historial || []).length,
+  ]);
 
   // Vista simplificada: solo "Mi perfil" (detalle). Otras secciones van en rutas aparte.
 
@@ -1040,7 +1632,40 @@ export default function StudentDetailContent({ code }: { code: string }) {
             {canSeeAdminAccessInfo && (
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-medium">Acceso (4 meses)</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-medium">
+                      Acceso ({accessStats?.totalMonths ?? 4} meses)
+                    </h3>
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-muted transition-colors"
+                      title="Extender accesos"
+                      onClick={() => {
+                        setTempMesesExtra(
+                          String(accessStats?.extraMonths ?? 0),
+                        );
+                        {
+                          const vt = (venceMeta as any)?.payload?.vence_tipo;
+                          setTempVenceTipo(
+                            vt === "extraordinaria"
+                              ? "extraordinaria"
+                              : vt === "membresia"
+                                ? "membresia"
+                                : "contractual",
+                          );
+                        }
+                        setTempVenceMotivo(
+                          String(
+                            (venceMeta as any)?.payload?.vence_motivo ?? "",
+                          ),
+                        );
+                        setEditVenceOpen(true);
+                      }}
+                      disabled={!accessStats}
+                    >
+                      <Plus className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </button>
+                  </div>
                   {accessStats ? (
                     accessStats.isExpired ? (
                       <Badge variant="destructive">Vencido</Badge>
@@ -1058,6 +1683,78 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   </p>
                 ) : (
                   <div className="mt-3 space-y-2 text-sm">
+                    {(() => {
+                      const tipoRaw = (venceMeta as any)?.payload?.vence_tipo;
+                      const tipo =
+                        tipoRaw === "extraordinaria"
+                          ? "Extraordinaria"
+                          : "Contractual";
+                      const hist = Array.isArray(
+                        (venceMeta as any)?.payload?.historial,
+                      )
+                        ? (venceMeta as any).payload.historial
+                        : [];
+                      const extensionCount = hist.filter((h: any) => {
+                        const from =
+                          h?.from_meses_extra === null ||
+                          h?.from_meses_extra === undefined
+                            ? null
+                            : Number(h.from_meses_extra);
+                        const to =
+                          h?.to_meses_extra === null ||
+                          h?.to_meses_extra === undefined
+                            ? null
+                            : Number(h.to_meses_extra);
+                        if (to === null || !Number.isFinite(to)) return false;
+                        if (from === null || !Number.isFinite(from))
+                          return to > 0;
+                        return to > from;
+                      }).length;
+
+                      if (accessStats.extraMonths <= 0 && extensionCount === 0)
+                        return null;
+
+                      return (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-muted-foreground">
+                            Meses extra
+                          </span>
+                          <span className="font-medium">
+                            {accessStats.extraMonths}
+                            <span className="text-muted-foreground"> · </span>
+                            <span className="text-muted-foreground">
+                              {tipo}
+                            </span>
+                            <span className="text-muted-foreground"> · </span>
+                            <span className="text-muted-foreground">
+                              {extensionCount} ext.
+                            </span>
+                          </span>
+                        </div>
+                      );
+                    })()}
+
+                    {accessStats.membresiaMonthsTotal > 0 ||
+                    accessStats.membresiaCountTotal > 0 ? (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-muted-foreground">Membresía</span>
+                        <span className="font-medium">
+                          {accessStats.membresiaMonthsTotal} mes(es)
+                          <span className="text-muted-foreground"> · </span>
+                          <span className="text-muted-foreground">
+                            {accessStats.membresiaCount} ext.
+                          </span>
+                          {accessStats.membresiaAnuladasCount > 0 ? (
+                            <>
+                              <span className="text-muted-foreground"> · </span>
+                              <span className="text-muted-foreground">
+                                {accessStats.membresiaAnuladasCount} anulada(s)
+                              </span>
+                            </>
+                          ) : null}
+                        </span>
+                      </div>
+                    ) : null}
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">Ingreso</span>
                       <div className="flex items-center gap-1">
@@ -1084,7 +1781,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">
-                        Días desde ingreso
+                        Días desde ingreso (hábiles)
                       </span>
                       <span className="font-medium">
                         {accessStats.daysSinceStart}
@@ -1095,28 +1792,24 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         Días en pausa (no cuentan)
                       </span>
                       <span className="font-medium">
-                        {accessStats.pausedDaysElapsed}
+                        {accessStats.pausedBusinessDaysElapsed}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">
-                        Días efectivos
+                        Días restantes
                       </span>
                       <span className="font-medium">
-                        {accessStats.effectiveDays} / {accessStats.programDays}
+                        {Math.max(0, accessStats.remainingDays)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">
-                        Vence (estimado)
+                        Extender accesos
                       </span>
                       <div className="flex items-center gap-1">
                         <span className="font-medium">
-                          {fmtES(
-                            (venceMeta?.payload?.vence_estimado
-                              ? String(venceMeta.payload.vence_estimado)
-                              : accessStats.estimatedEnd.toISOString()) as any,
-                          )}
+                          {fmtES(accessStats.estimatedEnd.toISOString() as any)}
                         </span>
                         {loadingVenceMeta && (
                           <span
@@ -1131,40 +1824,49 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           className="p-1 rounded hover:bg-muted transition-colors"
                           title="Ver historial de cambios"
                           onClick={() => setOpenVenceHistory(true)}
-                          disabled={!venceMeta?.payload?.historial || (venceMeta.payload.historial || []).length === 0}
+                          disabled={
+                            !venceMeta?.payload?.historial ||
+                            (venceMeta.payload.historial || []).length === 0
+                          }
                         >
                           <Eye className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                         </button>
                         <button
                           type="button"
                           className="p-1 rounded hover:bg-muted transition-colors"
-                          title="Editar vencimiento (estimado)"
+                          title="Extender accesos"
                           onClick={() => {
-                            const base = venceMeta?.payload?.vence_estimado
-                              ? String(venceMeta.payload.vence_estimado).split("T")[0]
-                              : accessStats.estimatedEnd.toISOString().split("T")[0];
-                            setTempVence(base);
+                            setTempMesesExtra(
+                              String(accessStats?.extraMonths ?? 0),
+                            );
+                            {
+                              const vt = (venceMeta as any)?.payload
+                                ?.vence_tipo;
+                              setTempVenceTipo(
+                                vt === "extraordinaria"
+                                  ? "extraordinaria"
+                                  : vt === "membresia"
+                                    ? "membresia"
+                                    : "contractual",
+                              );
+                            }
+                            setTempVenceMotivo(
+                              String(
+                                (venceMeta as any)?.payload?.vence_motivo ?? "",
+                              ),
+                            );
                             setEditVenceOpen(true);
                           }}
                         >
-                          <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                          <Plus className="h-3 w-3 text-muted-foreground hover:text-foreground" />
                         </button>
                       </div>
                     </div>
-                    {!accessStats.isExpired ? (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">
-                          Días restantes
-                        </span>
-                        <span className="font-medium">
-                          {Math.max(0, accessStats.remainingDays)}
-                        </span>
-                      </div>
-                    ) : (
+                    {accessStats.isExpired ? (
                       <>
-                        {accessStats.usedMetadataVence ? (
+                        {accessStats.extraMonths > 0 ? (
                           <p className="text-xs text-muted-foreground">
-                            * Vencimiento ajustado manualmente.
+                            * Acceso extendido con meses extra.
                           </p>
                         ) : accessStats.pausedDaysElapsed > 0 ? (
                           <p className="text-xs text-muted-foreground">
@@ -1173,7 +1875,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           </p>
                         ) : null}
                       </>
-                    )}
+                    ) : null}
 
                     <div className="pt-2 border-t border-border">
                       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1414,28 +2116,137 @@ export default function StudentDetailContent({ code }: { code: string }) {
         </DialogContent>
       </Dialog>
 
-      {/* Modal para editar vencimiento estimado (preview: no ejecuta endpoint) */}
+      {/* Modal para editar vencimiento estimado */}
       <Dialog open={editVenceOpen} onOpenChange={setEditVenceOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Editar vence (estimado)</DialogTitle>
+            <DialogTitle>Extender accesos</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div>
-              <Label htmlFor="fecha-vence">Fecha de vencimiento (estimado)</Label>
-              <Input
-                id="fecha-vence"
-                type="date"
-                value={tempVence ? tempVence.split("T")[0] : ""}
-                onChange={(e) => setTempVence(e.target.value)}
-                className="mt-1"
-              />
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setTempVenceTipo("membresia");
+                  // Membresía: cada solicitud agrega +1 mes (delta fijo)
+                  setTempMesesExtra("1");
+                }}
+              >
+                {membresiaExts.length > 0
+                  ? "Agregar nueva membresía"
+                  : "Por membresía"}
+              </Button>
             </div>
+            <div>
+              <Label>Tipo</Label>
+              <div className="mt-1">
+                <Select
+                  value={tempVenceTipo}
+                  onValueChange={(v) => {
+                    const next =
+                      v === "extraordinaria"
+                        ? "extraordinaria"
+                        : v === "membresia"
+                          ? "membresia"
+                          : "contractual";
+                    setTempVenceTipo(next);
+                    if (next === "contractual") {
+                      setTempVenceMotivo("");
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contractual">Contractual</SelectItem>
+                    <SelectItem value="extraordinaria">
+                      Extraordinaria
+                    </SelectItem>
+                    <SelectItem value="membresia">Membresía</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label>
+                {tempVenceTipo === "membresia"
+                  ? "Meses de membresía"
+                  : "Meses extra"}
+              </Label>
+              <div className="mt-1">
+                <Select
+                  value={tempMesesExtra}
+                  onValueChange={(v) => setTempMesesExtra(v)}
+                  disabled={tempVenceTipo === "membresia"}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona meses extra" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tempVenceTipo === "membresia" ? (
+                      <SelectItem value="1">1</SelectItem>
+                    ) : (
+                      Array.from({ length: 13 }).map((_, i) => (
+                        <SelectItem key={`mes-extra-${i}`} value={String(i)}>
+                          {i}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {tempVenceTipo === "membresia"
+                  ? `Cada membresía agrega +1 mes adicional.`
+                  : (() => {
+                      const currentExtra = Number(
+                        accessStats?.extraMonths ?? 0,
+                      );
+                      const nextExtra = Number(tempMesesExtra) || 0;
+                      const membresia = Number(
+                        accessStats?.membresiaMonthsTotal ?? 0,
+                      );
+                      const total = 4 + nextExtra + membresia;
+                      return `Actual: ${currentExtra} mes(es) extra. Nuevo: ${nextExtra}. Total acceso: ${total} meses`;
+                    })()}
+              </p>
+            </div>
+
+            {tempVenceTipo === "extraordinaria" || tempVenceMotivo ? (
+              <div>
+                <Label htmlFor="vence-motivo">
+                  Motivo / nota
+                  {tempVenceTipo === "extraordinaria"
+                    ? " (obligatorio)"
+                    : " (opcional)"}
+                </Label>
+                <Textarea
+                  id="vence-motivo"
+                  value={tempVenceMotivo}
+                  onChange={(e) => setTempVenceMotivo(e.target.value)}
+                  className="mt-1"
+                  rows={3}
+                  placeholder={
+                    tempVenceTipo === "extraordinaria"
+                      ? "Describe por qué se otorgan meses extra..."
+                      : "Opcional: detalle o referencia..."
+                  }
+                />
+              </div>
+            ) : null}
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setEditVenceOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleSaveVence} disabled={!tempVence}>
+              <Button
+                onClick={handleSaveVence}
+                disabled={
+                  tempVenceTipo === "extraordinaria" && !tempVenceMotivo.trim()
+                }
+              >
                 Guardar
               </Button>
             </div>
@@ -1447,7 +2258,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
       <Dialog open={openVenceHistory} onOpenChange={setOpenVenceHistory}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Historial de vencimiento</DialogTitle>
+            <DialogTitle>Historial de extensiones</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             {(() => {
@@ -1476,7 +2287,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
               return (
                 <div className="space-y-2 max-h-[420px] overflow-y-auto">
                   {ordered.map((h: any, idx: number) => {
-                    const who = h?.changed_by?.nombre || h?.changed_by?.codigo || "—";
+                    const who =
+                      h?.changed_by?.nombre || h?.changed_by?.codigo || "—";
                     const when = h?.changed_at
                       ? new Date(h.changed_at).toLocaleString("es-ES", {
                           day: "2-digit",
@@ -1493,24 +2305,194 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="font-medium">{who}</div>
-                          <div className="text-xs text-muted-foreground">{when}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {when}
+                          </div>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
                           <div>
                             <div className="text-muted-foreground">Antes</div>
-                            <div className="font-medium">{h?.from ?? "—"}</div>
+                            <div className="font-medium">
+                              {h?.from_meses_extra !== undefined
+                                ? `${String(h.from_meses_extra ?? "—")} mes(es) extra`
+                                : (h?.from ?? "—")}
+                            </div>
                           </div>
                           <div>
                             <div className="text-muted-foreground">Después</div>
-                            <div className="font-medium">{h?.to ?? "—"}</div>
+                            <div className="font-medium">
+                              {h?.to_meses_extra !== undefined
+                                ? `${String(h.to_meses_extra ?? "—")} mes(es) extra`
+                                : (h?.to ?? "—")}
+                            </div>
                           </div>
                         </div>
+                        {(h?.tipo || h?.motivo) && (
+                          <div className="mt-2 text-xs">
+                            {h?.tipo ? (
+                              <div>
+                                <span className="text-muted-foreground">
+                                  Tipo:
+                                </span>
+                                <span className="font-medium">
+                                  {String(h.tipo)}
+                                </span>
+                              </div>
+                            ) : null}
+                            {h?.motivo ? (
+                              <div className="mt-1">
+                                <div className="text-muted-foreground">
+                                  Motivo
+                                </div>
+                                <div className="font-medium whitespace-pre-wrap">
+                                  {String(h.motivo)}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               );
             })()}
+
+            {/* Membresía: extensiones como registros separados */}
+            <Separator />
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {(() => {
+                  const total = membresiaExts.length;
+                  const active = (membresiaExts || []).filter((m: any) => {
+                    const n = Number(
+                      m?.payload?.meses ?? m?.payload?.meses_extra ?? 0,
+                    );
+                    const isAnulado =
+                      Boolean(m?.payload?.anulado) ||
+                      !Number.isFinite(n) ||
+                      n <= 0;
+                    return !isAnulado;
+                  }).length;
+                  const anuladas = Math.max(0, total - active);
+                  return `Membresía (${active} activas · ${anuladas} anuladas · ${total} total)`;
+                })()}
+              </div>
+              {membresiaExts.length === 0 ? (
+                <div className="mt-2 text-sm text-muted-foreground">
+                  Sin extensiones por membresía.
+                </div>
+              ) : (
+                <div className="mt-2 space-y-2 max-h-[260px] overflow-y-auto">
+                  {membresiaExts
+                    .slice()
+                    .sort((a: any, b: any) => {
+                      const ta = new Date(
+                        a?.updated_at || a?.created_at || 0,
+                      ).getTime();
+                      const tb = new Date(
+                        b?.updated_at || b?.created_at || 0,
+                      ).getTime();
+                      if (tb !== ta) return tb - ta;
+                      return Number(b?.id || 0) - Number(a?.id || 0);
+                    })
+                    .map((m: any, idx: number) => {
+                      const months = Number(
+                        m?.payload?.meses ?? m?.payload?.meses_extra ?? 0,
+                      );
+                      const isAnulado =
+                        Boolean(m?.payload?.anulado) ||
+                        !Number.isFinite(months) ||
+                        months <= 0;
+                      const who =
+                        m?.payload?.changed_by?.nombre ||
+                        m?.payload?.changed_by?.codigo ||
+                        m?.payload?.changed_by?.id ||
+                        "—";
+                      const whenIso =
+                        m?.payload?.created_at ||
+                        m?.created_at ||
+                        m?.updated_at ||
+                        null;
+                      const when = whenIso
+                        ? new Date(whenIso).toLocaleString("es-ES", {
+                            day: "2-digit",
+                            month: "2-digit",
+                            year: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : "";
+                      const motivo = m?.payload?.motivo
+                        ? String(m.payload.motivo)
+                        : m?.payload?.anulado_motivo
+                          ? String(m.payload.anulado_motivo)
+                          : "";
+                      return (
+                        <div
+                          key={`membresia-ext-${String(m?.id ?? idx)}`}
+                          className="rounded-md border border-border bg-muted/20 p-3 text-sm"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-medium">{who}</div>
+                            <div className="flex items-center gap-2">
+                              {isAnulado ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px]"
+                                >
+                                  Anulada
+                                </Badge>
+                              ) : null}
+                              <div className="text-xs text-muted-foreground">
+                                {when}
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => startEditMembresia(m)}
+                              >
+                                Editar
+                              </Button>
+                              {!isAnulado ? (
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => startRemoveMembresia(m)}
+                                >
+                                  Quitar
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="mt-2 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">
+                                Meses:{" "}
+                              </span>
+                              <span className="font-medium">
+                                {Number.isFinite(months) ? months : 0}
+                              </span>
+                            </div>
+                            {motivo ? (
+                              <div className="mt-1">
+                                <div className="text-muted-foreground">
+                                  Motivo
+                                </div>
+                                <div className="font-medium whitespace-pre-wrap">
+                                  {motivo}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex justify-end">
             <Button variant="ghost" onClick={() => setOpenVenceHistory(false)}>
@@ -1520,11 +2502,111 @@ export default function StudentDetailContent({ code }: { code: string }) {
         </DialogContent>
       </Dialog>
 
+      {/* Confirmación: quitar/anular extensión de membresía */}
+      <AlertDialog
+        open={confirmRemoveMembresiaOpen}
+        onOpenChange={(o) => {
+          setConfirmRemoveMembresiaOpen(o);
+          if (!o) setRemoveMembresiaTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Quitar membresía</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esto no borra el registro: lo marca como anulada (0 meses) y deja
+              el histórico.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removingMembresia}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConfirmRemoveMembresia();
+              }}
+              disabled={removingMembresia || !removeMembresiaTarget?.id}
+            >
+              {removingMembresia ? "Quitando…" : "Quitar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal: editar/anular membresía (sin borrar, mantiene histórico) */}
+      <Dialog
+        open={editMembresiaOpen}
+        onOpenChange={(o) => {
+          setEditMembresiaOpen(o);
+          if (!o) {
+            setEditingMembresia(null);
+            setTempMembresiaMotivo("");
+            setTempMembresiaEstado("activa");
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Editar membresía</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Estado</Label>
+              <Select
+                value={tempMembresiaEstado}
+                onValueChange={(v) =>
+                  setTempMembresiaEstado(v as "activa" | "anulada")
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="activa">Activa (+1 mes)</SelectItem>
+                  <SelectItem value="anulada">Anulada (0 meses)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Anular mantiene el registro histórico, pero deja de sumar al
+                acceso.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Motivo (opcional)</Label>
+              <Textarea
+                value={tempMembresiaMotivo}
+                onChange={(e) => setTempMembresiaMotivo(e.target.value)}
+                placeholder="Ej: Se agregó por error, alumno no corresponde, etc."
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setEditMembresiaOpen(false)}
+              disabled={savingMembresia}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveMembresiaEdit}
+              disabled={savingMembresia || !editingMembresia?.id}
+            >
+              {savingMembresia ? "Guardando…" : "Guardar"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Se eliminó el botón flotante de chat; ahora está en una pestaña */}
 
-      <p className="text-center text-xs text-muted-foreground">
-        * Vista de demostración: los cambios no se envían al servidor
-      </p>
+      {/* Nota: los cambios de acceso se guardan en metadata (persistente). */}
     </div>
   );
 }
