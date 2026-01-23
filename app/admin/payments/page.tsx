@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -45,11 +46,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getPaymentByCodigo,
   getPayments,
+  getPaymentCuotas,
   syncPaymentCliente,
   upsertPaymentDetalle,
   createPaymentDetalle,
   deletePaymentDetalle,
   type PaymentRow,
+  type PaymentCuotaRow,
   type CreateDetallePayload,
 } from "./api";
 import { fetchUsers, type SysUser } from "../users/api";
@@ -96,6 +99,49 @@ function formatDateTime(value: string | null | undefined) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(d);
+}
+
+function formatDateOnly(value: string | null | undefined) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("es-ES", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
+}
+
+function getMonthValue(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+function getMonthRange(month: string) {
+  const m = String(month || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(m)) return null;
+  const year = Number(m.slice(0, 4));
+  const monthIndex = Number(m.slice(5, 7)) - 1;
+  if (!Number.isFinite(year) || !Number.isFinite(monthIndex)) return null;
+  if (monthIndex < 0 || monthIndex > 11) return null;
+
+  const start = new Date(Date.UTC(year, monthIndex, 1));
+  const end = new Date(Date.UTC(year, monthIndex + 1, 0));
+  const fechaDesde = `${m}-01`;
+  const fechaHasta = `${m}-${String(end.getUTCDate()).padStart(2, "0")}`;
+  return { fechaDesde, fechaHasta, start, end };
+}
+
+function startOfDay(d: Date) {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function diffDays(a: Date, b: Date) {
+  const ms = startOfDay(a).getTime() - startOfDay(b).getTime();
+  return Math.floor(ms / (24 * 60 * 60 * 1000));
 }
 
 function fixMojibake(value: string | null | undefined) {
@@ -296,6 +342,8 @@ function computePaymentMetrics(rows: PaymentRow[]): PaymentMetrics {
 }
 
 function PaymentsContent() {
+  const [activeTab, setActiveTab] = useState<"pagos" | "cuotas">("pagos");
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<PaymentRow[]>([]);
@@ -368,6 +416,65 @@ function PaymentsContent() {
   const [syncSaveError, setSyncSaveError] = useState<string | null>(null);
 
   const [onlyUnlinked, setOnlyUnlinked] = useState(false);
+
+  // Cuotas por vencer (endpoint paginado por rango)
+  const CUOTAS_PAGE_SIZE = 50;
+  const [cuotasMonth, setCuotasMonth] = useState<string>(() =>
+    getMonthValue(new Date()),
+  );
+  const [cuotasLoadedMonth, setCuotasLoadedMonth] = useState<string | null>(
+    null,
+  );
+  const [cuotasRows, setCuotasRows] = useState<PaymentCuotaRow[]>([]);
+  const [cuotasPage, setCuotasPage] = useState<number>(1);
+  const [cuotasTotalPages, setCuotasTotalPages] = useState<number>(1);
+  const [cuotasTotal, setCuotasTotal] = useState<number>(0);
+  const [cuotasLoading, setCuotasLoading] = useState(false);
+  const [cuotasError, setCuotasError] = useState<string | null>(null);
+  const cuotasReqIdRef = useRef(0);
+
+  async function loadCuotas(opts: { page: number; append?: boolean }) {
+    const range = getMonthRange(cuotasMonth);
+    if (!range) {
+      setCuotasError("Selecciona un mes válido");
+      return;
+    }
+
+    const reqId = ++cuotasReqIdRef.current;
+    setCuotasLoading(true);
+    setCuotasError(null);
+    try {
+      const json = await getPaymentCuotas({
+        fechaDesde: range.fechaDesde,
+        fechaHasta: range.fechaHasta,
+        page: opts.page,
+        pageSize: CUOTAS_PAGE_SIZE,
+      });
+
+      if (cuotasReqIdRef.current !== reqId) return;
+
+      const raw = Array.isArray(json?.data) ? json.data : [];
+      // “Cuotas por vencer”: por defecto ocultamos PAGADA.
+      const filtered = raw.filter((r) => {
+        const s = String(r?.estatus ?? "").toLowerCase();
+        if (!s) return true;
+        return !s.includes("pagad");
+      });
+
+      setCuotasRows((prev) =>
+        opts.append ? [...prev, ...filtered] : filtered,
+      );
+      setCuotasPage(Number(json?.page ?? opts.page) || opts.page);
+      setCuotasTotalPages(Number(json?.totalPages ?? 1) || 1);
+      setCuotasTotal(Number(json?.total ?? filtered.length) || 0);
+      setCuotasLoadedMonth(cuotasMonth);
+    } catch (e: any) {
+      if (cuotasReqIdRef.current !== reqId) return;
+      setCuotasError(e?.message || "No se pudieron cargar las cuotas");
+    } finally {
+      if (cuotasReqIdRef.current === reqId) setCuotasLoading(false);
+    }
+  }
 
   const isPaymentSynced = (r: PaymentRow) => {
     const name = String(r?.cliente_nombre ?? "").trim();
@@ -1152,6 +1259,13 @@ function PaymentsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [syncOpen, debouncedSyncUserSearch]);
 
+  useEffect(() => {
+    if (activeTab !== "cuotas") return;
+    if (cuotasLoadedMonth === cuotasMonth) return;
+    void loadCuotas({ page: 1 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   return (
     <div className="space-y-4">
       <div>
@@ -1161,364 +1275,567 @@ function PaymentsContent() {
         </p>
       </div>
 
-      <div className="rounded-lg border bg-card p-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold">Métricas</div>
-            <div className="text-xs text-muted-foreground">
-              Calculadas sobre todos los pagos que coinciden con los filtros
-              actuales.
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={metricsLoading}
-            onClick={() => loadMetrics()}
-          >
-            {metricsLoading ? "Calculando…" : "Recalcular"}
-          </Button>
-        </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab((v as any) || "pagos")}
+        className="space-y-4"
+      >
+        <TabsList>
+          <TabsTrigger value="pagos">Pagos</TabsTrigger>
+          <TabsTrigger value="cuotas">Cuotas por vencer</TabsTrigger>
+        </TabsList>
 
-        {metricsError ? (
-          <div className="mt-3">
-            <Alert variant="destructive">
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{metricsError}</AlertDescription>
-            </Alert>
-          </div>
-        ) : null}
-
-        <div className="mt-3 grid gap-2 md:grid-cols-5">
-          <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Con reserva</div>
-            <div className="text-sm font-semibold">
-              {metricsLoading ? "…" : (metrics?.withReserva ?? "—")}
-            </div>
-          </div>
-          <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Sin reserva</div>
-            <div className="text-sm font-semibold">
-              {metricsLoading ? "…" : (metrics?.withoutReserva ?? "—")}
-            </div>
-          </div>
-          <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Reembolsos</div>
-            <div className="text-sm font-semibold">
-              {metricsLoading ? "…" : (metrics?.refunds ?? "—")}
-            </div>
-          </div>
-          <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">Cuotas (total)</div>
-            <div className="text-sm font-semibold">
-              {metricsLoading ? "…" : (metrics?.totalCuotas ?? "—")}
-            </div>
-          </div>
-          <div className="rounded-md border p-3">
-            <div className="text-xs text-muted-foreground">
-              Cuotas (promedio)
-            </div>
-            <div className="text-sm font-semibold">
-              {metricsLoading
-                ? "…"
-                : metrics
-                  ? metrics.avgCuotas.toFixed(2)
-                  : "—"}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-lg border bg-card p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div className="grid gap-3 md:grid-cols-4">
-            <div className="grid gap-1">
-              <Label>Buscar</Label>
-              <Input
-                placeholder="Nombre, código, estatus, moneda…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label>Cliente código</Label>
-              <Input
-                placeholder="KrTVx8TnoVSUcFZn"
-                value={clienteCodigo}
-                onChange={(e) => setClienteCodigo(e.target.value)}
-              />
-            </div>
-            <div className="grid gap-1">
-              <Label>Estatus</Label>
-              <Select
-                value={normalizePaymentStatus(estatus) || "__ALL__"}
-                onValueChange={(v) => {
-                  setEstatus(v === "__ALL__" ? "" : normalizePaymentStatus(v));
-                  setPage(1);
-                }}
+        <TabsContent value="pagos" className="space-y-4">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm font-semibold">Métricas</div>
+                <div className="text-xs text-muted-foreground">
+                  Calculadas sobre todos los pagos que coinciden con los filtros
+                  actuales.
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={metricsLoading}
+                onClick={() => loadMetrics()}
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos">
-                    {estatus ? formatPaymentStatusLabel(estatus) : "Todos"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__ALL__">Todos</SelectItem>
-                  {statusOptions.length ? (
-                    statusOptions.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {formatPaymentStatusLabel(s)}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="pagado">Pagado</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
+                {metricsLoading ? "Calculando…" : "Recalcular"}
+              </Button>
             </div>
-            <div className="grid gap-1">
-              <Label>Método</Label>
-              <Input
-                placeholder="Transferencia / Tarjeta…"
-                value={metodo}
-                onChange={(e) => setMetodo(e.target.value)}
-              />
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              onClick={() => loadList({ page: 1, pageSize })}
-              disabled={isLoading}
-            >
-              {isLoading ? "Cargando…" : "Aplicar"}
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-3 grid gap-3 md:grid-cols-6">
-          <div className="grid gap-1 md:col-span-1">
-            <Label>Fecha desde</Label>
-            <Input
-              type="date"
-              value={fechaDesde}
-              onChange={(e) => setFechaDesde(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1 md:col-span-1">
-            <Label>Fecha hasta</Label>
-            <Input
-              type="date"
-              value={fechaHasta}
-              onChange={(e) => setFechaHasta(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1 md:col-span-1">
-            <Label>Monto min</Label>
-            <Input
-              inputMode="numeric"
-              placeholder="0"
-              value={montoMin}
-              onChange={(e) => setMontoMin(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1 md:col-span-1">
-            <Label>Monto max</Label>
-            <Input
-              inputMode="numeric"
-              placeholder="5000"
-              value={montoMax}
-              onChange={(e) => setMontoMax(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1 md:col-span-1">
-            <Label>Reserva min</Label>
-            <Input
-              inputMode="numeric"
-              placeholder="0"
-              value={reservaMin}
-              onChange={(e) => setReservaMin(e.target.value)}
-            />
-          </div>
-          <div className="grid gap-1 md:col-span-1">
-            <Label>Reserva max</Label>
-            <Input
-              inputMode="numeric"
-              placeholder="2000"
-              value={reservaMax}
-              onChange={(e) => setReservaMax(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {error ? (
-          <div className="mt-4">
-            <Alert variant="destructive">
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          </div>
-        ) : null}
-
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          <div>
-            Total: <span className="text-foreground">{rows.length}</span> ·
-            Filtrados:{" "}
-            <span className="text-foreground">{filtered.length}</span> · Página:{" "}
-            <span className="text-foreground">
-              {page}/{totalPages}
-            </span>
-            {unlinkedCount ? (
-              <>
-                {" "}
-                · Sin sincronizar:{" "}
-                <span className="text-foreground">{unlinkedCount}</span>
-              </>
+            {metricsError ? (
+              <div className="mt-3">
+                <Alert variant="destructive">
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{metricsError}</AlertDescription>
+                </Alert>
+              </div>
             ) : null}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant={onlyUnlinked ? "default" : "outline"}
-              size="sm"
-              onClick={() => setOnlyUnlinked((v) => !v)}
-            >
-              {onlyUnlinked ? "Viendo: sin sincronizar" : "Ver sin sincronizar"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => setPage(Math.max(1, page - 1))}
-            >
-              Anterior
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => setPage(Math.min(totalPages, page + 1))}
-            >
-              Siguiente
-            </Button>
-          </div>
-        </div>
 
-        <div className="mt-4 overflow-auto rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead className="whitespace-nowrap">Monto</TableHead>
-                <TableHead className="whitespace-nowrap">Reserva</TableHead>
-                <TableHead>Moneda</TableHead>
-                <TableHead>Estatus</TableHead>
-                <TableHead className="whitespace-nowrap">Acciones</TableHead>
-                <TableHead className="whitespace-nowrap">Creado</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-sm text-muted-foreground"
-                  >
-                    Cargando…
-                  </TableCell>
-                </TableRow>
-              ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={7}
-                    className="text-sm text-muted-foreground"
-                  >
-                    Sin resultados.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedData.map((r) => {
-                  const clientName = fixMojibake(
-                    r.cliente_nombre || r.cliente_codigo || "—",
-                  );
-                  const synced = isPaymentSynced(r);
+            <div className="mt-3 grid gap-2 md:grid-cols-5">
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Con reserva</div>
+                <div className="text-sm font-semibold">
+                  {metricsLoading ? "…" : (metrics?.withReserva ?? "—")}
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Sin reserva</div>
+                <div className="text-sm font-semibold">
+                  {metricsLoading ? "…" : (metrics?.withoutReserva ?? "—")}
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">Reembolsos</div>
+                <div className="text-sm font-semibold">
+                  {metricsLoading ? "…" : (metrics?.refunds ?? "—")}
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">
+                  Cuotas (total)
+                </div>
+                <div className="text-sm font-semibold">
+                  {metricsLoading ? "…" : (metrics?.totalCuotas ?? "—")}
+                </div>
+              </div>
+              <div className="rounded-md border p-3">
+                <div className="text-xs text-muted-foreground">
+                  Cuotas (promedio)
+                </div>
+                <div className="text-sm font-semibold">
+                  {metricsLoading
+                    ? "…"
+                    : metrics
+                      ? metrics.avgCuotas.toFixed(2)
+                      : "—"}
+                </div>
+              </div>
+            </div>
+          </div>
 
-                  return (
-                    <TableRow
-                      key={r.codigo}
-                      className="cursor-pointer"
-                      onClick={() => {
-                        try {
-                          console.debug("[payments] row selected", {
-                            codigo: r.codigo,
-                            synced,
-                            cliente_codigo: fixMojibake(r.cliente_codigo),
-                            cliente_nombre: fixMojibake(r.cliente_nombre),
-                          });
-                        } catch {}
-                        openDetail(r.codigo);
-                      }}
-                    >
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm">{clientName}</span>
-                            {!synced ? (
-                              <Badge variant="destructive">Sin usuario</Badge>
-                            ) : null}
-                          </div>
-                          {r.cliente_nombre && r.cliente_codigo ? (
-                            <span className="text-xs text-muted-foreground">
-                              {fixMojibake(r.cliente_codigo)}
-                            </span>
-                          ) : null}
-                        </div>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {formatMoney(r.monto, r.moneda)}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {formatMoney(r.monto_reserva, r.moneda)}
-                      </TableCell>
-                      <TableCell>{r.moneda || "—"}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={getStatusChipClass(r.estatus)}
-                        >
-                          {formatPaymentStatusLabel(r.estatus)}
-                        </Badge>
-                      </TableCell>
-                      <TableCell onClick={(e) => e.stopPropagation()}>
-                        {synced ? (
-                          <Badge
-                            variant="outline"
-                            className="border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60"
-                          >
-                            Sincronizado
-                          </Badge>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-900/60 dark:hover:bg-amber-950/55"
-                            onClick={() => openSync(r)}
-                          >
-                            Sincronizar
-                          </Button>
-                        )}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {formatDateTime(r.created_at)}
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="grid gap-1">
+                  <Label>Buscar</Label>
+                  <Input
+                    placeholder="Nombre, código, estatus, moneda…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label>Cliente código</Label>
+                  <Input
+                    placeholder="KrTVx8TnoVSUcFZn"
+                    value={clienteCodigo}
+                    onChange={(e) => setClienteCodigo(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1">
+                  <Label>Estatus</Label>
+                  <Select
+                    value={normalizePaymentStatus(estatus) || "__ALL__"}
+                    onValueChange={(v) => {
+                      setEstatus(
+                        v === "__ALL__" ? "" : normalizePaymentStatus(v),
+                      );
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos">
+                        {estatus ? formatPaymentStatusLabel(estatus) : "Todos"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">Todos</SelectItem>
+                      {statusOptions.length ? (
+                        statusOptions.map((s) => (
+                          <SelectItem key={s} value={s}>
+                            {formatPaymentStatusLabel(s)}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="pagado">Pagado</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1">
+                  <Label>Método</Label>
+                  <Input
+                    placeholder="Transferencia / Tarjeta…"
+                    value={metodo}
+                    onChange={(e) => setMetodo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => loadList({ page: 1, pageSize })}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Cargando…" : "Aplicar"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-6">
+              <div className="grid gap-1 md:col-span-1">
+                <Label>Fecha desde</Label>
+                <Input
+                  type="date"
+                  value={fechaDesde}
+                  onChange={(e) => setFechaDesde(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1 md:col-span-1">
+                <Label>Fecha hasta</Label>
+                <Input
+                  type="date"
+                  value={fechaHasta}
+                  onChange={(e) => setFechaHasta(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1 md:col-span-1">
+                <Label>Monto min</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={montoMin}
+                  onChange={(e) => setMontoMin(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1 md:col-span-1">
+                <Label>Monto max</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="5000"
+                  value={montoMax}
+                  onChange={(e) => setMontoMax(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1 md:col-span-1">
+                <Label>Reserva min</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={reservaMin}
+                  onChange={(e) => setReservaMin(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1 md:col-span-1">
+                <Label>Reserva max</Label>
+                <Input
+                  inputMode="numeric"
+                  placeholder="2000"
+                  value={reservaMax}
+                  onChange={(e) => setReservaMax(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {error ? (
+              <div className="mt-4">
+                <Alert variant="destructive">
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              </div>
+            ) : null}
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+              <div>
+                Total: <span className="text-foreground">{rows.length}</span> ·
+                Filtrados:{" "}
+                <span className="text-foreground">{filtered.length}</span> ·
+                Página:{" "}
+                <span className="text-foreground">
+                  {page}/{totalPages}
+                </span>
+                {unlinkedCount ? (
+                  <>
+                    {" "}
+                    · Sin sincronizar:{" "}
+                    <span className="text-foreground">{unlinkedCount}</span>
+                  </>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={onlyUnlinked ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setOnlyUnlinked((v) => !v)}
+                >
+                  {onlyUnlinked
+                    ? "Viendo: sin sincronizar"
+                    : "Ver sin sincronizar"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage(Math.min(totalPages, page + 1))}
+                >
+                  Siguiente
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead className="whitespace-nowrap">Monto</TableHead>
+                    <TableHead className="whitespace-nowrap">Reserva</TableHead>
+                    <TableHead>Moneda</TableHead>
+                    <TableHead>Estatus</TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Acciones
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">Creado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="text-sm text-muted-foreground"
+                      >
+                        Cargando…
                       </TableCell>
                     </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                  ) : filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={7}
+                        className="text-sm text-muted-foreground"
+                      >
+                        Sin resultados.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    paginatedData.map((r) => {
+                      const clientName = fixMojibake(
+                        r.cliente_nombre || r.cliente_codigo || "—",
+                      );
+                      const synced = isPaymentSynced(r);
+
+                      return (
+                        <TableRow
+                          key={r.codigo}
+                          className="cursor-pointer"
+                          onClick={() => {
+                            try {
+                              console.debug("[payments] row selected", {
+                                codigo: r.codigo,
+                                synced,
+                                cliente_codigo: fixMojibake(r.cliente_codigo),
+                                cliente_nombre: fixMojibake(r.cliente_nombre),
+                              });
+                            } catch {}
+                            openDetail(r.codigo);
+                          }}
+                        >
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm">{clientName}</span>
+                                {!synced ? (
+                                  <Badge variant="destructive">
+                                    Sin usuario
+                                  </Badge>
+                                ) : null}
+                              </div>
+                              {r.cliente_nombre && r.cliente_codigo ? (
+                                <span className="text-xs text-muted-foreground">
+                                  {fixMojibake(r.cliente_codigo)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {formatMoney(r.monto, r.moneda)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {formatMoney(r.monto_reserva, r.moneda)}
+                          </TableCell>
+                          <TableCell>{r.moneda || "—"}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={getStatusChipClass(r.estatus)}
+                            >
+                              {formatPaymentStatusLabel(r.estatus)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            {synced ? (
+                              <Badge
+                                variant="outline"
+                                className="border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60"
+                              >
+                                Sincronizado
+                              </Badge>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-900/60 dark:hover:bg-amber-950/55"
+                                onClick={() => openSync(r)}
+                              >
+                                Sincronizar
+                              </Button>
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {formatDateTime(r.created_at)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="cuotas" className="space-y-4">
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="grid gap-1">
+                <Label>Mes</Label>
+                <Input
+                  type="month"
+                  value={cuotasMonth}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setCuotasMonth(next);
+                    setCuotasLoadedMonth(null);
+                    setCuotasRows([]);
+                    setCuotasPage(1);
+                    setCuotasTotalPages(1);
+                    setCuotasTotal(0);
+                    setCuotasError(null);
+                  }}
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => loadCuotas({ page: 1 })}
+                  disabled={cuotasLoading}
+                >
+                  {cuotasLoading ? "Cargando…" : "Buscar"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-2 text-xs text-muted-foreground">
+              {getMonthRange(cuotasMonth)
+                ? `Rango: ${getMonthRange(cuotasMonth)!.fechaDesde} → ${
+                    getMonthRange(cuotasMonth)!.fechaHasta
+                  }`
+                : "Selecciona un mes válido"}
+            </div>
+
+            {cuotasError ? (
+              <div className="mt-3">
+                <Alert variant="destructive">
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{cuotasError}</AlertDescription>
+                </Alert>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border bg-card p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+              <div>
+                Página {cuotasPage} / {cuotasTotalPages} • Mostrando{" "}
+                {cuotasRows.length}
+                {cuotasTotal ? ` (total API: ${cuotasTotal})` : ""}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadCuotas({ page: 1 })}
+                  disabled={cuotasLoading}
+                >
+                  Recargar
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    loadCuotas({ page: cuotasPage + 1, append: true })
+                  }
+                  disabled={cuotasLoading || cuotasPage >= cuotasTotalPages}
+                >
+                  {cuotasLoading ? "Cargando…" : "Cargar más"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-3 overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead className="whitespace-nowrap">Cuota</TableHead>
+                    <TableHead className="whitespace-nowrap">Fecha</TableHead>
+                    <TableHead className="whitespace-nowrap">Días</TableHead>
+                    <TableHead className="whitespace-nowrap">Monto</TableHead>
+                    <TableHead>Estatus</TableHead>
+                    <TableHead className="whitespace-nowrap">
+                      Acciones
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {!cuotasRows.length ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-muted-foreground">
+                        {cuotasLoading
+                          ? "Cargando…"
+                          : "No hay cuotas para el mes seleccionado."}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    cuotasRows.map((r) => {
+                      const clientName = fixMojibake(r.cliente_nombre) || "—";
+                      const cuotaCode =
+                        String(r.cuota_codigo || r.codigo || "").trim() || "—";
+                      const cuotaDate = r.fecha_pago
+                        ? new Date(r.fecha_pago)
+                        : null;
+                      const dias =
+                        cuotaDate && !Number.isNaN(cuotaDate.getTime())
+                          ? diffDays(cuotaDate, new Date())
+                          : null;
+
+                      return (
+                        <TableRow key={String(r.id || r.codigo || cuotaCode)}>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <div className="text-sm">{clientName}</div>
+                              {r.cliente_codigo ? (
+                                <div className="text-xs text-muted-foreground">
+                                  {fixMojibake(r.cliente_codigo)}
+                                </div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <div className="text-sm">{cuotaCode}</div>
+                              {r.concepto ? (
+                                <div className="text-xs text-muted-foreground">
+                                  {fixMojibake(r.concepto)}
+                                </div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {formatDateOnly(r.fecha_pago)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {dias === null ? (
+                              "—"
+                            ) : dias < 0 ? (
+                              <span className="text-destructive">{dias}</span>
+                            ) : (
+                              dias
+                            )}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {formatMoney(r.monto, r.moneda)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={getStatusVariant(r.estatus)}>
+                              {formatPaymentStatusLabel(r.estatus)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={!r.payment_codigo}
+                              onClick={() =>
+                                openDetail(String(r.payment_codigo))
+                              }
+                            >
+                              Ver
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <Dialog
         open={syncOpen}

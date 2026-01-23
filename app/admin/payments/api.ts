@@ -64,6 +64,36 @@ export type PaymentUpsertDetailEnvelope = {
   data?: any;
 };
 
+export type PaymentCuotaRow = {
+  id: number;
+  codigo: string;
+  payment_id: number;
+  payment_codigo: string;
+  cliente_codigo: string | null;
+  cliente_nombre: string | null;
+  cuota_codigo: string | null;
+  monto: number | null;
+  moneda: string | null;
+  estatus: string | null;
+  fecha_pago: string | null;
+  metodo: string | null;
+  referencia: string | null;
+  concepto: string | null;
+  notas: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type PaymentCuotasEnvelope = {
+  code: number;
+  status: string;
+  data: PaymentCuotaRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
 async function fetchJson<T>(pathOrUrl: string, init?: RequestInit): Promise<T> {
   return apiFetch<T>(pathOrUrl, init);
 }
@@ -188,4 +218,19 @@ export async function deletePaymentDetalle(
       method: "DELETE",
     }
   );
+}
+
+export async function getPaymentCuotas(opts: {
+  fechaDesde: string;
+  fechaHasta: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<PaymentCuotasEnvelope> {
+  const q = new URLSearchParams();
+  q.set("fechaDesde", String(opts?.fechaDesde ?? ""));
+  q.set("fechaHasta", String(opts?.fechaHasta ?? ""));
+  if (opts?.page) q.set("page", String(opts.page));
+  if (opts?.pageSize) q.set("pageSize", String(opts.pageSize));
+
+  return fetchJson<PaymentCuotasEnvelope>(`/payments/get/cuotas?${q.toString()}`);
 }
