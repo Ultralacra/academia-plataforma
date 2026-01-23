@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { getStudentTickets } from "../api";
 import Link from "next/link";
-import { MessageSquare, Pencil } from "lucide-react";
+import { Eye, MessageSquare, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -63,6 +63,7 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
 import { deleteStudent } from "../api";
 import { useRouter } from "next/navigation";
+import { createMetadata, listMetadata, type MetadataRecord } from "@/lib/metadata";
 
 export default function StudentDetailContent({ code }: { code: string }) {
   const { user } = useAuth();
@@ -91,6 +92,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
   // Estado para editar fecha de ingreso
   const [editIngresoOpen, setEditIngresoOpen] = useState(false);
   const [tempIngreso, setTempIngreso] = useState<string>("");
+
+  // Estado para editar vencimiento estimado (solo preview: no ejecuta endpoint)
+  const [editVenceOpen, setEditVenceOpen] = useState(false);
+  const [tempVence, setTempVence] = useState<string>("");
+
+  // Metadata: vence estimado (persistente)
+  const [venceMeta, setVenceMeta] = useState<MetadataRecord<any> | null>(null);
+  const [loadingVenceMeta, setLoadingVenceMeta] = useState(false);
+  const [openVenceHistory, setOpenVenceHistory] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -285,6 +295,171 @@ export default function StudentDetailContent({ code }: { code: string }) {
       console.error(e);
       toast({
         title: "Error al actualizar fecha de ingreso",
+        description: String(e?.message ?? e ?? ""),
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function loadVenceMetadata(alumnoId: string | number | null | undefined) {
+    const id = alumnoId ? String(alumnoId) : "";
+    if (!id) {
+      setVenceMeta(null);
+      return;
+    }
+    setLoadingVenceMeta(true);
+    try {
+      // Backend puede no soportar query; cargamos y filtramos en cliente
+      const res = await listMetadata<any>();
+      const items = Array.isArray(res?.items) ? res.items : [];
+      const matches = items.filter((m) => {
+        if (!m) return false;
+        if (m.entity !== "alumno_acceso_vence_estimado") return false;
+        if (String(m.entity_id) !== id) return false;
+        // Seguridad extra: si viene alumno_id en payload, debe coincidir
+        const pid = (m as any)?.payload?.alumno_id;
+        if (pid !== undefined && pid !== null && String(pid) !== id) return false;
+        return true;
+      });
+
+      // Si hay varios, tomamos el más reciente por updated_at/created_at/id
+      matches.sort((a: any, b: any) => {
+        const ta = new Date(a?.updated_at || a?.created_at || 0).getTime();
+        const tb = new Date(b?.updated_at || b?.created_at || 0).getTime();
+        if (tb !== ta) return tb - ta;
+        return Number(b?.id || 0) - Number(a?.id || 0);
+      });
+
+      setVenceMeta(matches[0] ?? null);
+    } catch (e) {
+      console.warn("Error cargando metadata vence", e);
+      setVenceMeta(null);
+    } finally {
+      setLoadingVenceMeta(false);
+    }
+  }
+
+  useEffect(() => {
+    // Cargar metadata solo cuando tengamos el alumno real
+    if (!student?.id) return;
+    loadVenceMetadata(student.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student?.id]);
+
+  async function handleSaveVence() {
+    if (!tempVence) return;
+    if (!student?.id) {
+      toast({
+        title: "No se pudo guardar",
+        description: "No hay ID de alumno",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const alumnoId = String(student.id);
+    const now = new Date().toISOString();
+    const changedBy = {
+      id: user?.id ?? null,
+      codigo: (user as any)?.codigo ?? null,
+      nombre: (user as any)?.name ?? null,
+    };
+
+    try {
+      // 1) Si no tenemos metadata cargada, intentamos recargar antes de crear
+      if (!venceMeta) {
+        await loadVenceMetadata(student.id);
+      }
+
+      // 2) Si existe, actualizamos el MISMO registro (no crear otro)
+      if (venceMeta?.id) {
+        const detailResp = await apiFetch<any>(
+          `/metadata/${encodeURIComponent(String(venceMeta.id))}`,
+          { method: "GET" },
+        );
+        const curr = (detailResp as any)?.data ?? detailResp;
+        if (!curr || !curr.id) throw new Error("No existe metadata para actualizar");
+
+        const prevPayload = (curr as any)?.payload ?? {};
+        const prevVence = prevPayload?.vence_estimado ?? null;
+        const prevHistory = Array.isArray(prevPayload?.historial)
+          ? prevPayload.historial
+          : [];
+
+        // Agregar entrada al historial solo si realmente cambia
+        const nextHistory = [...prevHistory];
+        if (String(prevVence || "") !== String(tempVence)) {
+          nextHistory.push({
+            changed_at: now,
+            from: prevVence,
+            to: tempVence,
+            changed_by: changedBy,
+          });
+        }
+
+        // IMPORTANTE: no sobrescribir payload, solo actualizar vence_estimado + historial
+        const mergedPayload = {
+          ...prevPayload,
+          vence_estimado: tempVence,
+          historial: nextHistory,
+          ultimo_cambio_at: now,
+          ultimo_cambio_por: changedBy,
+        };
+
+        const body = {
+          entity: curr.entity,
+          entity_id: curr.entity_id,
+          payload: mergedPayload,
+        };
+
+        const updateResp = await apiFetch<any>(
+          `/metadata/${encodeURIComponent(String(curr.id))}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        );
+
+        const updated = (updateResp as any)?.data ?? updateResp;
+        setVenceMeta(updated ?? null);
+      } else {
+        // 3) Si no existe, crear el metadata (uno por alumno)
+        const payload = {
+          alumno_id: Number(student.id),
+          alumno_codigo: code,
+          alumno_nombre: student?.name ?? null,
+          creado_por_id: changedBy.id,
+          creado_por_codigo: changedBy.codigo,
+          creado_por_nombre: changedBy.nombre,
+          vence_estimado: tempVence,
+          historial: [
+            {
+              changed_at: now,
+              from: null,
+              to: tempVence,
+              changed_by: changedBy,
+              reason: "create",
+            },
+          ],
+        };
+
+        const created = await createMetadata({
+          entity: "alumno_acceso_vence_estimado",
+          entity_id: alumnoId,
+          payload,
+        });
+        setVenceMeta(created ?? null);
+      }
+
+      setEditVenceOpen(false);
+      toast({
+        title: "Vence (estimado) actualizado",
+      });
+    } catch (e: any) {
+      console.error("Error guardando metadata vence", e);
+      toast({
+        title: "Error al actualizar vencimiento",
         description: String(e?.message ?? e ?? ""),
         variant: "destructive",
       });
@@ -631,9 +806,20 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
     const effectiveDays = Math.max(0, daysSinceStart - pausedDaysElapsed);
     const PROGRAM_DAYS = 120; // 4 meses ~ 120 días (regla operativa)
-    const remaining = PROGRAM_DAYS - effectiveDays;
+
+    // Vence: si existe metadata, usar ese vencimiento (último registrado)
+    // Importante: los días restantes y el estado (vigente/vencido) se basan en esta fecha.
+    const metaVenceIso = venceMeta?.payload?.vence_estimado
+      ? String(venceMeta.payload.vence_estimado)
+      : null;
+    const metaVence = metaVenceIso ? parseMaybe(metaVenceIso) : null;
+
+    const usedMetadataVence = Boolean(metaVence);
+    const estEnd = usedMetadataVence
+      ? toDayDate(metaVence as Date)
+      : addDays(startDay, PROGRAM_DAYS + pausedDaysElapsed);
+    const remaining = diffDays(today, estEnd);
     const isExpired = remaining <= 0;
-    const estEnd = addDays(startDay, PROGRAM_DAYS + pausedDaysElapsed);
     return {
       startDay,
       today,
@@ -644,8 +830,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
       remainingDays: remaining,
       isExpired,
       estimatedEnd: estEnd,
+      usedMetadataVence,
     };
-  }, [pIngreso, student?.ingreso, student?.raw?.ingreso, mergedPauseIntervals]);
+  }, [pIngreso, student?.ingreso, student?.raw?.ingreso, mergedPauseIntervals, venceMeta?.payload?.vence_estimado]);
 
   // Vista simplificada: solo "Mi perfil" (detalle). Otras secciones van en rutas aparte.
 
@@ -923,9 +1110,46 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       <span className="text-muted-foreground">
                         Vence (estimado)
                       </span>
-                      <span className="font-medium">
-                        {fmtES(accessStats.estimatedEnd.toISOString())}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        <span className="font-medium">
+                          {fmtES(
+                            (venceMeta?.payload?.vence_estimado
+                              ? String(venceMeta.payload.vence_estimado)
+                              : accessStats.estimatedEnd.toISOString()) as any,
+                          )}
+                        </span>
+                        {loadingVenceMeta && (
+                          <span
+                            className="text-[10px] text-muted-foreground"
+                            title="Cargando metadata..."
+                          >
+                            ...
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-muted transition-colors"
+                          title="Ver historial de cambios"
+                          onClick={() => setOpenVenceHistory(true)}
+                          disabled={!venceMeta?.payload?.historial || (venceMeta.payload.historial || []).length === 0}
+                        >
+                          <Eye className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                        </button>
+                        <button
+                          type="button"
+                          className="p-1 rounded hover:bg-muted transition-colors"
+                          title="Editar vencimiento (estimado)"
+                          onClick={() => {
+                            const base = venceMeta?.payload?.vence_estimado
+                              ? String(venceMeta.payload.vence_estimado).split("T")[0]
+                              : accessStats.estimatedEnd.toISOString().split("T")[0];
+                            setTempVence(base);
+                            setEditVenceOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                        </button>
+                      </div>
                     </div>
                     {!accessStats.isExpired ? (
                       <div className="flex items-center justify-between gap-2">
@@ -937,10 +1161,18 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         </span>
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">
-                        * El vencimiento se calcula descontando días de pausa
-                        registrados.
-                      </p>
+                      <>
+                        {accessStats.usedMetadataVence ? (
+                          <p className="text-xs text-muted-foreground">
+                            * Vencimiento ajustado manualmente.
+                          </p>
+                        ) : accessStats.pausedDaysElapsed > 0 ? (
+                          <p className="text-xs text-muted-foreground">
+                            * El vencimiento se calcula descontando días de
+                            pausa registrados.
+                          </p>
+                        ) : null}
+                      </>
                     )}
 
                     <div className="pt-2 border-t border-border">
@@ -1178,6 +1410,112 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 Guardar
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para editar vencimiento estimado (preview: no ejecuta endpoint) */}
+      <Dialog open={editVenceOpen} onOpenChange={setEditVenceOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Editar vence (estimado)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label htmlFor="fecha-vence">Fecha de vencimiento (estimado)</Label>
+              <Input
+                id="fecha-vence"
+                type="date"
+                value={tempVence ? tempVence.split("T")[0] : ""}
+                onChange={(e) => setTempVence(e.target.value)}
+                className="mt-1"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setEditVenceOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSaveVence} disabled={!tempVence}>
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: historial de cambios de vencimiento */}
+      <Dialog open={openVenceHistory} onOpenChange={setOpenVenceHistory}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Historial de vencimiento</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {(() => {
+              const hist = Array.isArray(venceMeta?.payload?.historial)
+                ? venceMeta?.payload?.historial
+                : [];
+              if (!venceMeta) {
+                return (
+                  <div className="text-sm text-muted-foreground">
+                    No hay metadata cargada.
+                  </div>
+                );
+              }
+              if (hist.length === 0) {
+                return (
+                  <div className="text-sm text-muted-foreground">
+                    Sin historial de cambios.
+                  </div>
+                );
+              }
+              const ordered = hist.slice().sort((a: any, b: any) => {
+                const ta = new Date(a?.changed_at || 0).getTime();
+                const tb = new Date(b?.changed_at || 0).getTime();
+                return tb - ta;
+              });
+              return (
+                <div className="space-y-2 max-h-[420px] overflow-y-auto">
+                  {ordered.map((h: any, idx: number) => {
+                    const who = h?.changed_by?.nombre || h?.changed_by?.codigo || "—";
+                    const when = h?.changed_at
+                      ? new Date(h.changed_at).toLocaleString("es-ES", {
+                          day: "2-digit",
+                          month: "2-digit",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "";
+                    return (
+                      <div
+                        key={`vence-h-${idx}-${String(h?.changed_at || "")}`}
+                        className="rounded-md border border-border bg-muted/20 p-3 text-sm"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-medium">{who}</div>
+                          <div className="text-xs text-muted-foreground">{when}</div>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <div className="text-muted-foreground">Antes</div>
+                            <div className="font-medium">{h?.from ?? "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-muted-foreground">Después</div>
+                            <div className="font-medium">{h?.to ?? "—"}</div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+          <div className="flex justify-end">
+            <Button variant="ghost" onClick={() => setOpenVenceHistory(false)}>
+              Cerrar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
