@@ -20,11 +20,12 @@ import {
   BarChart3,
   CreditCard,
   ThumbsUp,
+  ClipboardList,
 } from "lucide-react";
 
 function StaticCard({ title, href }: { title: string; href: string }) {
   return (
-    <Card className="border-border">
+    <Card className="border-border bg-gradient-to-br from-card to-card/60 hover:to-accent/30 transition-colors">
       <CardHeader className="pb-2">
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
@@ -51,10 +52,13 @@ function InternalCard({
   icon: any;
 }) {
   return (
-    <Card className="border-border">
+    <Card className="border-border bg-gradient-to-br from-card to-card/60 hover:to-accent/30 transition-colors">
       <CardHeader className="pb-2">
         <CardTitle className="text-base flex items-center gap-2">
-          <Icon className="w-4 h-4" /> {title}
+          <span className="inline-flex items-center justify-center rounded-md bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300 w-7 h-7">
+            <Icon className="w-4 h-4" />
+          </span>
+          {title}
         </CardTitle>
       </CardHeader>
       <CardContent className="flex items-center justify-between gap-3">
@@ -76,10 +80,16 @@ export default function StudentInicioPage() {
   return (
     <ProtectedRoute allowedRoles={["admin", "coach", "student", "equipo"]}>
       <DashboardLayout>
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold flex items-center gap-2">
-            <Home className="w-5 h-5" /> Inicio
-          </h1>
+        <div className="rounded-2xl border border-border bg-gradient-to-r from-blue-500/10 via-transparent to-indigo-500/10 p-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold flex items-center gap-2">
+              <Home className="w-5 h-5 text-blue-600 dark:text-blue-300" />{" "}
+              Inicio
+            </h1>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Accesos rápidos del alumno
+          </p>
         </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -115,6 +125,14 @@ export default function StudentInicioPage() {
             description={isStudent ? "Ver feedback" : "Ver tickets y estado"}
             href={`/admin/alumnos/${code}/feedback`}
             icon={ThumbsUp}
+          />
+
+          {/* Colocar Mis tareas al final */}
+          <InternalCard
+            title="Mis tareas"
+            description="Ver tus tareas y si están resueltas"
+            href={`/admin/alumnos/${code}/tareas`}
+            icon={ClipboardList}
           />
 
           {/* Ocultar Sesiones para alumnos */}

@@ -6,7 +6,6 @@ import {
   getAllStudents,
   getAllStudentsPaged,
   getAllCoachesFromTeams,
-  getCoachStudentsByCoachId,
   createStudent,
   getOpciones,
   updateClientEtapa,
@@ -147,17 +146,18 @@ function normalizeStageLabel(stage?: string | null) {
 export default function StudentsContent() {
   const [coach, setCoach] = useState<string>("todos"); // formato: "todos" | `id:${id}` | `name:${name}`
   const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState<number>(0);
   const [all, setAll] = useState<StudentRow[]>([]);
-  const [allFull, setAllFull] = useState<StudentRow[]>([]);
   const [search, setSearch] = useState("");
   const [coaches, setCoaches] = useState<CoachTeam[]>([]);
   const [selectedCoachId, setSelectedCoachId] = useState<string | null>(null);
   const [selectedCoachName, setSelectedCoachName] = useState<string | null>(
     null,
   );
-  const [coachCodes, setCoachCodes] = useState<Set<string> | null>(null);
-  const [coachCodesLoading, setCoachCodesLoading] = useState(false);
-  const PAGE_SIZE = 25;
+  // El backend soporta hasta 1000 por página (según uso en otros módulos)
+  const SERVER_PAGE_SIZE = 1000;
+  // Mantener paginado local de UI liviano
+  const UI_PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
   const [serverPage, setServerPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -207,22 +207,16 @@ export default function StudentsContent() {
   useEffect(() => {
     const t = setTimeout(async () => {
       setLoading(true);
+      setProgress(0);
       try {
-        // 1) Traer alumnos paginados (50) desde backend. Si hay búsqueda o estado, usar `search`/`estado` del endpoint.
+        // 1) Traer alumnos (hasta 1000) desde backend una sola vez.
+        // Luego, filtros/búsqueda se aplican localmente sin refetch.
         const res = await getAllStudentsPaged({
           page: 1,
-          pageSize: PAGE_SIZE,
-          search: search.trim() ? search.trim() : undefined,
-          estado:
-            filterState && filterState !== "Sin estado"
-              ? filterState
-              : undefined,
+          pageSize: SERVER_PAGE_SIZE,
         });
         const items = res.items;
         setAll(items);
-        // Reutilizar la misma respuesta para construir filtros globales
-        // (evita una segunda llamada idéntica a /client/get/clients?page=1&pageSize=50)
-        setAllFull(items ?? []);
         setPage(1);
         setServerPage(1);
         setServerTotal(res.total ?? null);
@@ -230,12 +224,11 @@ export default function StudentsContent() {
         if (res.totalPages != null) {
           setHasMore((res.page ?? 1) < res.totalPages);
         } else {
-          setHasMore((items?.length ?? 0) >= PAGE_SIZE);
+          setHasMore((items?.length ?? 0) >= SERVER_PAGE_SIZE);
         }
       } catch (e) {
         console.error(e);
         setAll([]);
-        setAllFull([]);
         setHasMore(false);
         setServerTotal(null);
         setServerTotalPages(null);
@@ -244,7 +237,21 @@ export default function StudentsContent() {
       }
     }, 350);
     return () => clearTimeout(t);
-  }, [search, filterState]);
+  }, []);
+
+  // Progreso simulado durante carga (no hay progress real en fetch)
+  useEffect(() => {
+    if (!loading) {
+      setProgress((p) => (p < 95 ? 100 : 100));
+      const t = setTimeout(() => setProgress(0), 450);
+      return () => clearTimeout(t);
+    }
+    setProgress(5);
+    const iv = setInterval(() => {
+      setProgress((p) => Math.min(90, p + 8));
+    }, 180);
+    return () => clearInterval(iv);
+  }, [loading]);
 
   const loadMore = async () => {
     if (loadingMore || !hasMore) return;
@@ -253,10 +260,7 @@ export default function StudentsContent() {
       const next = serverPage + 1;
       const res = await getAllStudentsPaged({
         page: next,
-        pageSize: PAGE_SIZE,
-        search: search.trim() ? search.trim() : undefined,
-        estado:
-          filterState && filterState !== "Sin estado" ? filterState : undefined,
+        pageSize: SERVER_PAGE_SIZE,
       });
       const items = res.items;
       setAll((prev) => [...prev, ...(items ?? [])]);
@@ -266,7 +270,7 @@ export default function StudentsContent() {
       if (res.totalPages != null) {
         setHasMore(next < res.totalPages);
       } else {
-        setHasMore((items?.length ?? 0) >= PAGE_SIZE);
+        setHasMore((items?.length ?? 0) >= SERVER_PAGE_SIZE);
       }
     } catch (e) {
       console.error(e);
@@ -407,12 +411,10 @@ export default function StudentsContent() {
   //   - "todos"
   //   - `id:{coachId}|name:{coachName}`
   //   - `name:{coachName}`
-  // Si hay id, consultamos relaciones para traer los códigos de alumnos
   useEffect(() => {
     if (coach === "todos") {
       setSelectedCoachName(null);
       setSelectedCoachId(null);
-      setCoachCodes(null);
       return;
     }
     // parsear valor del select
@@ -431,51 +433,44 @@ export default function StudentsContent() {
     }
     setSelectedCoachName(nextName);
     setSelectedCoachId(nextId ?? null);
-    if (!nextId) setCoachCodes(null);
   }, [coach]);
 
-  // Si tenemos ID de coach, consulta alumnos asociados y guarda sus códigos
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      if (!selectedCoachId) return;
-      try {
-        setCoachCodesLoading(true);
-        const rows = await getCoachStudentsByCoachId(selectedCoachId);
-        if (!active) return;
-        const setCodes = new Set((rows ?? []).map((r) => r.alumno));
-        setCoachCodes(setCodes);
-      } catch (e) {
-        if (!active) return;
-        setCoachCodes(null);
-      } finally {
-        if (active) setCoachCodesLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [selectedCoachId]);
-
   const filtered = useMemo(() => {
-    if (coach === "todos") return all;
-    // Filtrar por códigos si tenemos relación por ID
-    if (selectedCoachId && coachCodes && coachCodes.size > 0) {
-      return all.filter((s) => s.code && coachCodes.has(s.code));
-    }
-    // Fallback por nombre (case-insensitive)
-    const name = selectedCoachName ?? "";
-    return all.filter((s) =>
-      s.teamMembers?.some(
-        (tm) => (tm.name ?? "").toLowerCase() === name.toLowerCase(),
-      ),
-    );
-  }, [all, coach, selectedCoachId, selectedCoachName, coachCodes]);
+    const q = (search || "").trim().toLowerCase();
+
+    // 1) filtro por coach (solo client-side)
+    const byCoach = (() => {
+      if (coach === "todos") return all;
+      const name = (selectedCoachName ?? "").trim();
+      if (!name) return all;
+      const nameLower = name.toLowerCase();
+      return all.filter((s) =>
+        s.teamMembers?.some(
+          (tm) => (tm.name ?? "").trim().toLowerCase() === nameLower,
+        ),
+      );
+    })();
+
+    // 2) búsqueda local
+    if (!q) return byCoach;
+    return byCoach.filter((s) => {
+      const name = (s.name ?? "").toString().toLowerCase();
+      const code = (s.code ?? "").toString().toLowerCase();
+      const state = (s.state ?? "").toString().toLowerCase();
+      const stage = (s.stage ?? "").toString().toLowerCase();
+      return (
+        name.includes(q) ||
+        code.includes(q) ||
+        state.includes(q) ||
+        stage.includes(q)
+      );
+    });
+  }, [all, coach, search, selectedCoachName]);
 
   // valores únicos de fases (usar la lista completa `allFull` si está disponible para mostrar todas las opciones)
   const uniqueStages = useMemo(() => {
     const NO_STAGE = "Sin fase";
-    const source = allFull && allFull.length > 0 ? allFull : filtered || [];
+    const source = all || [];
     const base = Array.from(
       new Set(
         (source || [])
@@ -487,12 +482,12 @@ export default function StudentsContent() {
       (s) => !s.stage || !String(s.stage).trim(),
     );
     return hasNoStage ? [NO_STAGE, ...base] : base;
-  }, [filtered, allFull]);
+  }, [all]);
 
   // valores únicos de estado (usar la lista completa `allFull` si está disponible para mostrar todas las opciones)
   const uniqueStates = useMemo(() => {
     const NO_STATE = "Sin estado";
-    const source = allFull && allFull.length > 0 ? allFull : filtered || [];
+    const source = all || [];
     const base = Array.from(
       new Set(
         (source || [])
@@ -506,7 +501,7 @@ export default function StudentsContent() {
       (s) => !s.state || !String(s.state).trim(),
     );
     return hasNoState ? [NO_STATE, ...base] : base;
-  }, [filtered, allFull]);
+  }, [all]);
 
   // aplicar filtro por fase adicional
   const finalRows = useMemo(() => {
@@ -545,18 +540,19 @@ export default function StudentsContent() {
   }, [filtered, filterStage, filterState]);
 
   const total = finalRows.length;
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / UI_PAGE_SIZE));
   const pageItems = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return finalRows.slice(start, start + PAGE_SIZE);
+    const start = (page - 1) * UI_PAGE_SIZE;
+    return finalRows.slice(start, start + UI_PAGE_SIZE);
   }, [finalRows, page]);
 
-  const coachMetrics = useMemo(() => getCoachMetrics(filtered), [filtered]);
+  const coachMetrics = useMemo(() => getCoachMetrics(finalRows), [finalRows]);
 
   const reset = () => {
     setSearch("");
     setCoach("todos");
     setFilterState(null);
+    setFilterStage(null);
     setPage(1);
   };
 
@@ -772,13 +768,6 @@ export default function StudentsContent() {
               </PopoverContent>
             </Popover>
           </div>
-
-          {coachCodesLoading && (
-            <div className="h-10 inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
-              Cargando alumnos del coach…
-            </div>
-          )}
 
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
@@ -1055,7 +1044,17 @@ export default function StudentsContent() {
                     colSpan={6}
                     className="px-3 py-4 text-center text-muted-foreground"
                   >
-                    Cargando alumnos…
+                    <div className="flex flex-col items-center justify-center gap-2 py-2">
+                      <div className="relative h-2 w-full max-w-xl overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full bg-blue-600 transition-all"
+                          style={{ width: `${Math.round(progress)}%` }}
+                        />
+                      </div>
+                      <div className="text-sm text-muted-foreground">
+                        Cargando alumnos… {Math.round(progress)}%
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : pageItems.length === 0 ? (

@@ -348,8 +348,20 @@ function parseTeamAlumnos(raw: unknown): TeamMember[] {
   if (!raw) return [];
   if (Array.isArray(raw)) {
     return raw
-      .map((v) => (typeof v === 'string' ? { name: v } : v))
-      .filter((x): x is TeamMember => Boolean((x as any)?.name));
+      .map((v) => {
+        if (typeof v === 'string') {
+          const name = v.trim();
+          return name ? ({ name } as TeamMember) : null;
+        }
+        if (v && typeof v === 'object') {
+          const anyV: any = v as any;
+          const name = String(anyV.name ?? anyV.nombre ?? '').trim();
+          const url = (anyV.url ?? anyV.link ?? anyV.href ?? null) as string | null;
+          return name ? ({ name, url } as TeamMember) : null;
+        }
+        return null;
+      })
+      .filter((x): x is TeamMember => Boolean(x?.name));
   }
   const s = String(raw);
   // formato esperado en API antigua: "Nombre (url), Nombre 2 (url)..."
@@ -420,8 +432,17 @@ export async function getAllStudentsPaged(params?: {
     code: r.codigo ?? r.code ?? null,
     name: cleanClientName(r.nombre ?? r.name),
     teamMembers: Array.isArray(r.teamMembers)
-      ? r.teamMembers
-      : parseTeamAlumnos(r.equipo ?? r.alumnos ?? null),
+      ? parseTeamAlumnos(r.teamMembers)
+      : parseTeamAlumnos(
+          r.equipo ??
+            r.alumnos ??
+            r.coaches ??
+            r.coachs ??
+            r.coach ??
+            r.coach_nombre ??
+            r.coachNombre ??
+            null,
+        ),
 
     state: r.estado ?? r.state ?? null,
     stage: r.etapa ?? r.stage ?? null,

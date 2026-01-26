@@ -27,6 +27,7 @@ import TicketsPanel from "./_parts/TicketsPanel";
 import SessionsStudentPanel from "./_parts/SessionsStudentPanel";
 import BonosPanel from "./_parts/BonosPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
+import TareasCard from "./_parts/TareasCard";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -1624,6 +1625,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
               history={phaseHistory}
               statusHistory={statusHistory}
               tasksHistory={tasksHistory}
+            />
+            <TareasCard
+              alumnoId={String(student.code || code)}
+              canEdit={(user?.role ?? "").toLowerCase() !== "student"}
             />
             {/* Tickets movidos a la sección Feedback */}
           </div>
