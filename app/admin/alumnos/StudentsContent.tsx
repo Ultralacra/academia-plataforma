@@ -182,7 +182,10 @@ export default function StudentsContent() {
     hasMore: boolean;
   } | null>(null);
 
-  const patchTodosByCode = (code: string, patch: (r: StudentRow) => StudentRow) => {
+  const patchTodosByCode = (
+    code: string,
+    patch: (r: StudentRow) => StudentRow,
+  ) => {
     const cached = allTodosRef.current;
     if (!cached || !code) return;
     allTodosRef.current = cached.map((r) =>
@@ -308,9 +311,10 @@ export default function StudentsContent() {
     }
 
     // Si el coach viene sin id/código, no podemos usar el endpoint nuevo.
-    if (!coachId) return () => {
-      active = false;
-    };
+    if (!coachId)
+      return () => {
+        active = false;
+      };
 
     (async () => {
       setLoading(true);
@@ -419,7 +423,9 @@ export default function StudentsContent() {
       setServerPage(1);
 
       if (total && total > 0) {
-        setCoachAllProgress(Math.min(95, Math.round((acc.length / total) * 100)));
+        setCoachAllProgress(
+          Math.min(95, Math.round((acc.length / total) * 100)),
+        );
       } else {
         setCoachAllProgress(10);
       }
@@ -972,8 +978,8 @@ export default function StudentsContent() {
             {coach !== "todos" && selectedCoachId && serverTotal != null && (
               <div className="mt-2 flex items-center justify-between gap-2">
                 <div className="text-[11px] text-muted-foreground">
-                  Cargados <span className="font-semibold">{all.length}</span> de{" "}
-                  <span className="font-semibold">{serverTotal}</span>
+                  Cargados <span className="font-semibold">{all.length}</span>{" "}
+                  de <span className="font-semibold">{serverTotal}</span>
                 </div>
                 {all.length < serverTotal && (
                   <Button
