@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,7 +78,7 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
     setUsersLoading(true);
     try {
       const response = await apiFetch<{ data: UserType[]; total: number }>(
-        "/users?pageSize=1000"
+        "/users?pageSize=1000",
       );
       const usersData = response?.data || [];
       const salesUsers = usersData.filter((u: any) => u.role === "sales");
@@ -211,8 +212,7 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
       {/* Botón para abrir */}
       <Button
         size="sm"
-        variant="outline"
-        className="gap-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+        className="gap-2 rounded-full bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow hover:from-indigo-600 hover:to-sky-600"
         onClick={() => setActiveModal("create")}
       >
         <Plus className="h-4 w-4" /> Nuevo lead
@@ -220,31 +220,53 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
 
       {/* Modal de creación de lead */}
       <Dialog open={activeModal === "create"} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Crear lead</DialogTitle>
+        <DialogContent className="sm:max-w-lg border-0 bg-gradient-to-br from-white via-indigo-50/70 to-slate-50/80 shadow-2xl">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-xl font-semibold text-slate-900">
+              Crear lead
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-500">
+              Completa los datos para registrar un nuevo prospecto.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-2">
-              <Label>Nombre *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Nombre *
+              </Label>
+              <Input
+                className="bg-white/90"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
-              <Label>Email</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Email
+              </Label>
               <Input
+                className="bg-white/90"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2">
-              <Label>Teléfono</Label>
-              <Input value={phone} onChange={(e) => setPhone(e.target.value)} />
+              <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Teléfono
+              </Label>
+              <Input
+                className="bg-white/90"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
-              <Label>Campaña (source)</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Campaña (source)
+              </Label>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none"
+                className="h-10 w-full rounded-md border border-indigo-200 bg-white/90 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 value={campaignCodigo}
                 onChange={(e) => setCampaignCodigo(e.target.value)}
                 disabled={campaignsLoading}
@@ -260,9 +282,11 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
               </select>
             </div>
             <div className="space-y-2">
-              <Label>Estado</Label>
+              <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Estado
+              </Label>
               <select
-                className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none"
+                className="h-10 w-full rounded-md border border-indigo-200 bg-white/90 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
               >
@@ -287,8 +311,8 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
                     ? users.find((u) => u.codigo === selectedUserCodigo)
                         ?.name || "Usuario seleccionado"
                     : usersLoading
-                    ? "Cargando usuarios..."
-                    : "Seleccionar usuario (opcional)"}
+                      ? "Cargando usuarios..."
+                      : "Seleccionar usuario (opcional)"}
                   <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
                 {selectedUserCodigo && (
@@ -304,12 +328,17 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
               </div>
             </div>
             <div className="col-span-2 flex justify-end gap-2 mt-2">
-              <Button variant="outline" onClick={resetForm}>
+              <Button
+                variant="outline"
+                onClick={resetForm}
+                className="rounded-full border-slate-300 hover:bg-slate-100"
+              >
                 Limpiar
               </Button>
               <Button
                 onClick={submit}
                 disabled={loading || assigning || !name.trim()}
+                className="rounded-full bg-gradient-to-r from-indigo-500 to-sky-500 text-white shadow hover:from-indigo-600 hover:to-sky-600"
               >
                 {loading || assigning ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -328,9 +357,14 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
           if (!open) setActiveModal("create");
         }}
       >
-        <DialogContent className="sm:max-w-2xl max-h-[600px] flex flex-col">
+        <DialogContent className="sm:max-w-2xl max-h-[600px] flex flex-col border-0 bg-gradient-to-br from-white via-indigo-50/60 to-slate-50/80 shadow-2xl">
           <DialogHeader>
-            <DialogTitle>Seleccionar Usuario</DialogTitle>
+            <DialogTitle className="text-lg font-semibold text-slate-900">
+              Seleccionar Usuario
+            </DialogTitle>
+            <DialogDescription className="text-sm text-slate-500">
+              Asigna el lead a un miembro del equipo de ventas.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
             {/* Buscador */}
@@ -340,55 +374,63 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
                 placeholder="Buscar por nombre o email..."
                 value={userSearchQuery}
                 onChange={(e) => setUserSearchQuery(e.target.value)}
-                className="pl-9"
+                className="pl-9 bg-white/90"
               />
             </div>
 
             {/* Lista de usuarios */}
-            <div className="flex-1 overflow-y-auto border rounded-md">
+            <div className="flex-1 overflow-y-auto rounded-xl border border-slate-200/70 bg-white/60">
               {usersLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
                 </div>
               ) : (
                 <div className="divide-y">
-                  {filteredUsers.map((user) => (
-                    <button
-                      key={user.codigo}
-                      onClick={() => {
-                        setSelectedUserCodigo(user.codigo);
-                        setUserSearchQuery("");
-                        setActiveModal("create");
-                      }}
-                      className={`w-full p-4 text-left hover:bg-slate-50 transition-colors ${
-                        selectedUserCodigo === user.codigo
-                          ? "bg-blue-50 border-l-4 border-blue-500"
-                          : ""
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                          <User className="h-5 w-5 text-slate-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-slate-900">
-                              {user.name}
-                            </p>
-                            <Badge variant="secondary" className="text-xs">
-                              Ventas
-                            </Badge>
+                  {filteredUsers.map((user) => {
+                    const isSelected = selectedUserCodigo === user.codigo;
+                    return (
+                      <button
+                        key={user.codigo}
+                        onClick={() => {
+                          setSelectedUserCodigo(user.codigo);
+                          setUserSearchQuery("");
+                          setActiveModal("create");
+                        }}
+                        className={`w-full p-4 text-left transition hover:bg-indigo-50/50 ${
+                          isSelected
+                            ? "bg-indigo-50 border-l-4 border-indigo-500"
+                            : ""
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="h-10 w-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0 shadow-inner">
+                            <User className="h-5 w-5" />
                           </div>
-                          <p className="text-sm text-slate-500 truncate">
-                            {user.email}
-                          </p>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-slate-900">
+                                {user.name}
+                              </p>
+                              <Badge
+                                variant="secondary"
+                                className="text-xs bg-indigo-100 text-indigo-600 border-indigo-200"
+                              >
+                                Ventas
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-slate-500 truncate">
+                              {user.email}
+                            </p>
+                          </div>
+                          {isSelected && (
+                            <div className="text-indigo-600 text-sm font-semibold">
+                              Seleccionado
+                            </div>
+                          )}
                         </div>
-                        {selectedUserCodigo === user.codigo && (
-                          <div className="text-blue-600">✓</div>
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                   {filteredUsers.length === 0 && (
                     <div className="text-center py-12 text-slate-500">
                       No se encontraron usuarios de ventas
@@ -397,19 +439,18 @@ export function CreateLeadDialog({ onCreated }: { onCreated: () => void }) {
                 </div>
               )}
             </div>
-
-            {/* Botón para volver */}
-            <div className="flex justify-end pt-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setUserSearchQuery("");
-                  setActiveModal("create");
-                }}
-              >
-                Volver al formulario
-              </Button>
-            </div>
+          </div>
+          <div className="flex justify-end pt-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setUserSearchQuery("");
+                setActiveModal("create");
+              }}
+              className="rounded-full border-slate-300 hover:bg-slate-100"
+            >
+              Volver al formulario
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

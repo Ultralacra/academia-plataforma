@@ -3388,33 +3388,42 @@ export default function TicketsBoard({
                       if (!Array.isArray(source) || source.length === 0)
                         return null;
 
-                      // Mostrar solo el primero si el usuario pide "el coach"
-                      const c = source[0];
-                      // Normalizar si es string o objeto
-                      const name =
-                        typeof c === "string" ? c : (c.nombre ?? "Coach");
-                      const area = typeof c === "string" ? null : c.area;
-                      const puesto = typeof c === "string" ? null : c.puesto;
-
                       return (
                         <div className="flex flex-wrap gap-1.5">
-                          <span
-                            className="inline-flex items-center rounded-md bg-slate-100 px-2 py-1 text-xs text-slate-700"
-                            title={`${name}${area ? ` · ${area}` : ""}${
-                              puesto ? ` · ${puesto}` : ""
-                            }`}
-                          >
-                            {name.slice(0, 20)}
-                            {area ? ` · ${String(area).slice(0, 10)}` : ""}
-                          </span>
-                          {source.length > 1 && (
-                            <span
-                              className="text-xs text-slate-400 flex items-center"
-                              title="Más coaches asignados"
-                            >
-                              +{source.length - 1}
-                            </span>
-                          )}
+                          {source.map((c: any, idx: number) => {
+                            const name =
+                              typeof c === "string"
+                                ? c
+                                : (c?.nombre ?? "Coach");
+                            const area = typeof c === "string" ? null : c?.area;
+                            const puesto =
+                              typeof c === "string" ? null : c?.puesto;
+                            const key =
+                              typeof c === "string"
+                                ? `${c}-${idx}`
+                                : String(
+                                    c?.codigo_equipo ??
+                                      c?.codigo ??
+                                      c?.id ??
+                                      name ??
+                                      idx,
+                                  );
+
+                            return (
+                              <span
+                                key={key}
+                                className={`inline-flex items-center rounded-md px-2 py-1 text-xs transition-colors ${coachChipClass(
+                                  idx,
+                                )}`}
+                                title={`${name}${area ? ` · ${area}` : ""}${
+                                  puesto ? ` · ${puesto}` : ""
+                                }`}
+                              >
+                                {String(name).slice(0, 20)}
+                                {area ? ` · ${String(area).slice(0, 10)}` : ""}
+                              </span>
+                            );
+                          })}
                         </div>
                       );
                     })()}

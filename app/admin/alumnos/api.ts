@@ -4,6 +4,122 @@
 import { getAuthToken } from "@/lib/auth";
 import { apiFetch, buildUrl } from "@/lib/api-config";
 
+// Evita requests duplicadas por montajes múltiples (p.ej. React 18 StrictMode)
+// y permite cachear catálogos que casi no cambian.
+const inflight = new Map<string, Promise<unknown>>();
+
+type CacheEntry<T> = { at: number; value: T };
+const cache = new Map<string, CacheEntry<unknown>>();
+
+const SESSION_CACHE_PREFIX = "academia:cache:";
+
+function sessionKey(key: string): string {
+  return `${SESSION_CACHE_PREFIX}${key}`;
+}
+
+function sessionGet<T>(key: string): CacheEntry<T> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(sessionKey(key));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as CacheEntry<T>;
+    if (!parsed || typeof parsed !== "object") return null;
+    const at = (parsed as any).at;
+    if (typeof at !== "number" || !Number.isFinite(at)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function sessionSet<T>(key: string, entry: CacheEntry<T>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(sessionKey(key), JSON.stringify(entry));
+  } catch {
+    // Ignorar (quota/JSON) para no romper la app
+  }
+}
+
+function sessionDeleteByPrefix(prefix: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const fullPrefix = sessionKey(prefix);
+    // sessionStorage no soporta búsqueda por prefijo; iteramos keys.
+    for (let i = window.sessionStorage.length - 1; i >= 0; i--) {
+      const k = window.sessionStorage.key(i);
+      if (k && k.startsWith(fullPrefix)) {
+        window.sessionStorage.removeItem(k);
+      }
+    }
+  } catch {
+    // noop
+  }
+}
+
+function cacheGet<T>(key: string, ttlMs: number): T | null {
+  const now = Date.now();
+
+  const hit = cache.get(key) as CacheEntry<T> | undefined;
+  if (hit) {
+    if (now - hit.at > ttlMs) {
+      cache.delete(key);
+      try {
+        if (typeof window !== "undefined") {
+          window.sessionStorage.removeItem(sessionKey(key));
+        }
+      } catch {}
+      return null;
+    }
+    return hit.value;
+  }
+
+  // Fallback: sessionStorage (sobrevive recargas en la misma pestaña)
+  const persisted = sessionGet<T>(key);
+  if (!persisted) return null;
+  if (now - persisted.at > ttlMs) {
+    try {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(sessionKey(key));
+      }
+    } catch {}
+    return null;
+  }
+  cache.set(key, persisted as unknown as CacheEntry<unknown>);
+  return persisted.value;
+}
+
+function cacheSet<T>(key: string, value: T): void {
+  const entry: CacheEntry<T> = { at: Date.now(), value };
+  cache.set(key, entry as unknown as CacheEntry<unknown>);
+  // Persistir en sesión para sobrevivir a recargas (mientras dure la pestaña)
+  sessionSet(key, entry);
+}
+
+function formatTimeout(ms: number): string {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n <= 0) return `${ms}ms`;
+  if (n >= 60_000) {
+    const min = Math.round((n / 60_000) * 10) / 10;
+    return `${min}min`;
+  }
+  const sec = Math.round((n / 1000) * 10) / 10;
+  return `${sec}s`;
+}
+
+function cacheDeleteByPrefix(prefix: string): void {
+  for (const k of Array.from(cache.keys())) {
+    if (k.startsWith(prefix)) cache.delete(k);
+  }
+
+  // Mantener sessionStorage consistente con la memoria.
+  sessionDeleteByPrefix(prefix);
+}
+
+function invalidateStudentsCache(): void {
+  cacheDeleteByPrefix("students:");
+}
+
 export type TeamMember = { name: string; url?: string | null };
 
 export type StudentRow = {
@@ -180,35 +296,52 @@ export async function getBonoAssignmentsByAlumnoCodigo(
   return rows as BonoAssignment[];
 }
 
-async function fetchJson<T>(pathOrUrl: string, init?: RequestInit, timeoutMs = 12000): Promise<T> {
+async function fetchJson<T>(pathOrUrl: string, init?: RequestInit, timeoutMs = 60_000): Promise<T> {
   const url = pathOrUrl.startsWith("http") ? pathOrUrl : buildUrl(pathOrUrl);
-  const token = typeof window !== 'undefined' ? getAuthToken() : null;
-  const authHeaders: Record<string, string> = token
-    ? { Authorization: `Bearer ${token}` }
-    : {};
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), Math.max(1000, timeoutMs));
-  try {
-    const res = await fetch(url, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...authHeaders, ...(init?.headers as any) },
-      cache: 'no-store',
-      signal: ctrl.signal,
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(text || `HTTP ${res.status} on ${url}`);
-    }
-    if (res.status === 204) return undefined as unknown as T;
-    return (await res.json()) as T;
-  } catch (e: any) {
-    if (e?.name === 'AbortError') {
-      throw new Error(`Timeout ${timeoutMs}ms on ${url}`);
-    }
-    throw e;
-  } finally {
-    clearTimeout(timer);
+  const method = String(init?.method ?? "GET").toUpperCase();
+  const isGet = method === "GET" && !init?.body;
+  const inflightKey = isGet ? `GET ${url}` : null;
+
+  if (inflightKey) {
+    const existing = inflight.get(inflightKey) as Promise<T> | undefined;
+    if (existing) return existing;
   }
+
+  const exec = (async () => {
+    const token = typeof window !== 'undefined' ? getAuthToken() : null;
+    const authHeaders: Record<string, string> = token
+      ? { Authorization: `Bearer ${token}` }
+      : {};
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), Math.max(1000, timeoutMs));
+    try {
+      const res = await fetch(url, {
+        ...init,
+        headers: { 'Content-Type': 'application/json', ...authHeaders, ...(init?.headers as any) },
+        cache: 'no-store',
+        signal: ctrl.signal,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(text || `HTTP ${res.status} on ${url}`);
+      }
+      if (res.status === 204) return undefined as unknown as T;
+      return (await res.json()) as T;
+    } catch (e: any) {
+      if (e?.name === 'AbortError') {
+        throw new Error(`Timeout ${formatTimeout(timeoutMs)} on ${url}`);
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
+
+  if (inflightKey) {
+    inflight.set(inflightKey, exec as Promise<unknown>);
+    exec.finally(() => inflight.delete(inflightKey));
+  }
+  return exec;
 }
 
 function parseTeamAlumnos(raw: unknown): TeamMember[] {
@@ -260,6 +393,10 @@ export async function getAllStudentsPaged(params?: {
   const search = String(params?.search ?? "").trim();
   const estado = String(params?.estado ?? "").trim();
 
+  const cacheKey = `students:${page}:${pageSize}:${encodeURIComponent(search)}:${encodeURIComponent(estado)}`;
+  const cached = cacheGet<StudentsPagedResult>(cacheKey, 30_000);
+  if (cached) return cached;
+
   const qs = new URLSearchParams();
   qs.set("page", String(page));
   qs.set("pageSize", String(pageSize));
@@ -302,13 +439,16 @@ export async function getAllStudentsPaged(params?: {
     return Number.isFinite(n) ? n : null;
   };
 
-  return {
+  const result: StudentsPagedResult = {
     items,
     total: toNumOrNull(json?.total ?? json?.clients?.total ?? json?.getClients?.total),
     page: toNumOrNull(json?.page) ?? page,
     pageSize: toNumOrNull(json?.pageSize) ?? pageSize,
     totalPages: toNumOrNull(json?.totalPages),
   };
+
+  cacheSet(cacheKey, result);
+  return result;
 }
 
 export async function getAllStudents(params?: {
@@ -322,18 +462,24 @@ export async function getAllStudents(params?: {
 
 // 2) Coaches (desde equipos)
 export async function getAllCoachesFromTeams(): Promise<CoachTeam[]> {
+  const cached = cacheGet<CoachTeam[]>("coachesFromTeams", 5 * 60_000);
+  if (cached) return cached;
+
   const path = '/team/get/team?page=1&pageSize=10000';
   const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
   const coaches: CoachTeam[] = rows.map((r) => ({ id: r.id, name: r.nombre, codigo: r.codigo ?? null }));
   // dedupe por nombre (por si acaso)
   const seen = new Set<string>();
-  return coaches.filter((c) => {
+  const deduped = coaches.filter((c) => {
     const k = c.name?.toLowerCase?.() ?? '';
     if (!k || seen.has(k)) return false;
     seen.add(k);
     return true;
   });
+
+  cacheSet("coachesFromTeams", deduped);
+  return deduped;
 }
 
 // Crear alumno (multipart/form-data). Campos: nombre (obligatorio), contrato (opcional)
@@ -369,6 +515,9 @@ export async function createStudent(payload: {
   }
   const json = await res.json().catch(() => ({}));
   const d = (json?.data ?? json ?? {}) as any;
+
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
   return {
     id: d.id ?? d.user_id ?? d.codigo ?? payload.email,
     codigo: d.codigo ?? d.code ?? null,
@@ -553,10 +702,14 @@ export type OpcionItem = {
 };
 
 export async function getOpciones(opcion: string): Promise<OpcionItem[]> {
+  const safe = String(opcion ?? "").trim().toLowerCase();
+  const cached = cacheGet<OpcionItem[]>(`opciones:${safe}`, 10 * 60_000);
+  if (cached) return cached;
+
   const path = `/opcion/get/opciones?opcion=${encodeURIComponent(opcion)}`;
   const json = await fetchJson<any>(path);
   const rows: any[] = Array.isArray(json?.data) ? json.data : [];
-  return rows.map((r) => {
+  const mapped = rows.map((r) => {
     const id = String(r.opcion_id ?? r.id ?? r.valor ?? r.clave ?? r.key ?? r.nombre ?? "");
     const key = String(r.opcion_key ?? r.clave ?? r.key ?? r.valor ?? "");
     const value = String(r.opcion_value ?? r.valor ?? r.nombre ?? r.key ?? "");
@@ -569,6 +722,9 @@ export async function getOpciones(opcion: string): Promise<OpcionItem[]> {
       updated_at: r.updated_at ?? null,
     } as OpcionItem;
   });
+
+  cacheSet(`opciones:${safe}`, mapped);
+  return mapped;
 }
 
 // 8) Archivos de ticket
@@ -670,11 +826,15 @@ export async function deleteTicket(ticketCodigo: string): Promise<any> {
 // 9) Actualizar cliente (etapa / estado / nicho)
 export async function updateClient(clientCode: string, payload: Record<string, any>): Promise<any> {
   const path = `/client/update/client/${encodeURIComponent(clientCode)}`;
-  return await fetchJson<any>(path, {
+  const res = await fetchJson<any>(path, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
+
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
+  return res;
 }
 
 // Actualizar solo la etapa del cliente (usa FormData por compatibilidad con backend)
@@ -694,7 +854,10 @@ export async function updateClientEtapa(clientCode: string, etapa: string): Prom
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);
   }
-  return await res.json().catch(() => ({}));
+  const json = await res.json().catch(() => ({}));
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
+  return json;
 }
 
 // Actualizar fecha de ingreso del cliente (usa FormData por compatibilidad con backend)
@@ -715,7 +878,10 @@ export async function updateClientIngreso(clientCode: string, ingreso: string | 
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);
   }
-  return await res.json().catch(() => ({}));
+  const json = await res.json().catch(() => ({}));
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
+  return json;
 }
 
 // Actualizar nombre del cliente (usa FormData por compatibilidad con backend)
@@ -738,7 +904,10 @@ export async function updateClientNombre(clientCode: string, nombre: string): Pr
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);
   }
-  return await res.json().catch(() => ({}));
+  const json = await res.json().catch(() => ({}));
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
+  return json;
 }
 
 // 12) Historial de tareas del cliente
@@ -842,7 +1011,10 @@ export async function updateClientLastTask(clientCode: string, isoDate: string):
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);
   }
-  return await res.json().catch(() => ({}));
+  const json = await res.json().catch(() => ({}));
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
+  return json;
 }
 
 // Subir contrato (multipart/form-data) para un cliente
@@ -859,7 +1031,10 @@ export async function uploadClientContract(
     const text = await res.text().catch(() => '');
     throw new Error(text || `HTTP ${res.status} on ${url}`);
   }
-  return await res.json().catch(() => ({}));
+  const json = await res.json().catch(() => ({}));
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
+  return json;
 }
 
 // Descargar contrato (blob) por código de cliente
@@ -889,10 +1064,14 @@ export async function downloadClientContractBlob(clientCode: string): Promise<{
 // Eliminar alumno por código (DELETE /v1/client/delete/client/:codigo)
 export async function deleteStudent(clientCode: string): Promise<any> {
   if (!clientCode) throw new Error('clientCode requerido');
-  return await apiFetch<any>(
+  const res = await apiFetch<any>(
     `/client/delete/client/${encodeURIComponent(clientCode)}`,
     { method: 'DELETE' }
   );
+
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
+  return res;
 }
 
 // ===== ADS METRICS =====

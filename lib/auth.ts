@@ -17,6 +17,14 @@ export interface AuthState {
 class AuthService {
   private storageKey = "academy_auth";
 
+  // Evitar múltiples requests simultáneas a /auth/me (muchos componentes llaman useAuth())
+  private meInFlight: Promise<User> | null = null;
+  private meCache:
+    | { token: string | null; user: User; at: number }
+    | null = null;
+  // TTL corto para evitar spameo sin dejar el usuario obsoleto
+  private meCacheTtlMs = 30_000;
+
   /**
    * Normaliza el rol proveniente del backend a los roles internos de la app.
    * Regla solicitada: "equipo" debe ver las vistas de admin, por lo que se mapea a "admin".
@@ -130,46 +138,76 @@ class AuthService {
 
   /** Obtiene información del usuario autenticado desde /auth/me */
   async me(): Promise<User> {
+    const now = Date.now();
+    const st = this.getAuthState();
+    const token = st.token ?? null;
+
+    // Si ya tenemos usuario reciente para este token, reutilizar
+    if (
+      this.meCache &&
+      this.meCache.token === token &&
+      now - this.meCache.at < this.meCacheTtlMs
+    ) {
+      return this.meCache.user;
+    }
+
+    // Si hay una request en vuelo, esperar esa misma
+    if (this.meInFlight) return this.meInFlight;
+
     try {
       const { buildUrl } = await import("./api-config");
-      const res = await fetch(buildUrl("/auth/me"), {
+      this.meInFlight = fetch(buildUrl("/auth/me"), {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
           Authorization: (() => {
-            const st = this.getAuthState();
-            return st.token ? `Bearer ${st.token}` : "";
+            return token ? `Bearer ${token}` : "";
           })(),
         },
-      });
-      if (!res.ok) {
-        // 401: token inválido/expirado -> limpiar sesión y enviar a login
-        if (res.status === 401) {
-          try {
-            this.logout();
-          } catch {}
-          if (typeof window !== "undefined") {
-            try {
-              const here = window.location?.pathname || "";
-              if (!here.startsWith("/login")) {
-                window.location.replace("/login");
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            // 401: token inválido/expirado -> limpiar sesión y enviar a login
+            if (res.status === 401) {
+              try {
+                this.logout();
+              } catch {}
+              if (typeof window !== "undefined") {
+                try {
+                  const here = window.location?.pathname || "";
+                  if (!here.startsWith("/login")) {
+                    window.location.replace("/login");
+                  }
+                } catch {}
               }
-            } catch {}
+              throw new Error("No autorizado");
+            }
+            // En 403 no redirigimos; devolvemos error genérico
+            throw new Error("Error consultando usuario");
           }
-          throw new Error("No autorizado");
-        }
-        // En 403 no redirigimos; devolvemos error genérico
-        throw new Error("Error consultando usuario");
-      }
-      const json: any = await res.json();
-      return {
-        id: json.id,
-        email: json.email,
-        name: json.name,
-        role: this.normalizeRole(json.role, json.tipo),
-        codigo: json.codigo,
-      };
+
+          const json: any = await res.json();
+          const user: User = {
+            id: json.id,
+            email: json.email,
+            name: json.name,
+            role: this.normalizeRole(json.role, json.tipo),
+            codigo: json.codigo,
+          };
+          this.meCache = { token, user, at: Date.now() };
+          return user;
+        })
+        .finally(() => {
+          this.meInFlight = null;
+        });
+
+      return await this.meInFlight;
     } catch (e) {
+      this.meInFlight = null;
+      // si hubo error, no dejar cache inconsistente
+      if (this.meCache?.token === token) {
+        this.meCache = null;
+      }
       if (e instanceof Error) throw e;
       throw new Error("No se pudo obtener el usuario");
     }

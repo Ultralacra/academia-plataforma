@@ -41,7 +41,7 @@ export function MetricsTabs({ items }: { items?: ProspectCore[] }) {
     items && items.length ? items : crmService.listProspects({}).items
   ) as ProspectCore[];
   const owners = Array.from(
-    new Set(all.map((p) => p.ownerNombre).filter(Boolean))
+    new Set(all.map((p) => p.ownerNombre).filter(Boolean)),
   ) as string[];
   const [owner, setOwner] = React.useState<string>("all");
   const filtered =
@@ -141,7 +141,7 @@ export function MetricsTabs({ items }: { items?: ProspectCore[] }) {
       to.setDate(from.getDate() + 7);
       const label = `${from.getMonth() + 1}/${from.getDate()}`;
       const slice = filtered.filter(
-        (p) => new Date(p.creadoAt) >= from && new Date(p.creadoAt) < to
+        (p) => new Date(p.creadoAt) >= from && new Date(p.creadoAt) < to,
       );
       let created = slice.length,
         contacted = 0,
@@ -232,10 +232,12 @@ export function MetricsTabs({ items }: { items?: ProspectCore[] }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div className="lg:col-span-2 flex items-center justify-end">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-600">Ver métricas de:</span>
+        <div className="flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-2 shadow-sm">
+          <span className="text-sm font-semibold text-slate-600">
+            Ver métricas de:
+          </span>
           <Select value={owner} onValueChange={setOwner}>
-            <SelectTrigger className="w-56">
+            <SelectTrigger className="w-56 bg-white">
               <SelectValue placeholder="Todos" />
             </SelectTrigger>
             <SelectContent>
@@ -250,8 +252,8 @@ export function MetricsTabs({ items }: { items?: ProspectCore[] }) {
         </div>
       </div>
 
-      <Card className="p-4">
-        <div className="text-sm font-semibold mb-2">Embudo</div>
+      <Card className="p-4 border-slate-200/70 bg-white/90 shadow-sm">
+        <div className="text-sm font-semibold mb-2 text-slate-700">Embudo</div>
         <ChartContainer
           config={{ value: { label: "Prospectos", color: "#fb923c" } }}
         >
@@ -265,8 +267,8 @@ export function MetricsTabs({ items }: { items?: ProspectCore[] }) {
         </ChartContainer>
       </Card>
 
-      <Card className="p-4">
-        <div className="text-sm font-semibold mb-2">
+      <Card className="p-4 border-slate-200/70 bg-white/90 shadow-sm">
+        <div className="text-sm font-semibold mb-2 text-slate-700">
           Canales (total vs ganados)
         </div>
         <ChartContainer
@@ -294,8 +296,10 @@ export function MetricsTabs({ items }: { items?: ProspectCore[] }) {
         </ChartContainer>
       </Card>
 
-      <Card className="p-4">
-        <div className="text-sm font-semibold mb-2">Tendencia semanal</div>
+      <Card className="p-4 border-slate-200/70 bg-white/90 shadow-sm">
+        <div className="text-sm font-semibold mb-2 text-slate-700">
+          Tendencia semanal
+        </div>
         <ChartContainer
           config={{
             created: { label: "Creados", color: "#0ea5e9" },
@@ -341,8 +345,10 @@ export function MetricsTabs({ items }: { items?: ProspectCore[] }) {
         </ChartContainer>
       </Card>
 
-      <Card className="p-4">
-        <div className="text-sm font-semibold mb-2">Edad por etapa (días)</div>
+      <Card className="p-4 border-slate-200/70 bg-white/90 shadow-sm">
+        <div className="text-sm font-semibold mb-2 text-slate-700">
+          Edad por etapa (días)
+        </div>
         <ChartContainer
           config={{
             avg: { label: "Promedio", color: "#6366f1" },

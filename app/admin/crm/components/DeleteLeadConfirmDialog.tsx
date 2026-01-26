@@ -50,7 +50,7 @@ export function DeleteLeadConfirmDialog({
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="border-0 bg-gradient-to-br from-white via-rose-50/70 to-slate-50/80 shadow-2xl">
         <AlertDialogHeader>
           <AlertDialogTitle>¿Eliminar este lead?</AlertDialogTitle>
           <AlertDialogDescription>
@@ -65,13 +65,19 @@ export function DeleteLeadConfirmDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={loading}>Cancelar</AlertDialogCancel>
+          <AlertDialogCancel
+            disabled={loading}
+            className="rounded-full border-slate-300 hover:bg-slate-100"
+          >
+            Cancelar
+          </AlertDialogCancel>
           <AlertDialogAction
             onClick={(e) => {
               e.preventDefault();
               void confirm();
             }}
             disabled={loading}
+            className="rounded-full bg-gradient-to-r from-rose-500 to-red-500 text-white shadow hover:from-rose-600 hover:to-red-600"
           >
             {loading ? "Eliminando..." : "Eliminar"}
           </AlertDialogAction>

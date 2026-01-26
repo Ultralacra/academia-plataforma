@@ -1,36 +1,35 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import type { LucideIcon } from "lucide-react";
 import {
-  Search,
-  Plus,
-  Filter,
-  ChevronDown,
+  Activity,
+  Calendar,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Users,
-  UserPlus,
-  Calendar,
-  Tags,
+  Eye,
+  LayoutGrid,
+  List,
+  Loader2,
   Mail,
   Phone,
-  MapPin,
-  Link as LinkIcon,
-  X,
-  Loader2,
-  List,
-  LayoutGrid,
-  Eye,
+  PieChart,
+  Search,
+  Sparkles,
   Trash2,
-  CheckCircle2,
-  XCircle,
   User,
+  UserPlus,
+  Users,
+  X,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { Input } from "@/components/ui/input";
+
+import { ProtectedRoute } from "@/components/auth/protected-route";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
-import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -38,247 +37,383 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card } from "@/components/ui/card";
-import { ProtectedRoute } from "@/components/auth/protected-route";
-import { ProspectKanban } from "./components/ProspectKanban";
-import { ProspectEditor } from "./components/ProspectEditor";
-// Detalle por modal deshabilitado; ahora usamos una vista dedicada /admin/crm/booking/[id]
-import { ProspectFilters } from "./components/ProspectFilters";
-import { CrmTabsLayout } from "./components/TabsLayout";
-import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import type {
-  ProspectCore,
-  CrmGlobalMetrics,
-  SellerMetricsResult,
-} from "@/lib/crm-types";
-import { computeGlobalMetrics, computeSellerMetrics } from "@/lib/crm-metrics";
-import { MetricsOverview } from "./components/MetricsOverview";
-import { SellerMetricsTable } from "./components/SellerMetricsTable";
-import { MetricsTabs } from "./components/MetricsTabs";
-import { crmAutomations } from "@/lib/crm-service";
+import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { crmAutomations } from "@/lib/crm-service";
+import { apiFetch } from "@/lib/api-config";
+
+import {
+  type Lead,
+  type LeadOrigin,
+  listLeadOrigins,
   listLeads,
   updateLead,
-  type Lead,
-  listLeadOrigins,
-  type LeadOrigin,
 } from "./api";
-import { toast } from "@/components/ui/use-toast";
-import { useAuth } from "@/hooks/use-auth";
-import { StageBadge } from "./components/StageBadge";
-import { CloseSaleForm } from "./components/CloseSaleForm2";
-import { SalesPersonalMetrics } from "./components/SalesPersonalMetrics";
-import { useRouter } from "next/navigation";
+import { CrmTabsLayout } from "./components/TabsLayout";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { DeleteLeadConfirmDialog } from "./components/DeleteLeadConfirmDialog";
 import { EventsOriginsManager } from "./components/EventsOriginsManager";
-import { apiFetch } from "@/lib/api-config";
+import { MetricsOverview } from "./components/MetricsOverview";
+import { MetricsTabs } from "./components/MetricsTabs";
+import { ProspectFilters } from "./components/ProspectFilters";
+import { ProspectKanban } from "./components/ProspectKanban";
+import { SalesPersonalMetrics } from "./components/SalesPersonalMetrics";
+import { SellerMetricsTable } from "./components/SellerMetricsTable";
+import { StageBadge } from "./components/StageBadge";
+
+type ProspectStage =
+  | "Nuevo"
+  | "Contactado"
+  | "Calificado"
+  | "Ganado"
+  | "Perdido";
+
+interface Prospect {
+  id: string;
+  nombre: string;
+  email: string | null;
+  telefono: string | null;
+  canal: string | null;
+  etapa: ProspectStage;
+  ownerCodigo: string | null;
+  saleStatus: string | null;
+  pais: string | null;
+  ciudad: string | null;
+  creado: string | null;
+  actualizado: string | null;
+  remote?: boolean;
+}
+
+interface CalendarAvailability {
+  google_email: string;
+  busy: Array<{ start: string; end: string }>;
+}
+
+interface CalendarStatus {
+  connected: boolean;
+  google_email?: string;
+  loading: boolean;
+}
+
+interface QuickStat {
+  label: string;
+  value: string;
+  icon: LucideIcon;
+  accent: string;
+}
+
+interface SellerMetricsRow {
+  ownerId: string | null;
+  ownerNombre: string;
+  total: number;
+  contacted: number;
+  qualified: number;
+  won: number;
+  lost: number;
+}
+
+interface SellerMetricsResult {
+  rows: SellerMetricsRow[];
+  totalOwners: number;
+}
+
+interface CrmGlobalMetrics {
+  totalProspects: number;
+  byStage: {
+    nuevo: number;
+    contactado: number;
+    calificado: number;
+    propuesta: number;
+    ganado: number;
+    perdido: number;
+  };
+  won: number;
+  lost: number;
+  contacted: number;
+  conversionRate: number;
+}
+
+interface UserSummary {
+  codigo: string;
+  name: string;
+  email: string;
+  role?: string | null;
+}
+
+const PIPELINE_STAGES: ProspectStage[] = [
+  "Nuevo",
+  "Contactado",
+  "Calificado",
+  "Ganado",
+  "Perdido",
+];
+
+const gradients = [
+  "from-indigo-500 to-sky-500",
+  "from-emerald-500 to-teal-500",
+  "from-amber-500 to-orange-500",
+  "from-rose-500 to-pink-500",
+  "from-purple-500 to-violet-500",
+  "from-slate-500 to-slate-700",
+];
+
+const HOURS = Array.from({ length: 17 }, (_, idx) => 6 + idx);
+
+const mapLeadStatusToEtapa = (status?: string | null): ProspectStage => {
+  switch (String(status ?? "").toLowerCase()) {
+    case "contacted":
+      return "Contactado";
+    case "qualified":
+      return "Calificado";
+    case "won":
+      return "Ganado";
+    case "lost":
+      return "Perdido";
+    default:
+      return "Nuevo";
+  }
+};
+
+const mapEtapaToLeadStatus = (etapa: ProspectStage): string => {
+  switch (etapa) {
+    case "Contactado":
+      return "contacted";
+    case "Calificado":
+      return "qualified";
+    case "Ganado":
+      return "won";
+    case "Perdido":
+      return "lost";
+    default:
+      return "new";
+  }
+};
+
+const mapLeadToProspect = (lead: Lead): Prospect => ({
+  id: String(lead.codigo ?? lead.id ?? ""),
+  nombre: lead.name || "(Sin nombre)",
+  email: lead.email ?? null,
+  telefono: lead.phone ?? null,
+  canal: lead.source ?? null,
+  etapa: mapLeadStatusToEtapa(lead.status),
+  ownerCodigo: lead.owner_codigo ?? null,
+  saleStatus: lead.status ?? null,
+  pais: (lead as any)?.country ?? null,
+  ciudad: (lead as any)?.city ?? null,
+  creado: lead.created_at ?? null,
+  actualizado: lead.updated_at ?? null,
+  remote: Boolean((lead as any)?.remote),
+});
+
+const getInitials = (name: string) =>
+  name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("")
+    .padEnd(2, "·");
+
+const getAvatarGradient = (name: string) => {
+  if (!name) return gradients[0];
+  const code = name
+    .split("")
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return gradients[code % gradients.length];
+};
+
+function mapUsersPayload(raw: any): UserSummary[] {
+  const source = Array.isArray(raw?.data)
+    ? raw.data
+    : Array.isArray(raw)
+      ? raw
+      : [];
+  return source
+    .map((item) => ({
+      codigo: String(item?.codigo ?? item?.id ?? ""),
+      name:
+        String(
+          item?.name ?? item?.nombre ?? item?.email ?? "(Sin nombre)",
+        ).trim() || "(Sin nombre)",
+      email: String(item?.email ?? "sin-email@academia.com"),
+      role: item?.role ?? item?.rol ?? null,
+    }))
+    .filter((user) => user.codigo);
+}
+
+function formatHourLabel(date: Date) {
+  return date.toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function CrmContent() {
   const router = useRouter();
-  const { authState } = useAuth();
-  type Prospect = {
-    id: string;
-    nombre: string;
-    email?: string;
-    telefono?: string;
-    canal?: string;
-    etapa: "Nuevo" | "Contactado" | "Calificado" | "Ganado" | "Perdido";
-    ownerCodigo?: string;
-    pais?: string;
-    ciudad?: string;
-    tags?: string[];
-    creado?: string;
-    actualizado?: string;
-    notas?: string;
-    remote?: boolean; // viene de API real (metadata)
-    saleStatus?: string;
-  };
+  const authState = useAuth();
+  const { toast } = useToast();
+
+  const isAdmin = authState?.user?.role === "admin";
+  const isSalesUser = ["sales", "equipo"].includes(
+    String(authState?.user?.role ?? ""),
+  );
+  const userCodigo = authState?.user?.codigo ?? "";
+
+  const ownerFilterRef = useRef<string>("");
 
   const [rows, setRows] = useState<Prospect[]>([]);
+  const [loadingLeads, setLoadingLeads] = useState<boolean>(false);
   const [stageUpdatingId, setStageUpdatingId] = useState<string | null>(null);
-  const [leadOrigins, setLeadOrigins] = useState<LeadOrigin[]>([]);
-  const [showingMyLeads, setShowingMyLeads] = useState(false);
-  const [userCodigo, setUserCodigo] = useState<string | null>(null);
 
-  // Filtro de leads por usuario sales (para admin)
-  const [salesUsers, setSalesUsers] = useState<
-    Array<{ codigo: string; name: string; email: string }>
-  >([]);
+  const [leadOrigins, setLeadOrigins] = useState<LeadOrigin[]>([]);
+  const [selectedCampaignForMetrics, setSelectedCampaignForMetrics] =
+    useState<string>("all");
+
+  const [salesUsers, setSalesUsers] = useState<UserSummary[]>([]);
+  const [salesUsersLoading, setSalesUsersLoading] = useState(false);
   const [selectedSalesUserFilter, setSelectedSalesUserFilter] =
     useState<string>("");
-  const [salesUsersLoading, setSalesUsersLoading] = useState(false);
 
-  // Determinar si el usuario actual es admin o sales
-  const currentUserRole = authState?.user?.role;
-  const isAdmin = currentUserRole === "admin";
-  const isSalesUser = currentUserRole === "sales";
+  const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
 
-  // Estados para asignar lead desde tabla
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [leadToAssign, setLeadToAssign] = useState<{
     codigo: string;
     nombre: string;
   } | null>(null);
-  const [allUsers, setAllUsers] = useState<
-    Array<{
-      codigo: string;
-      name: string;
-      email: string;
-      tipo: string;
-      role: string;
-    }>
-  >([]);
-  const [usersLoading, setUsersLoading] = useState(false);
   const [selectedUserForAssign, setSelectedUserForAssign] =
     useState<string>("");
+  const [userSearchQuery, setUserSearchQuery] = useState<string>("");
   const [assigning, setAssigning] = useState(false);
-  const [userSearchQuery, setUserSearchQuery] = useState("");
-  const [calendarStatus, setCalendarStatus] = useState<{
-    connected: boolean;
-    google_email?: string;
-    loading: boolean;
-  }>({ connected: false, loading: true });
-  const [syncingCalendar, setSyncingCalendar] = useState(false);
+
   const [availabilityOpen, setAvailabilityOpen] = useState(false);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
-  const [availabilityDay, setAvailabilityDay] = useState<Date>(
-    () => new Date(),
+  const [availability, setAvailability] = useState<CalendarAvailability | null>(
+    null,
   );
-  const [availability, setAvailability] = useState<{
-    google_email: string;
-    busy: Array<{ start: string; end: string }>;
+  const [availabilityDay, setAvailabilityDay] = useState<Date>(new Date());
+
+  const [calendarStatus, setCalendarStatus] = useState<CalendarStatus>({
+    connected: false,
+    loading: true,
+  });
+  const [syncingCalendar, setSyncingCalendar] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    nombre: string;
   } | null>(null);
 
-  const mapLeadStatusToEtapa = (status?: string) => {
-    const s = (status || "new").toLowerCase();
-    if (s === "new") return "Nuevo";
-    if (s === "contacted") return "Contactado";
-    if (s === "qualified") return "Calificado";
-    if (s === "won") return "Ganado";
-    if (s === "lost") return "Perdido";
-    return "Nuevo";
-  };
+  const [q, setQ] = useState("");
+  const [view, setView] = useState<"lista" | "kanban">("lista");
+  const [etapaFiltro, setEtapaFiltro] = useState<string>("all");
+  const [canalFiltro, setCanalFiltro] = useState<string>("all");
+  const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
+  const [createdFrom, setCreatedFrom] = useState<string>("");
+  const [createdTo, setCreatedTo] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<string>("pipeline");
 
-  const mapEtapaToLeadStatus = (etapa?: string) => {
-    const e = String(etapa || "").toLowerCase();
-    if (e === "nuevo") return "new";
-    if (e === "contactado") return "contacted";
-    if (e === "calificado") return "qualified";
-    if (e === "ganado") return "won";
-    if (e === "perdido") return "lost";
-    return "new";
-  };
+  const showingMyLeads =
+    Boolean(userCodigo) && ownerFilterRef.current === userCodigo;
 
-  // Eliminado: ya no usamos submissions locales vía localStorage.
-
-  const reload = async (userCodigoFilter?: string) => {
-    // Cargar leads desde /v1/leads o /v1/leads/user/:user_codigo
+  const fetchUsers = useCallback(async (): Promise<UserSummary[]> => {
     try {
-      let items: Lead[] = [];
-
-      // Si hay un filtro de usuario (para admin filtrando por sales user)
-      // o si es un usuario sales viendo sus propios leads
-      const filterCodigo = userCodigoFilter || selectedSalesUserFilter;
-
-      if (filterCodigo) {
-        // Usar endpoint de leads por usuario
-        const response = await apiFetch<{ data: Lead[] }>(
-          `/leads/user/${filterCodigo}`,
-        );
-        items = response.data || [];
-        setShowingMyLeads(true);
-      } else {
-        // Cargar todos los leads
-        const response = await apiFetch<{ data: Lead[] }>("/leads");
-        items = response.data || [];
-        setShowingMyLeads(false);
-      }
-
-      const mapped: Prospect[] = items.map((l: Lead) => ({
-        id: l.codigo,
-        nombre: l.name,
-        email: l.email || undefined,
-        telefono: l.phone || undefined,
-        canal: l.source || undefined,
-        etapa: mapLeadStatusToEtapa(l.status),
-        ownerCodigo: l.owner_codigo ?? undefined,
-        creado: l.created_at || undefined,
-        actualizado: l.updated_at || undefined,
-        remote: true,
-        saleStatus: undefined,
-      }));
-      setRows(mapped);
-      return;
-    } catch (e) {
-      console.warn("Cargar leads falló, mostrando lista vacía", e);
-      setRows([]);
+      const raw = await apiFetch<any>("/users", { method: "GET" });
+      return mapUsersPayload(raw);
+    } catch (error) {
+      console.error("Error al cargar usuarios", error);
       toast({
-        title: "Error cargando leads",
-        description: "No se pudieron cargar los leads.",
+        title: "Error al cargar usuarios",
+        description: "No se pudieron cargar los usuarios",
         variant: "destructive",
       });
-      return;
+      return [];
     }
-  };
+  }, [toast]);
 
-  // Cargar usuarios de tipo sales (para el filtro de admin)
-  const loadSalesUsers = async () => {
+  const loadSalesUsers = useCallback(async () => {
     setSalesUsersLoading(true);
     try {
-      const response = await apiFetch<{ data: any[] }>("/users?pageSize=1000");
-      const usersData = response?.data || [];
-      // Filtrar solo usuarios con role "sales"
-      const salesOnly = usersData.filter((u: any) => u.role === "sales");
-      setSalesUsers(salesOnly);
-    } catch (e: any) {
-      setSalesUsers([]);
-      console.warn("No se pudieron cargar usuarios de ventas", e);
+      const users = await fetchUsers();
+      const filtered = users.filter((user) =>
+        ["sales", "equipo", "admin"].includes(String(user.role ?? "")),
+      );
+      setSalesUsers(filtered);
     } finally {
       setSalesUsersLoading(false);
     }
-  };
+  }, [fetchUsers]);
 
-  const loadOrigins = async () => {
-    try {
-      const items = await listLeadOrigins();
-      setLeadOrigins(items || []);
-    } catch (e) {
-      console.warn("No se pudieron cargar orígenes", e);
-    }
-  };
-
-  const loadAllUsers = async () => {
+  const loadAllUsers = useCallback(async () => {
     setUsersLoading(true);
     try {
-      const response = await apiFetch<{ data: any[] }>("/users?pageSize=1000");
-      const usersData = response?.data || [];
-      setAllUsers(Array.isArray(usersData) ? usersData : []);
-    } catch (e: any) {
-      setAllUsers([]);
-      toast({
-        title: "Error",
-        description: e?.message || "No se pudieron cargar los usuarios",
-        variant: "destructive",
-      });
+      const users = await fetchUsers();
+      setAllUsers(users);
     } finally {
       setUsersLoading(false);
     }
-  };
+  }, [fetchUsers]);
 
-  const handleAssignLead = async () => {
-    if (!leadToAssign || !selectedUserForAssign) return;
+  const loadOrigins = useCallback(async () => {
+    try {
+      const origins = await listLeadOrigins();
+      setLeadOrigins(origins);
+    } catch (error) {
+      console.error("Error al cargar campañas", error);
+      toast({
+        title: "No se pudieron cargar campañas",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
 
+  const reload = useCallback(
+    async (owner?: string) => {
+      const ownerCode = owner ?? ownerFilterRef.current ?? "";
+      ownerFilterRef.current = ownerCode || "";
+      setLoadingLeads(true);
+      try {
+        const response = await listLeads({
+          owner: ownerCode ? String(ownerCode) : undefined,
+          pageSize: 500,
+        });
+        const items = response.items ?? [];
+        setRows(items.map(mapLeadToProspect));
+      } catch (error) {
+        console.error("Error al cargar leads", error);
+        toast({
+          title: "No se pudieron cargar leads",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingLeads(false);
+      }
+    },
+    [toast],
+  );
+
+  const handleAssignLead = useCallback(async () => {
+    if (!leadToAssign?.codigo || !selectedUserForAssign) return;
     setAssigning(true);
     try {
-      await apiFetch(`/leads/${leadToAssign.codigo}/assign`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_codigo: selectedUserForAssign }),
-      });
+      await apiFetch(
+        `/leads/${encodeURIComponent(leadToAssign.codigo)}/assign`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ owner_codigo: selectedUserForAssign }),
+        },
+      );
       toast({
         title: "Lead asignado",
         description: `${leadToAssign.nombre} asignado correctamente`,
@@ -287,32 +422,27 @@ function CrmContent() {
       setLeadToAssign(null);
       setSelectedUserForAssign("");
       setUserSearchQuery("");
-      reload();
+      reload(ownerFilterRef.current || undefined);
     } catch (error: any) {
-      let errorMessage = error?.message || "No se pudo asignar el lead";
-      if (errorMessage.includes("User is not a sales user")) {
-        errorMessage = "El usuario seleccionado no es un usuario de ventas";
-      }
       toast({
         title: "Error al asignar",
-        description: errorMessage,
+        description:
+          error?.message ?? "No se pudo asignar el lead. Intenta de nuevo",
         variant: "destructive",
       });
     } finally {
       setAssigning(false);
     }
-  };
+  }, [leadToAssign, reload, selectedUserForAssign, toast]);
 
   useEffect(() => {
     reload();
     loadOrigins();
-    // Si el usuario es admin, cargar usuarios de ventas para el filtro
     if (isAdmin) {
       loadSalesUsers();
     }
-  }, [isAdmin]);
+  }, [isAdmin, loadOrigins, loadSalesUsers, reload]);
 
-  // Cargar estado de sincronización de Google Calendar
   useEffect(() => {
     const fetchCalendarStatus = async () => {
       try {
@@ -326,40 +456,32 @@ function CrmContent() {
           loading: false,
         });
       } catch (error) {
-        console.error("Error al obtener estado del calendario:", error);
+        console.error("Estado de calendario", error);
         setCalendarStatus({ connected: false, loading: false });
       }
     };
 
     fetchCalendarStatus();
-    // Recargar cada 2 minutos
     const interval = setInterval(fetchCalendarStatus, 120000);
     return () => clearInterval(interval);
   }, []);
 
-  // Función para sincronizar con Google Calendar
   const handleSyncCalendar = async () => {
     try {
       setSyncingCalendar(true);
       const response = await apiFetch<{ url: string }>("/calendar/auth");
-
       if (response.url) {
-        // Redirigir a la URL de autorización de Google
         window.location.href = response.url;
       } else {
         toast({
-          title: "Error",
-          description: "No se recibió URL de autorización",
+          title: "No se pudo iniciar la sincronización",
           variant: "destructive",
         });
       }
     } catch (error: any) {
-      console.error("Error al iniciar sincronización:", error);
       toast({
         title: "Error al sincronizar",
-        description:
-          error?.message ||
-          "No se pudo iniciar la sincronización con Google Calendar",
+        description: error?.message ?? "Intenta nuevamente",
         variant: "destructive",
       });
     } finally {
@@ -367,7 +489,7 @@ function CrmContent() {
     }
   };
 
-  const loadAvailability = async () => {
+  const loadAvailability = useCallback(async () => {
     setAvailabilityLoading(true);
     try {
       const response = await apiFetch<{
@@ -382,99 +504,72 @@ function CrmContent() {
     } catch (error: any) {
       toast({
         title: "Error",
-        description:
-          error?.message ||
-          "No se pudo cargar la disponibilidad del calendario",
+        description: error?.message ?? "No se pudo cargar la disponibilidad",
         variant: "destructive",
       });
     } finally {
       setAvailabilityLoading(false);
     }
-  };
+  }, [toast]);
 
   const handleViewAvailability = () => {
     setAvailabilityDay(new Date());
     setAvailabilityOpen(true);
-    loadAvailability();
+    void loadAvailability();
   };
 
-  const toDateKeyLocal = (d: Date) => {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}`;
-  };
-
-  const getDayRange = (d: Date) => {
+  const getDayRange = useCallback((day: Date) => {
     const start = new Date(
-      d.getFullYear(),
-      d.getMonth(),
-      d.getDate(),
+      day.getFullYear(),
+      day.getMonth(),
+      day.getDate(),
       0,
       0,
       0,
       0,
     );
     const end = new Date(
-      d.getFullYear(),
-      d.getMonth(),
-      d.getDate(),
+      day.getFullYear(),
+      day.getMonth(),
+      day.getDate(),
       23,
       59,
       59,
       999,
     );
     return { start, end };
-  };
+  }, []);
 
-  const getBusyDates = () => {
-    if (!availability) return new Set<string>();
-    const busyDates = new Set<string>();
-    availability.busy.forEach((slot) => {
-      const start = new Date(slot.start);
-      const end = new Date(slot.end);
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
-
-      const current = new Date(
-        start.getFullYear(),
-        start.getMonth(),
-        start.getDate(),
-      );
-      const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
-
-      while (current <= endDay) {
-        busyDates.add(toDateKeyLocal(current));
-        current.setDate(current.getDate() + 1);
-      }
-    });
-    return busyDates;
-  };
-
-  const renderCalendar = () => {
+  const renderCalendar = useCallback(() => {
     if (!availability) return null;
 
     const now = new Date();
     const selectedDay = availabilityDay || now;
     const isToday = selectedDay.toDateString() === now.toDateString();
 
-    // Navegación de días
     const goToPrevDay = () => {
       const prev = new Date(selectedDay);
       prev.setDate(prev.getDate() - 1);
       setAvailabilityDay(prev);
     };
+
     const goToNextDay = () => {
       const next = new Date(selectedDay);
       next.setDate(next.getDate() + 1);
       setAvailabilityDay(next);
     };
+
     const goToToday = () => {
       setAvailabilityDay(new Date());
     };
 
     const { start: dayStart, end: dayEnd } = getDayRange(selectedDay);
+
     const busyForDay = availability.busy
-      .map((slot) => ({ start: new Date(slot.start), end: new Date(slot.end) }))
+      .map((slot) => ({
+        start: new Date(slot.start),
+        end: new Date(slot.end),
+      }))
       .filter(
         (slot) =>
           !Number.isNaN(slot.start.getTime()) &&
@@ -484,31 +579,21 @@ function CrmContent() {
       )
       .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-    // Generar franjas horarias de 6 AM a 10 PM (16 horas)
-    const hours = [];
-    for (let h = 6; h <= 22; h++) {
-      hours.push(h);
-    }
-
-    // Verificar si una hora está ocupada
     const isHourBusy = (hour: number) => {
       const hourStart = new Date(selectedDay);
       hourStart.setHours(hour, 0, 0, 0);
       const hourEnd = new Date(selectedDay);
       hourEnd.setHours(hour, 59, 59, 999);
-
       return busyForDay.some(
         (slot) => slot.start < hourEnd && slot.end > hourStart,
       );
     };
 
-    // Obtener eventos ocupados para una hora específica
     const getBusyEventsForHour = (hour: number) => {
       const hourStart = new Date(selectedDay);
       hourStart.setHours(hour, 0, 0, 0);
       const hourEnd = new Date(selectedDay);
       hourEnd.setHours(hour + 1, 0, 0, 0);
-
       return busyForDay.filter(
         (slot) => slot.start < hourEnd && slot.end > hourStart,
       );
@@ -516,7 +601,6 @@ function CrmContent() {
 
     return (
       <div className="flex flex-col h-full">
-        {/* Header con navegación de días */}
         <div className="flex items-center justify-between mb-4 pb-3 border-b">
           <div className="flex items-center gap-2">
             <Button
@@ -527,6 +611,13 @@ function CrmContent() {
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
+            <div className="text-sm font-medium text-slate-700">
+              {selectedDay.toLocaleDateString("es-ES", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </div>
             <Button
               variant="outline"
               size="icon"
@@ -535,97 +626,85 @@ function CrmContent() {
             >
               <ChevronRight className="h-4 w-4" />
             </Button>
-            {!isToday && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={goToToday}
-                className="text-xs"
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={goToToday}>
+              Hoy
+            </Button>
+            <Badge variant={isToday ? "default" : "outline"}>
+              {isToday ? "Hoy" : "Otro día"}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
+          <div>
+            Disponibilidad de:{" "}
+            <span className="font-medium text-slate-700">
+              {availability.google_email || "Google Calendar"}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded bg-blue-500" /> Ocupado
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-3 w-3 rounded border border-slate-300 bg-white" />
+              Libre
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto border rounded-lg">
+          {HOURS.map((hour) => {
+            const events = getBusyEventsForHour(hour);
+            const busy = isHourBusy(hour);
+            return (
+              <div
+                key={hour}
+                className="flex border-b last:border-b-0 min-h-[48px]"
               >
-                Hoy
-              </Button>
-            )}
-          </div>
-          <div className="text-center">
-            <h3 className="text-lg font-semibold">
-              {new Intl.DateTimeFormat("es-ES", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              }).format(selectedDay)}
-            </h3>
-            {isToday && (
-              <span className="text-xs text-blue-600 font-medium">Hoy</span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1">
-              <div className="h-3 w-3 rounded bg-blue-500" />
-              <span>Ocupado</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="h-3 w-3 rounded border border-slate-300 bg-white" />
-              <span>Libre</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Vista de día con horas */}
-        <div className="flex-1 overflow-y-auto max-h-[400px] border rounded-lg">
-          <div className="relative">
-            {hours.map((hour) => {
-              const busy = isHourBusy(hour);
-              const busyEvents = getBusyEventsForHour(hour);
-              const hourLabel = hour.toString().padStart(2, "0") + ":00";
-
-              return (
-                <div
-                  key={hour}
-                  className="flex border-b last:border-b-0 min-h-[48px]"
-                >
-                  {/* Columna de hora */}
-                  <div className="w-16 flex-shrink-0 px-2 py-1 text-xs text-slate-500 border-r bg-slate-50 flex items-start justify-end">
-                    {hourLabel}
-                  </div>
-                  {/* Contenido de la hora */}
-                  <div
-                    className={`flex-1 relative ${
-                      busy ? "bg-blue-50" : "bg-white hover:bg-slate-50"
-                    }`}
-                  >
-                    {busyEvents.map((event, idx) => {
-                      const startTime = event.start.toLocaleTimeString(
-                        "es-ES",
-                        { hour: "2-digit", minute: "2-digit" },
-                      );
-                      const endTime = event.end.toLocaleTimeString("es-ES", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      });
-                      return (
-                        <div
-                          key={idx}
-                          className="absolute inset-x-1 top-1 bg-blue-500 text-white text-xs px-2 py-1 rounded shadow-sm"
-                          style={{
-                            minHeight: "38px",
-                          }}
-                        >
-                          <div className="font-medium">Ocupado</div>
-                          <div className="opacity-80">
-                            {startTime} - {endTime}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="w-16 flex-shrink-0 px-2 py-1 text-xs text-slate-500 border-r bg-slate-50 flex items-start justify-end">
+                  {`${hour.toString().padStart(2, "0")}:00`}
                 </div>
-              );
-            })}
-          </div>
+                <div className="relative flex-1">
+                  <div
+                    className={`h-12 border-l-2 ${
+                      busy
+                        ? "border-blue-400 bg-blue-50/60"
+                        : "border-transparent"
+                    }`}
+                  />
+                  {events.map((slot, idx) => {
+                    const startMinutes =
+                      slot.start.getHours() * 60 + slot.start.getMinutes();
+                    const endMinutes =
+                      slot.end.getHours() * 60 + slot.end.getMinutes();
+                    const hourStart = hour * 60;
+                    const hourEnd = (hour + 1) * 60;
+                    const effectiveStart = Math.max(startMinutes, hourStart);
+                    const effectiveEnd = Math.min(endMinutes, hourEnd);
+                    const top = ((effectiveStart - hourStart) / 60) * 100;
+                    const height = Math.max(
+                      6,
+                      ((effectiveEnd - effectiveStart) / 60) * 100,
+                    );
+                    return (
+                      <div
+                        key={`${slot.start.toISOString()}-${idx}`}
+                        className="absolute left-0 right-2 bg-blue-500/80 text-white text-[10px] rounded-md px-2 py-1 shadow"
+                        style={{ top: `${top}%`, height: `${height}%` }}
+                      >
+                        Ocupado
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
-        {/* Resumen del día */}
         <div className="mt-4 pt-3 border-t">
           <div className="flex items-center justify-between text-sm">
             <span className="text-slate-600">
@@ -635,17 +714,9 @@ function CrmContent() {
             {busyForDay.length > 0 && (
               <div className="text-xs text-slate-500">
                 {busyForDay.map((slot, idx) => (
-                  <span key={idx}>
-                    {idx > 0 && ", "}
-                    {slot.start.toLocaleTimeString("es-ES", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    -
-                    {slot.end.toLocaleTimeString("es-ES", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  <span key={`${slot.start.toISOString()}-${idx}`}>
+                    {idx > 0 ? ", " : ""}
+                    {formatHourLabel(slot.start)} - {formatHourLabel(slot.end)}
                   </span>
                 ))}
               </div>
@@ -654,92 +725,93 @@ function CrmContent() {
         </div>
       </div>
     );
-  };
-
-  const [q, setQ] = useState("");
-  const [view, setView] = useState<"lista" | "kanban">("lista");
-  const [etapaFiltro, setEtapaFiltro] = useState<string>("all");
-  const [canalFiltro, setCanalFiltro] = useState<string>("all");
-  const [selectedCampaignForMetrics, setSelectedCampaignForMetrics] =
-    useState<string>("all");
-  // Owner eliminado de la tabla; mantenemos estado por compatibilidad UI pero podría retirarse luego.
-  const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
-  const [createdFrom, setCreatedFrom] = useState<string>("");
-  const [createdTo, setCreatedTo] = useState<string>("");
-  const [openCreate, setOpenCreate] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{
-    id: string;
-    nombre: string;
-  } | null>(null);
-  // Drawer eliminado en favor de ruta dedicada
-  const [drawerId, setDrawerId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("pipeline");
-
-  const etapas: Prospect["etapa"][] = [
-    "Nuevo",
-    "Contactado",
-    "Calificado",
-    "Ganado",
-    "Perdido",
-  ];
+  }, [availability, availabilityDay, getDayRange]);
 
   const filtrados = useMemo(() => {
-    return rows.filter((p) => {
-      const hayQ = q.trim()
-        ? [p.nombre, p.email, p.telefono]
+    return rows.filter((prospect) => {
+      const matchesSearch = q.trim()
+        ? [prospect.nombre, prospect.email, prospect.telefono]
             .filter(Boolean)
-            .some((x) => String(x).toLowerCase().includes(q.toLowerCase()))
+            .some((value) =>
+              String(value).toLowerCase().includes(q.trim().toLowerCase()),
+            )
         : true;
-      const byEtapa = etapaFiltro === "all" ? true : p.etapa === etapaFiltro;
-      const byCanal = canalFiltro === "all" ? true : p.canal === canalFiltro;
-      const byOwner =
-        ownerFiltro === "all" ? true : (p.ownerCodigo ?? "") === ownerFiltro;
+      const matchesStage =
+        etapaFiltro === "all" || prospect.etapa === etapaFiltro;
+      const matchesChannel =
+        canalFiltro === "all" || prospect.canal === canalFiltro;
+      const matchesOwner =
+        ownerFiltro === "all" || (prospect.ownerCodigo ?? "") === ownerFiltro;
 
-      const createdAtStr = p.creado ? String(p.creado) : "";
-      const createdAt = createdAtStr ? new Date(createdAtStr) : null;
-      const fromDate = createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
-      const toDate = createdTo ? new Date(`${createdTo}T23:59:59`) : null;
-      const byCreated =
-        !fromDate && !toDate
+      const createdAt = prospect.creado ? new Date(prospect.creado) : null;
+      const from = createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
+      const to = createdTo ? new Date(`${createdTo}T23:59:59`) : null;
+      const matchesDate =
+        !from && !to
           ? true
           : createdAt instanceof Date && !Number.isNaN(createdAt.getTime())
-            ? (!fromDate || createdAt >= fromDate) &&
-              (!toDate || createdAt <= toDate)
+            ? (!from || createdAt >= from) && (!to || createdAt <= to)
             : false;
 
-      return hayQ && byEtapa && byCanal && byOwner && byCreated;
+      return (
+        matchesSearch &&
+        matchesStage &&
+        matchesChannel &&
+        matchesOwner &&
+        matchesDate
+      );
     });
-  }, [q, etapaFiltro, canalFiltro, ownerFiltro, createdFrom, createdTo, rows]);
+  }, [rows, q, etapaFiltro, canalFiltro, ownerFiltro, createdFrom, createdTo]);
 
-  // Métricas desde rows (metadata) en vez de mock
   const gmFromRows = useMemo<CrmGlobalMetrics>(() => {
-    const byStage = {
+    const byStage: CrmGlobalMetrics["byStage"] = {
       nuevo: 0,
       contactado: 0,
       calificado: 0,
       propuesta: 0,
       ganado: 0,
       perdido: 0,
-    } as CrmGlobalMetrics["byStage"];
-    for (const r of rows) {
-      const etapa = r.etapa;
-      if (etapa === "Nuevo") byStage.nuevo++;
-      else if (etapa === "Contactado") byStage.contactado++;
-      else if (etapa === "Calificado") byStage.calificado++;
-      else if (etapa === "Ganado") byStage.ganado++;
-      else if (etapa === "Perdido") byStage.perdido++;
-    }
-    const totalProspects = rows.length;
+    };
+    rows.forEach((row) => {
+      switch (row.etapa) {
+        case "Contactado":
+          byStage.contactado += 1;
+          break;
+        case "Calificado":
+          byStage.calificado += 1;
+          break;
+        case "Ganado":
+          byStage.ganado += 1;
+          break;
+        case "Perdido":
+          byStage.perdido += 1;
+          break;
+        default:
+          byStage.nuevo += 1;
+      }
+    });
+    const total = rows.length || 1;
     const won = byStage.ganado;
-    const lost = byStage.perdido;
     const contacted =
-      byStage.contactado + byStage.calificado + byStage.propuesta + won + lost;
-    const conversionRate = totalProspects ? won / totalProspects : 0;
-    return { totalProspects, byStage, won, lost, contacted, conversionRate };
+      byStage.contactado +
+      byStage.calificado +
+      byStage.propuesta +
+      byStage.ganado +
+      byStage.perdido;
+    const lost = byStage.perdido;
+    const conversionRate = total > 0 ? won / total : 0;
+    return {
+      totalProspects: rows.length,
+      byStage,
+      won,
+      lost,
+      contacted,
+      conversionRate,
+    };
   }, [rows]);
 
   const sellerMetrics = useMemo<SellerMetricsResult>(() => {
-    const map = new Map<
+    const store = new Map<
       string,
       {
         ownerId: string | null;
@@ -751,169 +823,235 @@ function CrmContent() {
         lost: number;
       }
     >();
-    for (const r of rows) {
-      const key = "(Sin owner)";
-      if (!map.has(key))
-        map.set(key, {
-          ownerId: null,
-          ownerNombre: key,
+    rows.forEach((row) => {
+      const key = row.ownerCodigo || "(Sin owner)";
+      if (!store.has(key)) {
+        store.set(key, {
+          ownerId: row.ownerCodigo ?? null,
+          ownerNombre: row.ownerCodigo ?? "(Sin owner)",
           total: 0,
           contacted: 0,
           qualified: 0,
           won: 0,
           lost: 0,
         });
-      const row = map.get(key)!;
-      row.total++;
-      if (r.etapa !== "Nuevo") row.contacted++;
-      if (r.etapa === "Calificado") row.qualified++;
-      if (r.etapa === "Ganado") row.won++;
-      if (r.etapa === "Perdido") row.lost++;
-    }
-    return { rows: Array.from(map.values()), totalOwners: map.size };
+      }
+      const bucket = store.get(key)!;
+      bucket.total += 1;
+      if (row.etapa !== "Nuevo") bucket.contacted += 1;
+      if (row.etapa === "Calificado") bucket.qualified += 1;
+      if (row.etapa === "Ganado") bucket.won += 1;
+      if (row.etapa === "Perdido") bucket.lost += 1;
+    });
+    return {
+      rows: Array.from(store.values()),
+      totalOwners: store.size,
+    };
   }, [rows]);
 
-  const normalizeUrl = (s?: string) => {
-    const str = String(s || "").trim();
-    if (!str) return "";
-    return str.startsWith("http://") || str.startsWith("https://")
-      ? str
-      : `https://${str}`;
-  };
+  const canales = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((row) => {
+      if (row.canal) set.add(row.canal);
+    });
+    return Array.from(set.values());
+  }, [rows]);
 
-  const canales = useMemo(
-    () =>
-      Array.from(new Set(rows.map((r) => r.canal).filter(Boolean))) as string[],
-    [rows],
-  );
-
-  // Mapeo de ID de origen a nombre
-  const getOriginName = (originId?: string) => {
-    if (!originId) return "—";
-    const origin = leadOrigins.find((o) => o.codigo === originId);
-    return origin?.name || originId;
-  };
   const owners = useMemo(() => {
     const map = new Map<string, string>();
-    for (const u of salesUsers) {
-      const codigo = String(u.codigo || "").trim();
-      if (!codigo) continue;
-      const label = String(u.name || u.email || codigo).trim();
-      map.set(codigo, label);
-    }
-    for (const r of rows) {
-      const codigo = String(r.ownerCodigo || "").trim();
-      if (!codigo) continue;
+    salesUsers.forEach((user) => {
+      if (user.codigo)
+        map.set(user.codigo, user.name || user.email || user.codigo);
+    });
+    rows.forEach((row) => {
+      const codigo = row.ownerCodigo ?? "";
+      if (!codigo) return;
       if (!map.has(codigo)) map.set(codigo, codigo);
-    }
+    });
     return Array.from(map.entries()).map(([value, label]) => ({
       value,
       label,
     }));
   }, [salesUsers, rows]);
 
-  const saleStatusClass = (s?: string) => {
-    const v = String(s || "").toLowerCase();
-    if (["active", "contract_signed", "payment_confirmed"].includes(v))
-      return "bg-emerald-100 text-emerald-700";
-    if (
-      [
-        "contract_sent",
-        "payment_verification_pending",
-        "active_provisional",
-      ].includes(v)
-    )
-      return "bg-amber-100 text-amber-700";
-    return "bg-slate-100 text-slate-700";
-  };
+  const quickStats = useMemo<QuickStat[]>(() => {
+    return [
+      {
+        label: "Leads activos",
+        value: rows.length.toString(),
+        icon: Users,
+        accent: "from-indigo-500 to-sky-500",
+      },
+      {
+        label: "Conversión",
+        value: `${(gmFromRows.conversionRate * 100).toFixed(1)}%`,
+        icon: PieChart,
+        accent: "from-amber-500 to-orange-500",
+      },
+      {
+        label: "Contactados",
+        value: (
+          gmFromRows.byStage.contactado +
+          gmFromRows.byStage.calificado +
+          gmFromRows.byStage.propuesta +
+          gmFromRows.byStage.ganado +
+          gmFromRows.byStage.perdido
+        ).toString(),
+        icon: Activity,
+        accent: "from-cyan-500 to-teal-500",
+      },
+      {
+        label: "Ganados",
+        value: gmFromRows.byStage.ganado.toString(),
+        icon: CheckCircle2,
+        accent: "from-emerald-500 to-emerald-600",
+      },
+    ];
+  }, [rows.length, gmFromRows]);
+
+  const getOriginName = useCallback(
+    (originId?: string | null) => {
+      if (!originId) return "—";
+      const found = leadOrigins.find((origin) => origin.codigo === originId);
+      return found?.name || originId;
+    },
+    [leadOrigins],
+  );
+
+  const campaignSummary = useMemo(() => {
+    const filtered =
+      selectedCampaignForMetrics === "all"
+        ? rows
+        : rows.filter((row) => row.canal === selectedCampaignForMetrics);
+    const byStage = filtered.reduce(
+      (acc, row) => {
+        acc[row.etapa] = (acc[row.etapa] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
+    return {
+      total: filtered.length,
+      byStage,
+      label:
+        selectedCampaignForMetrics === "all"
+          ? "Todas las campañas"
+          : getOriginName(selectedCampaignForMetrics),
+    };
+  }, [rows, selectedCampaignForMetrics, getOriginName]);
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="border-b bg-white px-6 py-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-blue-600" />{" "}
-                CRM
-              </h1>
+    <div className="relative h-full flex flex-col overflow-hidden bg-slate-50">
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top_right,_rgba(129,140,248,0.18),transparent_55%)]"
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute -bottom-32 -left-32 -z-10 h-80 w-80 rounded-full bg-cyan-200/35 blur-3xl"
+        aria-hidden
+      />
 
-              {/* Filtro de leads por usuario sales (solo para admin) */}
-              {isAdmin && (
-                <div className="flex items-center gap-2">
+      <div className="relative border-b px-6 py-6 bg-gradient-to-r from-white via-indigo-50 to-sky-50 overflow-hidden">
+        <div
+          className="absolute -top-24 -right-10 h-56 w-56 rounded-full bg-indigo-300/30 blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="absolute -bottom-20 left-10 h-48 w-48 rounded-full bg-sky-200/30 blur-3xl"
+          aria-hidden
+        />
+
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1 space-y-4">
+            <div className="flex items-center gap-4">
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 text-indigo-500 shadow-inner ring-1 ring-white/60">
+                <Sparkles className="h-5 w-5" />
+              </span>
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+                  CRM Comercial
+                </h1>
+                <p className="text-sm text-slate-600">
+                  Gestiona tus leads, agenda y métricas en un tablero vibrante.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {isAdmin ? (
+                <div className="flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1.5 shadow-sm">
                   <select
-                    className="h-9 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="h-8 rounded-full border-0 bg-transparent px-1 text-sm text-slate-700 focus:outline-none"
                     value={selectedSalesUserFilter}
-                    onChange={(e) => {
-                      setSelectedSalesUserFilter(e.target.value);
-                      reload(e.target.value);
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setSelectedSalesUserFilter(value);
+                      ownerFilterRef.current = value;
+                      void reload(value || undefined);
                     }}
                     disabled={salesUsersLoading}
                   >
                     <option value="">
                       {salesUsersLoading ? "Cargando..." : "Todos los Leads"}
                     </option>
-                    {salesUsers.map((u) => (
-                      <option key={u.codigo} value={u.codigo}>
-                        {u.name} ({u.email})
+                    {salesUsers.map((user) => (
+                      <option key={user.codigo} value={user.codigo}>
+                        {user.name} ({user.email})
                       </option>
                     ))}
                   </select>
-                  {selectedSalesUserFilter && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                  {selectedSalesUserFilter ? (
+                    <button
+                      type="button"
                       onClick={() => {
                         setSelectedSalesUserFilter("");
-                        reload("");
+                        ownerFilterRef.current = "";
+                        void reload("");
                       }}
-                      className="gap-1 text-slate-500 hover:text-slate-700"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      aria-label="Limpiar filtro de usuarios"
                     >
-                      <X className="h-4 w-4" />
-                      Limpiar
-                    </Button>
-                  )}
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  ) : null}
                 </div>
-              )}
+              ) : null}
 
-              {/* Botón para ver mis leads (solo para usuarios sales/equipo) */}
-              {isSalesUser && authState?.user?.codigo && (
-                <div className="flex items-center gap-2">
-                  <Badge variant={showingMyLeads ? "default" : "secondary"}>
-                    {showingMyLeads ? "Mis Leads" : "Todos los Leads"}
-                  </Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
+              {isSalesUser && userCodigo ? (
+                <div className="flex items-center gap-2 rounded-full border border-indigo-200/70 bg-indigo-50/60 px-3 py-1.5 text-sm text-indigo-700 shadow-sm">
+                  <span className="font-medium">
+                    {showingMyLeads ? "Mis leads" : "Todos los leads"}
+                  </span>
+                  <button
+                    type="button"
                     onClick={() => {
                       if (showingMyLeads) {
-                        // Mostrar todos
-                        reload("");
+                        ownerFilterRef.current = "";
+                        void reload("");
                       } else {
-                        // Mostrar mis leads
-                        reload(authState?.user?.codigo);
+                        ownerFilterRef.current = userCodigo;
+                        void reload(userCodigo);
                       }
                     }}
-                    className="gap-2"
+                    className="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white shadow hover:bg-indigo-500"
                   >
                     {showingMyLeads ? (
                       <>
-                        <List className="h-4 w-4" />
-                        Ver Todos
+                        <List className="h-3.5 w-3.5" />
+                        Ver todos
                       </>
                     ) : (
                       <>
-                        <User className="h-4 w-4" />
-                        Ver Mis Leads
+                        <User className="h-3.5 w-3.5" />
+                        Ver mis leads
                       </>
                     )}
-                  </Button>
+                  </button>
                 </div>
-              )}
+              ) : null}
             </div>
 
-            {/* Indicador de sincronización de Google Calendar */}
-            <div className="flex flex-col gap-2 mt-2">
+            <div className="flex flex-col gap-2">
               {calendarStatus.loading ? (
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -922,12 +1060,11 @@ function CrmContent() {
               ) : calendarStatus.connected ? (
                 <>
                   <div
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium bg-green-50 text-green-700 border border-green-200"
+                    className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700"
                     title={`Sincronizado con ${
                       calendarStatus.google_email || "Google Calendar"
                     }`}
                   >
-                    {/* Icono de Google */}
                     <svg
                       className="h-4 w-4"
                       viewBox="0 0 24 24"
@@ -952,17 +1089,17 @@ function CrmContent() {
                     </svg>
                     <CheckCircle2 className="h-4 w-4" />
                     <span>Calendar sincronizado</span>
-                    {calendarStatus.google_email && (
+                    {calendarStatus.google_email ? (
                       <span className="text-xs opacity-75">
                         ({calendarStatus.google_email})
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <Button
                     onClick={handleViewAvailability}
                     variant="outline"
                     size="sm"
-                    className="gap-2 w-fit"
+                    className="w-fit gap-2"
                   >
                     <Calendar className="h-4 w-4" />
                     Ver mis horas disponibles
@@ -972,7 +1109,7 @@ function CrmContent() {
                 <button
                   onClick={handleSyncCalendar}
                   disabled={syncingCalendar}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-white text-slate-700 border-2 border-slate-300 hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 transition-all duration-200 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed group"
+                  className="group inline-flex items-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                   title="Sincronizar con Google Calendar"
                 >
                   {syncingCalendar ? (
@@ -982,7 +1119,6 @@ function CrmContent() {
                     </>
                   ) : (
                     <>
-                      {/* Icono de Google */}
                       <svg
                         className="h-5 w-5 transition-transform group-hover:scale-110"
                         viewBox="0 0 24 24"
@@ -1013,83 +1149,84 @@ function CrmContent() {
                 </button>
               )}
             </div>
-            {/* Selector de campaña para métricas */}
-            {leadOrigins.length > 0 && (
-              <div className="flex items-center gap-2 mt-3">
-                <label className="text-sm font-medium text-slate-700">
-                  Métricas de:
-                </label>
-                <select
-                  className="h-8 rounded-md border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+
+            {leadOrigins.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Métricas por campaña
+                </span>
+                <Select
                   value={selectedCampaignForMetrics}
-                  onChange={(e) =>
-                    setSelectedCampaignForMetrics(e.target.value)
-                  }
+                  onValueChange={setSelectedCampaignForMetrics}
                 >
-                  <option value="all">Todas las campañas</option>
-                  {leadOrigins.map((origin) => (
-                    <option key={origin.codigo} value={origin.codigo}>
-                      {origin.name || origin.codigo}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Métricas dinámicas basadas en la campaña seleccionada */}
-            <div className="flex gap-4 mt-3 flex-wrap items-center">
-              {(() => {
-                // Filtrar leads según la campaña seleccionada
-                const filteredRows =
-                  selectedCampaignForMetrics === "all"
-                    ? rows
-                    : rows.filter(
-                        (r) => r.canal === selectedCampaignForMetrics,
-                      );
-
-                // Calcular métricas
-                const statusMetrics = filteredRows.reduce(
-                  (acc, r) => {
-                    const status = r.etapa || "sin etapa";
-                    acc[status] = (acc[status] || 0) + 1;
-                    return acc;
-                  },
-                  {} as Record<string, number>,
-                );
-
-                const campaignName =
-                  selectedCampaignForMetrics === "all"
-                    ? "Total"
-                    : getOriginName(selectedCampaignForMetrics);
-
-                return (
-                  <>
-                    <span className="text-sm font-semibold text-slate-700">
-                      {campaignName}:
-                    </span>
-                    <span className="text-xs text-slate-600">
-                      Total:{" "}
-                      <span className="font-semibold text-blue-600">
-                        {filteredRows.length}
-                      </span>
-                    </span>
-                    {Object.entries(statusMetrics).map(([status, count]) => (
-                      <span key={status} className="text-xs text-slate-600">
-                        {status}: <span className="font-semibold">{count}</span>
-                      </span>
+                  <SelectTrigger className="w-60 rounded-full bg-white/80">
+                    <SelectValue placeholder="Seleccionar campaña" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {leadOrigins.map((origin) => (
+                      <SelectItem key={origin.codigo} value={origin.codigo}>
+                        {origin.name || origin.codigo}
+                      </SelectItem>
                     ))}
-                  </>
-                );
-              })()}
-            </div>
+                  </SelectContent>
+                </Select>
+                <div className="flex flex-wrap gap-2 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">
+                    {campaignSummary.label}:
+                  </span>
+                  <span>Total {campaignSummary.total}</span>
+                  {Object.entries(campaignSummary.byStage).map(
+                    ([key, value]) => (
+                      <span key={key}>
+                        {key}: <span className="font-semibold">{value}</span>
+                      </span>
+                    ),
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
-          <div className="flex items-center gap-2">
-            <CreateLeadDialog onCreated={reload} />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+            <CreateLeadDialog
+              onCreated={() => {
+                void reload(ownerFilterRef.current || undefined);
+              }}
+            />
           </div>
+        </div>
+
+        <div className="relative mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {quickStats.map((stat) => {
+            const Icon = stat.icon;
+            return (
+              <div
+                key={stat.label}
+                className="group relative overflow-hidden rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur transition hover:shadow-lg"
+              >
+                <div
+                  className={`absolute -top-10 -right-6 h-24 w-24 rounded-full bg-gradient-to-br ${stat.accent} opacity-40 blur-2xl group-hover:opacity-60`}
+                  aria-hidden
+                />
+                <div
+                  className={`inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.accent} text-white shadow`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {stat.label}
+                </div>
+                <div className="text-2xl font-semibold text-slate-900">
+                  {stat.value}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 p-6 overflow-y-auto bg-white">
+      <div className="flex-1 min-h-0 p-6 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/80">
         <CrmTabsLayout
           value={activeTab}
           onValueChange={setActiveTab}
@@ -1108,7 +1245,7 @@ function CrmContent() {
                 setCreatedFrom={setCreatedFrom}
                 createdTo={createdTo}
                 setCreatedTo={setCreatedTo}
-                etapas={etapas}
+                etapas={PIPELINE_STAGES}
                 canales={canales}
                 owners={owners}
                 onClear={() => {
@@ -1120,7 +1257,7 @@ function CrmContent() {
                   setCreatedTo("");
                 }}
               />
-              {/* Toggle de vista compacto con iconos, arriba a la derecha */}
+
               <div className="flex items-center justify-end -mt-2">
                 <div className="inline-flex overflow-hidden rounded-md border border-slate-200 bg-white">
                   <button
@@ -1149,9 +1286,10 @@ function CrmContent() {
                   </button>
                 </div>
               </div>
+
               {view === "lista" ? (
-                <div className="rounded-xl border bg-white">
-                  <div className="grid grid-cols-11 gap-2 px-4 py-2 text-xs font-medium text-slate-600 border-b bg-slate-50/50">
+                <div className="rounded-xl border border-slate-200/70 bg-white/90 shadow-sm">
+                  <div className="grid grid-cols-11 gap-2 px-4 py-2 text-xs font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
                     <div className="col-span-3">Prospecto</div>
                     <div className="col-span-2">Contacto</div>
                     <div className="col-span-2">Canal</div>
@@ -1159,122 +1297,163 @@ function CrmContent() {
                     <div className="col-span-2 text-right">Acción</div>
                   </div>
                   <div>
-                    {filtrados.length === 0 ? (
+                    {loadingLeads ? (
+                      <div className="flex items-center justify-center py-8 text-sm text-slate-500">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Cargando leads...
+                      </div>
+                    ) : filtrados.length === 0 ? (
                       <div className="p-8 text-center text-sm text-slate-500">
                         No hay leads para mostrar
                       </div>
                     ) : (
-                      filtrados.map((p) => (
+                      filtrados.map((prospect) => (
                         <div
-                          key={p.id}
-                          className="grid grid-cols-11 gap-2 px-4 py-3 border-b last:border-b-0 hover:bg-blue-50/30 transition-colors"
+                          key={prospect.id}
+                          className="grid grid-cols-11 gap-2 px-4 py-3 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
                         >
                           <div className="col-span-3 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="font-medium truncate text-slate-800"
-                                title={p.nombre}
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div
+                                className={`hidden sm:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${getAvatarGradient(prospect.nombre)} text-xs font-semibold text-white shadow`}
+                                aria-hidden
                               >
-                                {p.nombre}
-                              </span>
-                            </div>
-                            <div className="text-xs text-slate-500 truncate">
-                              {p.pais || ""} {p.ciudad ? `· ${p.ciudad}` : ""}
+                                {getInitials(prospect.nombre)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="font-semibold truncate text-slate-800"
+                                    title={prospect.nombre}
+                                  >
+                                    {prospect.nombre}
+                                  </span>
+                                  {prospect.remote ? (
+                                    <Badge
+                                      variant="secondary"
+                                      className="bg-indigo-50 text-indigo-600 border-indigo-200"
+                                    >
+                                      Sync
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <div className="text-xs text-slate-500 truncate">
+                                  {[prospect.pais, prospect.ciudad]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                          <div className="col-span-2 min-w-0 text-xs">
-                            <div className="truncate flex items-center gap-1">
-                              <Mail className="h-3.5 w-3.5 text-slate-400" />
-                              <span className="truncate">{p.email || "—"}</span>
-                            </div>
-                            <div className="truncate flex items-center gap-1 mt-0.5">
-                              <Phone className="h-3.5 w-3.5 text-slate-400" />
+
+                          <div className="col-span-2 min-w-0 text-xs space-y-1.5">
+                            <div className="flex items-center gap-1.5 truncate text-slate-600">
+                              <Mail className="h-3.5 w-3.5 text-indigo-400" />
                               <span className="truncate">
-                                {p.telefono || "—"}
+                                {prospect.email || "—"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5 truncate text-slate-600">
+                              <Phone className="h-3.5 w-3.5 text-emerald-400" />
+                              <span className="truncate">
+                                {prospect.telefono || "—"}
                               </span>
                             </div>
                           </div>
+
                           <div className="col-span-2 text-xs flex items-center">
-                            <span title={p.canal}>
-                              {getOriginName(p.canal)}
-                            </span>
+                            <Badge
+                              variant="outline"
+                              className="max-w-full truncate bg-sky-50 text-sky-700 border-sky-200"
+                              title={getOriginName(prospect.canal)}
+                            >
+                              {getOriginName(prospect.canal)}
+                            </Badge>
                           </div>
+
                           <div className="col-span-2">
-                            <select
-                              className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-slate-400 transition-colors"
-                              value={p.etapa}
-                              disabled={stageUpdatingId === p.id}
-                              onChange={async (e) => {
-                                const nextEtapa = e.target.value;
-                                const prevEtapa = p.etapa;
-                                setStageUpdatingId(p.id);
-                                // Optimista: reflejar cambio sin recargar
-                                setRows((prev) =>
-                                  prev.map((r) =>
-                                    r.id === p.id
-                                      ? { ...r, etapa: nextEtapa as any }
-                                      : r,
-                                  ),
-                                );
-                                try {
-                                  await updateLead(p.id, {
-                                    status: mapEtapaToLeadStatus(nextEtapa),
-                                  });
-                                  toast({
-                                    title: "Etapa actualizada",
-                                    description: nextEtapa,
-                                  });
-                                } catch (err) {
-                                  // rollback
+                            <div className="flex flex-col gap-1.5">
+                              <StageBadge stage={prospect.etapa} />
+                              <Select
+                                value={prospect.etapa}
+                                onValueChange={async (nextStage) => {
+                                  const originalStage = prospect.etapa;
+                                  setStageUpdatingId(prospect.id);
                                   setRows((prev) =>
-                                    prev.map((r) =>
-                                      r.id === p.id
-                                        ? { ...r, etapa: prevEtapa as any }
-                                        : r,
+                                    prev.map((row) =>
+                                      row.id === prospect.id
+                                        ? {
+                                            ...row,
+                                            etapa: nextStage as ProspectStage,
+                                          }
+                                        : row,
                                     ),
                                   );
-                                  toast({
-                                    title: "Error",
-                                    description:
-                                      "No se pudo actualizar la etapa",
-                                    variant: "destructive",
-                                  });
-                                } finally {
-                                  setStageUpdatingId(null);
-                                }
-                              }}
-                              title="Cambiar etapa"
-                            >
-                              {etapas.map((e) => (
-                                <option key={e} value={e}>
-                                  {e}
-                                </option>
-                              ))}
-                            </select>
+                                  try {
+                                    await updateLead(prospect.id, {
+                                      status: mapEtapaToLeadStatus(
+                                        nextStage as ProspectStage,
+                                      ),
+                                    });
+                                    toast({
+                                      title: "Etapa actualizada",
+                                      description: nextStage,
+                                    });
+                                  } catch {
+                                    setRows((prev) =>
+                                      prev.map((row) =>
+                                        row.id === prospect.id
+                                          ? { ...row, etapa: originalStage }
+                                          : row,
+                                      ),
+                                    );
+                                    toast({
+                                      title: "Error",
+                                      description:
+                                        "No se pudo actualizar la etapa",
+                                      variant: "destructive",
+                                    });
+                                  } finally {
+                                    setStageUpdatingId(null);
+                                  }
+                                }}
+                                disabled={stageUpdatingId === prospect.id}
+                              >
+                                <SelectTrigger className="h-8 w-full rounded-md border border-indigo-200 bg-white/80 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
+                                  <SelectValue placeholder="Etapa" />
+                                </SelectTrigger>
+                                <SelectContent align="end">
+                                  {PIPELINE_STAGES.map((stage) => (
+                                    <SelectItem key={stage} value={stage}>
+                                      {stage}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
+
                           <div className="col-span-2 flex items-center justify-end">
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
-                                aria-label={`Asignar lead ${p.nombre}`}
+                                aria-label={`Asignar lead ${prospect.nombre}`}
                                 title="Asignar a usuario"
                                 onClick={() => {
                                   setLeadToAssign({
-                                    codigo: p.id,
-                                    nombre: p.nombre,
+                                    codigo: prospect.id,
+                                    nombre: prospect.nombre,
                                   });
                                   setAssignModalOpen(true);
-                                  loadAllUsers();
+                                  void loadAllUsers();
                                 }}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-700"
                               >
                                 <UserPlus className="h-4 w-4" />
                               </button>
                               <Link
-                                href={`/admin/crm/booking/${encodeURIComponent(
-                                  p.id,
-                                )}`}
-                                aria-label={`Ver detalle de ${p.nombre}`}
+                                href={`/admin/crm/booking/${encodeURIComponent(prospect.id)}`}
+                                aria-label={`Ver detalle de ${prospect.nombre}`}
                                 title="Ver detalle"
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                               >
@@ -1282,12 +1461,12 @@ function CrmContent() {
                               </Link>
                               <button
                                 type="button"
-                                aria-label={`Eliminar lead ${p.nombre}`}
+                                aria-label={`Eliminar lead ${prospect.nombre}`}
                                 title="Eliminar lead"
                                 onClick={() =>
                                   setDeleteTarget({
-                                    id: p.id,
-                                    nombre: p.nombre,
+                                    id: prospect.id,
+                                    nombre: prospect.nombre,
                                   })
                                 }
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 hover:bg-red-50 hover:text-red-700"
@@ -1318,9 +1497,8 @@ function CrmContent() {
                       `/admin/crm/booking/${encodeURIComponent(p.id)}`,
                     )
                   }
-                  onMoved={() => reload()}
+                  onMoved={() => reload(ownerFilterRef.current || undefined)}
                   onStageChange={async (id, newStage) => {
-                    // Mapear la etapa del Kanban (pipeline) al status del lead
                     const statusMap: Record<string, string> = {
                       nuevo: "new",
                       contactado: "contacted",
@@ -1336,7 +1514,7 @@ function CrmContent() {
                         title: "Etapa actualizada",
                         description: `${row?.nombre || id} → ${newStage}`,
                       });
-                      reload();
+                      reload(ownerFilterRef.current || undefined);
                     } catch {
                       toast({
                         title: "Error",
@@ -1358,7 +1536,7 @@ function CrmContent() {
                   size="sm"
                   onClick={() => {
                     crmAutomations.runAutomationsDaily();
-                    reload();
+                    reload(ownerFilterRef.current || undefined);
                   }}
                 >
                   Ejecutar automatizaciones
@@ -1383,10 +1561,10 @@ function CrmContent() {
                           : p.etapa === "Ganado"
                             ? "ganado"
                             : "perdido",
-                  ownerId: null,
-                  ownerNombre: "(Sin owner)",
-                  pais: null,
-                  ciudad: null,
+                  ownerId: p.ownerCodigo,
+                  ownerNombre: p.ownerCodigo ?? "(Sin owner)",
+                  pais: p.pais,
+                  ciudad: p.ciudad,
                   tags: [],
                   score: null,
                   notasResumen: null,
@@ -1410,8 +1588,6 @@ function CrmContent() {
         />
       </div>
 
-      {/* Drawer deshabilitado */}
-
       <DeleteLeadConfirmDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
@@ -1419,10 +1595,9 @@ function CrmContent() {
         }}
         leadCodigo={deleteTarget?.id || ""}
         leadName={deleteTarget?.nombre || ""}
-        onDeleted={reload}
+        onDeleted={() => reload(ownerFilterRef.current || undefined)}
       />
 
-      {/* Modal de Disponibilidad del Calendario */}
       <Dialog open={availabilityOpen} onOpenChange={setAvailabilityOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1446,7 +1621,6 @@ function CrmContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Asignación de Lead */}
       <Dialog open={assignModalOpen} onOpenChange={setAssignModalOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[600px] flex flex-col">
           <DialogHeader>
@@ -1456,7 +1630,6 @@ function CrmContent() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
-            {/* Buscador */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
@@ -1467,7 +1640,6 @@ function CrmContent() {
               />
             </div>
 
-            {/* Lista de usuarios */}
             <div className="flex-1 overflow-y-auto border rounded-md">
               {usersLoading ? (
                 <div className="flex items-center justify-center py-12">
@@ -1487,14 +1659,18 @@ function CrmContent() {
                     .map((user) => (
                       <button
                         key={user.codigo}
-                        onClick={() => setSelectedUserForAssign(user.codigo)}
-                        className={`w-full p-4 text-left hover:bg-slate-50 transition-colors ${
+                        onClick={() =>
+                          setSelectedUserForAssign((prev) =>
+                            prev === user.codigo ? "" : user.codigo,
+                          )
+                        }
+                        className={`w-full text-left hover:bg-blue-50/70 transition-colors ${
                           selectedUserForAssign === user.codigo
-                            ? "bg-blue-50 border-l-4 border-blue-500"
+                            ? "bg-blue-50"
                             : ""
                         }`}
                       >
-                        <div className="flex items-start gap-3">
+                        <div className="p-3 flex items-start gap-3">
                           <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
                             <User className="h-5 w-5 text-slate-600" />
                           </div>
@@ -1568,7 +1744,7 @@ function CrmContent() {
 
 export default function CrmPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "sales"]}>
       <DashboardLayout>
         <CrmContent />
       </DashboardLayout>

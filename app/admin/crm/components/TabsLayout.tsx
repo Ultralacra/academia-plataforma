@@ -25,31 +25,31 @@ export function CrmTabsLayout({
       className="flex-1 flex flex-col min-h-0"
     >
       <div className="flex items-center justify-between">
-        <TabsList className="bg-white/70 backdrop-blur border rounded-lg">
+        <TabsList className="bg-gradient-to-r from-indigo-50 via-white to-sky-50 border border-slate-200/70 rounded-full p-1 shadow-sm">
           <TabsTrigger
             value="pipeline"
-            className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
+            className="rounded-full data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
           >
             Pipeline
           </TabsTrigger>
           {agenda ? (
             <TabsTrigger
               value="agenda"
-              className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
+              className="rounded-full data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
             >
               Agenda
             </TabsTrigger>
           ) : null}
           <TabsTrigger
             value="metricas"
-            className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
+            className="rounded-full data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
           >
             Métricas
           </TabsTrigger>
           {campanas ? (
             <TabsTrigger
               value="campanas"
-              className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
+              className="rounded-full data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-sm data-[state=active]:border-indigo-600"
             >
               Campañas
             </TabsTrigger>

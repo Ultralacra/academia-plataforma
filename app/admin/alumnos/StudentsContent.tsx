@@ -157,7 +157,7 @@ export default function StudentsContent() {
   );
   const [coachCodes, setCoachCodes] = useState<Set<string> | null>(null);
   const [coachCodesLoading, setCoachCodesLoading] = useState(false);
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
   const [serverPage, setServerPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
@@ -220,6 +220,9 @@ export default function StudentsContent() {
         });
         const items = res.items;
         setAll(items);
+        // Reutilizar la misma respuesta para construir filtros globales
+        // (evita una segunda llamada idéntica a /client/get/clients?page=1&pageSize=50)
+        setAllFull(items ?? []);
         setPage(1);
         setServerPage(1);
         setServerTotal(res.total ?? null);
@@ -232,6 +235,7 @@ export default function StudentsContent() {
       } catch (e) {
         console.error(e);
         setAll([]);
+        setAllFull([]);
         setHasMore(false);
         setServerTotal(null);
         setServerTotalPages(null);
@@ -351,25 +355,7 @@ export default function StudentsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cargar lista completa de alumnos (para construir filtros globales)
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        // Intentar traer hasta 50 alumnos para construir filtros (petición limitada)
-        const rows = await getAllStudents({ page: 1, pageSize: 50 });
-        if (!active) return;
-        setAllFull(rows ?? []);
-      } catch (e) {
-        if (!active) return;
-        console.error("Error cargando lista completa de alumnos:", e);
-        setAllFull([]);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+  // Nota: la carga de `allFull` se hace arriba reutilizando el fetch principal.
 
   // Cargar catálogo de etapas (para edición inline de fase)
   useEffect(() => {

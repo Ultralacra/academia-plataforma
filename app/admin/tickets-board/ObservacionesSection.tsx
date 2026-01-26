@@ -285,9 +285,30 @@ export default function ObservacionesSection({
     }
   };
 
-  const toggleEstado = async (obs: Observacion) => {
+  const applyRealizadaOptimistic = (id: number, realizada: boolean) => {
+    setObservaciones((prev) =>
+      prev.map((o) => {
+        if (o.id !== id) return o;
+        const payload: any = (o as any)?.payload ?? {};
+        return {
+          ...o,
+          payload: {
+            ...payload,
+            realizada,
+          },
+        } as any;
+      }),
+    );
+  };
+
+  const toggleEstado = async (obs: Observacion, nextRealizada?: boolean) => {
     try {
       const payload = obs.payload;
+
+      const resolvedNextRealizada =
+        typeof nextRealizada === "boolean"
+          ? nextRealizada
+          : !(payload.realizada ?? false);
 
       // Construir el payload completo asegurando que no perdamos ningún campo
       const updatePayload: any = {
@@ -295,7 +316,7 @@ export default function ObservacionesSection({
         recomendacion: payload.recomendacion,
         area: payload.area,
         estado: payload.estado, // Mantener estado por compatibilidad
-        realizada: !(payload.realizada ?? false), // Toggle realizada
+        realizada: resolvedNextRealizada,
         constancia: payload.constancia || "[]",
         constancia_texto: payload.constancia_texto || "",
         creado_por_id: payload.creado_por_id,
@@ -334,6 +355,17 @@ export default function ObservacionesSection({
         variant: "destructive",
       });
     }
+  };
+
+  const handleToggleRealizada = async (
+    obs: Observacion,
+    nextRealizada?: boolean,
+  ) => {
+    if (!canEdit) return;
+    const current = (obs.payload?.realizada ?? false) as boolean;
+    const next = typeof nextRealizada === "boolean" ? nextRealizada : !current;
+    applyRealizadaOptimistic(obs.id, next);
+    await toggleEstado(obs, next);
   };
 
   const formatDisplayDate = (isoDate: string) => {
@@ -402,7 +434,9 @@ export default function ObservacionesSection({
                     <Checkbox
                       id={`check-${obs.id}`}
                       checked={isRealizada}
-                      onCheckedChange={() => toggleEstado(obs)}
+                      onCheckedChange={(checked) =>
+                        handleToggleRealizada(obs, checked === true)
+                      }
                       className="mt-1"
                       disabled={!canEdit}
                     />
@@ -420,12 +454,14 @@ export default function ObservacionesSection({
                         )}
                       </div>
 
-                      <Label
-                        htmlFor={`check-${obs.id}`}
-                        className="text-xs text-slate-500 cursor-pointer hover:text-slate-700"
+                      <button
+                        type="button"
+                        onClick={() => handleToggleRealizada(obs)}
+                        className="text-left text-xs text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                        disabled={!canEdit}
                       >
                         {isRealizada ? "✓ Realizada" : "Marcar como realizada"}
-                      </Label>
+                      </button>
 
                       <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
                         <span className="flex items-center gap-1">

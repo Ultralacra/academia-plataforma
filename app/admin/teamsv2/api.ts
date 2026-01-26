@@ -1,6 +1,7 @@
 // app/admin/teamsv2/api.ts
 // Helpers para consultas relacionadas con el módulo teamsv2 (coaches)
-import { apiFetch } from "@/lib/api-config";
+import { apiFetch, buildUrl } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
 
 export type CoachItem = {
   id: number;
@@ -31,6 +32,53 @@ export type CoachStudent = {
 async function fetchJson<T>(pathOrUrl: string, init?: RequestInit): Promise<T> {
   // Delegamos en apiFetch que ya adjunta el token Bearer automáticamente
   return apiFetch<T>(pathOrUrl, init);
+}
+
+// ======================
+// Mutaciones de alumno (reutiliza endpoint de /client/update/client/:codigo)
+// Nota: el backend espera FormData para algunas keys (compatibilidad)
+// ======================
+
+export async function updateClientEtapa(clientCode: string, etapa: string): Promise<any> {
+  if (!clientCode) throw new Error("clientCode requerido");
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
+  const fd = new FormData();
+  fd.set("etapa", String(etapa ?? ""));
+  const token = typeof window !== "undefined" ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: "PUT",
+    body: fd,
+    cache: "no-store",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  return await res.json().catch(() => ({}));
+}
+
+// Enviar como key: ingreso (YYYY-MM-DD o ISO). Si viene vacío, se limpia.
+export async function updateClientIngreso(
+  clientCode: string,
+  ingreso: string | null,
+): Promise<any> {
+  if (!clientCode) throw new Error("clientCode requerido");
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
+  const fd = new FormData();
+  fd.set("ingreso", String(ingreso ?? ""));
+  const token = typeof window !== "undefined" ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: "PUT",
+    body: fd,
+    cache: "no-store",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  return await res.json().catch(() => ({}));
 }
 
 export async function getCoaches(opts?: { page?: number; pageSize?: number; search?: string }) {

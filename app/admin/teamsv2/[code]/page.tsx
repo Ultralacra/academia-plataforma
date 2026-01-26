@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRouter, usePathname } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -45,7 +45,6 @@ import {
   listAlumnoSessions,
   type SessionItem,
 } from "../api";
-import { useMemo } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import PersonalMetrics from "../PersonalMetrics";
@@ -2302,6 +2301,24 @@ function CoachStudentsInline({
   const [stateFilter, setStateFilter] = useState<string>("");
   const [stageFilter, setStageFilter] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
+  const [etapaOptions, setEtapaOptions] = useState<OpcionItem[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const list = await getOptions("etapa");
+        if (!active) return;
+        setEtapaOptions(Array.isArray(list) ? list : []);
+      } catch {
+        if (!active) return;
+        setEtapaOptions([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Visor y resumen de sesiones por alumno
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -2386,13 +2403,19 @@ function CoachStudentsInline({
   }, [items]);
 
   const stagesOptions = useMemo(() => {
+    if (etapaOptions.length) {
+      return etapaOptions
+        .map((o) => o.opcion_key)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b));
+    }
     const set = new Set<string>();
     for (const r of items) {
       const v = (r.stage ?? "").toString().trim();
       if (v) set.add(v);
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [items]);
+  }, [items, etapaOptions]);
 
   const filteredRows = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
@@ -2409,6 +2432,19 @@ function CoachStudentsInline({
       return okSearch && okState && okStage;
     });
   }, [items, search, stateFilter, stageFilter]);
+
+  const patchItemByCode = useCallback(
+    (code: string, patch: Record<string, any>) => {
+      const c = String(code ?? "").trim();
+      if (!c) return;
+      setItems((prev: any[]) =>
+        prev.map((r) =>
+          String(r?.code ?? "").trim() === c ? { ...r, ...patch } : r,
+        ),
+      );
+    },
+    [],
+  );
 
   return (
     <div className="space-y-2">
@@ -2437,11 +2473,16 @@ function CoachStudentsInline({
           onChange={(e) => setStageFilter(e.target.value)}
         >
           <option value="">Fase: Todas</option>
-          {stagesOptions.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
+          {(etapaOptions.length ? etapaOptions : stagesOptions).map((s: any) => {
+            const key = typeof s === "string" ? s : String(s.opcion_key ?? "");
+            const label = typeof s === "string" ? s : String(s.opcion_value ?? s.opcion_key ?? "");
+            if (!key) return null;
+            return (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            );
+          })}
         </select>
         {(search || stateFilter || stageFilter) && (
           <button
@@ -2472,6 +2513,8 @@ function CoachStudentsInline({
         <CoachStudentsTable
           rows={filteredRows}
           title="ALUMNOS"
+          stageOptions={etapaOptions.length ? etapaOptions : stagesOptions}
+          onPatchRow={(code, patch) => patchItemByCode(code, patch)}
           onOffer={(row: any) => {
             const code = String(row.code || "").trim();
             if (!code) return;
