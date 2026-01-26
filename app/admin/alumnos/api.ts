@@ -399,13 +399,15 @@ export async function getAllStudentsPaged(params?: {
   pageSize?: number;
   search?: string;
   estado?: string;
+  coach?: string;
 }): Promise<StudentsPagedResult> {
   const page = params?.page ?? 1;
   const pageSize = params?.pageSize ?? 1000;
   const search = String(params?.search ?? "").trim();
   const estado = String(params?.estado ?? "").trim();
+  const coach = String(params?.coach ?? "").trim();
 
-  const cacheKey = `students:${page}:${pageSize}:${encodeURIComponent(search)}:${encodeURIComponent(estado)}`;
+  const cacheKey = `students:${page}:${pageSize}:${encodeURIComponent(search)}:${encodeURIComponent(estado)}:${encodeURIComponent(coach)}`;
   const cached = cacheGet<StudentsPagedResult>(cacheKey, 30_000);
   if (cached) return cached;
 
@@ -414,6 +416,7 @@ export async function getAllStudentsPaged(params?: {
   qs.set("pageSize", String(pageSize));
   if (search) qs.set("search", search);
   if (estado) qs.set("estado", estado);
+  if (coach) qs.set("coach", coach);
 
   const path = `/client/get/clients?${qs.toString()}`;
   const json = await fetchJson<any>(path);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { StudentRow, CoachTeam } from "./api";
 import {
   getAllStudents,
@@ -156,6 +156,9 @@ export default function StudentsContent() {
   );
   // El backend soporta hasta 1000 por página (según uso en otros módulos)
   const SERVER_PAGE_SIZE = 1000;
+  // Nuevo comportamiento: al filtrar por coach, traer primero 100 y dar opción de traer TODO.
+  const COACH_FIRST_PAGE_SIZE = 100;
+  const COACH_ALL_PAGE_SIZE = 500;
   // Mantener paginado local de UI liviano
   const UI_PAGE_SIZE = 25;
   const [page, setPage] = useState(1);
@@ -164,9 +167,28 @@ export default function StudentsContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [serverTotal, setServerTotal] = useState<number | null>(null);
   const [serverTotalPages, setServerTotalPages] = useState<number | null>(null);
+  const [loadingCoachAll, setLoadingCoachAll] = useState(false);
+  const [coachAllProgress, setCoachAllProgress] = useState<number>(0);
   const [filterStage, setFilterStage] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<string | null>(null);
   const [openCoach, setOpenCoach] = useState(false);
+
+  // Cache local: dataset "todos" para volver sin refetch.
+  const allTodosRef = useRef<StudentRow[] | null>(null);
+  const todosMetaRef = useRef<{
+    serverPage: number;
+    serverTotal: number | null;
+    serverTotalPages: number | null;
+    hasMore: boolean;
+  } | null>(null);
+
+  const patchTodosByCode = (code: string, patch: (r: StudentRow) => StudentRow) => {
+    const cached = allTodosRef.current;
+    if (!cached || !code) return;
+    allTodosRef.current = cached.map((r) =>
+      String(r.code ?? "") === code ? patch(r) : r,
+    );
+  };
 
   // Edición de fecha de ingreso
   const [openIngreso, setOpenIngreso] = useState(false);
@@ -217,6 +239,7 @@ export default function StudentsContent() {
         });
         const items = res.items;
         setAll(items);
+        allTodosRef.current = items;
         setPage(1);
         setServerPage(1);
         setServerTotal(res.total ?? null);
@@ -226,6 +249,16 @@ export default function StudentsContent() {
         } else {
           setHasMore((items?.length ?? 0) >= SERVER_PAGE_SIZE);
         }
+
+        todosMetaRef.current = {
+          serverPage: 1,
+          serverTotal: res.total ?? null,
+          serverTotalPages: res.totalPages ?? null,
+          hasMore:
+            res.totalPages != null
+              ? (res.page ?? 1) < res.totalPages
+              : (items?.length ?? 0) >= SERVER_PAGE_SIZE,
+        };
       } catch (e) {
         console.error(e);
         setAll([]);
@@ -238,6 +271,83 @@ export default function StudentsContent() {
     }, 350);
     return () => clearTimeout(t);
   }, []);
+
+  // Mantener sincronizado el cache de "todos" cuando estamos en modo todos.
+  useEffect(() => {
+    if (coach !== "todos") return;
+    allTodosRef.current = all;
+    todosMetaRef.current = {
+      serverPage,
+      serverTotal,
+      serverTotalPages,
+      hasMore,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [all, coach]);
+
+  // Cuando se filtra por coach, ahora se hace server-side: ?coach=CODE.
+  useEffect(() => {
+    let active = true;
+    const coachId = selectedCoachId;
+
+    // Volver a "todos" sin refetch.
+    if (coach === "todos") {
+      const cached = allTodosRef.current;
+      const meta = todosMetaRef.current;
+      if (cached) {
+        setAll(cached);
+        setPage(1);
+        setServerPage(meta?.serverPage ?? 1);
+        setServerTotal(meta?.serverTotal ?? null);
+        setServerTotalPages(meta?.serverTotalPages ?? null);
+        setHasMore(meta?.hasMore ?? false);
+      }
+      return () => {
+        active = false;
+      };
+    }
+
+    // Si el coach viene sin id/código, no podemos usar el endpoint nuevo.
+    if (!coachId) return () => {
+      active = false;
+    };
+
+    (async () => {
+      setLoading(true);
+      setLoadingCoachAll(false);
+      setCoachAllProgress(0);
+      try {
+        const res = await getAllStudentsPaged({
+          page: 1,
+          pageSize: COACH_FIRST_PAGE_SIZE,
+          coach: coachId,
+        });
+        if (!active) return;
+        setAll(res.items ?? []);
+        setPage(1);
+        setServerPage(1);
+        setServerTotal(res.total ?? null);
+        setServerTotalPages(res.totalPages ?? null);
+        // Para coach, la UX es botón "Traer todo"; no usar "Cargar más".
+        setHasMore(false);
+      } catch (e) {
+        console.error(e);
+        if (!active) return;
+        setAll([]);
+        setServerTotal(null);
+        setServerTotalPages(null);
+        setHasMore(false);
+      } finally {
+        if (!active) return;
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coach, selectedCoachId]);
 
   // Progreso simulado durante carga (no hay progress real en fetch)
   useEffect(() => {
@@ -254,6 +364,8 @@ export default function StudentsContent() {
   }, [loading]);
 
   const loadMore = async () => {
+    // En modo coach filtrado, usamos el botón "Traer todo".
+    if (coach !== "todos") return;
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
@@ -283,6 +395,99 @@ export default function StudentsContent() {
     }
   };
 
+  const loadAllForSelectedCoach = async () => {
+    if (coach === "todos") return;
+    const coachId = selectedCoachId;
+    if (!coachId) return;
+    if (loadingCoachAll) return;
+
+    setLoadingCoachAll(true);
+    setCoachAllProgress(0);
+    try {
+      const first = await getAllStudentsPaged({
+        page: 1,
+        pageSize: COACH_ALL_PAGE_SIZE,
+        coach: coachId,
+      });
+
+      const total = first.total ?? null;
+      const totalPages = first.totalPages;
+      let acc: StudentRow[] = [...(first.items ?? [])];
+      setAll(acc);
+      setServerTotal(total);
+      setServerTotalPages(totalPages ?? null);
+      setServerPage(1);
+
+      if (total && total > 0) {
+        setCoachAllProgress(Math.min(95, Math.round((acc.length / total) * 100)));
+      } else {
+        setCoachAllProgress(10);
+      }
+
+      if (totalPages != null) {
+        for (let p = 2; p <= totalPages; p++) {
+          const res = await getAllStudentsPaged({
+            page: p,
+            pageSize: COACH_ALL_PAGE_SIZE,
+            coach: coachId,
+          });
+          const items = res.items ?? [];
+          acc = [...acc, ...items];
+          setAll(acc);
+          setServerPage(p);
+          if (res.total != null) setServerTotal(res.total);
+          if (res.totalPages != null) setServerTotalPages(res.totalPages);
+
+          const t = res.total ?? total;
+          if (t && t > 0) {
+            setCoachAllProgress(
+              Math.min(99, Math.round((acc.length / t) * 100)),
+            );
+          }
+        }
+      } else {
+        // Fallback: si no hay totalPages, seguir mientras venga lleno.
+        let p = 2;
+        while (true) {
+          const res = await getAllStudentsPaged({
+            page: p,
+            pageSize: COACH_ALL_PAGE_SIZE,
+            coach: coachId,
+          });
+          const items = res.items ?? [];
+          if (items.length === 0) break;
+          acc = [...acc, ...items];
+          setAll(acc);
+          setServerPage(p);
+          if (res.total != null) setServerTotal(res.total);
+          if (res.totalPages != null) setServerTotalPages(res.totalPages);
+
+          const t = res.total ?? total;
+          if (t && t > 0) {
+            setCoachAllProgress(
+              Math.min(99, Math.round((acc.length / t) * 100)),
+            );
+          }
+
+          if (items.length < COACH_ALL_PAGE_SIZE) break;
+          p += 1;
+        }
+      }
+
+      setCoachAllProgress(100);
+      setHasMore(false);
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Ocurrió un error al traer todos los alumnos del coach",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingCoachAll(false);
+      setTimeout(() => setCoachAllProgress(0), 600);
+    }
+  };
+
   const openIngresoEditor = (student: StudentRow) => {
     if (!student.code) return;
     setIngresoFor({
@@ -306,6 +511,9 @@ export default function StudentsContent() {
         String(r.code ?? "") === code ? { ...r, joinDate: next } : r,
       ),
     );
+    if (coach !== "todos") {
+      patchTodosByCode(code, (r) => ({ ...r, joinDate: next }));
+    }
 
     try {
       await updateClientIngreso(code, next);
@@ -324,6 +532,9 @@ export default function StudentsContent() {
             : r,
         ),
       );
+      if (coach !== "todos") {
+        patchTodosByCode(code, (r) => ({ ...r, joinDate: ingresoFor.prev }));
+      }
       toast({
         title: "Error",
         description: getSpanishApiError(
@@ -438,22 +649,9 @@ export default function StudentsContent() {
   const filtered = useMemo(() => {
     const q = (search || "").trim().toLowerCase();
 
-    // 1) filtro por coach (solo client-side)
-    const byCoach = (() => {
-      if (coach === "todos") return all;
-      const name = (selectedCoachName ?? "").trim();
-      if (!name) return all;
-      const nameLower = name.toLowerCase();
-      return all.filter((s) =>
-        s.teamMembers?.some(
-          (tm) => (tm.name ?? "").trim().toLowerCase() === nameLower,
-        ),
-      );
-    })();
-
-    // 2) búsqueda local
-    if (!q) return byCoach;
-    return byCoach.filter((s) => {
+    // Nota: el filtro por coach ahora es server-side; aquí solo buscamos localmente.
+    if (!q) return all;
+    return all.filter((s) => {
       const name = (s.name ?? "").toString().toLowerCase();
       const code = (s.code ?? "").toString().toLowerCase();
       const state = (s.state ?? "").toString().toLowerCase();
@@ -465,7 +663,7 @@ export default function StudentsContent() {
         stage.includes(q)
       );
     });
-  }, [all, coach, search, selectedCoachName]);
+  }, [all, search]);
 
   // valores únicos de fases (usar la lista completa `allFull` si está disponible para mostrar todas las opciones)
   const uniqueStages = useMemo(() => {
@@ -592,6 +790,9 @@ export default function StudentsContent() {
         ticketsCount: 0,
       };
       setAll((prev) => [newRow, ...prev]);
+      if (allTodosRef.current) {
+        allTodosRef.current = [newRow, ...allTodosRef.current];
+      }
       setPage(1);
       toast({
         title: "Alumno creado",
@@ -767,6 +968,37 @@ export default function StudentsContent() {
                 </Command>
               </PopoverContent>
             </Popover>
+
+            {coach !== "todos" && selectedCoachId && serverTotal != null && (
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <div className="text-[11px] text-muted-foreground">
+                  Cargados <span className="font-semibold">{all.length}</span> de{" "}
+                  <span className="font-semibold">{serverTotal}</span>
+                </div>
+                {all.length < serverTotal && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 px-2"
+                    onClick={loadAllForSelectedCoach}
+                    disabled={loading || loadingCoachAll}
+                    title="Traer todos los alumnos de este coach"
+                  >
+                    {loadingCoachAll ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {coachAllProgress > 0
+                          ? `Traer todo (${coachAllProgress}%)`
+                          : "Traer todo"}
+                      </span>
+                    ) : (
+                      "Traer todo"
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="relative flex-1">
@@ -1192,6 +1424,12 @@ export default function StudentsContent() {
                                                 : r,
                                             ),
                                           );
+                                          if (coach !== "todos") {
+                                            patchTodosByCode(code, (r) => ({
+                                              ...r,
+                                              stage: nextKey,
+                                            }));
+                                          }
                                           try {
                                             await updateClientEtapa(
                                               code,
@@ -1211,6 +1449,12 @@ export default function StudentsContent() {
                                                   : r,
                                               ),
                                             );
+                                            if (coach !== "todos") {
+                                              patchTodosByCode(code, (r) => ({
+                                                ...r,
+                                                stage: prevStage,
+                                              }));
+                                            }
                                             toast({
                                               title: "Error",
                                               description: getSpanishApiError(
@@ -1328,7 +1572,7 @@ export default function StudentsContent() {
               >
                 Siguiente
               </button>
-              {hasMore && page >= totalPages && (
+              {hasMore && coach === "todos" && page >= totalPages && (
                 <Button
                   variant="ghost"
                   size="sm"
