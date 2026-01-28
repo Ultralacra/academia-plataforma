@@ -16,7 +16,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Mail, Phone, Tags, Calendar } from "lucide-react";
+import {
+  Mail,
+  Phone,
+  Tags,
+  Calendar,
+  User,
+  CreditCard,
+  Target,
+  TrendingUp,
+} from "lucide-react";
 
 interface TabResumenProps {
   p: any;
@@ -53,52 +62,95 @@ export function TabResumen({
 }: TabResumenProps) {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-      <div className="xl:col-span-2 space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Resumen</CardTitle>
-            <CardDescription>Datos básicos del contacto</CardDescription>
+      <div className="xl:col-span-3 space-y-6">
+        {/* Card de contacto principal */}
+        <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-teal-500 to-cyan-500" />
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center">
+                <User className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-slate-800">Resumen</CardTitle>
+                <CardDescription className="text-slate-500">
+                  Datos básicos del contacto
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 gap-3 text-sm">
-              <div className="flex items-center gap-2 min-w-0">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate">{p.email || "—"}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100/50 border border-slate-200/60">
+                <div className="h-9 w-9 rounded-lg bg-teal-100 flex items-center justify-center">
+                  <Mail className="h-4 w-4 text-teal-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500">Email</div>
+                  <div className="text-sm font-medium text-slate-700 truncate">
+                    {p.email || "—"}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 min-w-0">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate">{p.phone || "—"}</span>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100/50 border border-slate-200/60">
+                <div className="h-9 w-9 rounded-lg bg-cyan-100 flex items-center justify-center">
+                  <Phone className="h-4 w-4 text-cyan-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500">Teléfono</div>
+                  <div className="text-sm font-medium text-slate-700 truncate">
+                    {p.phone || "—"}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 min-w-0">
-                <Tags className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate">{p.source || "booking"}</span>
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100/50 border border-slate-200/60">
+                <div className="h-9 w-9 rounded-lg bg-teal-100 flex items-center justify-center">
+                  <Tags className="h-4 w-4 text-teal-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500">Fuente</div>
+                  <div className="text-sm font-medium text-slate-700 truncate">
+                    {p.source || "booking"}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 min-w-0">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate">
-                  Registrado: {fmtDate(record.created_at || p.created_at)}
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100/50 border border-slate-200/60">
+                <div className="h-9 w-9 rounded-lg bg-cyan-100 flex items-center justify-center">
+                  <Calendar className="h-4 w-4 text-cyan-600" />
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs text-slate-500">Registrado</div>
+                  <div className="text-sm font-medium text-slate-700 truncate">
+                    {fmtDate(record.created_at || p.created_at)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Detalles adicionales */}
+            <div className="mt-6 pt-5 border-t border-slate-200/60">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Detalle completo
                 </span>
               </div>
-
-              <div className="pt-2 border-t border-border text-xs text-muted-foreground">
-                Detalle
-              </div>
-              <div className="grid grid-cols-1 gap-2 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Evento</span>
-                  <span className="truncate">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Evento</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {p.event_codigo || p.eventCodigo || "—"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Origen</span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Origen</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {p.origin_codigo || p.origen || p.originCodigo || "—"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Agenda</span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Agenda</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {p.selected_date || p.selectedDate
                       ? `${fmtDate(p.selected_date || p.selectedDate)}${
                           p.selected_time || p.selectedTime
@@ -108,15 +160,15 @@ export function TabResumen({
                       : "—"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Instagram</span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Instagram</span>
+                  <span className="font-medium text-teal-600 truncate">
                     {p.instagram_user || p.instagramUser || "—"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Programa</span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Programa</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {(draft as any)?.program ||
                       effectiveSalePayload?.program ||
                       p.program ||
@@ -124,60 +176,57 @@ export function TabResumen({
                       "—"}
                   </span>
                 </div>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="text-muted-foreground">Bonos</span>
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Bonos</span>
                   <span className="flex flex-wrap justify-end gap-1">
                     {bonusesList.length ? (
                       bonusesList.map((b) => (
-                        <Badge key={b} variant="secondary">
+                        <Badge
+                          key={b}
+                          className="bg-gradient-to-r from-teal-50 to-cyan-50 text-teal-700 border-teal-200 text-xs"
+                        >
                           {b}
                         </Badge>
                       ))
                     ) : (
-                      <span className="truncate">—</span>
+                      <span className="text-slate-400">—</span>
                     )}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    Presupuesto mensual
-                  </span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Presupuesto mensual</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {(p.monthly_budget ?? p.monthlyBudget) === null ||
                     (p.monthly_budget ?? p.monthlyBudget) === undefined
                       ? "—"
                       : String(p.monthly_budget ?? p.monthlyBudget)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    Plataforma llamada
-                  </span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Plataforma llamada</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {p.platform_call || p.platformCall || "—"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    Resultado llamada
-                  </span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Resultado llamada</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {callOutcomeLabel(
                       p.call_outcome || p.callOutcome || p.call?.outcome,
                     )}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Pago</span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Pago</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {p.payment_status
                       ? paymentStatusLabel(p.payment_status)
                       : statusLabel}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Monto</span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Monto</span>
+                  <span className="font-semibold text-teal-600 truncate">
                     {(p.payment_amount ??
                       effectiveSalePayload?.payment?.amount) === null ||
                     (p.payment_amount ??
@@ -189,9 +238,9 @@ export function TabResumen({
                         )}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Próximo cobro</span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Próximo cobro</span>
+                  <span className="font-medium text-slate-700 truncate">
                     {p.next_charge_date ||
                     effectiveSalePayload?.payment?.nextChargeDate
                       ? fmtDate(
@@ -201,43 +250,66 @@ export function TabResumen({
                       : "—"}
                   </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Plan</span>
-                  <span className="truncate">{planSummary}</span>
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Plan</span>
+                  <span className="font-medium text-slate-700 truncate">
+                    {planSummary}
+                  </span>
                 </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Recordatorios</span>
-                  <span className="truncate">
+                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                  <span className="text-slate-500">Recordatorios</span>
+                  <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200">
                     {Array.isArray(p.reminders)
                       ? p.reminders.length
                       : Array.isArray(p.call?.reminders)
                         ? p.call.reminders.length
                         : 0}
-                  </span>
+                  </Badge>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Estado del lead</CardTitle>
-            <CardDescription>
-              Etapa del pipeline + estado comercial
-            </CardDescription>
+      {/* Sidebar derecho */}
+      <div className="xl:col-span-2 space-y-6">
+        <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-cyan-500 to-teal-500" />
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center">
+                <Target className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-slate-800">
+                  Estado del lead
+                </CardTitle>
+                <CardDescription className="text-slate-500">
+                  Etapa del pipeline + estado comercial
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4">
-              <div className="grid gap-1">
-                <Label htmlFor="lead-stage">Etapa</Label>
+            <div className="grid gap-5">
+              <div className="grid gap-2">
+                <Label
+                  htmlFor="lead-stage"
+                  className="text-slate-600 font-medium"
+                >
+                  Etapa
+                </Label>
                 <Select
                   value={leadStatus}
                   onValueChange={(next) => {
                     applyRecordPatch({ status: next });
                   }}
                 >
-                  <SelectTrigger id="lead-stage" className="w-full">
+                  <SelectTrigger
+                    id="lead-stage"
+                    className="w-full bg-white border-slate-200 focus:border-teal-400 focus:ring-teal-400/20"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -258,8 +330,13 @@ export function TabResumen({
                 </Select>
               </div>
 
-              <div className="grid gap-1">
-                <Label htmlFor="lead-disposition">Estado comercial</Label>
+              <div className="grid gap-2">
+                <Label
+                  htmlFor="lead-disposition"
+                  className="text-slate-600 font-medium"
+                >
+                  Estado comercial
+                </Label>
                 <Select
                   value={leadDisposition || "__empty__"}
                   onValueChange={(next) => {
@@ -268,7 +345,10 @@ export function TabResumen({
                     });
                   }}
                 >
-                  <SelectTrigger id="lead-disposition" className="w-full">
+                  <SelectTrigger
+                    id="lead-disposition"
+                    className="w-full bg-white border-slate-200 focus:border-teal-400 focus:ring-teal-400/20"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -343,8 +423,11 @@ export function TabResumen({
                 </Select>
               </div>
             </div>
-            <div className="mt-3 text-xs text-muted-foreground">
-              Se guarda al presionar "Guardar cambios".
+            <div className="mt-4 p-3 rounded-lg bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-100">
+              <p className="text-xs text-teal-700 flex items-center gap-2">
+                <TrendingUp className="h-3.5 w-3.5" />
+                Se guarda al presionar "Guardar cambios".
+              </p>
             </div>
           </CardContent>
         </Card>

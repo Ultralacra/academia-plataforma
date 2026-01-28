@@ -1,0 +1,446 @@
+CONTRATO PRESTACIÓN DE SERVICIOS DEL PROGRAMA “{{PROGRAMA}}”
+
+Entre los suscritos, de una parte, MHF GROUP LLC, con EIN 85-4320656, domiciliada a efectos de notificaciones en 13728 Lagoon Isle Way Apt 205 Orlando, FL 32824, Estados Unidos (en adelante "LA EMPRESA"), y de otra parte, {{NOMBRE_COMPLETO}}, identificado(a) con número {{DNI}}, domiciliado(a) en {{DIRECCION}} (en adelante "EL CLIENTE"), quienes acuerdan celebrar el presente contrato conforme a las siguientes:
+
+CLÁUSULAS
+
+PRIMERA. OBJETO.
+
+El presente contrato tiene por objeto regular la prestación del servicio educativo denominado "{{PROGRAMA}}", mediante el cual LA EMPRESA capacitará al CLIENTE en la creación de un ecosistema de ventas basado en la estrategia hotselling, conforme a las especificaciones y alcances descritos en este documento.
+
+SEGUNDA. ALCANCE DEL SERVICIO.
+
+2.1 El servicio incluye:
+
+●	Cinco (5) sesiones pregrabadas de formación acelerada.
+●	Canal de comunicación directa (Skool y WhatsApp).
+●	Acceso a la comunidad del programa.
+●	Sesiones adicionales semanales (martes y miércoles: copywriting; jueves: ads, viernes: implementación técnica).
+●	Área de miembros Premium.
+●	Box de herramientas de implementación rápida.
+●	Trafficker interno asignado para montaje de campañas publicitarias (excluyendo gestión de ads), disponible únicamente dentro de los {{DURACION_TEXTO}} meses de vigencia del contrato, según cláusula décimo tercera.
+●	Bono de Implementación Técnica disponible únicamente dentro de los {{DURACION_TEXTO}} meses de vigencia del contrato, según cláusula décimo cuarta.
+
+2.2 Soporte: LA EMPRESA atenderá dudas e inquietudes del CLIENTE exclusivamente por los canales referidos, sin asumir responsabilidad por fallas de terceros (p. ej., conectividad).
+
+2.3 Acceso secuencial por fases. El acceso a las distintas sesiones o fases del programa se habilitará de manera secuencial, lo cual implica que el estudiante deberá completar y entregar las tareas correspondientes a la fase anterior para poder acceder a la siguiente.
+
+Esta metodología, denominada “El Ascenso”, tiene como propósito fomentar un enfoque progresivo y estructurado, promoviendo la concentración del estudiante en cada etapa y potenciando la ejecución efectiva del programa formativo.
+
+Parágrafo – Criterios mínimos de habilitación: EL CLIENTE acepta que la habilitación de cada fase depende de la entrega completa y verificable de los insumos y tareas mínimas solicitadas para la fase anterior a través de los canales oficiales del programa. LA EMPRESA contará con un término razonable de revisión para habilitar el acceso. La falta de entrega, entrega incompleta o no verificable imputable al CLIENTE mantendrá la fase en pausa sin que ello constituya incumplimiento de LA EMPRESA.
+
+2.4 Causales de suspensión o terminación
+
+LA EMPRESA podrá suspender o terminar la participación del CLIENTE, sin derecho a reembolso, si incurre en:
+
+a) Incumplimiento de pago.
+b) Conducta disruptiva, difamatoria o irrespetuosa, que afecte el normal desarrollo del programa o que cause molestias, incomodidad o afectaciones a otros clientes, trabajadores o prestadores de servicios vinculados a LA EMPRESA.
+c) Violación de las normas de confidencialidad.
+d) Incumplimiento de las obligaciones contractuales
+
+Parágrafo: Podrá suspenderse o terminarse el contrato por mutuo acuerdo, de forma excepcional y siempre deberá constar por escrito.
+
+2.5 Cláusula de Responsabilidad sobre Bonos
+
+El uso y gestión de los bonos ofrecidos en el programa es responsabilidad exclusiva del CLIENTE. LA EMPRESA no se hace responsable por su pérdida, vencimiento o no utilización.
+
+TERCERA. VIGENCIA Y EJECUCIÓN DEL SERVICIO.
+
+3.1 El servicio tendrá una duración de {{DURACION_TEXTO}} meses, contados a partir de la fecha solicitada por el CLIENTE, la cual corresponde al día {{DIA_INICIO}} del mes {{MES_INICIO}} del año {{ANIO_INICIO}}, fecha en la cual el CLIENTE iniciará el programa y se habilitarán los accesos y/o acompañamiento correspondiente, siempre y cuando para dicha fecha se haya verificado y cumplido:
+
+(i) la firma del presente contrato, y
+(ii) el pago correspondiente, así:
+
+1.	Si el pago se pacta en una sola exhibición, deberá encontrarse acreditado el pago total del valor del programa; y
+2.	Si el pago se pacta en cuotas, el CLIENTE deberá tener acreditado, a más tardar en la Fecha de Inicio, el pago de la primera cuota y de cualquier otra cuota que, conforme al cronograma pactado, se encuentre vencida o exigible a dicha fecha.
+
+Parágrafo – Responsabilidad por tiempos y vencimientos: EL CLIENTE reconoce que el plazo de acceso, la vigencia del contrato y los términos de garantía corren conforme a las reglas aquí pactadas, aun cuando no ingrese a la plataforma o no utilice el servicio. Cualquier recordatorio o aviso por parte de LA EMPRESA será una cortesía y no constituirá renuncia, modificación o extensión de plazos.
+
+3.2 El CLIENTE deberá iniciar el programa en un plazo máximo de {{DURACION_TEXTO}} meses desde la fecha del pago inicial; de no hacerlo, se entenderá desistido sin derecho a reembolso.
+
+3.3 El CLIENTE podrá solicitar una suspensión temporal de máximo un (1) mes, continua o fraccionada, previa aprobación expresa de LA EMPRESA. Suspendiéndose el cómputo del Plazo de ejecución del contrato durante ese período.
+
+Parágrafo – Régimen de suspensión: Las suspensiones (pausas) no son automáticas, no son retroactivas y requieren aprobación previa y expresa de LA EMPRESA. No procederán solicitudes de suspensión cuando exista mora, membresía activa, auditoría o garantía en curso, ni cuando el CLIENTE mantenga accesos activos y disponibles para ejecución.
+
+3.4.	El CLIENTE podrá optar por extender la garantía por hasta {{DURACION_TEXTO}} meses adicionales, mediante el pago de la membresía correspondiente, lo que le permitirá seguir accediendo a los beneficios pactados en el presente contrato, siempre y cuando mantenga la ejecución ininterrumpida del programa según las condiciones previamente establecidas.
+
+Parágrafo – Membresía continua: La membresía de extensión no admite pausas, acumulación de tiempo ni retroactividad. Su validez exige continuidad mensual ininterrumpida, y cualquier interrupción anula automáticamente el beneficio de extensión. Su validez exige continuidad mensual ininterrumpida; cualquier interrupción dará lugar a la pérdida automática del beneficio de extensión de la garantía, así como de los bonos y beneficios asociados al presente contrato.
+
+CUARTA. HONORARIOS Y FORMA DE PAGO.
+
+4.1 EL CLIENTE conviene en cancelar el valor total del programa por la modalidad de {{MODALIDAD_PAGO}}, la suma de {{MONTO_TOTAL_LETRAS}} ({{MONTO_TOTAL}}), por la adquisición del programa “{{PROGRAMA}}” conforme a la presente vigencia. De la siguiente forma:
+
+4.2 Moneda y variación cambiaria: Todas las sumas se expresan en {{MONEDA}}; el CLIENTE asume cualquier variación cambiaria.
+
+4.3 Mora e intereses: En caso de mora, se aplicarán los intereses moratorios y el orden de abonos previsto en la cláusula décima sexta.
+
+4.4 Las reservas no son reembolsables.
+
+4.5 EL CLIENTE renuncia expresamente al reembolso de honorarios pagados salvo lo dispuesto en la cláusula décima séptima.
+
+4.6 No serán válidas solicitudes de reembolso fundadas en la inasistencia o no utilización de recursos proporcionados por LA EMPRESA.
+
+4.7 El retraso en los pagos por parte del CLIENTE generará la suspensión inmediata del acceso a los servicios contratados, la cual se mantendrá hasta tanto se regularice el pago correspondiente.
+
+El CLIENTE contará con un plazo máximo de treinta (30) días calendario para ponerse al día. Transcurrido dicho término sin que se haya efectuado el pago, no habrá lugar a reembolso ni a reactivación del servicio, y se entenderá que el CLIENTE ha desistido unilateralmente de la continuación del mismo.
+
+4.8 El CLIENTE deberá pagar la totalidad del valor para acceder a la última fase del programa.
+
+4.9 EL CLIENTE declara conocer y aceptar que el acceso al Programa “{{PROGRAMA}}” será habilitado única y exclusivamente una vez cumplida alguna de las siguientes condiciones de pago:
+
+1.	Cancelación total del valor del programa bajo la modalidad de Pago Único, o
+
+2.	Pago efectivo de la primera cuota correspondiente al esquema de pago en tres (3) cuotas, o, de ser aplicable, al esquema excepcional de dos (2) cuotas personalizadas aprobado por LA EMPRESA.
+
+El pago de una reserva no habilita por sí solo el acceso al contenido, beneficios ni servicios del programa, ya que dicha reserva tiene como único fin asegurar la plaza y el descuento correspondiente. En este sentido, mientras no se haya completado el pago inicial según una de las dos modalidades antes mencionadas, EL CLIENTE no tendrá derecho a ingreso, activación de usuario, ni participación alguna dentro del programa.
+
+Asimismo, EL CLIENTE entiende que la adquisición del Programa está sujeta al cumplimiento de una estructura de pago válida, siendo la reserva un compromiso de compra, no una activación de servicio.
+
+QUINTA. OBLIGACIONES.
+
+5.1 De LA EMPRESA:
+
+1.	Prestación del servicio de capacitación:
+Brindar el servicio de formación integral del programa “{{PROGRAMA}}”, con el objetivo de aportar las herramientas necesarias para que EL CLIENTE pueda construir y escalar su negocio, ejerciendo además las comunicaciones, seguimiento e instrucciones requeridas para garantizar su satisfacción con el servicio recibido.
+
+2.	Acceso a contenido estructurado:
+Proporcionar cinco (5) sesiones pregrabadas, correspondientes a las cinco (5) fases del programa, en las que se explica la estrategia completa de Hotselling, con el fin de que EL CLIENTE pueda implementarla de forma autónoma sobre su propio negocio.
+
+3.	Soporte técnico y estratégico:
+Brindar soporte y resolver oportunamente las preguntas y dudas que formule EL CLIENTE, durante el plazo de {{DURACION_TEXTO}} meses de acceso, a través de:
+
+●	Sesiones semanales de coaching en vivo.
+●	El grupo de comunidad del programa.
+●	Canales habilitados como Skool y WhatsApp, Academy Space y otros canales exclusivamente para participantes activos.
+
+4.	Acceso a la comunidad “Legionarios”:
+Otorgar a EL CLIENTE acceso a la comunidad privada “Legionarios”, espacio colaborativo donde podrá interactuar con otros participantes, expandir su red de contactos y obtener retroalimentación sobre sus inquietudes y estrategias de negocio.
+
+5.2 Del CLIENTE:
+
+EL CLIENTE, en desarrollo del presente contrato, se compromete a cumplir con las siguientes obligaciones esenciales para la adecuada ejecución del programa “{{PROGRAMA}}” y la obtención de los resultados esperados:
+
+1.	Compromiso con la ejecución:
+Ejecutar el programa de manera disciplinada, conforme a las indicaciones, instrucciones y estrategias comunicadas por LA EMPRESA, asumiendo plena responsabilidad sobre la implementación y resultados. La ejecución efectiva será condición esencial para la activación de cualquier garantía de resultados.
+
+2.	Diligencia y proactividad:
+Actuar con rapidez y eficiencia en la toma de decisiones y en la implementación de las acciones acordadas; solicitar oportunamente ayuda en caso de bloqueos o dificultades; y compartir aprendizajes y logros con la comunidad, manteniendo una actitud colaborativa. Sin perjuicio de lo anterior, EL CLIENTE reconoce que el cumplimiento del plan y la obtención de resultados dependen exclusivamente de su gestión personal.
+
+●	Validación de oferta y comportamiento del mercado:
+EL CLIENTE acepta que la validación de su oferta, la aceptación del mercado, la disposición de pago del público objetivo y la viabilidad comercial de su idea de negocio son factores ajenos al control de LA EMPRESA. En consecuencia, tales variables no constituyen incumplimiento imputable a LA EMPRESA y no habilitan reclamaciones distintas a las previstas expresamente en la Cláusula DÉCIMA SÉPTIMA.
+
+●	Uso de herramientas tecnológicas, automatizaciones e inteligencia artificial:
+EL CLIENTE reconoce que el uso de herramientas tecnológicas, automatizaciones e inteligencia artificial (IA) dentro del programa es bajo su exclusiva responsabilidad. LA EMPRESA no garantiza resultados derivados del uso, mal uso o configuración de dichas herramientas, ni asume responsabilidad por fallas de terceros, restricciones de plataforma o decisiones técnicas implementadas por el CLIENTE.
+
+3.	Confidencialidad y uso restringido del contenido:
+Mantener la confidencialidad absoluta respecto de la información compartida dentro del programa, incluyendo sesiones grupales, comunidad de “Legionarios”, materiales digitales, estrategias y experiencias de otros participantes.
+En consecuencia, no podrá compartir credenciales de acceso, capturas de pantalla, documentos o contenidos sensibles con terceros, ni divulgar información discutida dentro de los espacios de formación y soporte.
+
+4.	Testimonio de resultados:
+Proporcionar un testimonio veraz y honesto sobre su experiencia y resultados obtenidos durante el programa. Como contraprestación, LA EMPRESA podrá otorgar incentivos o bonos adicionales, sin que ello constituya una obligación contractual.
+
+5.	Uso adecuado de los espacios de soporte:
+Canalizar cualquier inquietud, duda o solicitud de aclaración a través de las sesiones grupales semanales, a fin de permitir a LA EMPRESA prestar asistencia con el más alto nivel de atención, seguimiento y calidad en el servicio.
+
+SEXTA. CONFIDENCIALIDAD.
+
+Las partes se comprometen a mantener en estricta confidencialidad toda información obtenida durante la ejecución del contrato, obligándose a no divulgarla por ningún medio y respetando permanentemente el secreto profesional.
+
+SÉPTIMA. PROPIEDAD INTELECTUAL.
+
+7.1 Confidencialidad y uso limitado de materiales
+
+EL CLIENTE manifiesta su conformidad y acepta expresamente que todo material, contenido, documento o recurso pedagógico entregado por LA EMPRESA en el marco del programa de formación “{{PROGRAMA}}”, independientemente del canal de entrega (incluyendo pero sin limitarse a webinars, plataformas digitales, eventos presenciales, redes sociales o grupos privados), no podrá ser vendido, reproducido, distribuido, divulgado, copiado ni utilizado con fines distintos al desarrollo del presente contrato, salvo autorización previa, expresa y por escrito de LA EMPRESA.
+De igual manera, LA EMPRESA se compromete a observar el mismo nivel de respeto, confidencialidad y uso limitado respecto de cualquier material o información aportada por EL CLIENTE.
+
+7.2 Licencia de uso limitada y revocable
+
+Todos los contenidos, recursos y materiales que EL CLIENTE reciba como parte del Programa de Formación, incluidos aquellos alojados en plataformas tecnológicas o entregados por cualquier otro medio, son de propiedad exclusiva de LA EMPRESA.
+Por lo tanto, se otorga a EL CLIENTE una licencia de uso personal, no comercial, intransferible, limitada y revocable, exclusivamente para su uso profesional personalísimo.
+Cualquier uso distinto al expresamente autorizado —incluyendo reproducción, adaptación, redistribución o comercialización— constituirá una infracción a los derechos de propiedad intelectual de LA EMPRESA, y podrá ser objeto de acciones legales, incluidas sanciones civiles y penales, conforme a lo dispuesto en la legislación vigente en materia de derechos de autor y propiedad intelectual.
+
+7.3 Acceso a plataformas
+
+Finalizado el período de formación establecido en el contrato, LA EMPRESA procederá al retiro de los accesos concedidos a EL CLIENTE a plataformas, comunidades, herramientas digitales o cualquier otro entorno virtual (incluyendo, sin limitarse a Skool, Notion, grupos privados u otros medios habilitados para el desarrollo del programa).
+
+OCTAVA. PROTECCIÓN DE DATOS PERSONALES.
+
+LA EMPRESA tratará los datos personales del CLIENTE conforme a la normativa aplicable, garantizando privacidad y uso exclusivo para la ejecución del presente contrato. EL CLIENTE podrá conocer la Política de privacidad de la empresa en la siguiente dirección web https://x-academy.tech/politicas-de-privacidad/.
+
+NOVENA. CESIÓN DE IMAGEN.
+
+9.1 Autorización de uso de imagen
+
+EL CLIENTE autoriza de forma previa, expresa y gratuita a LA EMPRESA para utilizar su imagen, voz, nombre, fotografías, grabaciones audiovisuales y cualquier otro material personal o testimonial, captado o generado en el marco del programa de formación “{{PROGRAMA}}”, con fines comerciales, promocionales, institucionales y testimoniales.
+
+Esta autorización incluye, pero no se limita a, el uso del material en páginas web, redes sociales, plataformas digitales, campañas de marketing, piezas publicitarias, eventos, presentaciones, material educativo y medios de comunicación, tanto físicos como electrónicos. En todo caso, LA EMPRESA se obliga a respetar el derecho al honor, la intimidad personal y la propia imagen del CLIENTE, conforme a la legislación vigente.
+
+9.2 Alcance, limitaciones y legislación aplicable.
+
+La presente autorización se otorga por un período indefinido, es de carácter no exclusivo, con efectos a nivel nacional e internacional, sin restricción territorial, y podrá ser revocada por EL CLIENTE en cualquier momento mediante notificación escrita, con una antelación mínima de treinta (30) días calendario, teniendo efecto únicamente hacia el futuro.
+
+La autorización incluye expresamente el uso comercial del material, sin que se requiera una autorización adicional para este fin. No obstante, queda prohibido cualquier uso que implique un menoscabo a la dignidad, integridad o reputación del CLIENTE, o que distorsione el sentido original del contenido.
+
+En caso de uso indebido, las partes acuerdan aplicar la legislación vigente, incluyendo, sin limitarse a, lo dispuesto en el Capítulo 540 del Código del Estado de Florida, relativo a los Derechos de Publicidad, siempre que:
+
+●	El uso tenga conexión directa con el Estado de Florida; o
+●	Las partes hayan acordado expresamente la aplicación de dicha legislación para controversias derivadas de este contrato.
+
+9.3 Gratuidad de la autorización.
+
+EL CLIENTE declara que la cesión de derechos de imagen aquí contemplada se realiza a título gratuito, y que no recibirá contraprestación ni remuneración alguna por el uso autorizado, salvo pacto expreso y escrito en contrario entre las partes.
+
+9.4 Infracción y consecuencias.
+
+Cualquier uso de la imagen del CLIENTE en contravención de los términos de esta cláusula constituirá una infracción de sus derechos de imagen y podrá dar lugar a:
+
+●	La exigencia de retiro inmediato del contenido,
+
+DÉCIMA. CARÁCTER PERSONAL DEL CONTRATO.
+
+Este contrato es personal e intransferible, prohibiéndose expresamente su cesión sin acuerdo previo y escrito entre las partes.
+
+DÉCIMA PRIMERA. LEGISLACIÓN APLICABLE Y JURISDICCIÓN.
+
+Este contrato se regirá por las leyes del Estado de Florida, EE.UU., sometiéndose las partes expresamente a la jurisdicción y competencia de sus tribunales para cualquier controversia.
+
+DÉCIMA SEGUNDA. VARIOS
+
+12.1 Modificación del programa.
+
+LA EMPRESA se reserva el derecho, a su entera discreción, de modificar, actualizar o ajustar el contenido del programa “{{PROGRAMA}}”, sin que ello constituya incumplimiento contractual. Dichas modificaciones podrán incluir, entre otras, la sustitución de materiales, la adición de contenidos complementarios o la publicación de versiones actualizadas, garantizando en todo caso el acceso al contenido esencial originalmente ofertado. Para estos efectos, se entiende por “contenido esencial” la estructura general del programa, sus fases, los canales oficiales de soporte y los materiales base ofertados, sin perjuicio de ajustes metodológicos o de actualización.
+
+12.2 No solicitud ni captación.
+
+Durante la vigencia del presente contrato y por un período adicional de doce (12) meses contados a partir de su terminación, EL CLIENTE se obliga a no realizar, de forma directa o indirecta y sin autorización previa, expresa y escrita de LA EMPRESA, ninguna de las siguientes conductas:
+
+i.	Inducir o intentar inducir a cualquier empleado, contratista independiente, agente, consultor o cliente de LA EMPRESA a interrumpir su relación comercial, profesional o contractual con la misma.
+ii.	Interferir, perturbar o menoscabar de cualquier forma la relación de LA EMPRESA con sus empleados, contratistas, clientes, consultores o agentes.
+iii.	Solicitar, atraer, contratar o comprometer a personas que mantengan —o hayan mantenido durante el último año— una relación contractual con LA EMPRESA.
+iv.	Contactar, por cualquier medio, a empleados, contratistas, agentes, consultores o clientes de LA EMPRESA, con el fin de ofrecer productos o servicios propios, inducir a la desvinculación o desviar oportunidades comerciales.
+
+EL CLIENTE reconoce expresamente que cualquier conducta que contravenga esta disposición será considerada dañina, desleal y perjudicial para los intereses comerciales y reputacionales de LA EMPRESA, y que podrá dar lugar a acciones legales y a la terminación inmediata del contrato.
+
+12.3 Comportamiento ético y respeto.
+
+EL CLIENTE se compromete a mantener una conducta respetuosa, cordial, ética y profesional en todas sus interacciones con el personal de LA EMPRESA, así como con otros participantes del programa.
+
+Se considerarán como faltas graves:
+
+●	La agresión verbal o física.
+●	El acoso, la discriminación, el comportamiento ofensivo o inapropiado.
+●	Cualquier manifestación de irrespeto hacia empleados, directivos o terceros vinculados con el programa.
+
+El incumplimiento de esta cláusula facultará a LA EMPRESA para suspender temporalmente o dar por terminado el contrato de forma inmediata, sin derecho a reembolso por parte del CLIENTE.
+
+12.4 Restricción en modalidad de coproducción.
+
+En los casos en que EL CLIENTE aplique las estrategias del programa bajo la figura de coproducción o colaboración con terceros, se aclara que únicamente podrá solicitar retroalimentación (“feedback”) respecto de un (1) negocio o proyecto a la vez. Esta clausula también será aplicable en caso de productores de infoproductos.
+
+DÉCIMA TERCERA. SERVICIO DE MONTAJE DE CAMPAÑAS.
+
+13.1 Alcance de los Servicios:
+LA EMPRESA asignará un trafficker interno para realizar exclusivamente el montaje de campañas publicitarias en la plataforma Meta Ads para el CLIENTE, considerando entre tres (3) y cinco (5) anuncios por cada conjunto, dependiendo del tipo de testeo definido (convencional o agresivo).
+
+El trafficker no será responsable de la gestión, optimización o monitoreo posterior de las campañas, ni del diseño gráfico, copywriting, creación de contenido o cualquier otro elemento creativo necesario, cuya responsabilidad exclusiva recae sobre el CLIENTE.
+
+El presente servicio no comprende, bajo ningún supuesto, asesoría o soporte personalizado en temas relacionados con Meta Ads. Cualquier inquietud o requerimiento adicional sobre pauta digital deberá canalizarse únicamente a través de los medios y canales oficiales dispuestos por LA EMPRESA dentro del programa {{PROGRAMA}} (sesiones, Skool y WhatsApp).
+
+13.2 Acceso a Plataformas y Cuentas:
+
+El CLIENTE se compromete a otorgar al trafficker accesos limitados a sus cuentas de Meta Ads, Hotmart, hosting, dominio, y cualquier otra plataforma digital estrictamente requerida para el montaje inicial de las campañas publicitarias acordadas. Estos accesos estarán vigentes únicamente durante el periodo de duración del presente contrato.
+
+13.3 Confidencialidad:
+
+Ambas partes asumen la obligación expresa de mantener absoluta confidencialidad sobre toda información suministrada o adquirida durante la prestación del servicio, incluyendo, pero sin limitarse a, datos del CLIENTE, estrategias comerciales, técnicas publicitarias y demás información sensible o de carácter privado.
+
+13.4 Propiedad del Entregable:
+
+Las configuraciones y estructuras de campañas publicitarias realizadas por el trafficker serán propiedad exclusiva del CLIENTE, una vez cumplido íntegramente el pago total del programa contratado.
+
+13.5 Limitación de Responsabilidad:
+LA EMPRESA queda exonerada expresamente de cualquier responsabilidad relacionada con el manejo inadecuado del presupuesto publicitario, hackeos, bloqueos o sanciones impuestas por Facebook (Meta), u otras incidencias vinculadas a las plataformas digitales. La responsabilidad de LA EMPRESA culmina estrictamente con la entrega y montaje inicial de las campañas acordadas.
+
+13.6 Vigencia del Servicio:
+
+El presente servicio podrá ser solicitado por el CLIENTE únicamente durante la vigencia del contrato ({{DURACION_TEXTO}} meses). Una vez expirado dicho plazo, cesará automáticamente el derecho a este beneficio.
+
+13.7 Solicitud del Servicio:
+
+El CLIENTE deberá solicitar formalmente la prestación del servicio de montaje de campañas publicitarias con una anticipación mínima de quince (15) días antes de la fecha de terminación del contrato. En caso contrario, el servicio perderá vigencia.
+
+13.8 Responsabilidades adicionales del CLIENTE:
+Será responsabilidad exclusiva del CLIENTE modificar contraseñas y revocar todos los accesos concedidos al equipo interno de LA EMPRESA inmediatamente después de finalizada la prestación del servicio. En consecuencia, LA EMPRESA no será responsable por ningún tipo de acceso o violación de seguridad posterior a la culminación del servicio contratado.
+
+13.9 Prohibición de Relaciones Extracontractuales:
+
+Durante el plazo de un (1) año contado a partir de la suscripción del presente contrato, se prohíbe expresamente tanto al CLIENTE como al trafficker interno establecer relaciones laborales, comerciales o profesionales, directas o indirectas, al margen de este contrato, con el objetivo de salvaguardar los intereses comerciales y estratégicos de LA EMPRESA.
+
+13.10 Tiempo máximo de ejecución:
+
+El servicio de montaje de campañas publicitarias deberá ejecutarse por parte del trafficker en un plazo máximo de diez (10) días calendario, contados a partir de la solicitud expresa y efectiva entrega por parte del CLIENTE de todos los insumos necesarios para su ejecución.
+
+DÉCIMA CUARTA. SERVICIO DE IMPLEMENTACIÓN TÉCNICA
+
+14.1 Naturaleza del Bono:
+
+El Bono de Implementación Técnica constituye un servicio operativo, técnico y personalizado, ofrecido por LA EMPRESA de forma opcional y complementaria, que no forma parte del programa educativo principal, no garantiza resultados comerciales y no condiciona la ejecución ni la garantía del programa {{PROGRAMA}}.
+
+El presente servicio no comprende, bajo ningún supuesto, asesoría o soporte personalizado en temas relacionados con implementación técnica. Cualquier inquietud o requerimiento adicional sobre el embudo, páginas etc. deberá canalizarse únicamente a través de los medios y canales oficiales dispuestos por LA EMPRESA dentro del programa {{PROGRAMA}} (sesiones, Skool y WhatsApp, X Academy Space).
+
+14.2 Carácter voluntario y condicionado:
+
+El acceso y ejecución del Bono queda sujeto al cumplimiento estricto por parte del CLIENTE de las condiciones establecidas en la presente cláusula. La sola existencia del bono no genera obligación automática de ejecución por parte de LA EMPRESA.
+
+14.3 Acceso a Plataformas y Cuentas:
+
+El CLIENTE se compromete a otorgar al equipo asignado a implementar dicho bono los accesos limitados a sus cuentas system.io, Hotmart, hosting, dominio, Vturb y cualquier otra plataforma digital estrictamente requerida para el montaje de su embudo y páginas. Estos accesos estarán vigentes únicamente durante el periodo de duración del presente contrato.
+
+14.4 Confidencialidad:
+
+Ambas partes asumen la obligación expresa de mantener absoluta confidencialidad sobre toda información suministrada o adquirida durante la prestación del servicio, incluyendo, pero sin limitarse a, datos del CLIENTE, estrategias comerciales, técnicas, y demás información sensible o de carácter privado.
+
+14.5 Limitación de Responsabilidad:
+LA EMPRESA queda expresamente exonerada de cualquier responsabilidad derivada de fallas técnicas, errores de configuración preexistentes, accesos incorrectos, información incompleta o errónea proporcionada por el CLIENTE, así como de hackeos, bloqueos, suspensiones, restricciones de cuentas, caídas de plataformas, cambios en políticas, incompatibilidades técnicas o cualquier otra incidencia propia o ajena a las plataformas digitales utilizadas.
+La responsabilidad de LA EMPRESA se limita única y exclusivamente a la ejecución del montaje e implementación técnica inicial, conforme al alcance definido del bono, y culmina de manera definitiva una vez entregado el activo correspondiente y notificada la finalización del servicio, sin que exista obligación posterior de soporte, corrección, mantenimiento, optimización, reconfiguración o re-ejecución del trabajo realizado.
+
+14.6 Propiedad del Entregable:
+Las configuraciones técnicas, estructuras, páginas, embudos, integraciones o activos digitales implementados por el equipo de LA EMPRESA en el marco del Bono de Implementación Técnica serán de propiedad exclusiva del CLIENTE, únicamente una vez se haya cumplido íntegramente el pago total del programa contratado y se haya dado por finalizada la prestación del servicio conforme a los términos del bono.
+
+14.7 Responsabilidades adicionales del CLIENTE:
+
+Será responsabilidad exclusiva del CLIENTE modificar contraseñas y revocar todos los accesos concedidos al equipo interno de LA EMPRESA inmediatamente después de finalizada la prestación del servicio. En consecuencia, LA EMPRESA no será responsable por ningún tipo de acceso o violación de seguridad posterior a la culminación del servicio contratado.
+
+14.8 Vigencia del Servicio:
+
+El presente servicio podrá ser solicitado por el CLIENTE únicamente durante la vigencia del contrato ({{DURACION_TEXTO}} meses). Una vez expirado dicho plazo, cesará automáticamente el derecho a este beneficio.
+
+14.9 Plazo máximo de solicitud:
+
+El CLIENTE deberá solicitar formalmente el Bono dentro del plazo máximo de vigencia del contrato, y con al menos quince (15) días calendario de antelación al vencimiento del mismo.
+La no solicitud dentro de dicho plazo implica la pérdida automática del bono, sin derecho a reclamo, compensación o reactivación.
+
+14.10 Obligaciones del CLIENTE – Entrega de insumos:
+
+3.	Una vez solicitado el bono, el CLIENTE contará con un plazo máximo de tres (3) días calendario para:
+4.	Completar el formulario oficial indicado por LA EMPRESA.
+5.	Entregar la totalidad de los insumos, accesos y materiales requeridos, en forma correcta y completa.
+6.	La falta de entrega, entrega incompleta o entrega tardía suspende automáticamente el inicio del servicio, sin que ello implique obligación de reprogramación inmediata.
+
+14.11 Tiempos de ejecución:
+
+El plazo estimado de ejecución del Bono es de siete (7) a diez (10) días hábiles, contados únicamente a partir de la entrega completa y validada de los insumos por parte del CLIENTE.
+Cualquier retraso derivado de errores, omisiones o incumplimientos del CLIENTE no será imputable a LA EMPRESA.
+
+14.12 Alcance y limitaciones:
+
+El Bono NO INCLUYE, bajo ningún supuesto:
+
+●	Redacción o modificación de copy.
+●	Edición profesional de videos (VSL, OTO, testimonios).
+●	Cambios estratégicos, rediseños completos o creación de nuevos embudos.
+●	Compra de dominios, hosting o herramientas externas.
+●	Servicios recurrentes o soporte posterior a la entrega final.
+
+14.13 Cambios permitidos:
+
+El CLIENTE contará con una (1) única ronda de ajustes estéticos menores, siempre que se encuentren dentro del alcance original del bono.
+Cualquier solicitud adicional se considerará servicio independiente con costo adicional.
+
+14.14 Cierre del servicio:
+
+Una vez entregado el activo correspondiente (embudo, página o verificación técnica), el servicio se considerará completado y cerrado, sin obligación posterior por parte de LA EMPRESA.
+
+La pérdida del bono no genera derecho a compensación, extensión de contrato ni reembolso parcial o total.
+
+14.15 Independencia contractual:
+
+La activación, uso o pérdida del Bono no modifica, no extiende ni altera la vigencia del contrato principal, ni los derechos y obligaciones derivados del mismo.
+
+14.16 Prohibición de Relaciones Extracontractuales:
+
+Durante el plazo de un (1) año contado a partir de la suscripción del presente contrato, se prohíbe expresamente tanto al CLIENTE como al trafficker interno establecer relaciones laborales, comerciales o profesionales, directas o indirectas, al margen de este contrato, con el objetivo de salvaguardar los intereses comerciales y estratégicos de LA EMPRESA.
+
+DÉCIMA QUINTA. RESOLUCIÓN DE CONFLICTOS
+
+15.1.	Las partes acordarán un arreglo directo de buena fe dentro de los diez (10) días calendario siguientes a la notificación por escrito de la controversia.
+
+15.2.	Si no se alcanza acuerdo, podrán acudir a los tribunales competentes del Estado de Florida, EE. UU., renunciando a cualquier otra jurisdicción.
+
+DÉCIMA SEXTA. CLÁUSULA PENAL
+
+En caso de incumplimiento total o parcial de las obligaciones contractuales, la parte incumplida pagará a la parte cumplida una penalidad equivalente al treinta por ciento (30 %) del valor total del contrato, sin perjuicio de la exigencia de daños y perjuicios adicionales.
+
+DÉCIMA SÉPTIMA. INTERESES MORATORIOS Y ORDEN DE APLICACIÓN DE PAGOS
+
+17.1.	Se causarán intereses moratorios a la tasa del uno punto cinco por ciento (1,5 %) mensual o la máxima permitida por la ley aplicable, según resulte menor, sobre el saldo vencido.
+
+17.2.	Cuando EL CLIENTE haga un pago, ese dinero se aplicará en el siguiente orden:
+1.	Primero, se pagarán los intereses por demora, es decir, los que se generan por no haber pagado a tiempo.
+2.	Segundo, se pagará la multa del 30% del valor del contrato, si aplica, por haber incumplido con las condiciones pactadas.
+3.	Tercero, se pagará el valor principal que debe, es decir, la deuda original sin intereses ni multas.
+
+DÉCIMA OCTAVA. GARANTÍA
+
+{{PROGRAMA}} es un programa diseñado para generar resultados concretos, con una estructura ejecutable en un corto plazo, sin que ello implique obligatoriedad temporal para el CLIENTE. Sin embargo, el acceso al programa se encuentra sujeto a un proceso de selección previa, dirigido exclusivamente a personas comprometidas, con capacidad de ejecución y conciencia de que todo negocio implica inversión y esfuerzo propio.
+
+En ese sentido, la EMPRESA establece una política de garantía basada en un principio de compromiso mutuo, conforme a las siguientes condiciones:
+
+●	Solicitud y oportunidad: La solicitud de activación de la garantía deberá ser presentada por EL CLIENTE por correo electrónico dentro de la vigencia contractual y, en todo caso, con una anticipación mínima de cinco (05) días hábiles al vencimiento del término de acceso principal. Presentada la solicitud, se entenderá ejecutada por una única vez y no podrá formularse una nueva solicitud posterior.
+
+●	Resultado esperado: Dentro de un plazo máximo de {{DURACION_TEXTO}} meses contados desde la firma del presente contrato, EL CLIENTE obtendrá un resultado económico mínimo de cinco mil dólares estadounidenses (USD 5,000.00) de facturación adicional, obtenida en un solo mes calendario, siempre que haya cumplido cabalmente con la ejecución de la estrategia enseñada por LA EMPRESA, durante las cinco (5) fases del programa, y por un mínimo de un (1) mes continuo de pauta publicitaria activa, de acuerdo con los lineamientos impartidos.
+
+●	Condiciones para aplicar la garantía:
+
+a.	EL CLIENTE deberá haber ejecutado integralmente el programa en tiempo, forma y a cabalidad, conforme a las instrucciones impartidas.
+b.	La totalidad del valor del programa deberá estar completamente cancelado, ya sea mediante pago único o por cuotas.
+c.	El contrato debe estar en ejecución, esto es, no puede haber transcurrido más de {{DURACION_NUMERO}} meses, estar suspendido o terminado.
+
+●	Optimización y reformulación: EL CLIENTE acepta que la ejecución integral puede requerir optimizaciones y/o reformulaciones del ecosistema (incluida la reconstrucción total de activos) cuando los resultados no se presenten en los tiempos esperados. Dichas optimizaciones hacen parte de la ejecución exigida para la garantía y no constituyen fundamento autónomo para solicitar reembolso.
+
+●	Ajuste estratégico y métricas: EL CLIENTE reconoce que los hitos, métricas o referentes (incluyendo, de ser el caso, objetivos de ventas o validaciones intermedias) pueden variar según el comportamiento de su mercado, su nicho y su ejecución, y deberán ser revisados y adaptados con su coach. En consecuencia, la imposibilidad de alcanzar un número específico de ventas, por sí sola, no configura incumplimiento de LA EMPRESA, siempre que exista acompañamiento y adaptación estratégica conforme al programa.
+
+●	Alternativas ante el incumplimiento del resultado:
+Si, habiendo cumplido con los requisitos anteriores, no se alcanza el resultado económico mencionado, LA EMPRESA ofrecerá, a elección del CLIENTE:
+
+a)	El reembolso del 100% del valor pagado por concepto del programa, el cual será procesado en un plazo de 20 a 30 días hábiles contados a partir de la aceptación de la solicitud de garantía, o
+b)	La continuidad del servicio sin costo adicional por un plazo adicional de {{DURACION_TEXTO}} meses.
+
+●	Auditoría previa al reembolso:
+Como condición para la activación de la garantía, EL CLIENTE deberá diligenciar el formato de auditoría dispuesto por LA EMPRESA.
+
+Parágrafo Primero – Alcance temporal de la auditoría: La auditoría evaluará únicamente lo ejecutado hasta la fecha exacta en la que EL CLIENTE radique la solicitud formal de garantía por correo electrónico, siempre que dicha solicitud se encuentre dentro del período de vigencia. Ninguna actividad, ajuste o evidencia posterior será considerada para efectos de aprobación de la garantía.
+
+Parágrafo Segundo – Cierre por entrega tardía o incompleta: Si EL CLIENTE entrega información parcial, fragmentada o fuera de los plazos aquí establecidos, o retoma el envío semanas o meses después, LA EMPRESA podrá dar por cerrado definitivamente el proceso de auditoría. La información tardía no será considerada, no reactivará la auditoría, no habilitará nuevas solicitudes y no generará derecho a reembolso ni a extensión de tiempos pausados.
+
+Parágrafo Tercero – Plazos estrictos y caducidad: Una vez LA EMPRESA remita el formato de auditoría, EL CLIENTE contará con tres (3) días hábiles improrrogables para diligenciar y entregar la totalidad de soportes, accesos e información requeridos. El incumplimiento de este término hará caducar automáticamente el trámite de auditoría y, en consecuencia, se perderá el derecho a activar la garantía. De forma excepcional, LA EMPRESA podrá otorgar una (1) única prórroga humanitaria hasta por cinco (5) días hábiles adicionales, debidamente solicitada y justificada por EL CLIENTE, sin que sea renovable.
+
+Parágrafo Cuarto – Pausa automática por auditoría: A partir de la solicitud formal de garantía, el tiempo restante del contrato se pausará automáticamente hasta el cierre definitivo del proceso de auditoría. La reactivación no será automática y requerirá, si aplica, un acuerdo escrito (Otrosí) y el cumplimiento de las obligaciones del CLIENTE. LA EMPRESA podrá negar la reactivación cuando la garantía sea improcedente o cuando el vínculo contractual se encuentre deteriorado por incumplimientos o mala fe.
+
+Para efectos de verificación, LA EMPRESA podrá solicitar los accesos necesarios, incluyendo, de manera enunciativa más no limitativa, acceso como administrador o colaborador al Administrador de Anuncios y/o Business Manager, así como a otras plataformas utilizadas durante la implementación del programa Hotselling.
+
+Dichos accesos serán utilizados exclusivamente con fines de auditoría, preferiblemente en modo lector, sin intervención operativa sobre las cuentas del CLIENTE. Una vez finalizada la auditoría, EL CLIENTE podrá revocar los accesos otorgados y/o modificar las credenciales correspondientes.
+
+La auditoría se realizará de manera digital dentro de los siete (7) días hábiles, tras lo cual LA EMPRESA emitirá un informe con sus conclusiones.
+
+La extensión de garantía no será aplicable si existe interrupción entre el vencimiento del acceso inicial y el inicio de la membresía, o entre mensualidades consecutivas. En tales casos, la garantía quedará automáticamente anulada.
+
+Asimismo, quedará sin efecto el derecho a extender la garantía mediante membresía si EL CLIENTE ha presentado previamente una solicitud de reembolso, independientemente de que dicha solicitud haya sido aprobada o no.
+
+La presentación de una solicitud de reembolso se entenderá como una renuncia expresa al beneficio de extensión de garantía contemplado en la presente cláusula.
+
+Esta garantía sólo es exigible si el CLIENTE ha cumplido integralmente con las condiciones de ejecución, y ha realizado el pago total del programa.
+
+En señal de aceptación y conformidad, las partes firman en duplicado ejemplar este contrato:
+
+FIRMAN:
+
+[[FIRMAS]]
+
+FECHA DEL ACUERDO:
+
+{{FECHA_CONTRATO}}
+
+FECHA DE LIBERACIÓN DE ACCESOS:
+
+Tras validación de la firma, sujeta a horario laboral.

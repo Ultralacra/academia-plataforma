@@ -7,10 +7,14 @@ export default function AudioBubble({
   src,
   isMine,
   timeLabel,
+  delivered,
+  read,
 }: {
   src: string;
   isMine: boolean;
   timeLabel?: string;
+  delivered?: boolean;
+  read?: boolean;
 }) {
   const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = React.useState(false);
@@ -20,7 +24,7 @@ export default function AudioBubble({
   const [error, setError] = React.useState(false);
   const [blobUrl, setBlobUrl] = React.useState<string | null>(null);
   const idRef = React.useRef(
-    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   );
 
   // Cargar audio protegido si es necesario
@@ -124,7 +128,7 @@ export default function AudioBubble({
         window.dispatchEvent(
           new CustomEvent("chat:audio:play", {
             detail: { id: idRef.current },
-          })
+          }),
         );
       } catch {}
       a.play().catch((e) => {
@@ -221,7 +225,29 @@ export default function AudioBubble({
           <span>{mmss(dur || 0)}</span>
           <div className="flex items-center gap-2">
             {timeLabel ? (
-              <span className="text-right text-gray-500">{timeLabel}</span>
+              <span className="text-right text-gray-500 flex items-center gap-1">
+                {timeLabel}
+                {isMine &&
+                  (read ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-3 w-3 text-[#53bdeb]"
+                      fill="currentColor"
+                    >
+                      <path d="M1 14l4 4L15 8" />
+                      <path d="M9 14l4 4L23 8" />
+                    </svg>
+                  ) : delivered ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="h-3 w-3 text-gray-500"
+                      fill="currentColor"
+                    >
+                      <path d="M1 14l4 4L15 8" />
+                      <path d="M9 14l4 4L23 8" />
+                    </svg>
+                  ) : null)}
+              </span>
             ) : (
               <span />
             )}

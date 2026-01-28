@@ -3637,6 +3637,48 @@ export default function StudentChatFriendly({
         it?.created_at ||
         it?.fecha_creacion;
       const lastLabel = lastAt ? formatTime(String(lastAt)) : "";
+
+      // Obtener preview del último mensaje con soporte para archivos adjuntos
+      const lastMsg = it?.last_message || {};
+      let lastPreview = String(
+        lastMsg?.contenido ?? lastMsg?.Contenido ?? lastMsg?.text ?? "",
+      ).trim();
+
+      if (!lastPreview) {
+        const archivos =
+          lastMsg?.archivos ??
+          lastMsg?.Archivos ??
+          lastMsg?.archivos_cargados ??
+          lastMsg?.attachments ??
+          [];
+        if (Array.isArray(archivos) && archivos.length > 0) {
+          const firstFile = archivos[0];
+          const mime = String(
+            firstFile?.mime ?? firstFile?.tipo_mime ?? firstFile?.type ?? "",
+          ).toLowerCase();
+
+          if (mime.startsWith("audio/")) {
+            lastPreview = "🎤 Mensaje de voz";
+          } else if (mime.startsWith("image/")) {
+            lastPreview = "📷 Imagen";
+          } else if (mime.startsWith("video/")) {
+            lastPreview = "🎬 Video";
+          } else if (mime.includes("pdf")) {
+            lastPreview = "📄 Documento PDF";
+          } else if (mime.includes("word") || mime.includes("document")) {
+            lastPreview = "📝 Documento";
+          } else if (mime.includes("sheet") || mime.includes("excel")) {
+            lastPreview = "📊 Hoja de cálculo";
+          } else {
+            lastPreview = "📎 Archivo adjunto";
+          }
+
+          if (archivos.length > 1) {
+            lastPreview += ` (+${archivos.length - 1})`;
+          }
+        }
+      }
+
       let unread = 0;
       // Prefer server-provided unread count when available, otherwise fallback to localStorage
       if (it?.unread != null) {
@@ -3672,6 +3714,11 @@ export default function StudentChatFriendly({
               </span>
             )}
           </div>
+          {lastPreview && (
+            <div className="text-[12px] text-gray-600 truncate">
+              {lastPreview}
+            </div>
+          )}
           {lastLabel && (
             <div className="text-[11px] text-gray-500">{lastLabel}</div>
           )}
@@ -4718,7 +4765,7 @@ export default function StudentChatFriendly({
                               )
                               .map((a) => {
                                 const url = getAttachmentUrl(a);
-                                const timeLabel = ""; // formatTime(m.at);
+                                const timeLabel = formatTime(m.at);
                                 const attSelected =
                                   selectionMode &&
                                   selectedAttachmentIds.has(a.id);
@@ -4741,6 +4788,8 @@ export default function StudentChatFriendly({
                                       src={url}
                                       isMine={isMine}
                                       timeLabel={timeLabel}
+                                      delivered={m.delivered}
+                                      read={m.read}
                                     />
                                     {selectionMode && (
                                       <span
@@ -4778,7 +4827,7 @@ export default function StudentChatFriendly({
                                 selectionMode &&
                                 selectedAttachmentIds.has(a.id);
                               if (isAudio) {
-                                const timeLabel = ""; // formatTime(m.at);
+                                const timeLabel = formatTime(m.at);
                                 return (
                                   <div
                                     key={a.id}
@@ -4798,6 +4847,8 @@ export default function StudentChatFriendly({
                                       src={url}
                                       isMine={isMine}
                                       timeLabel={timeLabel}
+                                      delivered={m.delivered}
+                                      read={m.read}
                                     />
                                     {selectionMode && (
                                       <span

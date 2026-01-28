@@ -915,12 +915,57 @@ export default function AdminChatPage() {
                         const { title, subtitle } = labelForChatItem(it);
                         const lastObj =
                           it?.last_message ?? it?.ultimo_mensaje ?? null;
-                        const last = (
+                        let last = (
                           lastObj?.contenido ??
                           lastObj?.text ??
                           it?.last?.text ??
                           ""
                         ).toString();
+
+                        // Si no hay texto, verificar si hay archivos adjuntos
+                        if (!last.trim()) {
+                          const archivos =
+                            lastObj?.archivos ??
+                            lastObj?.Archivos ??
+                            lastObj?.archivos_cargados ??
+                            lastObj?.attachments ??
+                            [];
+                          if (Array.isArray(archivos) && archivos.length > 0) {
+                            const firstFile = archivos[0];
+                            const mime = String(
+                              firstFile?.mime ??
+                                firstFile?.tipo_mime ??
+                                firstFile?.type ??
+                                "",
+                            ).toLowerCase();
+
+                            if (mime.startsWith("audio/")) {
+                              last = "🎤 Mensaje de voz";
+                            } else if (mime.startsWith("image/")) {
+                              last = "📷 Imagen";
+                            } else if (mime.startsWith("video/")) {
+                              last = "🎬 Video";
+                            } else if (mime.includes("pdf")) {
+                              last = "📄 Documento PDF";
+                            } else if (
+                              mime.includes("word") ||
+                              mime.includes("document")
+                            ) {
+                              last = "📝 Documento";
+                            } else if (
+                              mime.includes("sheet") ||
+                              mime.includes("excel")
+                            ) {
+                              last = "📊 Hoja de cálculo";
+                            } else {
+                              last = "📎 Archivo adjunto";
+                            }
+
+                            if (archivos.length > 1) {
+                              last += ` (+${archivos.length - 1})`;
+                            }
+                          }
+                        }
                         // Dependemos de readsBump para re-render al cambiar lecturas
                         const _rb = readsBump; // eslint-disable-line @typescript-eslint/no-unused-vars
                         const unread = hasUnreadForItem(it);

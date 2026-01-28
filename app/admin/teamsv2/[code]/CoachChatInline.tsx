@@ -4609,7 +4609,7 @@ export default function CoachChatInline({
                             .filter((a) => (a.mime || "").startsWith("audio/"))
                             .map((a) => {
                               const url = getAttachmentUrl(a);
-                              const timeLabel = ""; // formatTime(m.at);
+                              const timeLabel = formatTime(m.at);
                               const attSelected =
                                 selectionMode &&
                                 selectedAttachmentIds.has(a.id);
@@ -4630,6 +4630,8 @@ export default function CoachChatInline({
                                     src={url}
                                     isMine={isMine}
                                     timeLabel={timeLabel}
+                                    delivered={m.delivered}
+                                    read={m.read}
                                   />
                                   {selectionMode && (
                                     <span
@@ -4662,7 +4664,7 @@ export default function CoachChatInline({
                             const attSelected =
                               selectionMode && selectedAttachmentIds.has(a.id);
                             if (isAudio) {
-                              const timeLabel = ""; // formatTime(m.at);
+                              const timeLabel = formatTime(m.at);
                               return (
                                 <div
                                   key={a.id}
@@ -4680,6 +4682,8 @@ export default function CoachChatInline({
                                     src={url}
                                     isMine={isMine}
                                     timeLabel={timeLabel}
+                                    delivered={m.delivered}
+                                    read={m.read}
                                   />
                                   {selectionMode && (
                                     <span

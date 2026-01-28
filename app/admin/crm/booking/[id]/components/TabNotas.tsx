@@ -15,6 +15,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import {
+  FileText,
+  Bell,
+  Clock,
+  AlertTriangle,
+  Plus,
+  MessageSquare,
+  User,
+} from "lucide-react";
 
 interface TabNotasProps {
   p: any;
@@ -97,27 +107,41 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
     p.call_reschedule_time || p.call?.reschedule?.time || null;
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle>Notas</CardTitle>
-          <CardDescription>Notas de venta y mensajes</CardDescription>
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      {/* Notas Card */}
+      <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+              <FileText className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle className="text-slate-800">Notas</CardTitle>
+              <CardDescription className="text-slate-500">
+                Notas de venta y mensajes
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4 text-sm">
+          <div className="space-y-5">
             {isLost ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-xs font-medium text-amber-800">
+              <div className="rounded-xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-sm font-semibold text-amber-800">
                       Motivo (obligatorio)
                     </div>
-                    <div className="text-[11px] text-amber-700">
+                    <div className="text-xs text-amber-700 mt-0.5">
                       En esta etapa se tipifica un solo motivo.
                     </div>
                   </div>
                 </div>
-                <div className="mt-2">
+                <div className="mt-3">
                   <Label className="sr-only">Motivo</Label>
                   <Select
                     value={selectedMotive || ""}
@@ -125,7 +149,7 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
                       applyRecordPatch?.({ lead_disposition: v });
                     }}
                   >
-                    <SelectTrigger className="h-10 bg-white">
+                    <SelectTrigger className="h-11 bg-white border-amber-200 focus:border-amber-400 focus:ring-amber-400/20">
                       <SelectValue placeholder="Selecciona un motivo…" />
                     </SelectTrigger>
                     <SelectContent>
@@ -138,7 +162,8 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
                   </Select>
                 </div>
                 {!selectedMotive ? (
-                  <div className="mt-2 text-xs text-amber-700">
+                  <div className="mt-2 text-xs text-amber-700 flex items-center gap-1.5">
+                    <div className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
                     Falta seleccionar el motivo antes de guardar.
                   </div>
                 ) : null}
@@ -146,60 +171,100 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
             ) : null}
 
             <div>
-              <div className="text-xs font-medium text-slate-600">
-                Notas de venta
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Notas de venta
+                </span>
               </div>
-              <div className="mt-1 rounded-md border border-slate-200 bg-slate-50 p-3 whitespace-pre-wrap">
-                {String(p.sale_notes ?? p.saleNotes ?? "").trim() || "—"}
+              <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4 whitespace-pre-wrap text-sm text-slate-700">
+                {String(p.sale_notes ?? p.saleNotes ?? "").trim() || (
+                  <span className="text-slate-400">Sin notas</span>
+                )}
               </div>
             </div>
             <div>
-              <div className="text-xs font-medium text-slate-600">
-                Mensajes / notas de llamada
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Mensajes / notas de llamada
+                </span>
               </div>
-              <div className="mt-1 rounded-md border border-slate-200 bg-slate-50 p-3 whitespace-pre-wrap">
-                {String(p.text_messages ?? p.textMessages ?? "").trim() || "—"}
+              <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4 whitespace-pre-wrap text-sm text-slate-700">
+                {String(p.text_messages ?? p.textMessages ?? "").trim() || (
+                  <span className="text-slate-400">Sin mensajes</span>
+                )}
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle>Recordatorios y reagenda</CardTitle>
-          <CardDescription>Resumen rápido del seguimiento</CardDescription>
+      {/* Recordatorios Card */}
+      <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
+              <Bell className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle className="text-slate-800">
+                Recordatorios y reagenda
+              </CardTitle>
+              <CardDescription className="text-slate-500">
+                Resumen rápido del seguimiento
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Reagendado</span>
-              <span className="font-medium">
-                {reagendaDate || reagendaTime
-                  ? `${String(reagendaDate || "").slice(0, 10)}${
-                      reagendaTime ? ` ${String(reagendaTime)}` : ""
-                    }`.trim()
-                  : "—"}
-              </span>
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100/50 p-4">
+                <div className="flex items-center gap-2 text-slate-500 mb-1">
+                  <Clock className="h-4 w-4" />
+                  <span className="text-xs font-medium">Reagendado</span>
+                </div>
+                <div className="text-sm font-semibold text-slate-700">
+                  {reagendaDate || reagendaTime
+                    ? `${String(reagendaDate || "").slice(0, 10)}${
+                        reagendaTime ? ` ${String(reagendaTime)}` : ""
+                      }`.trim()
+                    : "—"}
+                </div>
+              </div>
+              <div className="rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-purple-50 p-4">
+                <div className="flex items-center gap-2 text-violet-600 mb-1">
+                  <Bell className="h-4 w-4" />
+                  <span className="text-xs font-medium">Recordatorios</span>
+                </div>
+                <div className="text-2xl font-bold text-violet-700">
+                  {reminders.length}
+                </div>
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-muted-foreground">Recordatorios</span>
-              <span className="font-medium">{reminders.length}</span>
-            </div>
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+
+            <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4">
               {reminders.length ? (
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                   {reminders.slice(0, 6).map((r: any, idx: number) => (
-                    <li key={idx} className="text-sm">
+                    <li
+                      key={idx}
+                      className="flex items-start gap-3 p-2 rounded-lg hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="h-7 w-7 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Bell className="h-3.5 w-3.5 text-violet-600" />
+                      </div>
                       {(() => {
                         const fr = formatReminder(r);
                         return (
-                          <div className="space-y-0.5">
-                            <div className="font-medium text-slate-900">
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm text-slate-800">
                               {fr.title}
                             </div>
                             {fr.meta ? (
-                              <div className="text-xs text-slate-600">
+                              <div className="text-xs text-slate-500 mt-0.5">
                                 {fr.meta}
                               </div>
                             ) : null}
@@ -209,46 +274,69 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
                     </li>
                   ))}
                   {reminders.length > 6 ? (
-                    <li className="text-xs text-slate-500">
+                    <li className="text-xs text-slate-500 pl-10">
                       +{reminders.length - 6} más…
                     </li>
                   ) : null}
                 </ul>
               ) : (
-                <span className="text-slate-600">—</span>
+                <div className="text-center py-4">
+                  <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-2">
+                    <Bell className="h-6 w-6 text-slate-400" />
+                  </div>
+                  <span className="text-sm text-slate-500">
+                    Sin recordatorios
+                  </span>
+                </div>
               )}
             </div>
-            <div className="text-xs text-slate-500">
-              Para editar seguimiento/recordatorios, usa la pestaña
-              "Seguimiento".
+            <div className="p-3 rounded-lg bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100">
+              <p className="text-xs text-violet-700">
+                Para editar seguimiento/recordatorios, usa la pestaña
+                "Seguimiento".
+              </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      <Card className="xl:col-span-2">
-        <CardHeader className="pb-3">
-          <CardTitle>Actividad</CardTitle>
-          <CardDescription>
-            Historial de notas registradas en el lead
-          </CardDescription>
+      {/* Actividad Card */}
+      <Card className="xl:col-span-2 bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
+        <div className="h-1 bg-gradient-to-r from-teal-500 to-emerald-500" />
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
+              <MessageSquare className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <CardTitle className="text-slate-800">Actividad</CardTitle>
+              <CardDescription className="text-slate-500">
+                Historial de notas registradas en el lead
+              </CardDescription>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <div className="text-xs font-medium text-slate-600">
-                Nueva nota
+          <div className="space-y-5">
+            <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Nueva nota
+                </span>
               </div>
               <textarea
-                className="min-h-[88px] w-full rounded-md border border-slate-200 bg-white p-2 text-sm"
+                className="min-h-[100px] w-full rounded-xl border border-slate-200 bg-white p-4 text-sm focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 outline-none transition-all resize-none"
                 placeholder="Escribe una nota para el historial (queda con fecha y usuario al guardar)…"
                 value={newActivityNote}
                 onChange={(e) => setNewActivityNote(e.target.value)}
               />
-              <div className="flex justify-end">
-                <button
+              <div className="flex items-center justify-between mt-3">
+                <div className="text-xs text-slate-500">
+                  Se guarda al presionar "Guardar cambios".
+                </div>
+                <Button
                   type="button"
-                  className="h-9 px-3 rounded border bg-white hover:bg-slate-50 text-sm"
                   onClick={() => {
                     const msg = String(newActivityNote || "").trim();
                     if (!msg) return;
@@ -267,47 +355,72 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
                     applyRecordPatch?.({ activity_log: next });
                     setNewActivityNote("");
                   }}
+                  className="gap-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white shadow-sm"
                 >
+                  <Plus className="h-4 w-4" />
                   Agregar al historial
-                </button>
-              </div>
-              <div className="text-[11px] text-slate-500">
-                Se guarda al presionar "Guardar cambios".
+                </Button>
               </div>
             </div>
 
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Historial
+                </span>
+              </div>
               {activityLog.length ? (
-                <ul className="space-y-2">
+                <ul className="space-y-3">
                   {activityLog
                     .slice()
                     .reverse()
                     .slice(0, 12)
                     .map((a: any, idx: number) => (
-                      <li key={idx} className="text-sm">
-                        <div className="text-[11px] text-slate-600">
-                          {a?.at
-                            ? String(a.at).replace("T", " ").slice(0, 19)
-                            : "—"}
-                          {a?.by?.name || a?.by?.email
-                            ? ` · ${String(a.by.name || a.by.email)}`
-                            : ""}
+                      <li
+                        key={idx}
+                        className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-white hover:bg-slate-50 transition-colors"
+                      >
+                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-teal-100 to-emerald-100 flex items-center justify-center flex-shrink-0">
+                          <User className="h-4 w-4 text-teal-600" />
                         </div>
-                        <div className="whitespace-pre-wrap">
-                          {String(a?.message ?? "").trim() || "—"}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                            <span>
+                              {a?.at
+                                ? String(a.at).replace("T", " ").slice(0, 19)
+                                : "—"}
+                            </span>
+                            {a?.by?.name || a?.by?.email ? (
+                              <>
+                                <span>·</span>
+                                <span className="font-medium text-teal-600">
+                                  {String(a.by.name || a.by.email)}
+                                </span>
+                              </>
+                            ) : null}
+                          </div>
+                          <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                            {String(a?.message ?? "").trim() || "—"}
+                          </div>
                         </div>
                       </li>
                     ))}
                   {activityLog.length > 12 ? (
-                    <li className="text-xs text-slate-500">
+                    <li className="text-xs text-slate-500 text-center py-2">
                       +{activityLog.length - 12} más…
                     </li>
                   ) : null}
                 </ul>
               ) : (
-                <span className="text-slate-600">
-                  Sin actividad registrada.
-                </span>
+                <div className="text-center py-8">
+                  <div className="h-14 w-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                    <MessageSquare className="h-7 w-7 text-slate-400" />
+                  </div>
+                  <span className="text-sm text-slate-500">
+                    Sin actividad registrada.
+                  </span>
+                </div>
               )}
             </div>
           </div>

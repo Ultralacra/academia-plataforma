@@ -7,7 +7,7 @@ import { type CloseSaleInput } from "../../components/CloseSaleForm2";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Loader2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
 import { toast } from "@/components/ui/use-toast";
 import { StageBadge } from "@/app/admin/crm/components/StageBadge";
@@ -795,9 +795,12 @@ function Content({ id }: { id: string }) {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <Card className="p-6 flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" /> Cargando lead...
+      <div className="p-6 min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-teal-50/40">
+        <Card className="p-6 flex items-center gap-3 bg-white/80 backdrop-blur border-slate-200/60 shadow-sm">
+          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-cyan-500 flex items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-white" />
+          </div>
+          <span className="text-slate-700 font-medium">Cargando lead...</span>
         </Card>
       </div>
     );
@@ -805,8 +808,10 @@ function Content({ id }: { id: string }) {
 
   if (!record) {
     return (
-      <div className="p-6">
-        <Card className="p-6">No se encontró el lead solicitado.</Card>
+      <div className="p-6 min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-teal-50/40">
+        <Card className="p-6 bg-white/80 backdrop-blur border-slate-200/60 shadow-sm">
+          <p className="text-slate-600">No se encontró el lead solicitado.</p>
+        </Card>
       </div>
     );
   }
@@ -995,56 +1000,79 @@ function Content({ id }: { id: string }) {
   })();
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="p-6 space-y-6 min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-teal-50/40">
+      {/* Header con gradiente sutil */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between bg-white/70 backdrop-blur-sm rounded-xl p-5 border border-slate-200/60 shadow-sm">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold truncate">
+          <h1 className="text-2xl font-bold text-slate-800 truncate">
             {p.name || salePayload?.name || "Detalle del lead"}
           </h1>
-          <div className="text-sm text-muted-foreground">
-            Lead • Código: {record.codigo}
+          <div className="text-sm text-slate-500 mt-1">
+            Lead • Código:{" "}
+            <span className="font-medium text-teal-600">{record.codigo}</span>
             {record.record_id
               ? ` • Record: ${record.record_entity || "—"} #${record.record_id}`
               : ""}
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <StageBadge stage={leadStageLabel} />
             {!!leadDispositionLabel && (
-              <Badge variant="muted">Estado: {leadDispositionLabel}</Badge>
+              <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">
+                Estado: {leadDispositionLabel}
+              </Badge>
             )}
-            <Badge variant="secondary" className="capitalize">
+            <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-50 capitalize">
               Venta: {statusLabel}
             </Badge>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button asChild variant="outline">
-            <Link href="/admin/crm">Volver al CRM</Link>
+        <div className="flex items-center gap-3">
+          <Button
+            asChild
+            variant="outline"
+            className="border-slate-300 hover:bg-slate-50 bg-transparent"
+          >
+            <Link href="/admin/crm" className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Volver al CRM
+            </Link>
           </Button>
           <Button
-            variant="outline"
             onClick={handleSaveChanges}
             disabled={snapshotSaving}
-            className="bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-50 hover:text-teal-700 focus-visible:ring-teal-300"
+            className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-md shadow-teal-500/20 gap-2"
           >
+            <Save className="h-4 w-4" />
             {snapshotSaving ? "Guardando..." : "Guardar cambios"}
           </Button>
         </div>
       </div>
 
       <Tabs defaultValue="resumen" className="w-full">
-        <TabsList className="sticky top-0 z-30 w-full justify-start rounded-md border border-slate-200 bg-white/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-white/75 overflow-x-auto">
-          <TabsTrigger value="resumen" className="text-xs sm:text-sm">
+        <TabsList className="sticky top-0 z-30 w-full justify-start rounded-xl border border-slate-200/60 bg-white/90 p-1.5 backdrop-blur shadow-sm overflow-x-auto">
+          <TabsTrigger
+            value="resumen"
+            className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg px-4"
+          >
             Resumen
           </TabsTrigger>
-          <TabsTrigger value="venta" className="text-xs sm:text-sm">
+          <TabsTrigger
+            value="venta"
+            className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg px-4"
+          >
             Venta
           </TabsTrigger>
-          <TabsTrigger value="seguimiento" className="text-xs sm:text-sm">
+          <TabsTrigger
+            value="seguimiento"
+            className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg px-4"
+          >
             Seguimiento
           </TabsTrigger>
-          <TabsTrigger value="notas" className="text-xs sm:text-sm">
+          <TabsTrigger
+            value="notas"
+            className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg px-4"
+          >
             Notas
           </TabsTrigger>
         </TabsList>
@@ -1076,6 +1104,7 @@ function Content({ id }: { id: string }) {
             initial={initial}
             hasReserva={hasReserva}
             reserveAmountRaw={reserveAmountRaw}
+            lead={leadForUi}
             setDraft={setDraft}
             setSaleDraftPayload={setSaleDraftPayload}
           />
@@ -1090,21 +1119,21 @@ function Content({ id }: { id: string }) {
         </TabsContent>
       </Tabs>
 
-      <div className="sticky bottom-0 z-40 -mx-6 mt-8 border-t border-slate-200 bg-white/95 px-6 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/75">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-xs text-muted-foreground">
+      {/* Footer sticky mejorado */}
+      <div className="sticky bottom-0 z-40 -mx-6 mt-8 border-t border-slate-200/60 bg-white/90 px-6 py-4 backdrop-blur shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)]">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2 text-sm text-slate-500">
+            <div className="h-2 w-2 rounded-full bg-teal-400 animate-pulse" />
             Los cambios se aplican al presionar "Guardar cambios".
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleSaveChanges}
-              disabled={snapshotSaving}
-              className="bg-teal-600 text-white border border-teal-700 hover:bg-teal-600 hover:text-white focus-visible:ring-teal-300"
-            >
-              {snapshotSaving ? "Guardando..." : "Guardar cambios"}
-            </Button>
-          </div>
+          <Button
+            onClick={handleSaveChanges}
+            disabled={snapshotSaving}
+            className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-lg shadow-teal-500/25 gap-2"
+          >
+            <Save className="h-4 w-4" />
+            {snapshotSaving ? "Guardando..." : "Guardar cambios"}
+          </Button>
         </div>
       </div>
     </div>

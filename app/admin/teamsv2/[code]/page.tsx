@@ -364,10 +364,41 @@ export default function CoachDetailPage({
   function getChatLastMessage(it: any): { text: string; at: number } {
     try {
       const m = it?.last_message || {};
-      const text =
+      let text =
         String(
           m?.contenido ?? m?.Contenido ?? m?.text ?? it?.last_message_text ?? ""
         ) || "";
+      
+      // Si no hay texto, verificar si hay archivos adjuntos y mostrar tipo descriptivo
+      if (!text.trim()) {
+        const archivos = m?.archivos ?? m?.Archivos ?? m?.archivos_cargados ?? m?.attachments ?? [];
+        if (Array.isArray(archivos) && archivos.length > 0) {
+          const firstFile = archivos[0];
+          const mime = String(firstFile?.mime ?? firstFile?.tipo_mime ?? firstFile?.type ?? "").toLowerCase();
+          
+          if (mime.startsWith("audio/")) {
+            text = "🎤 Mensaje de voz";
+          } else if (mime.startsWith("image/")) {
+            text = "📷 Imagen";
+          } else if (mime.startsWith("video/")) {
+            text = "🎬 Video";
+          } else if (mime.includes("pdf")) {
+            text = "📄 Documento PDF";
+          } else if (mime.includes("word") || mime.includes("document")) {
+            text = "📝 Documento";
+          } else if (mime.includes("sheet") || mime.includes("excel")) {
+            text = "📊 Hoja de cálculo";
+          } else {
+            text = "📎 Archivo adjunto";
+          }
+          
+          // Si hay múltiples archivos, indicarlo
+          if (archivos.length > 1) {
+            text += ` (+${archivos.length - 1})`;
+          }
+        }
+      }
+      
       const atFields = [
         m?.fecha_envio_local,
         m?.created_at_local,
