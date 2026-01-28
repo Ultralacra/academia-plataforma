@@ -586,10 +586,11 @@ function PaymentsContent() {
           fecha_pago: cuotaForm.fecha_pago
             ? new Date(cuotaForm.fecha_pago).toISOString()
             : null,
-          metodo: cuotaForm.metodo.trim() || null,
-          referencia: cuotaForm.referencia.trim() || null,
-          concepto: cuotaForm.concepto.trim() || null,
-          notas: cuotaForm.notas.trim() || null,
+          // El backend valida strings; evitar null (manda "" como en otras pantallas)
+          metodo: cuotaForm.metodo.trim() || "",
+          referencia: cuotaForm.referencia.trim() || "",
+          concepto: cuotaForm.concepto.trim() || "",
+          notas: cuotaForm.notas.trim() || "",
         };
 
         await upsertPaymentDetalle(
@@ -612,10 +613,10 @@ function PaymentsContent() {
           fecha_pago: cuotaForm.fecha_pago
             ? new Date(cuotaForm.fecha_pago).toISOString()
             : undefined,
-          metodo: cuotaForm.metodo.trim() || undefined,
-          referencia: cuotaForm.referencia.trim() || undefined,
-          concepto: cuotaForm.concepto.trim() || undefined,
-          notas: cuotaForm.notas.trim() || undefined,
+          metodo: cuotaForm.metodo.trim() || "",
+          referencia: cuotaForm.referencia.trim() || "",
+          concepto: cuotaForm.concepto.trim() || "",
+          notas: cuotaForm.notas.trim() || "",
         };
 
         await createPaymentDetalle(paymentCodigo, payload);
@@ -1118,6 +1119,15 @@ function PaymentsContent() {
       String(detail?.codigo ?? detailCodigo ?? "").trim() || null;
     if (!paymentCodigo) return;
 
+    try {
+      console.debug("[payments] saveDetalle:start", {
+        key,
+        paymentCodigo,
+        detalleCodigo: String(d?.codigo ?? ""),
+        currentEstatus: d?.estatus,
+      });
+    } catch {}
+
     const nextStatus = String(
       detailEditStatusByKeyRef.current[key] ?? d?.estatus ?? "",
     )
@@ -1162,15 +1172,32 @@ function PaymentsContent() {
         fecha_pago: d?.fecha_pago ?? null,
         metodo: d?.metodo ? String(d.metodo) : "",
         referencia: d?.referencia ? String(d.referencia) : "",
-        concepto: nextConcept || null,
-        notas: nextNotes.trim() ? nextNotes : null,
+        concepto: nextConcept || "",
+        // Evitar null: el backend rechaza notas=null (manda "")
+        notas: nextNotes.trim() ? nextNotes : "",
       };
+
+      try {
+        console.debug("[payments] saveDetalle:request", {
+          paymentCodigo,
+          detalleCodigo: String(d?.codigo ?? ""),
+          payload,
+        });
+      } catch {}
 
       await upsertPaymentDetalle(
         paymentCodigo,
         String(d.codigo ?? ""),
         payload,
       );
+
+      try {
+        console.debug("[payments] saveDetalle:success", {
+          key,
+          paymentCodigo,
+          estatus: normalizedNextStatus,
+        });
+      } catch {}
 
       // Optimistic update local
       setDetail((prev: any) => {
@@ -1201,6 +1228,15 @@ function PaymentsContent() {
         // noop
       }
     } catch (e: any) {
+      try {
+        console.error("[payments] saveDetalle:error", {
+          key,
+          paymentCodigo,
+          detalleCodigo: String(d?.codigo ?? ""),
+          message: e?.message,
+          error: e,
+        });
+      } catch {}
       toast({
         title: "Error al actualizar",
         description: e?.message || "No se pudo actualizar el estatus",
@@ -1215,6 +1251,15 @@ function PaymentsContent() {
     const key = getDetailRowKey(d);
     if (!key) return;
 
+    try {
+      console.debug("[payments] scheduleSaveDetalle", {
+        key,
+        delayMs,
+        paymentCodigo: String(detail?.codigo ?? detailCodigo ?? "").trim(),
+        detalleCodigo: String(d?.codigo ?? ""),
+      });
+    } catch {}
+
     const prev = detailSaveTimersRef.current[key];
     if (prev) {
       window.clearTimeout(prev);
@@ -1222,6 +1267,13 @@ function PaymentsContent() {
     const t = window.setTimeout(
       () => {
         delete detailSaveTimersRef.current[key];
+        try {
+          console.debug("[payments] scheduleSaveDetalle:fire", {
+            key,
+            paymentCodigo: String(detail?.codigo ?? detailCodigo ?? "").trim(),
+            detalleCodigo: String(d?.codigo ?? ""),
+          });
+        } catch {}
         void saveDetalle(d);
       },
       Math.max(0, delayMs),
@@ -2338,6 +2390,20 @@ function PaymentsContent() {
                                         onValueChange={(v) => {
                                           const vLower =
                                             normalizePaymentStatus(v);
+                                          try {
+                                            console.debug(
+                                              "[payments] detalle estatus changed",
+                                              {
+                                                key,
+                                                from: current,
+                                                to: vLower,
+                                                raw: v,
+                                                detalleCodigo: String(
+                                                  d?.codigo ?? "",
+                                                ),
+                                              },
+                                            );
+                                          } catch {}
                                           setDetailEditStatusByKey((prev) => ({
                                             ...prev,
                                             [key]: vLower,

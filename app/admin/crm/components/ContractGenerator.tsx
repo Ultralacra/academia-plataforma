@@ -10,6 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -64,6 +65,17 @@ export function ContractGenerator({
   const [useCustomTemplate, setUseCustomTemplate] = useState(false);
   const [editBeforeGenerate, setEditBeforeGenerate] = useState(true);
   const [overrides, setOverrides] = useState<Partial<ContractData>>({});
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [baseContractText, setBaseContractText] = useState<string | null>(null);
+  const [baseContractStats, setBaseContractStats] = useState<{
+    lines: number;
+    chars: number;
+  } | null>(null);
+  const [baseContractWarnings, setBaseContractWarnings] = useState<string[]>(
+    [],
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Datos del contrato mapeados desde el lead
@@ -81,7 +93,340 @@ export function ContractGenerator({
     if (!open) return;
     // Cada vez que se abre el diálogo, reiniciamos cambios locales para evitar confusiones
     setOverrides({});
+    setPreviewOpen(false);
+    setPreviewError(null);
   }, [open]);
+
+  const getContractTextWarnings = (txt: string): string[] => {
+    const warnings: string[] = [];
+
+    // Detección específica de truncamiento observado previamente en 9.4
+    if (
+      /9\.4\s+Infracción y consecuencias\./i.test(txt) &&
+      /●\s*La exigencia de retiro inmediato del contenido,\s*\n\s*\n?\s*DÉCIMA\./i.test(
+        txt,
+      )
+    ) {
+      warnings.push(
+        "El texto base parece estar cortado en la cláusula 9.4 (queda un ítem con coma y salta directo a DÉCIMA). Si falta contenido, complétalo en el .txt y pulsa “Actualizar”.",
+      );
+    }
+
+    if (!txt.includes("[[FIRMAS]]")) {
+      warnings.push(
+        "No se encontró el marcador [[FIRMAS]] en el texto base. La sección de firmas no se maquetará como tabla.",
+      );
+    }
+
+    return warnings;
+  };
+
+  const ensureBaseContractText = async (forceReload = false) => {
+    if (baseContractText && !forceReload) return baseContractText;
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      // Cache-buster para evitar que el navegador se quede con una versión antigua
+      const url = forceReload
+        ? `${DEFAULT_CONTRACT_TEXT_URL}?v=${Date.now()}`
+        : DEFAULT_CONTRACT_TEXT_URL;
+      const txt = await loadContractTextFromUrl(url);
+      setBaseContractText(txt);
+      setBaseContractStats({
+        lines: txt.split(/\r?\n/).length,
+        chars: txt.length,
+      });
+      setBaseContractWarnings(getContractTextWarnings(txt));
+      return txt;
+    } catch (e: any) {
+      const msg = e?.message || "No se pudo cargar el texto base del contrato";
+      setPreviewError(msg);
+      throw e;
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  type PreviewBlock =
+    | { type: "h1"; text: string }
+    | { type: "centerTitle"; text: string }
+    | { type: "h2"; text: string }
+    | { type: "p"; text: string }
+    | { type: "list"; label: string; text: string; level: number }
+    | { type: "signatures" };
+
+  const fillPlaceholdersLocal = (
+    input: string,
+    values: Record<string, string>,
+  ) =>
+    input.replace(/\{\{([A-Z0-9_]+)\}\}/g, (_m, key: string) => {
+      const v = values[key];
+      return typeof v === "string" ? v : "";
+    });
+
+  const parsePreviewBlocks = React.useCallback(
+    (contractText: string, values: Record<string, string>): PreviewBlock[] => {
+      const lines = contractText
+        .split(/\r?\n/)
+        .map((l) => fillPlaceholdersLocal(l, values).trimEnd());
+
+      const blocks: PreviewBlock[] = [];
+      let buffer: string[] = [];
+      let currentNumberDepth = 0;
+
+      const flush = () => {
+        const text = buffer.join(" ").trim();
+        buffer = [];
+        if (!text) return;
+        blocks.push({ type: "p", text });
+      };
+
+      const isAllCapsHeading = (line: string) => {
+        const t = line.trim();
+        if (!t) return false;
+        const letters = t.replace(/[^A-ZÁÉÍÓÚÜÑ]/g, "");
+        return letters.length >= 6 && t === t.toUpperCase() && t.length <= 80;
+      };
+
+      const looksLikeClauseHeading = (line: string) => {
+        const t = line.trim();
+        if (!t) return false;
+        return /^[A-ZÁÉÍÓÚÜÑ]+\.[\s\S]+$/.test(t) && t === t.toUpperCase();
+      };
+
+      for (const raw of lines) {
+        const trimmed = raw.trim();
+        if (!trimmed) {
+          flush();
+          continue;
+        }
+
+        if (trimmed === "[[FIRMAS]]") {
+          flush();
+          currentNumberDepth = 0;
+          blocks.push({ type: "signatures" });
+          continue;
+        }
+
+        const bulletMatch = /^([●•\-])\s+(.*)$/.exec(trimmed);
+        if (bulletMatch) {
+          flush();
+          blocks.push({
+            type: "list",
+            label: "•",
+            text: bulletMatch[2].trim(),
+            level: 1,
+          });
+          continue;
+        }
+
+        if (trimmed.includes("CONTRATO") && trimmed === trimmed.toUpperCase()) {
+          flush();
+          currentNumberDepth = 0;
+          blocks.push({ type: "h1", text: trimmed });
+          continue;
+        }
+
+        if (trimmed.toUpperCase() === "CLÁUSULAS") {
+          flush();
+          currentNumberDepth = 0;
+          blocks.push({ type: "centerTitle", text: trimmed });
+          continue;
+        }
+
+        if (looksLikeClauseHeading(trimmed) || isAllCapsHeading(trimmed)) {
+          flush();
+          currentNumberDepth = 0;
+          blocks.push({ type: "h2", text: trimmed });
+          continue;
+        }
+
+        const subsectionMatch =
+          /^(\d+(?:\.\d+)+)\.(?:\s+|\t+)(.*)$/.exec(trimmed) ??
+          /^(\d+(?:\.\d+)+)\s+(.*)$/.exec(trimmed);
+        if (subsectionMatch) {
+          flush();
+          const label = subsectionMatch[1];
+          const rest = subsectionMatch[2].trim();
+          currentNumberDepth = Math.max(0, label.split(".").length - 1);
+          blocks.push({
+            type: "list",
+            label: `${label}`,
+            text: rest,
+            level: currentNumberDepth + 1,
+          });
+          continue;
+        }
+
+        const numberedMatch = /^(\d+)\.(?:\s+|\t+)(.*)$/.exec(trimmed);
+        if (numberedMatch) {
+          flush();
+          blocks.push({
+            type: "list",
+            label: `${numberedMatch[1]}.`,
+            text: numberedMatch[2].trim(),
+            level: Math.max(1, currentNumberDepth + 1),
+          });
+          continue;
+        }
+
+        const letterMatch = /^([a-z])\)(?:\s+|\t+)(.*)$/i.exec(trimmed);
+        if (letterMatch) {
+          flush();
+          blocks.push({
+            type: "list",
+            label: `${letterMatch[1].toLowerCase()})`,
+            text: letterMatch[2].trim(),
+            level: Math.max(2, currentNumberDepth + 2),
+          });
+          continue;
+        }
+
+        const romanMatch = /^([ivx]+)\.(?:\s+|\t+)(.*)$/i.exec(trimmed);
+        if (romanMatch) {
+          flush();
+          blocks.push({
+            type: "list",
+            label: `${romanMatch[1].toLowerCase()}.`,
+            text: romanMatch[2].trim(),
+            level: Math.max(2, currentNumberDepth + 2),
+          });
+          continue;
+        }
+
+        buffer.push(trimmed);
+      }
+
+      flush();
+      return blocks;
+    },
+    [],
+  );
+
+  const previewBlocks = React.useMemo(() => {
+    if (!baseContractText) return [] as PreviewBlock[];
+    return parsePreviewBlocks(baseContractText, preparedData);
+  }, [baseContractText, parsePreviewBlocks, preparedData]);
+
+  const buildPreviewHtml = React.useCallback((): string => {
+    const esc = (s: string) =>
+      String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;");
+
+    const blocks = previewBlocks;
+    const body = blocks
+      .map((b) => {
+        if (b.type === "h1") {
+          return `<h1 class="h1">${esc(b.text)}</h1>`;
+        }
+        if (b.type === "centerTitle") {
+          return `<div class="centerTitle">${esc(b.text)}</div>`;
+        }
+        if (b.type === "h2") {
+          return `<div class="h2">${esc(b.text)}</div>`;
+        }
+        if (b.type === "p") {
+          return `<p class="p">${esc(b.text)}</p>`;
+        }
+        if (b.type === "list") {
+          const pad = Math.min(56, 12 + b.level * 14);
+          return `<div class="li" style="padding-left:${pad}px"><span class="label">${esc(
+            b.label,
+          )}</span><span class="text">${esc(b.text)}</span></div>`;
+        }
+        if (b.type === "signatures") {
+          return `
+<div class="sigWrap">
+  <div class="sigGrid">
+    <div class="sigLeft">
+      <div class="sigName">JAVIER MIRANDA</div>
+      <div class="sigName">MHF GROUP LLC</div>
+    </div>
+    <div class="sigRight">
+      <div class="sigLine">${esc(preparedData.NOMBRE_COMPLETO || "")}</div>
+      <div class="sigHint">(NOMBRE Y APELLIDO)</div>
+      <div class="sigFields">
+        <div class="row"><div class="k">Correo Electrónico:</div><div class="v">${esc(
+          preparedData.EMAIL || "",
+        )}</div></div>
+        <div class="row"><div class="k">Ciudad de Residencia:</div><div class="v">${esc(
+          preparedData.CIUDAD || "",
+        )}</div></div>
+        <div class="row"><div class="k">País de Residencia:</div><div class="v">${esc(
+          preparedData.PAIS || "",
+        )}</div></div>
+        <div class="row"><div class="k">Nro. de Telef.:</div><div class="v">${esc(
+          preparedData.TELEFONO || "",
+        )}</div></div>
+      </div>
+    </div>
+  </div>
+</div>`;
+        }
+        return "";
+      })
+      .join("\n");
+
+    const title = `Contrato_${(mergedData.fullName || "cliente").replace(/[^a-zA-Z0-9]/g, "_")}`;
+
+    return `<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${esc(title)}</title>
+  <style>
+    body{font-family:Arial, sans-serif; color:#000; margin:0; background:#fff;}
+    .page{max-width:900px; margin:0 auto; padding:40px 48px;}
+    .h1{text-align:center; font-weight:700; font-size:18px; margin:0 0 16px;}
+    .centerTitle{text-align:center; font-weight:700; font-size:16px; margin:16px 0;}
+    .h2{font-weight:700; font-size:15px; margin:18px 0 8px;}
+    .p{margin:0 0 12px; text-align:justify;}
+    .li{margin:0 0 8px; text-align:justify;}
+    .label{font-weight:700; margin-right:8px;}
+    .sigWrap{margin:24px 0;}
+    .sigGrid{display:grid; grid-template-columns:1fr 1fr; gap:32px; align-items:start;}
+    .sigLeft{text-align:center;}
+    .sigName{font-weight:700;}
+    .sigLine{text-align:center; font-weight:700; border-bottom:1px solid #000; padding-bottom:4px;}
+    .sigHint{text-align:center; font-weight:700; font-size:12px; margin-top:6px;}
+    .sigFields{margin-top:16px; display:flex; flex-direction:column; gap:8px;}
+    .row{display:grid; grid-template-columns:auto 1fr; gap:12px; align-items:end;}
+    .k{font-weight:700;}
+    .v{border-bottom:1px solid #000; min-height:18px;}
+    @media print {.page{padding:0.75in 0.75in;}}
+  </style>
+</head>
+<body>
+  <div class="page">
+    ${body}
+  </div>
+</body>
+</html>`;
+  }, [mergedData.fullName, mergedData, previewBlocks, preparedData]);
+
+  const downloadPreviewHtml = React.useCallback(() => {
+    const html = buildPreviewHtml();
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const clientName = (mergedData.fullName || "cliente").replace(
+      /[^a-zA-Z0-9]/g,
+      "_",
+    );
+    const date = new Date().toISOString().slice(0, 10);
+    const filename = `Contrato_${clientName}_${date}.html`;
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 500);
+  }, [buildPreviewHtml, mergedData.fullName]);
 
   // Campos que están vacíos o incompletos
   const missingFields = React.useMemo(() => {
@@ -141,8 +486,9 @@ export function ContractGenerator({
       if (usedTemplate && templateBuffer) {
         await generateContract(templateBuffer, mergedData, filename);
       } else {
+        // Cache-buster para asegurar que se use el texto más reciente
         const baseText = await loadContractTextFromUrl(
-          DEFAULT_CONTRACT_TEXT_URL,
+          `${DEFAULT_CONTRACT_TEXT_URL}?v=${Date.now()}`,
         );
         await generateContractFromText(baseText, mergedData, filename);
       }
@@ -612,6 +958,225 @@ export function ContractGenerator({
         </div>
 
         <DialogFooter>
+          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={async () => {
+                setPreviewOpen(true);
+                try {
+                  // Al abrir, siempre recargamos para mostrar el texto completo y más reciente
+                  await ensureBaseContractText(true);
+                } catch {
+                  // error ya seteado
+                }
+              }}
+              className="gap-2"
+            >
+              <FileText className="h-4 w-4" />
+              Vista previa
+            </Button>
+
+            <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden">
+              <DialogHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <DialogTitle>Vista previa del contrato</DialogTitle>
+                    <DialogDescription>
+                      Vista previa basada en el texto del contrato (modo sin
+                      plantilla). Si usas un template .docx personalizado, la
+                      vista previa puede diferir.
+                    </DialogDescription>
+                    {baseContractStats && !previewError && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Cargado: {baseContractStats.lines} líneas,{" "}
+                        {baseContractStats.chars} caracteres.
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={async () => {
+                        try {
+                          await ensureBaseContractText(true);
+                        } catch {
+                          // error ya seteado
+                        }
+                      }}
+                      disabled={previewLoading}
+                    >
+                      Actualizar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={downloadPreviewHtml}
+                      disabled={
+                        previewLoading || !baseContractText || !!previewError
+                      }
+                      className="gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      Descargar HTML
+                    </Button>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              {previewError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  {previewError}
+                </div>
+              ) : (
+                <ScrollArea className="h-[70vh] rounded-md border">
+                  <div
+                    className="p-6 text-[14px] leading-relaxed"
+                    style={{ fontFamily: "Arial" }}
+                  >
+                    {baseContractWarnings.length > 0 && (
+                      <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+                        <div className="text-sm font-medium text-amber-900">
+                          Aviso
+                        </div>
+                        <div className="mt-1 space-y-1 text-xs text-amber-900">
+                          {baseContractWarnings.map((w, i) => (
+                            <div key={i}>- {w}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {previewLoading && !baseContractText ? (
+                      <p className="text-sm text-muted-foreground">
+                        Cargando vista previa…
+                      </p>
+                    ) : (
+                      previewBlocks.map((b, idx) => {
+                        if (b.type === "h1") {
+                          return (
+                            <h1
+                              key={idx}
+                              className="text-center font-bold text-[18px] mb-4"
+                            >
+                              {b.text}
+                            </h1>
+                          );
+                        }
+                        if (b.type === "centerTitle") {
+                          return (
+                            <div
+                              key={idx}
+                              className="text-center font-bold text-[16px] my-4"
+                            >
+                              {b.text}
+                            </div>
+                          );
+                        }
+                        if (b.type === "h2") {
+                          return (
+                            <div
+                              key={idx}
+                              className="font-bold text-[15px] mt-5 mb-2"
+                            >
+                              {b.text}
+                            </div>
+                          );
+                        }
+                        if (b.type === "p") {
+                          return (
+                            <p
+                              key={idx}
+                              className="mb-3"
+                              style={{
+                                textAlign: "justify" as const,
+                                textJustify: "inter-word",
+                              }}
+                            >
+                              {b.text}
+                            </p>
+                          );
+                        }
+                        if (b.type === "list") {
+                          const pad = Math.min(56, 12 + b.level * 14);
+                          return (
+                            <div
+                              key={idx}
+                              className="mb-2"
+                              style={{
+                                paddingLeft: pad,
+                                textAlign: "justify" as const,
+                              }}
+                            >
+                              <span className="font-bold">{b.label}</span>
+                              <span className="ml-2">{b.text}</span>
+                            </div>
+                          );
+                        }
+                        if (b.type === "signatures") {
+                          return (
+                            <div key={idx} className="my-6">
+                              <div className="grid grid-cols-2 gap-8 items-start">
+                                <div className="text-center">
+                                  <div className="font-bold">
+                                    JAVIER MIRANDA
+                                  </div>
+                                  <div className="font-bold">MHF GROUP LLC</div>
+                                </div>
+                                <div>
+                                  <div className="text-center">
+                                    <div className="border-b border-black pb-1 font-bold">
+                                      {preparedData.NOMBRE_COMPLETO}
+                                    </div>
+                                    <div className="text-[12px] font-bold mt-1">
+                                      (NOMBRE Y APELLIDO)
+                                    </div>
+                                  </div>
+
+                                  <div className="mt-4 space-y-2">
+                                    {[
+                                      [
+                                        "Correo Electrónico:",
+                                        preparedData.EMAIL,
+                                      ],
+                                      [
+                                        "Ciudad de Residencia:",
+                                        preparedData.CIUDAD,
+                                      ],
+                                      [
+                                        "País de Residencia:",
+                                        preparedData.PAIS,
+                                      ],
+                                      [
+                                        "Nro. de Telef.:",
+                                        preparedData.TELEFONO,
+                                      ],
+                                    ].map(([label, value]) => (
+                                      <div
+                                        key={label}
+                                        className="grid grid-cols-[auto,1fr] gap-3"
+                                      >
+                                        <div className="font-bold">{label}</div>
+                                        <div className="border-b border-black">
+                                          {value}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                        return null;
+                      })
+                    )}
+                  </div>
+                </ScrollArea>
+              )}
+            </DialogContent>
+          </Dialog>
+
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancelar
           </Button>

@@ -233,6 +233,13 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
   };
   const durationText = durationWords[durationNum] || `${durationNum}`;
 
+  const durationUnit = durationNum === 1 ? "mes" : "meses";
+  const hasExplicitDurationNumber =
+    typeof data.programDurationNumber === "number" && Number.isFinite(data.programDurationNumber);
+  const durationProgram = hasExplicitDurationNumber
+    ? `${durationText} ${durationUnit}`
+    : data.programDuration || "cuatro (4) meses";
+
   return {
     // Datos personales
     NOMBRE_COMPLETO: data.fullName || "___________________________",
@@ -259,7 +266,7 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
 
     // Programa
     PROGRAMA: data.program || "HOTSELLING PRO",
-    DURACION_PROGRAMA: data.programDuration || "cuatro (4) meses",
+    DURACION_PROGRAMA: durationProgram,
     DURACION_NUMERO: String(durationNum),
     DURACION_TEXTO: durationText,
     BONOS: bonusesText,
@@ -509,13 +516,16 @@ function parseContractTextToParagraphs(
         left: baseLeftIndent(),
         firstLine: FIRST_LINE,
       },
-      spacing: { after: 180 },
+      spacing: { after: 140 },
     });
 
   const makeListParagraph = (label: string, text: string, extraIndentLevels: number) => {
     const left = baseLeftIndent() + INDENT_PER_LEVEL * Math.max(1, extraIndentLevels);
     return new Paragraph({
-      children: [run(label ? `${label} ` : ""), run(text)],
+      children: [
+        ...(label ? [run(`${label} `, { bold: true })] : []),
+        run(text),
+      ],
       alignment: AlignmentType.JUSTIFIED,
       indent: {
         left,
@@ -600,7 +610,7 @@ function parseContractTextToParagraphs(
         new Paragraph({
           children: [run(trimmed, { bold: true, size: 24 })],
           heading: HeadingLevel.HEADING_2,
-          alignment: AlignmentType.JUSTIFIED,
+          alignment: AlignmentType.LEFT,
           spacing: { before: 240, after: 140 },
         }),
       );
@@ -617,10 +627,10 @@ function parseContractTextToParagraphs(
       currentNumberDepth = Math.max(0, label.split(".").length - 1);
       paragraphs.push(
         new Paragraph({
-          children: [run(`${label} ${rest}`, { bold: true })],
-          alignment: AlignmentType.JUSTIFIED,
+          children: [run(label, { bold: true }), run(` ${rest}`)],
+          alignment: AlignmentType.LEFT,
           indent: { left: baseLeftIndent() },
-          spacing: { before: 160, after: 120 },
+          spacing: { before: 160, after: 100 },
         }),
       );
       continue;
@@ -676,6 +686,11 @@ export async function generateContractFromText(
     styles: {
       default: {
         document: {
+          paragraph: {
+            spacing: {
+              line: 276, // ~1.15
+            },
+          },
           run: {
             font: DOC_FONT,
             color: DOC_COLOR,
@@ -686,7 +701,16 @@ export async function generateContractFromText(
     },
     sections: [
       {
-        properties: {},
+        properties: {
+          page: {
+            margin: {
+              top: 1440,
+              right: 1440,
+              bottom: 1440,
+              left: 1440,
+            },
+          },
+        },
         children,
       },
     ],
