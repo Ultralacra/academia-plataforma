@@ -55,7 +55,9 @@ export default function PauseDatesModal({
     if (!open) return;
     if (initialRange?.start) {
       const from = parseMaybe(initialRange.start) ?? undefined;
-      const to = initialRange?.end ? parseMaybe(initialRange.end) ?? undefined : undefined;
+      const to = initialRange?.end
+        ? (parseMaybe(initialRange.end) ?? undefined)
+        : undefined;
       setRange({ from, to });
     } else {
       setRange({});
