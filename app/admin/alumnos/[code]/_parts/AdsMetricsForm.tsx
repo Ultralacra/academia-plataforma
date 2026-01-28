@@ -157,15 +157,16 @@ export default function AdsMetricsForm({
   const [assignedCoaches, setAssignedCoaches] = useState<
     Array<{ name: string; area?: string | null; puesto?: string | null }>
   >([]);
-  const [studentInfo, setStudentInfo] = useState<
-    { id: string | number | null; code: string; name: string } | null
-  >(null);
+  const [studentInfo, setStudentInfo] = useState<{
+    id: string | number | null;
+    code: string;
+    name: string;
+  } | null>(null);
 
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataSaving, setMetadataSaving] = useState(false);
-  const [matchedMetadata, setMatchedMetadata] = useState<
-    MetadataRecord<any> | null
-  >(null);
+  const [matchedMetadata, setMatchedMetadata] =
+    useState<MetadataRecord<any> | null>(null);
   const [matchedMetadataCount, setMatchedMetadataCount] = useState<number>(0);
 
   function applyMetadataToForm(record: MetadataRecord<any> | null) {
@@ -315,10 +316,11 @@ export default function AdsMetricsForm({
   ) {
     const alumnoIdStr = normalizeId(opts.alumnoId);
     const candidateEntityIds = Array.from(
-      new Set([
-        alumnoIdStr,
-        normalizeId(opts.studentCode),
-      ].filter(Boolean) as string[]),
+      new Set(
+        [alumnoIdStr, normalizeId(opts.studentCode)].filter(
+          Boolean,
+        ) as string[],
+      ),
     );
 
     const matches = items
@@ -338,7 +340,8 @@ export default function AdsMetricsForm({
         const payloadMatches =
           (alumnoIdStr && payloadAlumnoId === alumnoIdStr) ||
           (payloadAlumnoCodigo &&
-            payloadAlumnoCodigo.toLowerCase() === opts.studentCode.toLowerCase());
+            payloadAlumnoCodigo.toLowerCase() ===
+              opts.studentCode.toLowerCase());
 
         return Boolean(idMatches || payloadMatches);
       });
@@ -398,9 +401,15 @@ export default function AdsMetricsForm({
 
     const creadoPorId = (user as any)?.id ?? null;
     const creadoPorCodigo =
-      (user as any)?.codigo ?? (user as any)?.code ?? (user as any)?.user_code ?? null;
+      (user as any)?.codigo ??
+      (user as any)?.code ??
+      (user as any)?.user_code ??
+      null;
     const creadoPorNombre =
-      (user as any)?.nombre ?? (user as any)?.name ?? (user as any)?.email ?? null;
+      (user as any)?.nombre ??
+      (user as any)?.name ??
+      (user as any)?.email ??
+      null;
 
     const payload = {
       ...data,
@@ -449,7 +458,8 @@ export default function AdsMetricsForm({
         const mergedPayload = {
           ...existingPayload,
           ...payload,
-          creado_por_id: existingPayload?.creado_por_id ?? payload.creado_por_id,
+          creado_por_id:
+            existingPayload?.creado_por_id ?? payload.creado_por_id,
           creado_por_codigo:
             existingPayload?.creado_por_codigo ?? payload.creado_por_codigo,
           creado_por_nombre:
@@ -1127,7 +1137,9 @@ export default function AdsMetricsForm({
                     >
                       <option value="sin-fase">Sin fase</option>
                       <option value="Fase de testeo">Fase de testeo</option>
-                      <option value="Fase de optimización">Fase de optimización</option>
+                      <option value="Fase de optimización">
+                        Fase de optimización
+                      </option>
                       <optgroup label="Subfases (optimización)">
                         <option value="Fase de optimización - Copy/Ads">
                           Copy/Ads
@@ -1335,8 +1347,8 @@ export default function AdsMetricsForm({
 
             <div className="text-[11px] text-muted-foreground">
               Guardado local automáticamente. “Guardar” crea la metadata del
-              alumno si no existe; si ya existe, la actualiza (PUT /metadata/:id)
-              y luego la vuelve a consultar por id.
+              alumno si no existe; si ya existe, la actualiza (PUT
+              /metadata/:id) y luego la vuelve a consultar por id.
             </div>
           </CardContent>
         </Card>
