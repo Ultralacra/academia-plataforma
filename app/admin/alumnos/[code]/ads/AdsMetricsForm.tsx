@@ -671,6 +671,24 @@ export default function AdsMetricsForm({
                       <SelectItem value="Fase de optimización">
                         Fase de optimización
                       </SelectItem>
+                      <SelectItem value="Fase de optimización - Copy/Ads">
+                        Copy/Ads
+                      </SelectItem>
+                      <SelectItem value="Fase de optimización - Copy/VSL">
+                        Copy/VSL
+                      </SelectItem>
+                      <SelectItem value="Fase de optimización - Copy/Página">
+                        Copy/Página
+                      </SelectItem>
+                      <SelectItem value="Fase de optimización - Copy/Oferta">
+                        Copy/Oferta
+                      </SelectItem>
+                      <SelectItem value="Fase de optimización - Técnica">
+                        Técnica
+                      </SelectItem>
+                      <SelectItem value="Fase de optimización - Ads">
+                        Ads
+                      </SelectItem>
                       <SelectItem value="Fase de Escala">
                         Fase de Escala
                       </SelectItem>

@@ -5,24 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from "@/components/ui/dialog";
 import { apiFetch } from "@/lib/api-config";
 import {
-  Eye,
-  Trash2,
-  PlusCircle,
-  FileText,
-  Link as LinkIcon,
-} from "lucide-react";
+  createMetadata,
+  getMetadata,
+  listMetadata,
+  type MetadataRecord,
+  updateMetadata,
+} from "@/lib/metadata";
+import { useAuth } from "@/hooks/use-auth";
 import { Badge } from "@/components/ui/badge";
 import { isoDay, parseMaybe } from "./detail-utils";
 
@@ -106,6 +99,8 @@ export default function AdsMetricsForm({
   studentCode: string;
   studentName?: string;
 }) {
+  const { user } = useAuth();
+
   type Metrics = {
     fecha_inicio?: string;
     fecha_asignacion?: string;
@@ -162,60 +157,22 @@ export default function AdsMetricsForm({
   const [assignedCoaches, setAssignedCoaches] = useState<
     Array<{ name: string; area?: string | null; puesto?: string | null }>
   >([]);
-  const [adsForms, setAdsForms] = useState<any[]>([]);
-  const [showNewNote, setShowNewNote] = useState<boolean>(false);
-  const [newNoteObs, setNewNoteObs] = useState<string>("");
-  const [newNoteInterv, setNewNoteInterv] = useState<string>("");
-  const [newNoteEnlaces, setNewNoteEnlaces] = useState<string>("");
-  const [newNoteLinks, setNewNoteLinks] = useState<
-    Array<{ name?: string; url: string }>
-  >([]);
-  const [newNoteLinkName, setNewNoteLinkName] = useState<string>("");
-  const [newNoteLinkUrl, setNewNoteLinkUrl] = useState<string>("");
-  const [newNoteFiles, setNewNoteFiles] = useState<
-    Array<{ id: string; name: string; type: string; size: number; url: string }>
-  >([]);
-  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(
-    null,
-  );
-  const [selectedInstanceDetailed, setSelectedInstanceDetailed] = useState<
-    any | null
+  const [studentInfo, setStudentInfo] = useState<
+    { id: string | number | null; code: string; name: string } | null
   >(null);
-  const [showHistory, setShowHistory] = useState<boolean>(false);
 
-  function addNewNoteLink() {
-    const url = (newNoteLinkUrl || "").trim();
-    if (!url) return;
-    setNewNoteLinks((prev) => [...prev, { name: newNoteLinkName || url, url }]);
-    setNewNoteLinkName("");
-    setNewNoteLinkUrl("");
-  }
+  const [metadataLoading, setMetadataLoading] = useState(false);
+  const [metadataSaving, setMetadataSaving] = useState(false);
+  const [matchedMetadata, setMatchedMetadata] = useState<
+    MetadataRecord<any> | null
+  >(null);
+  const [matchedMetadataCount, setMatchedMetadataCount] = useState<number>(0);
 
-  function onPickNewNoteFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const add = files.map((f) => ({
-      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      name: f.name,
-      type: f.type || "application/octet-stream",
-      size: f.size,
-      url: URL.createObjectURL(f),
-    }));
-    setNewNoteFiles((prev) => [...prev, ...add]);
-    try {
-      e.target.value = "";
-    } catch {}
-  }
-
-  function removeNewNoteFile(id: string) {
-    setNewNoteFiles((prev) => {
-      const it = prev.find((x) => x.id === id);
-      if (it?.url)
-        try {
-          URL.revokeObjectURL(it.url);
-        } catch {}
-      return prev.filter((x) => x.id !== id);
-    });
+  function applyMetadataToForm(record: MetadataRecord<any> | null) {
+    if (!record) return;
+    const p = (record as any)?.payload;
+    if (!p || typeof p !== "object") return;
+    setData((prev) => ({ ...prev, ...(p as any) }));
   }
 
   const norm = (v: unknown) =>
@@ -281,6 +238,274 @@ export default function AdsMetricsForm({
       alive = false;
     };
   }, [studentCode]);
+
+  // Resolver id/nombre del alumno para poder guardar en metadata
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const url = `/client/get/clients?page=1&search=${encodeURIComponent(
+          studentCode,
+        )}`;
+        const json = await apiFetch<any>(url);
+        const rows: any[] = Array.isArray(json?.data)
+          ? json.data
+          : Array.isArray(json?.clients?.data)
+            ? json.clients.data
+            : Array.isArray(json?.getClients?.data)
+              ? json.getClients.data
+              : Array.isArray(json)
+                ? json
+                : [];
+
+        const found =
+          rows.find(
+            (r) =>
+              String(r.codigo ?? r.code ?? "").toLowerCase() ===
+              studentCode.toLowerCase(),
+          ) ||
+          rows[0] ||
+          null;
+
+        if (!alive) return;
+
+        const id =
+          found?.id ??
+          found?.alumno_id ??
+          found?.client_id ??
+          found?.cliente_id ??
+          null;
+        const name = String(found?.nombre ?? found?.name ?? "").trim();
+        setStudentInfo({
+          id: id != null ? id : null,
+          code: studentCode,
+          name,
+        });
+      } catch {
+        if (!alive) return;
+        setStudentInfo({ id: null, code: studentCode, name: "" });
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [studentCode]);
+
+  function normalizeId(v: unknown) {
+    const s = String(v ?? "").trim();
+    if (!s) return null;
+    // algunos ids vienen como numero o string
+    const n = Number(s);
+    if (Number.isFinite(n) && String(n) === s) return String(n);
+    return s;
+  }
+
+  function isDeletedPayload(p: any) {
+    return Boolean(p?.deleted);
+  }
+
+  function pickBestMetadataForStudent(
+    items: MetadataRecord<any>[],
+    opts: {
+      studentCode: string;
+      alumnoId: string | number | null;
+      entity: string;
+      tag: string;
+    },
+  ) {
+    const alumnoIdStr = normalizeId(opts.alumnoId);
+    const candidateEntityIds = Array.from(
+      new Set([
+        alumnoIdStr,
+        normalizeId(opts.studentCode),
+      ].filter(Boolean) as string[]),
+    );
+
+    const matches = items
+      .filter((m) => !isDeletedPayload((m as any)?.payload))
+      .filter((m) => {
+        const entity = String((m as any)?.entity ?? "").trim();
+        const entityId = normalizeId((m as any)?.entity_id);
+        const payload = (m as any)?.payload ?? {};
+
+        const entityMatches =
+          entity === opts.entity || String(payload?._tag ?? "") === opts.tag;
+        if (!entityMatches) return false;
+
+        const idMatches = entityId && candidateEntityIds.includes(entityId);
+        const payloadAlumnoId = normalizeId(payload?.alumno_id);
+        const payloadAlumnoCodigo = String(payload?.alumno_codigo ?? "").trim();
+        const payloadMatches =
+          (alumnoIdStr && payloadAlumnoId === alumnoIdStr) ||
+          (payloadAlumnoCodigo &&
+            payloadAlumnoCodigo.toLowerCase() === opts.studentCode.toLowerCase());
+
+        return Boolean(idMatches || payloadMatches);
+      });
+
+    // elegir la más reciente: preferimos id numérico más alto; si no, por created_at
+    const best = [...matches].sort((a, b) => {
+      const aId = Number((a as any)?.id);
+      const bId = Number((b as any)?.id);
+      const aHasNum = Number.isFinite(aId);
+      const bHasNum = Number.isFinite(bId);
+      if (aHasNum && bHasNum) return bId - aId;
+      if (aHasNum) return -1;
+      if (bHasNum) return 1;
+      const aT = Date.parse(String((a as any)?.created_at ?? "")) || 0;
+      const bT = Date.parse(String((b as any)?.created_at ?? "")) || 0;
+      return bT - aT;
+    })[0] as MetadataRecord<any> | undefined;
+
+    return { best: best ?? null, count: matches.length };
+  }
+
+  async function reloadStudentMetadata() {
+    const alumnoId = studentInfo?.id ?? null;
+    setMetadataLoading(true);
+    try {
+      const { items } = await listMetadata<any>();
+      const { best, count } = pickBestMetadataForStudent(items, {
+        studentCode,
+        alumnoId,
+        entity: "ads_metrics",
+        tag: "admin_alumnos_ads_metrics",
+      });
+      setMatchedMetadata(best);
+      setMatchedMetadataCount(count);
+      if (best) applyMetadataToForm(best);
+      console.log(
+        "[ADS][metadata] list -> total:",
+        items.length,
+        "matches:",
+        count,
+        "best:",
+        best,
+      );
+    } catch (e) {
+      console.warn("[ADS][metadata] no se pudo listar metadata:", e);
+      setMatchedMetadata(null);
+      setMatchedMetadataCount(0);
+    } finally {
+      setMetadataLoading(false);
+    }
+  }
+
+  async function handleGuardarMetadata() {
+    const alumnoId = studentInfo?.id ?? null;
+    const alumnoNombre =
+      String(studentName || studentInfo?.name || "").trim() || studentCode;
+
+    const creadoPorId = (user as any)?.id ?? null;
+    const creadoPorCodigo =
+      (user as any)?.codigo ?? (user as any)?.code ?? (user as any)?.user_code ?? null;
+    const creadoPorNombre =
+      (user as any)?.nombre ?? (user as any)?.name ?? (user as any)?.email ?? null;
+
+    const payload = {
+      ...data,
+      alumno_id: alumnoId,
+      alumno_codigo: studentCode,
+      alumno_nombre: alumnoNombre,
+      // Se mantiene el esquema del detalle; si ya existe, estos campos se
+      // preservan desde el detalle (para no cambiar el creador original).
+      creado_por_id: creadoPorId,
+      creado_por_codigo: creadoPorCodigo,
+      creado_por_nombre: creadoPorNombre,
+      _tag: "admin_alumnos_ads_metrics",
+      _view: "/admin/alumnos/[code]/ads",
+      _saved_at: new Date().toISOString(),
+    };
+
+    const body = {
+      entity: "ads_metrics",
+      entity_id: String(alumnoId ?? studentCode),
+      payload,
+    };
+
+    setMetadataSaving(true);
+    try {
+      // 1) Listar TODO y filtrar la del alumno (sin tocar el resto)
+      const { items } = await listMetadata<any>();
+      const { best, count } = pickBestMetadataForStudent(items, {
+        studentCode,
+        alumnoId,
+        entity: body.entity,
+        tag: "admin_alumnos_ads_metrics",
+      });
+
+      if (best?.id != null) {
+        // Ya existe: actualizar (PUT) y luego consultar por id
+        console.log(
+          "[ADS][metadata] ya existe para este alumno, actualizando por id:",
+          best.id,
+        );
+
+        const detail = await getMetadata<any>(best.id);
+
+        // Body EXACTO con el shape del detalle: {id, entity, entity_id, payload}
+        // Preservamos creado_por_* si ya existe, para no modificar creador.
+        const existingPayload = (detail as any)?.payload ?? {};
+        const mergedPayload = {
+          ...existingPayload,
+          ...payload,
+          creado_por_id: existingPayload?.creado_por_id ?? payload.creado_por_id,
+          creado_por_codigo:
+            existingPayload?.creado_por_codigo ?? payload.creado_por_codigo,
+          creado_por_nombre:
+            existingPayload?.creado_por_nombre ?? payload.creado_por_nombre,
+        };
+
+        const updateBody = {
+          id: (detail as any)?.id,
+          entity: (detail as any)?.entity,
+          entity_id: (detail as any)?.entity_id,
+          payload: mergedPayload,
+        };
+
+        console.log("[ADS][metadata] update body ->", updateBody);
+        await updateMetadata<any>(best.id, updateBody as any);
+
+        const updatedDetail = await getMetadata<any>(best.id);
+        setMatchedMetadata(updatedDetail);
+        setMatchedMetadataCount(count || 1);
+        applyMetadataToForm(updatedDetail);
+        console.log("[ADS][metadata] updated detail ->", updatedDetail);
+        return;
+      }
+
+      // 2) Crear metadata SOLO para este alumno
+      console.log("[ADS][metadata] create body ->", body);
+      const created = await createMetadata<any>(body);
+      console.log("[ADS][metadata] created ->", created);
+
+      // 3) Consultar por id para confirmar
+      const createdId = (created as any)?.id;
+      if (createdId != null) {
+        const detail = await getMetadata<any>(createdId);
+        setMatchedMetadata(detail);
+        setMatchedMetadataCount(1);
+        applyMetadataToForm(detail);
+        console.log("[ADS][metadata] detail ->", detail);
+      } else {
+        // Fallback: recargar por lista
+        await reloadStudentMetadata();
+      }
+    } catch (e) {
+      console.error("[ADS][metadata] error guardando/consultando:", e);
+    } finally {
+      setMetadataSaving(false);
+    }
+  }
+
+  // Cargar metadata del alumno al montar (lista completa + filtro local)
+  useEffect(() => {
+    if (!studentCode) return;
+    // esperamos a tener studentInfo para decidir entity_id preferente
+    if (studentInfo === null) return;
+    reloadStudentMetadata();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentCode, studentInfo?.id]);
 
   useEffect(() => {
     // Persistir automáticamente el coach de COPY y el de ADS dentro de la métrica
@@ -380,239 +605,6 @@ export default function AdsMetricsForm({
     };
   }, [studentCode]);
 
-  // Cargar lista completa de forms ADS (soporta respuesta anidada en data.data)
-  async function fetchAdsForms() {
-    try {
-      const url = `/ads-forms/get/ads-forms?codigo_alumno=${encodeURIComponent(
-        studentCode,
-      )}`;
-      const j = await apiFetch<any>(url);
-      const rows: any[] = Array.isArray(j?.data?.data)
-        ? j.data.data
-        : Array.isArray(j?.data)
-          ? j.data
-          : Array.isArray(j)
-            ? j
-            : [];
-      const mapped = rows
-        .map((r) => {
-          if (!r) return null;
-          // conservar objeto entero, pero normalizar campos
-          const item = {
-            id: r.id ?? r.codigo ?? String(Math.random()).slice(2),
-            codigo: r.codigo ?? r.id ?? null,
-            tipo: String(r.tipo ?? r.title ?? r.titulo ?? "").trim(),
-            observaciones: r.observaciones ?? r.obs ?? null,
-            intervencion_sugerida:
-              r.intervencion_sugerida ?? r.intervencion ?? null,
-            enlaces: Array.isArray(r.enlaces) ? r.enlaces : [],
-            archivos: Array.isArray(r.archivos) ? r.archivos : [],
-            raw: r,
-          };
-          if (!item.tipo) return null;
-          return item;
-        })
-        .filter(Boolean) as any[];
-      setAdsForms(mapped);
-    } catch (e) {
-      console.error("No se pudieron cargar ads-forms:", e);
-      setAdsForms([]);
-    }
-  }
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!mounted) return;
-      await fetchAdsForms();
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const formsOfPhase = useMemo(() => {
-    if (!data.fase) return [] as any[];
-    return adsForms.filter((f) => String(f.tipo) === String(data.fase));
-  }, [adsForms, data.fase]);
-
-  const selectedInstance = useMemo(() => {
-    if (selectedInstanceId)
-      return (
-        selectedInstanceDetailed ??
-        adsForms.find((f) => f.id === selectedInstanceId) ??
-        null
-      );
-    return formsOfPhase[0] ?? null;
-  }, [adsForms, selectedInstanceId, formsOfPhase]);
-
-  function formatFormLabel(f: any) {
-    const d =
-      f?.raw?.created_at ?? f?.raw?.createdAt ?? f?.raw?.fecha ?? f?.raw?.date;
-    const dt = parseMaybe(d);
-    const when = dt
-      ? dt.toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })
-      : String(d || f.id);
-    return `${when} — ${f.tipo}`;
-  }
-
-  // Fetch single form by codigo (detailed view)
-  async function fetchFormByCodigo(codigo: string) {
-    try {
-      const url = `/ads-forms/get/ads-form/${encodeURIComponent(String(codigo))}`;
-      const j = await apiFetch<any>(url);
-      const r = j?.data ?? j;
-      if (!r) return null;
-      const item = {
-        id: r.id ?? r.codigo ?? String(Math.random()).slice(2),
-        codigo: r.codigo ?? r.id ?? null,
-        tipo: String(r.tipo ?? r.title ?? r.titulo ?? "").trim(),
-        observaciones: r.observaciones ?? r.obs ?? null,
-        intervencion_sugerida:
-          r.intervencion_sugerida ?? r.intervencion ?? null,
-        enlaces: Array.isArray(r.enlaces) ? r.enlaces : [],
-        archivos: Array.isArray(r.archivos) ? r.archivos : [],
-        raw: r,
-      };
-      return item;
-    } catch (e) {
-      console.error("Error fetching form by codigo", e);
-      return null;
-    }
-  }
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!selectedInstanceId) {
-        setSelectedInstanceDetailed(null);
-        return;
-      }
-      const f = adsForms.find(
-        (x) => x.id === selectedInstanceId || x.codigo === selectedInstanceId,
-      );
-      const codigo = f?.codigo ?? selectedInstanceId;
-      if (!codigo) {
-        setSelectedInstanceDetailed(f ?? null);
-        return;
-      }
-      const detailed = await fetchFormByCodigo(codigo);
-      if (mounted) setSelectedInstanceDetailed(detailed ?? f ?? null);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [selectedInstanceId, adsForms]);
-
-  async function handleDeleteForm(f: any) {
-    try {
-      const codigo = f.codigo || f.id;
-      if (!codigo) return;
-      await apiFetch(
-        `/ads-forms/delete/ads-form/${encodeURIComponent(String(codigo))}`,
-        { method: "DELETE" },
-      );
-      await fetchAdsForms();
-      setSelectedInstanceId(null);
-    } catch (e) {
-      console.error("Error deleting form", e);
-    }
-  }
-
-  async function handleCreateForm() {
-    try {
-      const payload = {
-        tipo: data.fase || "",
-        observaciones: newNoteObs || "",
-        intervencion_sugerida: newNoteInterv || "",
-        enlaces:
-          newNoteLinks.length > 0
-            ? newNoteLinks.map((l) => l.url)
-            : newNoteEnlaces
-              ? newNoteEnlaces
-                  .split("\n")
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-              : [],
-        archivos: newNoteFiles.map((f) => ({
-          name: f.name,
-          mime_type: f.type,
-          size: f.size,
-          key: `ads-forms/${new Date().toISOString().slice(0, 10)}/${f.name}`,
-          url: f.url,
-        })),
-      } as any;
-      // Intentar crear via endpoint público (si existe)
-      let createdCodigo: string | null = null;
-      try {
-        const j = await apiFetch(`/ads-forms/create/ads-form`, {
-          method: "POST",
-          body: JSON.stringify({ ...payload, codigo_alumno: studentCode }),
-        });
-        const res = j?.data ?? j;
-        createdCodigo = res?.codigo ?? res?.id ?? res?.codigo_alumno ?? null;
-      } catch (e) {
-        // fallback: no existe endpoint, añadir localmente
-        const newItem = {
-          id: `local_${Date.now()}`,
-          codigo: `local_${Date.now()}`,
-          tipo: payload.tipo,
-          observaciones: payload.observaciones,
-          intervencion_sugerida: payload.intervencion_sugerida,
-          enlaces: payload.enlaces,
-          archivos: payload.archivos || [],
-          raw: { created_at: new Date().toISOString() },
-        };
-        setAdsForms((prev) => [newItem, ...prev]);
-        createdCodigo = newItem.codigo;
-      }
-
-      await fetchAdsForms();
-      // seleccionar la nota creada en el historial si existe
-      if (createdCodigo) {
-        setSelectedInstanceId(String(createdCodigo));
-      }
-
-      setShowNewNote(false);
-      setNewNoteObs("");
-      setNewNoteInterv("");
-      setNewNoteEnlaces("");
-      setNewNoteLinks([]);
-      setNewNoteLinkName("");
-      setNewNoteLinkUrl("");
-      // revoke object URLs
-      newNoteFiles.forEach((f) => {
-        try {
-          if (f.url) URL.revokeObjectURL(f.url);
-        } catch {}
-      });
-      setNewNoteFiles([]);
-    } catch (e) {
-      console.error("Error creating form", e);
-    }
-  }
-
-  const selectedForm = useMemo(() => {
-    if (!data.fase) return null;
-    return (
-      adsForms.find((f: any) => String(f.tipo) === String(data.fase)) ?? null
-    );
-  }, [adsForms, data.fase]);
-
-  // Inicializar fase_data con valores del form seleccionado si está vacío
-  useEffect(() => {
-    if (!selectedForm) return;
-    const phaseKey = selectedForm.tipo || String(selectedForm.id || "");
-    const existing = data.fase_data?.[phaseKey] || {};
-    const next = {
-      obs: existing.obs || selectedForm.observaciones || "",
-      interv_sugerida:
-        existing.interv_sugerida || selectedForm.intervencion_sugerida || "",
-    };
-    onChange("fase_data", { ...(data.fase_data || {}), [phaseKey]: next });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedForm?.id]);
-
   // Autosave con debounce al cambiar datos
   useEffect(() => {
     if (!didInitRef.current) return;
@@ -679,117 +671,7 @@ export default function AdsMetricsForm({
     persist({ ...data, [k]: v });
   }
 
-  // Cleanup session files on unmount
-  useEffect(() => {
-    return () => {
-      sessionFiles.forEach((f) => {
-        try {
-          if (f.url) URL.revokeObjectURL(f.url);
-        } catch {}
-      });
-    };
-  }, []);
-
-  // Notas y Adjuntos (link y archivos de sesión)
-  const [newLinkName, setNewLinkName] = useState<string>("");
-  const [newLinkUrl, setNewLinkUrl] = useState<string>("");
-  const [sessionFiles, setSessionFiles] = useState<
-    Array<{ id: string; name: string; type: string; size: number; url: string }>
-  >([]);
-
-  function addLinkAttachment() {
-    const url = (newLinkUrl || "").trim();
-    const name = (newLinkName || "").trim() || url;
-    if (!url) return;
-    try {
-      const u = new URL(url);
-      const item = {
-        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        kind: "link" as const,
-        name,
-        url: u.toString(),
-      };
-      const next = [...(data.adjuntos || []), item];
-      onChange("adjuntos", next as any);
-      setNewLinkName("");
-      setNewLinkUrl("");
-    } catch {}
-  }
-
-  // Importar enlaces/archivos desde el formulario seleccionado
-  function addAttachmentFromForm(item: {
-    name?: string;
-    url?: string;
-    kind?: "link" | "file";
-  }) {
-    if (!item?.url) return;
-    const entry = {
-      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      kind:
-        (item.kind as any) || (item.url?.startsWith("http") ? "link" : "file"),
-      name: item.name || item.url || "archivo",
-      url: item.url,
-    } as any;
-    const next = [...(data.adjuntos || []), entry];
-    onChange("adjuntos", next as any);
-  }
-
-  function copyObservacionesFromForm() {
-    if (!selectedForm) return;
-    const phase = data.fase || selectedForm.tipo || "sin-fase";
-    const currentPhaseData = data.fase_data?.[phase] || {};
-    const nextPhaseData = {
-      ...currentPhaseData,
-      obs: selectedForm.observaciones || "",
-    };
-    onChange("fase_data", {
-      ...(data.fase_data || {}),
-      [phase]: nextPhaseData,
-    });
-  }
-
-  function copyIntervFromForm() {
-    if (!selectedForm) return;
-    const phase = data.fase || selectedForm.tipo || "sin-fase";
-    const currentPhaseData = data.fase_data?.[phase] || {};
-    const nextPhaseData = {
-      ...currentPhaseData,
-      interv_sugerida: selectedForm.intervencion_sugerida || "",
-    };
-    onChange("fase_data", {
-      ...(data.fase_data || {}),
-      [phase]: nextPhaseData,
-    });
-  }
-
-  function removeSavedAttachment(id: string) {
-    const next = (data.adjuntos || []).filter((a) => a.id !== id);
-    onChange("adjuntos", next as any);
-  }
-
-  function onPickSessionFiles(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    const add = files.map((f) => ({
-      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      name: f.name,
-      type: f.type || "application/octet-stream",
-      size: f.size,
-      url: URL.createObjectURL(f),
-    }));
-    setSessionFiles((prev) => [...prev, ...add]);
-    try {
-      e.target.value = "";
-    } catch {}
-  }
-
-  function removeSessionFile(id: string) {
-    setSessionFiles((prev) => {
-      const it = prev.find((x) => x.id === id);
-      if (it?.url) URL.revokeObjectURL(it.url);
-      return prev.filter((x) => x.id !== id);
-    });
-  }
+  // Nota: se removió la caja de “Notas y adjuntos” en esta vista.
 
   // Auto-calcular "Carga de página (%)" = visitas/clics*100
   useEffect(() => {
@@ -899,12 +781,37 @@ export default function AdsMetricsForm({
   return (
     <>
       <div className="space-y-6">
-        <div className="text-sm text-muted-foreground">
-          {loading
-            ? "Cargando métricas…"
-            : saving
-              ? "Guardando…"
-              : "Cambios guardados"}
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm text-muted-foreground">
+            {loading
+              ? "Cargando métricas…"
+              : saving
+                ? "Guardando…"
+                : "Cambios guardados"}
+          </div>
+          <div className="flex items-center gap-2">
+            {metadataLoading ? (
+              <Badge variant="secondary">metadata…</Badge>
+            ) : matchedMetadata?.id != null ? (
+              <Badge variant="secondary">
+                metadata #{String(matchedMetadata.id)}
+                {matchedMetadataCount > 1
+                  ? ` (+${matchedMetadataCount - 1})`
+                  : ""}
+              </Badge>
+            ) : (
+              <Badge variant="outline">sin metadata</Badge>
+            )}
+            <Button
+              type="button"
+              variant="default"
+              size="sm"
+              onClick={handleGuardarMetadata}
+              disabled={loading || metadataSaving}
+            >
+              Guardar
+            </Button>
+          </div>
         </div>
         <Card>
           <CardHeader className="pb-3">
@@ -940,7 +847,7 @@ export default function AdsMetricsForm({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <Card>
                 <CardHeader className="py-3">
                   <CardTitle className="text-sm">Rendimiento</CardTitle>
@@ -982,393 +889,6 @@ export default function AdsMetricsForm({
                       value={data.auto_roas ? view.roas || "" : data.roas || ""}
                       onChange={(e) => onChange("roas", e.target.value)}
                     />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Notas y adjuntos</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {data.fase && (
-                    <div className="mb-3 p-3 border rounded bg-muted/5">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium">
-                          Formulario: {data.fase}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setShowNewNote(true)}
-                          >
-                            <PlusCircle className="mr-2" size={14} />
-                            Nueva nota
-                          </Button>
-                        </div>
-                      </div>
-                      {Array.isArray(formsOfPhase) &&
-                        formsOfPhase.length > 0 && (
-                          <div className="mt-2 text-xs text-muted-foreground">
-                            <div className="font-semibold">
-                              Notas disponibles
-                            </div>
-                            <div className="flex flex-col gap-1 mt-2">
-                              {showHistory ? (
-                                formsOfPhase.map((f: any) => (
-                                  <div
-                                    key={f.id}
-                                    className="flex items-center justify-between text-sm rounded border px-3 py-2"
-                                  >
-                                    <div className="flex items-center gap-3">
-                                      <div className="text-muted-foreground">
-                                        <FileText size={16} />
-                                      </div>
-                                      <div className="truncate">
-                                        {formatFormLabel(f)}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      <Button
-                                        size="xs"
-                                        variant="ghost"
-                                        onClick={() => {
-                                          setSelectedInstanceId(f.id);
-                                          setShowHistory(false);
-                                        }}
-                                      >
-                                        <Eye size={14} />
-                                      </Button>
-                                      <Button
-                                        size="xs"
-                                        variant="ghost"
-                                        onClick={() => handleDeleteForm(f)}
-                                      >
-                                        <Trash2 size={14} />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                ))
-                              ) : (
-                                // Mostrar solo la primera por defecto (o la seleccionada)
-                                <div className="flex items-center justify-between text-sm rounded border px-3 py-2">
-                                  <div className="flex items-center gap-3">
-                                    <div className="text-muted-foreground">
-                                      <FileText size={16} />
-                                    </div>
-                                    <div className="truncate">
-                                      {formatFormLabel(
-                                        selectedInstance ?? formsOfPhase[0],
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      size="xs"
-                                      variant="ghost"
-                                      onClick={() => setShowHistory(true)}
-                                    >
-                                      <Eye size={14} className="mr-2" />{" "}
-                                      Historial
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                      {selectedInstance && selectedInstance.observaciones && (
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          <div className="font-semibold">
-                            Observaciones del form
-                          </div>
-                          <div className="truncate">
-                            {selectedInstance.observaciones}
-                          </div>
-                        </div>
-                      )}
-                      {selectedInstance &&
-                        selectedInstance.intervencion_sugerida && (
-                          <div className="mt-2 text-xs text-muted-foreground">
-                            <div className="font-semibold">
-                              Intervención sugerida
-                            </div>
-                            <div className="truncate">
-                              {selectedInstance.intervencion_sugerida}
-                            </div>
-                          </div>
-                        )}
-
-                      {selectedInstance?.enlaces?.length > 0 && (
-                        <div className="mt-3">
-                          <div className="text-xs text-muted-foreground">
-                            Enlaces del formulario
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {selectedInstance.enlaces.map(
-                              (l: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className="flex items-center gap-2 rounded border px-2 py-1"
-                                >
-                                  <a
-                                    href={l.url || l}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-sm text-primary hover:underline"
-                                  >
-                                    {l.name || l.url || String(l)}
-                                  </a>
-                                  <Button
-                                    size="xs"
-                                    variant="ghost"
-                                    onClick={() =>
-                                      addAttachmentFromForm({
-                                        name: l.name,
-                                        url: l.url || l,
-                                        kind: "link",
-                                      })
-                                    }
-                                  >
-                                    <LinkIcon size={14} />
-                                  </Button>
-                                </div>
-                              ),
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {selectedInstance?.archivos?.length > 0 && (
-                        <div className="mt-3">
-                          <div className="text-xs text-muted-foreground">
-                            Archivos del formulario
-                          </div>
-                          <div className="flex flex-col gap-2 mt-2">
-                            {selectedInstance.archivos.map(
-                              (f: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className="flex items-center justify-between rounded border px-2 py-1 text-xs"
-                                >
-                                  <div className="truncate">
-                                    {f.name ||
-                                      f.filename ||
-                                      f.title ||
-                                      f.url ||
-                                      String(f)}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    {f.url ? (
-                                      <a
-                                        href={f.url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-primary hover:underline"
-                                      >
-                                        Ver
-                                      </a>
-                                    ) : null}
-                                    <Button
-                                      size="xs"
-                                      variant="ghost"
-                                      onClick={() =>
-                                        addAttachmentFromForm({
-                                          name: f.name || f.filename || f.title,
-                                          url: f.url,
-                                          kind: "file",
-                                        })
-                                      }
-                                    >
-                                      <FileText size={14} />
-                                    </Button>
-                                  </div>
-                                </div>
-                              ),
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="mt-3 flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={copyObservacionesFromForm}
-                        >
-                          Usar observaciones del form
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={copyIntervFromForm}
-                        >
-                          Usar intervención sugerida
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="space-y-1.5">
-                    <Label>Observaciones</Label>
-                    <Textarea
-                      rows={3}
-                      placeholder="Notas, comentarios, enlaces…"
-                      value={
-                        data.fase_data?.[data.fase || "sin-fase"]?.obs || ""
-                      }
-                      onChange={(e) => {
-                        const phase = data.fase || "sin-fase";
-                        const currentPhaseData = data.fase_data?.[phase] || {};
-                        const nextPhaseData = {
-                          ...currentPhaseData,
-                          obs: e.target.value,
-                        };
-                        onChange("fase_data", {
-                          ...(data.fase_data || {}),
-                          [phase]: nextPhaseData,
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Intervención sugerida</Label>
-                    <Textarea
-                      rows={3}
-                      placeholder="Descripción de la intervención"
-                      value={
-                        data.fase_data?.[data.fase || "sin-fase"]
-                          ?.interv_sugerida || ""
-                      }
-                      onChange={(e) => {
-                        const phase = data.fase || "sin-fase";
-                        const currentPhaseData = data.fase_data?.[phase] || {};
-                        const nextPhaseData = {
-                          ...currentPhaseData,
-                          interv_sugerida: e.target.value,
-                        };
-                        onChange("fase_data", {
-                          ...(data.fase_data || {}),
-                          [phase]: nextPhaseData,
-                        });
-                      }}
-                    />
-                  </div>
-
-                  <div className="pt-2 space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      Adjuntar enlaces
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-                      <Input
-                        className="md:col-span-2"
-                        placeholder="Nombre (opcional)"
-                        value={newLinkName}
-                        onChange={(e) => setNewLinkName(e.target.value)}
-                      />
-                      <Input
-                        className="md:col-span-3"
-                        placeholder="https://…"
-                        value={newLinkUrl}
-                        onChange={(e) => setNewLinkUrl(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={addLinkAttachment}
-                      >
-                        Agregar enlace
-                      </Button>
-                    </div>
-                    {(data.adjuntos || []).filter((a) => a.kind === "link")
-                      .length > 0 && (
-                      <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">
-                          Enlaces guardados
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(data.adjuntos || [])
-                            .filter((a) => a.kind === "link")
-                            .map((a) => (
-                              <div
-                                key={a.id}
-                                className="flex items-center gap-2 rounded border px-2 py-1"
-                              >
-                                <a
-                                  href={a.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-xs text-primary hover:underline"
-                                  title={a.url}
-                                >
-                                  {a.name || a.url}
-                                </a>
-                                <Button
-                                  size="xs"
-                                  variant="ghost"
-                                  onClick={() => removeSavedAttachment(a.id)}
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-3 space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      Adjuntar archivos (solo esta sesión)
-                    </div>
-                    <input type="file" multiple onChange={onPickSessionFiles} />
-                    {sessionFiles.length > 0 && (
-                      <div className="space-y-2">
-                        <div className="text-xs text-muted-foreground">
-                          Archivos de la sesión
-                        </div>
-                        <div className="flex flex-col gap-1">
-                          {sessionFiles.map((f) => (
-                            <div
-                              key={f.id}
-                              className="flex items-center justify-between text-xs rounded border px-2 py-1"
-                            >
-                              <div className="truncate">
-                                {f.name}{" "}
-                                <span className="text-muted-foreground">
-                                  ({(f.size / 1024).toFixed(0)} KB)
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <a
-                                  href={f.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-primary hover:underline"
-                                >
-                                  Ver
-                                </a>
-                                <Button
-                                  size="xs"
-                                  variant="ghost"
-                                  onClick={() => removeSessionFile(f.id)}
-                                >
-                                  <Trash2 size={14} />
-                                </Button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          Nota: los archivos no se guardan en el servidor ni en
-                          localStorage. Usa enlaces para persistir referencias
-                          (Drive, YouTube, etc.).
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1606,25 +1126,27 @@ export default function AdsMetricsForm({
                       className="w-full h-9 rounded-md border px-3 text-sm"
                     >
                       <option value="sin-fase">Sin fase</option>
-                      {/* Mostrar primero los títulos obtenidos desde /v1/ads-forms/get/ads-forms */}
-                      {adsForms.length > 0 ? (
-                        Array.from(new Set(adsForms.map((f) => f.tipo))).map(
-                          (t) => (
-                            <option key={t} value={t}>
-                              {t}
-                            </option>
-                          ),
-                        )
-                      ) : (
-                        // Fallback a opciones antiguas si no se cargaron forms
-                        <>
-                          <option value="Fase de testeo">Fase de testeo</option>
-                          <option value="Fase de optimización">
-                            Fase de optimización
-                          </option>
-                          <option value="Fase de Escala">Fase de Escala</option>
-                        </>
-                      )}
+                      <option value="Fase de testeo">Fase de testeo</option>
+                      <option value="Fase de optimización">Fase de optimización</option>
+                      <optgroup label="Subfases (optimización)">
+                        <option value="Fase de optimización - Copy/Ads">
+                          Copy/Ads
+                        </option>
+                        <option value="Fase de optimización - Copy/VSL">
+                          Copy/VSL
+                        </option>
+                        <option value="Fase de optimización - Copy/Página">
+                          Copy/Página
+                        </option>
+                        <option value="Fase de optimización - Copy/Oferta">
+                          Copy/Oferta
+                        </option>
+                        <option value="Fase de optimización - Técnica">
+                          Técnica
+                        </option>
+                        <option value="Fase de optimización - Ads">Ads</option>
+                      </optgroup>
+                      <option value="Fase de Escala">Fase de Escala</option>
                     </select>
                   </div>
                 </CardContent>
@@ -1812,148 +1334,13 @@ export default function AdsMetricsForm({
             </div>
 
             <div className="text-[11px] text-muted-foreground">
-              Guardado local automáticamente. Esta vista no envía datos al
-              servidor.
+              Guardado local automáticamente. “Guardar” crea la metadata del
+              alumno si no existe; si ya existe, la actualiza (PUT /metadata/:id)
+              y luego la vuelve a consultar por id.
             </div>
           </CardContent>
         </Card>
       </div>
-      <Dialog open={showNewNote} onOpenChange={(v) => setShowNewNote(!!v)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              Nueva nota {data.fase ? `— ${data.fase}` : ""}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 mt-2">
-            <div className="space-y-1">
-              <Label>Observaciones</Label>
-              <Textarea
-                value={newNoteObs}
-                onChange={(e) => setNewNoteObs(e.target.value)}
-                rows={4}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Intervención sugerida</Label>
-              <Textarea
-                value={newNoteInterv}
-                onChange={(e) => setNewNoteInterv(e.target.value)}
-                rows={3}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Enlaces</Label>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-                <Input
-                  className="md:col-span-2"
-                  placeholder="Nombre (opcional)"
-                  value={newNoteLinkName}
-                  onChange={(e) => setNewNoteLinkName(e.target.value)}
-                />
-                <Input
-                  className="md:col-span-3"
-                  placeholder="https://…"
-                  value={newNoteLinkUrl}
-                  onChange={(e) => setNewNoteLinkUrl(e.target.value)}
-                />
-              </div>
-              <div>
-                <Button type="button" size="sm" onClick={addNewNoteLink}>
-                  Agregar enlace
-                </Button>
-              </div>
-              {newNoteLinks.length > 0 && (
-                <div className="space-y-2">
-                  <div className="text-xs text-muted-foreground">Enlaces</div>
-                  <div className="flex flex-wrap gap-2">
-                    {newNoteLinks.map((l, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-2 rounded border px-2 py-1"
-                      >
-                        <a
-                          href={l.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs text-primary hover:underline"
-                        >
-                          {l.name || l.url}
-                        </a>
-                        <button
-                          type="button"
-                          className="text-[11px] text-muted-foreground hover:text-destructive"
-                          onClick={() =>
-                            setNewNoteLinks((prev) =>
-                              prev.filter((_, idx) => idx !== i),
-                            )
-                          }
-                        >
-                          Quitar
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="pt-3 space-y-2">
-                <div className="text-xs text-muted-foreground">
-                  Adjuntar archivos
-                </div>
-                <input type="file" multiple onChange={onPickNewNoteFiles} />
-                {newNoteFiles.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      Archivos
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      {newNoteFiles.map((f) => (
-                        <div
-                          key={f.id}
-                          className="flex items-center justify-between text-xs rounded border px-2 py-1"
-                        >
-                          <div className="truncate">
-                            {f.name}{" "}
-                            <span className="text-muted-foreground">
-                              ({(f.size / 1024).toFixed(0)} KB)
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={f.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              Ver
-                            </a>
-                            <button
-                              type="button"
-                              className="hover:text-destructive"
-                              onClick={() => removeNewNoteFile(f.id)}
-                            >
-                              Quitar
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <div className="flex gap-2">
-              <Button variant="secondary" onClick={() => setShowNewNote(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreateForm}>Crear nota</Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }
