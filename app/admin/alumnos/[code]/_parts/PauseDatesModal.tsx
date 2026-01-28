@@ -21,6 +21,7 @@ import { es } from "date-fns/locale";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { parseMaybe } from "./detail-utils";
 
 type DateRange = { from?: Date; to?: Date };
 
@@ -45,11 +46,16 @@ export default function PauseDatesModal({
   const [motivo, setMotivo] = useState<string>("");
   const isMobile = useIsMobile();
 
+  const isBusinessDay = (d: Date) => {
+    const day = d.getDay(); // 0=dom, 6=sáb
+    return day !== 0 && day !== 6;
+  };
+
   useEffect(() => {
     if (!open) return;
     if (initialRange?.start) {
-      const from = new Date(initialRange.start);
-      const to = initialRange?.end ? new Date(initialRange.end) : undefined;
+      const from = parseMaybe(initialRange.start) ?? undefined;
+      const to = initialRange?.end ? parseMaybe(initialRange.end) ?? undefined : undefined;
       setRange({ from, to });
     } else {
       setRange({});
@@ -63,7 +69,9 @@ export default function PauseDatesModal({
       range.from &&
       range.to &&
       !isNaN(range.from.getTime()) &&
-      !isNaN(range.to.getTime())
+      !isNaN(range.to.getTime()) &&
+      isBusinessDay(range.from) &&
+      isBusinessDay(range.to)
     ) &&
     (tipo === "CONTRACTUAL" || tipo === "EXTRAORDINARIA") &&
     motivo.trim().length > 0;
@@ -116,6 +124,7 @@ export default function PauseDatesModal({
               selected={range as any}
               onSelect={(r: any) => setRange(r)}
               locale={es}
+              disabled={(d: Date) => !isBusinessDay(d)}
             />
           </div>
         </div>

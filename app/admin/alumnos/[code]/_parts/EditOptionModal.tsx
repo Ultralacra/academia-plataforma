@@ -20,6 +20,7 @@ import { toast } from "@/components/ui/use-toast";
 import { buildUrl } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
 import PauseDatesModal from "./PauseDatesModal";
+import { fmtES } from "./detail-utils";
 
 export default function EditOptionModal({
   open,
@@ -239,8 +240,7 @@ export default function EditOptionModal({
                         ({String(pauseRange.tipo).toUpperCase()})
                       </span>
                     ) : null}
-                    : {new Date(pauseRange.start).toLocaleDateString()} –{" "}
-                    {new Date(pauseRange.end).toLocaleDateString()}
+                    : {fmtES(pauseRange.start)} – {fmtES(pauseRange.end)}
                     {pauseRange?.motivo ? (
                       <span className="block mt-1 text-[11px] text-muted-foreground">
                         Motivo: {pauseRange.motivo}
