@@ -16,15 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import {
-  FileText,
-  Bell,
-  Clock,
-  AlertTriangle,
-  Plus,
-  MessageSquare,
-  User,
-} from "lucide-react";
+import { FileText, Bell, Clock, AlertTriangle } from "lucide-react";
 
 interface TabNotasProps {
   p: any;
@@ -33,8 +25,6 @@ interface TabNotasProps {
 }
 
 export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
-  const [newActivityNote, setNewActivityNote] = React.useState("");
-
   const motives = React.useMemo(
     () =>
       [
@@ -96,10 +86,6 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
     : Array.isArray(p.call?.reminders)
       ? p.call.reminders
       : [];
-
-  const activityLog = Array.isArray((p as any).activity_log)
-    ? ((p as any).activity_log as any[])
-    : [];
 
   const reagendaDate =
     p.call_reschedule_date || p.call?.reschedule?.date || null;
@@ -295,133 +281,6 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
                 Para editar seguimiento/recordatorios, usa la pestaña
                 "Seguimiento".
               </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actividad Card */}
-      <Card className="xl:col-span-2 bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-teal-500 to-emerald-500" />
-        <CardHeader className="pb-4">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
-              <MessageSquare className="h-5 w-5 text-white" />
-            </div>
-            <div>
-              <CardTitle className="text-slate-800">Actividad</CardTitle>
-              <CardDescription className="text-slate-500">
-                Historial de notas registradas en el lead
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-5">
-            <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="h-1.5 w-1.5 rounded-full bg-teal-500" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Nueva nota
-                </span>
-              </div>
-              <textarea
-                className="min-h-[100px] w-full rounded-xl border border-slate-200 bg-white p-4 text-sm focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 outline-none transition-all resize-none"
-                placeholder="Escribe una nota para el historial (queda con fecha y usuario al guardar)…"
-                value={newActivityNote}
-                onChange={(e) => setNewActivityNote(e.target.value)}
-              />
-              <div className="flex items-center justify-between mt-3">
-                <div className="text-xs text-slate-500">
-                  Se guarda al presionar "Guardar cambios".
-                </div>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    const msg = String(newActivityNote || "").trim();
-                    if (!msg) return;
-                    const entry = {
-                      type: "note",
-                      at: new Date().toISOString(),
-                      by: {
-                        id: (user as any)?.id ?? null,
-                        name: (user as any)?.name ?? null,
-                        email: (user as any)?.email ?? null,
-                        role: (user as any)?.role ?? null,
-                      },
-                      message: msg,
-                    };
-                    const next = [...activityLog, entry];
-                    applyRecordPatch?.({ activity_log: next });
-                    setNewActivityNote("");
-                  }}
-                  className="gap-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white shadow-sm"
-                >
-                  <Plus className="h-4 w-4" />
-                  Agregar al historial
-                </Button>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Historial
-                </span>
-              </div>
-              {activityLog.length ? (
-                <ul className="space-y-3">
-                  {activityLog
-                    .slice()
-                    .reverse()
-                    .slice(0, 12)
-                    .map((a: any, idx: number) => (
-                      <li
-                        key={idx}
-                        className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-white hover:bg-slate-50 transition-colors"
-                      >
-                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-teal-100 to-emerald-100 flex items-center justify-center flex-shrink-0">
-                          <User className="h-4 w-4 text-teal-600" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-                            <span>
-                              {a?.at
-                                ? String(a.at).replace("T", " ").slice(0, 19)
-                                : "—"}
-                            </span>
-                            {a?.by?.name || a?.by?.email ? (
-                              <>
-                                <span>·</span>
-                                <span className="font-medium text-teal-600">
-                                  {String(a.by.name || a.by.email)}
-                                </span>
-                              </>
-                            ) : null}
-                          </div>
-                          <div className="text-sm text-slate-700 whitespace-pre-wrap">
-                            {String(a?.message ?? "").trim() || "—"}
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  {activityLog.length > 12 ? (
-                    <li className="text-xs text-slate-500 text-center py-2">
-                      +{activityLog.length - 12} más…
-                    </li>
-                  ) : null}
-                </ul>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="h-14 w-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                    <MessageSquare className="h-7 w-7 text-slate-400" />
-                  </div>
-                  <span className="text-sm text-slate-500">
-                    Sin actividad registrada.
-                  </span>
-                </div>
-              )}
             </div>
           </div>
         </CardContent>

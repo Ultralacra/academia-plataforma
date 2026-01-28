@@ -39,12 +39,12 @@ function statusBadge(status?: string) {
     v === "active" || v === "payment_confirmed" || v === "contract_signed"
       ? "bg-emerald-100 text-emerald-700"
       : v === "contract_sent" ||
-        v === "payment_verification_pending" ||
-        v === "active_provisional"
-      ? "bg-amber-100 text-amber-700"
-      : v === "operational_closure" || v === "cancelled" || v === "lost"
-      ? "bg-rose-100 text-rose-700"
-      : "bg-slate-100 text-slate-700";
+          v === "payment_verification_pending" ||
+          v === "active_provisional"
+        ? "bg-amber-100 text-amber-700"
+        : v === "operational_closure" || v === "cancelled" || v === "lost"
+          ? "bg-rose-100 text-rose-700"
+          : "bg-slate-100 text-slate-700";
   return <Badge className={cls + " capitalize"}>{v || "draft"}</Badge>;
 }
 
@@ -117,32 +117,89 @@ export function SalePreview({
           (payload as any)?.payment?.plan_type ??
           (payload as any)?.payment?.planType ??
           (draft as any)?.paymentPlanType ??
-          ""
+          "",
       ) || "";
     const mode = String(pay?.mode || "").toLowerCase();
 
+    const draftStdSchedule = Array.isArray(
+      (draft as any)?.paymentInstallmentsSchedule,
+    )
+      ? ((draft as any)?.paymentInstallmentsSchedule as any[])
+      : [];
+    const draftCustomSchedule = Array.isArray(
+      (draft as any)?.paymentCustomInstallments,
+    )
+      ? ((draft as any)?.paymentCustomInstallments as any[])
+      : [];
+
+    const modeCuotasMatch = mode.match(/(\d+)_cuotas/);
+    const modeCuotasCount = modeCuotasMatch?.[1]
+      ? Number(modeCuotasMatch[1])
+      : null;
+    const modeExMatch = mode.match(/excepcion_(\d+)_cuotas/);
+    const modeExCount = modeExMatch?.[1] ? Number(modeExMatch[1]) : null;
+
     const tipo = (() => {
       if (planType === "reserva" || mode.includes("reserva")) return "Reserva";
-      if (planType === "excepcion_2_cuotas" || mode.includes("excepcion"))
-        return "Excepción (2 cuotas)";
+      if (planType === "excepcion_2_cuotas" || mode.includes("excepcion")) {
+        const n =
+          modeExCount ??
+          (draft as any)?.paymentInstallmentsCount ??
+          null ??
+          (draftCustomSchedule.length || null) ??
+          2;
+        return `Excepción (${n} cuotas)`;
+      }
       if (planType === "cuotas" || mode.includes("cuota")) return "Cuotas";
       return "Contado";
     })();
 
     const cuotasCount =
-      (primaryPlan as any)?.installments?.count ??
-      (payload as any)?.payment?.installments?.count ??
       (draft as any)?.paymentInstallmentsCount ??
-      (mode.match(/(\d+)_cuotas/)?.[1]
-        ? Number(mode.match(/(\d+)_cuotas/)?.[1])
-        : null);
-    const cuotaAmount =
-      (primaryPlan as any)?.installments?.amount ??
-      (payload as any)?.payment?.installments?.amount ??
-      (draft as any)?.paymentInstallmentAmount ??
+      (draftStdSchedule.length ? draftStdSchedule.length : null) ??
+      (draftCustomSchedule.length ? draftCustomSchedule.length : null) ??
+      modeCuotasCount ??
+      (payload as any)?.payment?.installments?.count ??
+      (primaryPlan as any)?.installments?.count ??
       null;
 
-    const total = pay?.amount ?? (primaryPlan as any)?.total ?? null;
+    const cuotaAmount =
+      (draft as any)?.paymentInstallmentAmount ??
+      (() => {
+        const schedule = draftStdSchedule.length
+          ? draftStdSchedule
+          : draftCustomSchedule;
+        if (!schedule.length) return null;
+        const nums = schedule
+          .map((it) => Number(it?.amount))
+          .filter((n) => Number.isFinite(n));
+        if (!nums.length) return null;
+        // Si todas son iguales, mostrar ese monto; si no, mostrar promedio aproximado
+        const allSame = nums.every((n) => n === nums[0]);
+        if (allSame) return String(nums[0]);
+        const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+        return String(Math.round(avg * 100) / 100);
+      })() ??
+      (payload as any)?.payment?.installments?.amount ??
+      (primaryPlan as any)?.installments?.amount ??
+      null;
+
+    const total =
+      pay?.amount ??
+      (() => {
+        const schedule = draftStdSchedule.length
+          ? draftStdSchedule
+          : draftCustomSchedule;
+        if (!schedule.length) return null;
+        const sum = schedule
+          .map((it) => Number(it?.amount))
+          .filter((n) => Number.isFinite(n))
+          .reduce((a, b) => a + b, 0);
+        return Number.isFinite(sum) && sum > 0 ? String(sum) : null;
+      })() ??
+      (primaryPlan as any)?.total ??
+      null;
+
     const pagado = pay?.paidAmount ?? (primaryPlan as any)?.paid_amount ?? null;
 
     return {
@@ -158,29 +215,29 @@ export function SalePreview({
   const bonuses: string[] = Array.isArray(draft?.bonuses)
     ? (draft?.bonuses as string[])
     : Array.isArray(payload?.bonuses)
-    ? payload?.bonuses
-    : payload?.bonuses
-    ? String(payload?.bonuses)
-        .split(",")
-        .map((s: string) => s.trim())
-        .filter(Boolean)
-    : [];
+      ? payload?.bonuses
+      : payload?.bonuses
+        ? String(payload?.bonuses)
+            .split(",")
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : [];
   const bonusesLabel = bonuses.length
     ? bonuses.map((k) => BONOS_BY_KEY[k]?.title || k).join(", ")
     : "—";
 
   const cuotas = (() => {
     const m = String(
-      draft?.paymentMode || payload?.paymentMode || pay?.mode || ""
+      draft?.paymentMode || payload?.paymentMode || pay?.mode || "",
     );
     const c = m.match(/(\d+)\s*cuotas?/i);
     return c
       ? Number(c[1])
       : m.includes("cuota")
-      ? 2
-      : m.includes("pago_total")
-      ? 1
-      : undefined;
+        ? 2
+        : m.includes("pago_total")
+          ? 1
+          : undefined;
   })();
 
   const rawMode = String(pay?.mode || "").toLowerCase();
@@ -206,13 +263,13 @@ export function SalePreview({
   const planLabel = isPagoTotal
     ? "Pago total"
     : cuotas && cuotas > 1
-    ? `${cuotas} cuotas`
-    : hasReserva
-    ? "Con reserva"
-    : "—";
+      ? `${cuotas} cuotas`
+      : hasReserva
+        ? "Con reserva"
+        : "—";
 
   const [localStatus, setLocalStatus] = React.useState<string>(
-    String(payload?.status || "")
+    String(payload?.status || ""),
   );
   const status = localStatus;
   const isPaid = status.toLowerCase() === "payment_confirmed";
@@ -316,11 +373,11 @@ export function SalePreview({
               (status === "payment_confirmed"
                 ? "bg-emerald-100 text-emerald-700"
                 : status === "payment_verification_pending" ||
-                  status === "contract_sent"
-                ? "bg-amber-100 text-amber-700"
-                : status === "cancelled" || status === "lost"
-                ? "bg-rose-100 text-rose-700"
-                : "bg-slate-100 text-slate-700") + " capitalize"
+                    status === "contract_sent"
+                  ? "bg-amber-100 text-amber-700"
+                  : status === "cancelled" || status === "lost"
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-slate-100 text-slate-700") + " capitalize"
             }
           >
             {statusLabel}

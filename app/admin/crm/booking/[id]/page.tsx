@@ -1080,6 +1080,7 @@ function Content({ id }: { id: string }) {
         <TabsContent value="resumen" className="mt-6">
           <TabResumen
             p={p}
+            user={user}
             record={record}
             salePayload={salePayload}
             effectiveSalePayload={effectiveSalePayload}

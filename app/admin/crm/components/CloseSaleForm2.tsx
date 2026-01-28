@@ -1627,21 +1627,6 @@ export function CloseSaleForm({
                       </div>
 
                       <div className="space-y-1.5">
-                        <Label>Monto efectivamente pagado (USD)</Label>
-                        <Input
-                          placeholder="$"
-                          className={inputAccent}
-                          value={form.paymentPaidAmount || ""}
-                          onChange={(e) =>
-                            setForm({
-                              ...form,
-                              paymentPaidAmount: e.target.value,
-                            })
-                          }
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
                         <Label>Plataforma de pago *</Label>
                         <Select
                           value={form.paymentPlatform}

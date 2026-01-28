@@ -195,15 +195,41 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
     ? data.bonuses.join(", ")
     : data.bonusesText || "—";
 
-  // Modalidad de pago formateada
+  // Modalidad de pago formateada (alineada a los códigos del CRM)
   const paymentModeText = (() => {
     const mode = String(data.paymentMode || "").toLowerCase();
-    if (mode.includes("contado") || mode === "pago_total") return "Pago único (contado)";
-    if (mode.includes("cuota")) {
-      const count = data.installmentsCount || 3;
-      return `${count} cuotas de ${formatCurrency(data.installmentAmount, data.paymentCurrency)}`;
+
+    const parsedCount = (() => {
+      const m = /(\d+)_cuotas/.exec(mode);
+      if (m?.[1]) {
+        const n = Number.parseInt(m[1], 10);
+        if (Number.isFinite(n) && n > 0) return n;
+      }
+      if (mode.includes("excepcion_2_cuotas")) return 2;
+      return undefined;
+    })();
+
+    const count =
+      typeof data.installmentsCount === "number" &&
+      Number.isFinite(data.installmentsCount) &&
+      data.installmentsCount > 0
+        ? data.installmentsCount
+        : parsedCount ?? 3;
+
+    const computedInstallmentAmount = (() => {
+      if (data.installmentAmount !== undefined && String(data.installmentAmount).trim())
+        return data.installmentAmount;
+      // Fallback: si hay total y count, estimar monto por cuota
+      if (Number.isFinite(paymentNum) && paymentNum > 0 && Number.isFinite(count) && count > 0)
+        return paymentNum / count;
+      return "";
+    })();
+
+    if (mode.includes("contado") || mode === "pago_total") return "PAGO ÚNICO";
+    if (mode.includes("cuota") || mode.includes("excepcion")) {
+      return `${count} cuotas de ${formatCurrency(computedInstallmentAmount, data.paymentCurrency)}`;
     }
-    if (mode.includes("reserva")) return `Reserva + saldo`;
+    if (mode.includes("reserva")) return "RESERVA + SALDO";
     return data.paymentMode || "Por definir";
   })();
 

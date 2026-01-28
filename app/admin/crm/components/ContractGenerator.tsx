@@ -14,6 +14,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { FileText, Download, Upload, Loader2, FileWarning } from "lucide-react";
 import {
@@ -26,6 +33,7 @@ import {
   prepareContractData,
   type ContractData,
 } from "@/lib/contract-generator";
+import { getLead } from "@/app/admin/crm/api";
 import {
   Card,
   CardContent,
@@ -76,10 +84,12 @@ export function ContractGenerator({
   const [baseContractWarnings, setBaseContractWarnings] = useState<string[]>(
     [],
   );
+  const [liveLead, setLiveLead] = useState<any>(lead);
+  const [refreshingLead, setRefreshingLead] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Datos del contrato mapeados desde el lead
-  const contractData = mapLeadToContractData(lead, draft);
+  const contractData = mapLeadToContractData(liveLead ?? lead, draft);
   const mergedData = React.useMemo(
     () => ({ ...contractData, ...overrides }),
     [contractData, overrides],
@@ -95,7 +105,41 @@ export function ContractGenerator({
     setOverrides({});
     setPreviewOpen(false);
     setPreviewError(null);
+
+    // Guardamos el lead actual (puede venir "parcial" desde listados)
+    setLiveLead(lead);
+
+    // Intentamos refrescar desde el CRM para que el detalle (pago/cuotas) sea el real
+    const codigo = (lead as any)?.codigo;
+    if (codigo) {
+      setRefreshingLead(true);
+      getLead(String(codigo))
+        .then((fresh) => setLiveLead(fresh))
+        .catch(() => {
+          // Silencioso: seguimos usando el lead que llegó por props
+        })
+        .finally(() => setRefreshingLead(false));
+    }
   }, [open]);
+
+  React.useEffect(() => {
+    // Si el prop cambia mientras está abierto, reflejarlo
+    setLiveLead(lead);
+  }, [lead]);
+
+  const PAYMENT_MODE_PRESETS: Array<{ value: string; label: string }> = [
+    { value: "pago_total", label: "Pago único" },
+    { value: "3_cuotas", label: "3 cuotas" },
+    { value: "2_cuotas", label: "2 cuotas" },
+    { value: "excepcion_2_cuotas", label: "Excepción 2 cuotas" },
+    { value: "reserva", label: "Reserva" },
+  ];
+
+  const currentPaymentMode =
+    overrides.paymentMode ?? mergedData.paymentMode ?? "";
+  const isPresetPaymentMode = PAYMENT_MODE_PRESETS.some(
+    (p) => p.value === currentPaymentMode,
+  );
 
   const getContractTextWarnings = (txt: string): string[] => {
     const warnings: string[] = [];
@@ -525,11 +569,52 @@ export function ContractGenerator({
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Generar Contrato</DialogTitle>
-          <DialogDescription>
-            Genera un documento Word (.docx) con los datos del lead. El
-            documento será completamente editable.
-          </DialogDescription>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <DialogTitle>Generar Contrato</DialogTitle>
+              <DialogDescription>
+                Genera un documento Word (.docx) con los datos del lead. El
+                documento será completamente editable.
+              </DialogDescription>
+            </div>
+            {!!(lead as any)?.codigo && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={refreshingLead}
+                onClick={async () => {
+                  try {
+                    setRefreshingLead(true);
+                    const fresh = await getLead(String((lead as any)?.codigo));
+                    setLiveLead(fresh);
+                    toast({
+                      title: "Lead actualizado",
+                      description:
+                        "Se sincronizó el detalle del lead para el contrato.",
+                    });
+                  } catch (e: any) {
+                    toast({
+                      title: "No se pudo actualizar",
+                      description:
+                        e?.message ||
+                        "No se pudo refrescar el lead desde el CRM.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setRefreshingLead(false);
+                  }
+                }}
+              >
+                {refreshingLead ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="h-4 w-4" />
+                )}
+                <span className="ml-2">Sincronizar</span>
+              </Button>
+            )}
+          </div>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -836,20 +921,166 @@ export function ContractGenerator({
                     <Label className="text-xs" htmlFor="cg-paymentMode">
                       Modalidad de pago
                     </Label>
-                    <Input
-                      id="cg-paymentMode"
+                    <Select
                       value={
-                        overrides.paymentMode ?? mergedData.paymentMode ?? ""
+                        isPresetPaymentMode
+                          ? currentPaymentMode
+                          : currentPaymentMode
+                            ? "custom"
+                            : ""
                       }
-                      onChange={(e) =>
-                        setOverrides((p) => ({
-                          ...p,
-                          paymentMode: e.target.value,
-                        }))
-                      }
-                      placeholder="Pago único / cuotas / reserva"
-                    />
+                      onValueChange={(v) => {
+                        if (v === "custom") {
+                          setOverrides((p) => ({ ...p, paymentMode: "" }));
+                          return;
+                        }
+                        setOverrides((p) => ({ ...p, paymentMode: v }));
+                      }}
+                    >
+                      <SelectTrigger id="cg-paymentMode">
+                        <SelectValue placeholder="Selecciona una modalidad" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_MODE_PRESETS.map((p) => (
+                          <SelectItem key={p.value} value={p.value}>
+                            {p.label}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="custom">Otro (escribir)</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {!isPresetPaymentMode && (
+                      <Input
+                        className="mt-2"
+                        value={currentPaymentMode}
+                        onChange={(e) =>
+                          setOverrides((p) => ({
+                            ...p,
+                            paymentMode: e.target.value,
+                          }))
+                        }
+                        placeholder="Ej: pago_total / 3_cuotas / reserva"
+                      />
+                    )}
+
+                    <div className="mt-2 text-[11px] text-muted-foreground">
+                      En el contrato se mostrará como:{" "}
+                      <b>{preparedData.MODALIDAD_PAGO}</b>
+                    </div>
                   </div>
+
+                  {(String(currentPaymentMode)
+                    .toLowerCase()
+                    .includes("cuota") ||
+                    String(currentPaymentMode)
+                      .toLowerCase()
+                      .includes("excepcion")) && (
+                    <>
+                      <div className="space-y-1">
+                        <Label
+                          className="text-xs"
+                          htmlFor="cg-installmentsCount"
+                        >
+                          Número de cuotas
+                        </Label>
+                        <Input
+                          id="cg-installmentsCount"
+                          type="number"
+                          min={1}
+                          max={36}
+                          value={
+                            (overrides.installmentsCount ??
+                              mergedData.installmentsCount ??
+                              "") as any
+                          }
+                          onChange={(e) => {
+                            const v = Number.parseInt(e.target.value, 10);
+                            setOverrides((p) => ({
+                              ...p,
+                              installmentsCount: Number.isFinite(v)
+                                ? v
+                                : undefined,
+                            }));
+                          }}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label
+                          className="text-xs"
+                          htmlFor="cg-installmentAmount"
+                        >
+                          Monto por cuota (USD)
+                        </Label>
+                        <Input
+                          id="cg-installmentAmount"
+                          value={
+                            (overrides.installmentAmount ??
+                              mergedData.installmentAmount ??
+                              "") as any
+                          }
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              installmentAmount: e.target.value,
+                            }))
+                          }
+                          placeholder="Ej: 1600"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {String(currentPaymentMode)
+                    .toLowerCase()
+                    .includes("reserva") && (
+                    <>
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-reserveAmount">
+                          Monto de reserva (USD)
+                        </Label>
+                        <Input
+                          id="cg-reserveAmount"
+                          value={
+                            (overrides.reserveAmount ??
+                              mergedData.reserveAmount ??
+                              "") as any
+                          }
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              reserveAmount: e.target.value,
+                            }))
+                          }
+                          placeholder="Ej: 500"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs" htmlFor="cg-nextChargeDate">
+                          Próximo cobro (opcional)
+                        </Label>
+                        <Input
+                          id="cg-nextChargeDate"
+                          type="date"
+                          value={
+                            (
+                              overrides.nextChargeDate ??
+                              mergedData.nextChargeDate ??
+                              ""
+                            ).slice(0, 10) as any
+                          }
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              nextChargeDate: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    </>
+                  )}
 
                   <div className="space-y-1 md:col-span-2">
                     <Label className="text-xs" htmlFor="cg-notes">
