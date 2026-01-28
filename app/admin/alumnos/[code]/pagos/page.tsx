@@ -53,9 +53,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "@/components/ui/use-toast";
-import { getPayments, createManualPayment, type Payment } from "./api";
+import {
+  createPaymentDetail,
+  createPaymentPlan,
+  deletePaymentDetail,
+  getPaymentPlansByClienteCodigo,
+  getPaymentPlanByCodigo,
+  updatePaymentDetail,
+  updatePaymentPlan,
+  type Payment,
+} from "./api";
+import {
+  apiDetailToConfig,
+  planToCreatePayload,
+  planToUpdatePayload,
+  type UiPaymentConfig,
+} from "./payments-plan.mapper";
+import {
+  buildStandardScheduleFromCount,
+  getStdPricing,
+  isoPlusDays,
+  labelForPlanType,
+  type CrmPaymentCustomInstallment,
+  type CrmPaymentPlanType,
+  type CrmPaymentPricingPreset,
+  CRM_PRODUCT_OPTIONS,
+} from "./payment-plan-builder";
 import { format, differenceInDays, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { BONOS_CONTRACTUALES, BONOS_EXTRA } from "@/lib/bonos";
@@ -66,6 +90,11 @@ import {
 } from "@/components/ui/popover";
 
 type PaymentConfig = {
+  planType?: CrmPaymentPlanType;
+  pricingPreset?: CrmPaymentPricingPreset;
+  program?: string;
+  metodo?: string;
+  tipo_pago?: string;
   frequency: "mensual" | "trimestral" | "semanal" | "unico";
   startDate: string;
   amount: number;
@@ -76,6 +105,7 @@ type PaymentConfig = {
   reservationDate?: string;
   installments: {
     id: string;
+    cuotaCodigo?: string;
     date: string;
     amount: number;
     type: "regular" | "extra" | "bono" | "reserva";
@@ -98,6 +128,10 @@ export default function StudentPaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState<PaymentConfig | null>(null);
   const [logs, setLogs] = useState<ChangeLog[]>([]);
+  const [paymentCodigo, setPaymentCodigo] = useState<string | null>(null);
+  const [selectedDetalleCodigo, setSelectedDetalleCodigo] = useState<
+    string | null
+  >(null);
 
   // Modals
   const [configOpen, setConfigOpen] = useState(false);
@@ -131,7 +165,11 @@ export default function StudentPaymentsPage() {
   });
 
   const [tempConfig, setTempConfig] = useState<PaymentConfig>({
-    frequency: "mensual",
+    planType: "contado",
+    pricingPreset: "descuento",
+    program: "HOTSELLING PRO",
+    metodo: "transfer",
+    frequency: "unico",
     startDate: new Date().toISOString().split("T")[0],
     amount: 0,
     currency: "USD",
@@ -140,6 +178,43 @@ export default function StudentPaymentsPage() {
     reservationDate: new Date().toISOString().split("T")[0],
     installments: [],
   });
+
+  function nextCuotaCodigo(insts: Array<{ cuotaCodigo?: string }>) {
+    let max = 0;
+    for (const it of insts) {
+      const v = String(it?.cuotaCodigo || "");
+      const m = v.match(/^CUOTA_(\d{1,})$/);
+      if (m) max = Math.max(max, Number(m[1]) || 0);
+    }
+    const next = max + 1;
+    return `CUOTA_${String(next).padStart(3, "0")}`;
+  }
+
+  function ymdPlusDays(ymd: string, days: number) {
+    const base = String(ymd || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(base)) return isoPlusDays(days);
+    try {
+      const d = new Date(`${base}T00:00:00.000Z`);
+      if (Number.isNaN(d.getTime())) return isoPlusDays(days);
+      return format(addDays(d, days), "yyyy-MM-dd");
+    } catch {
+      return isoPlusDays(days);
+    }
+  }
+
+  function normalizeScheduleInstallments(next: PaymentConfig["installments"]) {
+    const base = (next || []).filter((i) => i.type !== "bono");
+    return base.map((it, idx) => ({
+      ...it,
+      type: (it.type || "regular") as any,
+      cuotaCodigo: `CUOTA_${String(idx + 1).padStart(3, "0")}`,
+      concept:
+        String(it.concept || "").trim() ||
+        ((it.type || "regular") === "reserva" ? "Reserva" : `Cuota ${idx + 1}`),
+      amount: Number(it.amount || 0),
+      date: String(it.date || ""),
+    }));
+  }
 
   const [initialBonuses, setInitialBonuses] = useState<
     { name: string; amount: number }[]
@@ -168,30 +243,79 @@ export default function StudentPaymentsPage() {
 
   useEffect(() => {
     loadData();
-    loadConfig();
     loadLogs();
   }, [code]);
 
   async function loadData() {
     setLoading(true);
-    // Mock delay
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    const raw = localStorage.getItem(`mock-payments-${code}`);
-    if (raw) {
-      setPayments(JSON.parse(raw));
-    } else {
+    try {
+      // 1) Listar planes por cliente_codigo (código del alumno)
+      const list = await getPaymentPlansByClienteCodigo(code, {
+        page: 1,
+        pageSize: 100,
+        search: "",
+      });
+      const plans = Array.isArray(list) ? list : (list as any)?.data;
+      const planRow = Array.isArray(plans)
+        ? (plans.find(
+            (p: any) =>
+              String(p?.cliente_codigo ?? "").toLowerCase() ===
+              code.toLowerCase(),
+          ) ?? plans[0])
+        : null;
+
+      const planCodigo = String(planRow?.codigo ?? "").trim();
+      if (!planCodigo) {
+        setConfig(null);
+        setPaymentCodigo(null);
+        setPayments([]);
+        return;
+      }
+
+      // 2) Consultar detalle del plan por su codigo (NO por el id/código del alumno)
+      const rawDetail = await getPaymentPlanByCodigo(planCodigo);
+      const plan = (rawDetail as any)?.data ?? rawDetail;
+      setPaymentCodigo(planCodigo);
+
+      // Cargar config desde el plan (cuotas/detalles) y renderizar en campos
+      const cfg = apiDetailToConfig(
+        code,
+        plan as any,
+      ) as unknown as UiPaymentConfig;
+      setConfig(cfg as any);
+
+      // Historial de pagos: solo cuotas marcadas como pagadas/listas
+      const detalles: any[] = Array.isArray(plan?.detalles)
+        ? plan.detalles
+        : Array.isArray(plan?.details)
+          ? plan.details
+          : [];
+      const isPaidStatus = (s: any) => {
+        const v = String(s ?? "").toLowerCase();
+        return ["pagado", "paid", "completed", "listo", "aprobado"].includes(v);
+      };
+      const paid = detalles.filter((d) => isPaidStatus(d?.estatus));
+      const paidPayments: Payment[] = paid.map((d) => ({
+        id: d?.codigo ?? d?.id ?? Math.random().toString(36),
+        codigo_cliente: code,
+        monto: d?.monto ?? 0,
+        moneda: d?.moneda ?? plan?.moneda ?? "USD",
+        fecha_pago: d?.fecha_pago ?? "",
+        metodo_pago: d?.metodo ?? "",
+        estado: "completed",
+        referencia: d?.referencia ?? undefined,
+        comprobante_url: undefined,
+        observaciones: d?.notas ?? undefined,
+        created_at: d?.created_at ?? undefined,
+      }));
+      setPayments(paidPayments);
+    } catch (e) {
+      console.error("Error cargando plan de pagos", e);
+      setConfig(null);
+      setPaymentCodigo(null);
       setPayments([]);
     }
     setLoading(false);
-  }
-
-  function loadConfig() {
-    try {
-      const raw = localStorage.getItem(`payment-config-${code}`);
-      if (raw) {
-        setConfig(JSON.parse(raw));
-      }
-    } catch {}
   }
 
   function loadLogs() {
@@ -203,68 +327,111 @@ export default function StudentPaymentsPage() {
     } catch {}
   }
 
-  function saveConfig() {
-    // Generate installments based on 4 months duration
+  async function saveConfig() {
+    const planType = (tempConfig.planType || "contado") as CrmPaymentPlanType;
+    const preset = (tempConfig.pricingPreset ||
+      "descuento") as CrmPaymentPricingPreset;
+    const program = String(tempConfig.program || "HOTSELLING PRO");
+
     const installments: PaymentConfig["installments"] = [];
-    const start = new Date(tempConfig.startDate);
-    let totalAmount = tempConfig.amount;
+    const std = getStdPricing(program, preset);
 
-    // Handle Reservation
-    if (tempConfig.hasReservation && tempConfig.reservationAmount) {
+    const normalizeNumber = (v: any) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const fromModal = Array.isArray(tempConfig.installments)
+      ? normalizeScheduleInstallments(tempConfig.installments)
+      : [];
+
+    if (fromModal.length > 0) {
+      installments.push(...fromModal);
+    } else if (planType === "contado") {
+      const total =
+        normalizeNumber(tempConfig.amount) ||
+        (std?.stdCash ? Number(std.stdCash) : 0);
       installments.push({
         id: Math.random().toString(36).substr(2, 9),
-        date: tempConfig.reservationDate || tempConfig.startDate,
-        amount: tempConfig.reservationAmount,
-        type: "reserva",
-        concept: "Reserva / Matrícula",
-      });
-      totalAmount -= tempConfig.reservationAmount;
-    }
-
-    if (tempConfig.frequency === "unico") {
-      installments.push({
-        id: Math.random().toString(36).substr(2, 9),
-        date: tempConfig.startDate,
-        amount: totalAmount,
+        cuotaCodigo: "CUOTA_001",
+        date: isoPlusDays(0),
+        amount: total,
         type: "regular" as const,
+        concept: "Pago total",
       });
-    } else if (tempConfig.frequency === "mensual") {
-      // 4 months = 4 payments
-      const installmentAmount = totalAmount / 4;
-      for (let i = 0; i < 4; i++) {
-        const d = new Date(start);
-        d.setMonth(start.getMonth() + i);
+    } else if (planType === "cuotas") {
+      const stdCount = std?.stdInstallments?.count ?? 0;
+      const stdAmount = std?.stdInstallments?.amount ?? 0;
+      const desiredTotal = normalizeNumber(tempConfig.amount);
+
+      const count = stdCount || 2;
+      const per = desiredTotal > 0 ? desiredTotal / count : stdAmount;
+      const perRounded = Math.round(per * 100) / 100;
+
+      const schedule = buildStandardScheduleFromCount(
+        [],
+        count,
+        String(perRounded),
+      );
+      schedule.forEach((it, idx) => {
+        const a = Number(String(it.amount || "0"));
+        installments.push({
+          id: String(it.id || Math.random().toString(36).substr(2, 9)),
+          cuotaCodigo: `CUOTA_${String(idx + 1).padStart(3, "0")}`,
+          date: it.dueDate || isoPlusDays(idx * 30),
+          amount: Number.isFinite(a) ? a : 0,
+          type: "regular" as const,
+          concept: `Cuota ${idx + 1}`,
+        });
+      });
+    } else if (planType === "excepcion_2_cuotas") {
+      const total = normalizeNumber(tempConfig.amount);
+      const nowId = Date.now();
+      const first = total > 0 ? Math.round((total / 2) * 100) / 100 : 0;
+      const custom: CrmPaymentCustomInstallment[] = [
+        { id: `ci_0_${nowId}`, amount: String(first), dueDate: isoPlusDays(0) },
+        {
+          id: `ci_1_${nowId}`,
+          amount: String(first),
+          dueDate: isoPlusDays(30),
+        },
+      ];
+      custom.forEach((it, idx) => {
+        const a = Number(String(it.amount || "0"));
+        installments.push({
+          id: it.id,
+          cuotaCodigo: `CUOTA_${String(idx + 1).padStart(3, "0")}`,
+          date: it.dueDate,
+          amount: Number.isFinite(a) ? a : 0,
+          type: "regular" as const,
+          concept: `Cuota ${idx + 1}`,
+        });
+      });
+    } else {
+      // reserva
+      const total = normalizeNumber(tempConfig.amount);
+      const reserva = normalizeNumber(tempConfig.reservationAmount);
+      const paidDate = tempConfig.reservationDate || isoPlusDays(0);
+      const remaining = Math.max(0, total - reserva);
+
+      if (reserva > 0) {
         installments.push({
           id: Math.random().toString(36).substr(2, 9),
-          date: d.toISOString().split("T")[0],
-          amount: installmentAmount,
-          type: "regular" as const,
+          cuotaCodigo: "CUOTA_001",
+          date: paidDate,
+          amount: reserva,
+          type: "reserva" as const,
+          concept: "Reserva",
         });
       }
-    } else if (tempConfig.frequency === "trimestral") {
-      // 4 months duration. 2 payments (Month 0 and Month 3)
-      const installmentAmount = totalAmount / 2;
-      for (let i = 0; i < 2; i++) {
-        const d = new Date(start);
-        d.setMonth(start.getMonth() + i * 3);
+      if (remaining > 0) {
         installments.push({
           id: Math.random().toString(36).substr(2, 9),
-          date: d.toISOString().split("T")[0],
-          amount: installmentAmount,
+          cuotaCodigo: reserva > 0 ? "CUOTA_002" : "CUOTA_001",
+          date: isoPlusDays(30),
+          amount: remaining,
           type: "regular" as const,
-        });
-      }
-    } else if (tempConfig.frequency === "semanal") {
-      // 4 months * 4 weeks = 16 weeks
-      const installmentAmount = totalAmount / 16;
-      for (let i = 0; i < 16; i++) {
-        const d = new Date(start);
-        d.setDate(start.getDate() + i * 7);
-        installments.push({
-          id: Math.random().toString(36).substr(2, 9),
-          date: d.toISOString().split("T")[0],
-          amount: installmentAmount,
-          type: "regular" as const,
+          concept: "Saldo pendiente",
         });
       }
     }
@@ -273,34 +440,72 @@ export default function StudentPaymentsPage() {
     initialBonuses.forEach((bono) => {
       installments.push({
         id: Math.random().toString(36).substr(2, 9),
-        date: tempConfig.startDate, // Default to start date
+        date: installments[0]?.date || isoPlusDays(0),
         amount: bono.amount,
         type: "bono" as const,
         concept: bono.name,
       });
     });
 
-    // Recalculate total amount to include bonuses?
-    // User said "monto base se debe dividir... ademas... agregar los bonos"
-    // So the total config amount should probably reflect everything.
-    const totalWithBonuses =
-      tempConfig.amount + initialBonuses.reduce((sum, b) => sum + b.amount, 0);
+    const baseTotal = installments
+      .filter((i) => i.type !== "bono")
+      .reduce((sum, i) => sum + (Number(i.amount) || 0), 0);
 
-    const newConfig = {
+    const totalWithBonuses =
+      baseTotal + initialBonuses.reduce((sum, b) => sum + b.amount, 0);
+
+    const newConfig: PaymentConfig = {
       ...tempConfig,
+      currency: "USD",
+      metodo: String(tempConfig.metodo || "transfer"),
+      tipo_pago: planType,
+      planType,
+      pricingPreset: preset,
+      program,
+      frequency:
+        planType === "contado"
+          ? "unico"
+          : planType === "cuotas"
+            ? "mensual"
+            : planType === "excepcion_2_cuotas"
+              ? "mensual"
+              : "unico",
+      startDate: installments[0]?.date || isoPlusDays(0),
+      hasReservation: planType === "reserva",
       amount: totalWithBonuses,
       installments,
     };
-    localStorage.setItem(`payment-config-${code}`, JSON.stringify(newConfig));
-    setConfig(newConfig);
-    setConfigOpen(false);
-    toast({ title: "Configuración guardada y cuotas generadas" });
+    // Persistir en backend:
+    try {
+      if (paymentCodigo) {
+        await updatePaymentPlan(
+          paymentCodigo,
+          planToUpdatePayload(code, newConfig as any),
+        );
+      } else {
+        const created = await createPaymentPlan(
+          planToCreatePayload(code, newConfig as any),
+        );
+        const createdCodigo = String(
+          (created as any)?.codigo ?? (created as any)?.payment_codigo ?? "",
+        ).trim();
+        setPaymentCodigo(createdCodigo || null);
+      }
+
+      await loadData();
+      setConfigOpen(false);
+      toast({ title: "Configuración guardada" });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error guardando plan de pagos", variant: "destructive" });
+    }
   }
 
   function openRegisterModal() {
     // Find first unpaid installment
     const nextUnpaid = upcomingPayments.find((p) => p.status !== "paid");
     if (nextUnpaid) {
+      setSelectedDetalleCodigo(nextUnpaid.detalleCodigo || null);
       setNewPayment({
         monto: String(nextUnpaid.amount),
         moneda: config?.currency || "USD",
@@ -311,6 +516,7 @@ export default function StudentPaymentsPage() {
         comprobante_url: "",
       });
     } else {
+      setSelectedDetalleCodigo(null);
       // Default empty
       setNewPayment({
         monto: "",
@@ -325,7 +531,12 @@ export default function StudentPaymentsPage() {
     setRegisterOpen(true);
   }
 
-  function handleValidatePayment(amount: number, date: Date) {
+  function handleValidatePayment(
+    detalleCodigo: string,
+    amount: number,
+    date: Date,
+  ) {
+    setSelectedDetalleCodigo(String(detalleCodigo || "").trim() || null);
     setNewPayment({
       ...newPayment,
       monto: String(amount),
@@ -338,7 +549,7 @@ export default function StudentPaymentsPage() {
 
   function handleSplitInstallment(originalId: string) {
     const originalIndex = editingInstallments.findIndex(
-      (i) => i.id === originalId
+      (i) => i.id === originalId,
     );
     if (originalIndex === -1) return;
 
@@ -436,8 +647,16 @@ export default function StudentPaymentsPage() {
     toast({ title: "Fechas recalculadas" });
   }
 
-  function saveEditedPlan() {
+  async function saveEditedPlan() {
     if (!config) return;
+    if (!paymentCodigo) {
+      toast({
+        title: "No hay plan en backend",
+        description: "Guarda el plan primero para poder actualizarlo.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Generate logs
     const newLogs: ChangeLog[] = [];
@@ -493,8 +712,8 @@ export default function StudentPaymentsPage() {
 
     // Recalculate total amount
     const newTotal = editingInstallments.reduce(
-      (sum, inst) => sum + inst.amount,
-      0
+      (sum, inst) => sum + (Number.isFinite(inst.amount) ? inst.amount : 0),
+      0,
     );
 
     const newConfig = {
@@ -502,27 +721,115 @@ export default function StudentPaymentsPage() {
       amount: newTotal,
       installments: editingInstallments,
     };
-    localStorage.setItem(`payment-config-${code}`, JSON.stringify(newConfig));
-    setConfig(newConfig);
-    setEditPlanOpen(false);
-    toast({
-      title: "Plan de pagos actualizado",
-      description: `Nuevo total del programa: ${new Intl.NumberFormat("es-CO", {
-        style: "currency",
-        currency: config.currency,
-      }).format(newTotal)}`,
-    });
+    try {
+      // 1) Update del plan principal
+      await updatePaymentPlan(
+        paymentCodigo,
+        planToUpdatePayload(code, newConfig as any),
+      );
+
+      // 2) Sync de cuotas/detalles: update (upsert) y delete
+      const prev = (config.installments || []).filter((i) => i.type !== "bono");
+      const next = (editingInstallments || []).filter((i) => i.type !== "bono");
+      const nextIds = new Set(next.map((i) => i.id));
+      const deleted = prev.filter((i) => !nextIds.has(i.id));
+
+      const prevIds = new Set(prev.map((i) => i.id));
+      const added = next.filter((i) => !prevIds.has(i.id));
+      const existing = next.filter((i) => prevIds.has(i.id));
+
+      const toMetodo = (m: string) => {
+        const v = String(m || "").toLowerCase();
+        if (v.includes("tarjeta") || v.includes("card")) return "card";
+        return "transfer";
+      };
+
+      const metodoPlan = toMetodo((config as any)?.metodo ?? "transfer");
+      const monedaPlan = config.currency || "USD";
+
+      for (const inst of existing) {
+        await updatePaymentDetail(paymentCodigo, inst.id, {
+          cuota_codigo:
+            String((inst as any)?.cuotaCodigo || "").trim() || undefined,
+          monto: Number(inst.amount || 0),
+          moneda: monedaPlan,
+          estatus: "pendiente",
+          fecha_pago: inst.date ? `${inst.date}T00:00:00Z` : undefined,
+          metodo: metodoPlan,
+          referencia: "",
+          concepto: inst.concept || "",
+          notas: "",
+        });
+      }
+
+      for (const inst of added) {
+        await createPaymentDetail(paymentCodigo, {
+          cuota_codigo:
+            String((inst as any)?.cuotaCodigo || "").trim() ||
+            nextCuotaCodigo(next),
+          monto: Number(inst.amount || 0),
+          moneda: monedaPlan,
+          estatus: "pendiente",
+          fecha_pago: inst.date
+            ? `${inst.date}T00:00:00Z`
+            : new Date().toISOString(),
+          metodo: metodoPlan,
+          referencia: "",
+          concepto: inst.concept || "",
+          notas: "",
+        });
+      }
+
+      for (const inst of deleted) {
+        await deletePaymentDetail(paymentCodigo, inst.id);
+      }
+
+      await loadData();
+      setEditPlanOpen(false);
+      toast({
+        title: "Plan de pagos actualizado",
+        description: `Nuevo total del programa: ${new Intl.NumberFormat(
+          "es-CO",
+          {
+            style: "currency",
+            currency: config.currency,
+          },
+        ).format(newTotal)}`,
+      });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Error actualizando plan", variant: "destructive" });
+    }
   }
 
   function handleAddInstallment() {
+    const amount = Number(newInstallment.amount);
+    if (!newInstallment.date) {
+      toast({
+        title: "Fecha requerida",
+        description: "Selecciona una fecha para la cuota.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast({
+        title: "Monto inválido",
+        description: "Ingresa un monto mayor a 0.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setEditingInstallments([
       ...editingInstallments,
       {
         id: Math.random().toString(36).substr(2, 9),
         date: newInstallment.date,
-        amount: Number(newInstallment.amount),
+        amount,
         type: newInstallment.type,
         concept: newInstallment.concept,
+        cuotaCodigo: nextCuotaCodigo(editingInstallments),
       },
     ]);
     setAddInstallmentOpen(false);
@@ -542,31 +849,75 @@ export default function StudentPaymentsPage() {
     }
   }
 
+  function openConfigBuilder() {
+    setTempConfig((prev) => {
+      const base = config;
+      return {
+        ...prev,
+        ...(base ? (base as any) : {}),
+        currency: "USD",
+        metodo: String((base as any)?.metodo ?? prev.metodo ?? "transfer"),
+        // Mantener cuotas actuales para editarlas dentro del modal (como CRM)
+        installments: Array.isArray((base as any)?.installments)
+          ? ([...(base as any).installments] as any)
+          : prev.installments,
+      };
+    });
+    setConfigOpen(true);
+  }
+
   async function handleRegisterPayment() {
     try {
-      // Mock delay
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (!paymentCodigo) {
+        toast({
+          title: "No hay plan en backend",
+          description: "Crea/guarda el plan antes de registrar pagos.",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      const newPay: Payment = {
-        id: Math.random().toString(36),
-        codigo_cliente: code,
-        monto: Number(newPayment.monto),
-        moneda: newPayment.moneda,
-        fecha_pago: newPayment.fecha_pago,
-        metodo_pago: newPayment.metodo_pago,
-        referencia: newPayment.referencia,
-        observaciones: newPayment.observaciones,
-        comprobante_url: newPayment.comprobante_url,
-        estado: "completed",
-        created_at: new Date().toISOString(),
+      const detalleCodigo = String(selectedDetalleCodigo || "").trim();
+      const match = detalleCodigo
+        ? (config?.installments || []).find(
+            (i) => String(i.id) === detalleCodigo,
+          )
+        : null;
+
+      if (!detalleCodigo || !match) {
+        toast({
+          title: "No se encontró una cuota",
+          description:
+            "Selecciona una cuota con 'Validar' para editar ese detalle.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const targetDate = newPayment.fecha_pago;
+      const targetAmount = Number(newPayment.monto || 0);
+
+      const toMetodo = (m: string) => {
+        const v = String(m || "").toLowerCase();
+        if (v.includes("tarjeta") || v.includes("card")) return "card";
+        return "transfer";
       };
 
-      const updatedPayments = [...payments, newPay];
-      setPayments(updatedPayments);
-      localStorage.setItem(
-        `mock-payments-${code}`,
-        JSON.stringify(updatedPayments)
-      );
+      await updatePaymentDetail(paymentCodigo, detalleCodigo, {
+        cuota_codigo:
+          String((match as any)?.cuotaCodigo || "").trim() || undefined,
+        monto: targetAmount,
+        moneda: newPayment.moneda || (config?.currency ?? "USD"),
+        estatus: "listo",
+        // Usar mediodía UTC para evitar desfases por zona horaria
+        fecha_pago: targetDate ? `${targetDate}T12:00:00Z` : undefined,
+        metodo: toMetodo(newPayment.metodo_pago),
+        referencia: newPayment.referencia || "",
+        concepto: match.concept || "Ajuste de cuota",
+        notas: newPayment.observaciones || "",
+      });
+
+      await loadData();
 
       toast({
         title: "Pago registrado exitosamente",
@@ -574,6 +925,7 @@ export default function StudentPaymentsPage() {
         className: "bg-green-50 border-green-200 text-green-800",
       });
       setRegisterOpen(false);
+      setSelectedDetalleCodigo(null);
       // Reset form
       setNewPayment({
         monto: config ? String(config.amount) : "",
@@ -611,7 +963,7 @@ export default function StudentPaymentsPage() {
 
     // Sort installments by date to match earliest first
     const sortedInstallments = [...config.installments].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
     );
 
     return sortedInstallments.map((inst) => {
@@ -640,6 +992,8 @@ export default function StudentPaymentsPage() {
       const isNearDue = !isPaid && daysDiff <= 5 && daysDiff >= 0;
 
       return {
+        detalleCodigo: String(inst.id),
+        cuotaCodigo: String((inst as any)?.cuotaCodigo || ""),
         date: d,
         amount: inst.amount,
         type: inst.type || "regular",
@@ -675,7 +1029,7 @@ export default function StudentPaymentsPage() {
             <CreditCard className="w-5 h-5" /> Seguimiento de pagos
           </h1>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setConfigOpen(true)}>
+            <Button variant="outline" onClick={openConfigBuilder}>
               <Settings className="w-4 h-4 mr-2" />
               {config ? "Configurar plan" : "Configuración inicial"}
             </Button>
@@ -712,7 +1066,7 @@ export default function StudentPaymentsPage() {
                     <p>No hay configuración de pagos.</p>
                     <Button
                       variant="link"
-                      onClick={() => setConfigOpen(true)}
+                      onClick={openConfigBuilder}
                       className="mt-2"
                     >
                       Iniciar configuración
@@ -721,13 +1075,30 @@ export default function StudentPaymentsPage() {
                 ) : (
                   <div className="space-y-4">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Frecuencia:</span>
-                      <span className="capitalize font-medium">
-                        {config.frequency}
+                      <span className="text-muted-foreground">Tipo:</span>
+                      <span className="font-medium">
+                        {labelForPlanType(
+                          (config.planType ??
+                            (config.hasReservation
+                              ? "reserva"
+                              : config.frequency === "unico"
+                                ? "contado"
+                                : "cuotas")) as CrmPaymentPlanType,
+                        )}
                       </span>
                     </div>
+                    {config.pricingPreset && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Tarifa:</span>
+                        <span className="capitalize font-medium">
+                          {config.pricingPreset}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Monto base:</span>
+                      <span className="text-muted-foreground">
+                        Monto total:
+                      </span>
                       <span className="font-medium">
                         {new Intl.NumberFormat("es-CO", {
                           style: "currency",
@@ -784,10 +1155,10 @@ export default function StudentPaymentsPage() {
                                 item.status === "paid"
                                   ? "bg-green-50 border-green-100 dark:bg-green-900/20 dark:border-green-900"
                                   : item.status === "overdue"
-                                  ? "bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-900"
-                                  : item.isNearDue
-                                  ? "bg-yellow-50 border-yellow-100 dark:bg-yellow-900/20 dark:border-yellow-900"
-                                  : "bg-card"
+                                    ? "bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-900"
+                                    : item.isNearDue
+                                      ? "bg-yellow-50 border-yellow-100 dark:bg-yellow-900/20 dark:border-yellow-900"
+                                      : "bg-card"
                               }`}
                             >
                               <div className="flex items-center gap-2">
@@ -821,10 +1192,10 @@ export default function StudentPaymentsPage() {
                                       {item.status === "paid"
                                         ? "Pagado"
                                         : item.status === "overdue"
-                                        ? "Vencido"
-                                        : item.isNearDue
-                                        ? "Vence pronto"
-                                        : "Pendiente"}
+                                          ? "Vencido"
+                                          : item.isNearDue
+                                            ? "Vence pronto"
+                                            : "Pendiente"}
                                     </span>
                                   </div>
                                 </div>
@@ -844,8 +1215,11 @@ export default function StudentPaymentsPage() {
                                     className="h-6 text-xs px-2"
                                     onClick={() =>
                                       handleValidatePayment(
+                                        String(
+                                          (item as any).detalleCodigo || "",
+                                        ),
                                         item.amount,
-                                        item.date
+                                        item.date,
                                       )
                                     }
                                   >
@@ -964,8 +1338,8 @@ export default function StudentPaymentsPage() {
                               p.estado === "aprobado"
                                 ? "Completado"
                                 : p.estado === "pending"
-                                ? "Pendiente"
-                                : p.estado || "Completado"}
+                                  ? "Pendiente"
+                                  : p.estado || "Completado"}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
@@ -1032,91 +1406,558 @@ export default function StudentPaymentsPage() {
             <div className="grid gap-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Frecuencia</Label>
+                  <Label>Tipo de pago *</Label>
                   <Select
-                    value={tempConfig.frequency}
-                    onValueChange={(v: any) =>
-                      setTempConfig({ ...tempConfig, frequency: v })
+                    value={(tempConfig.planType || "contado") as any}
+                    onValueChange={(v: any) => {
+                      const next = v as CrmPaymentPlanType;
+                      const std = getStdPricing(
+                        String(tempConfig.program || "HOTSELLING PRO"),
+                        (tempConfig.pricingPreset ||
+                          "descuento") as CrmPaymentPricingPreset,
+                      );
+
+                      if (next === "contado") {
+                        const total = std?.stdCash
+                          ? Number(std.stdCash)
+                          : Number(tempConfig.amount || 0);
+                        setTempConfig({
+                          ...tempConfig,
+                          planType: next,
+                          hasReservation: false,
+                          frequency: "unico",
+                          amount: total,
+                          installments: [
+                            {
+                              id: Math.random().toString(36).substr(2, 9),
+                              cuotaCodigo: "CUOTA_001",
+                              date: isoPlusDays(0),
+                              amount: total,
+                              type: "regular",
+                              concept: "Pago total",
+                            },
+                          ],
+                        });
+                        return;
+                      }
+
+                      if (next === "cuotas") {
+                        const cnt = std?.stdInstallments?.count ?? 2;
+                        const per = std?.stdInstallments?.amount ?? 0;
+                        const schedule = buildStandardScheduleFromCount(
+                          [],
+                          cnt,
+                          String(per),
+                        );
+                        setTempConfig({
+                          ...tempConfig,
+                          planType: next,
+                          hasReservation: false,
+                          frequency: "mensual",
+                          amount: cnt * per,
+                          installments: schedule.map((it, idx) => ({
+                            id: String(
+                              it.id || Math.random().toString(36).substr(2, 9),
+                            ),
+                            cuotaCodigo: `CUOTA_${String(idx + 1).padStart(3, "0")}`,
+                            date: it.dueDate || isoPlusDays(idx * 30),
+                            amount: Number(String(it.amount || per)) || 0,
+                            type: "regular",
+                            concept: `Cuota ${idx + 1}`,
+                          })),
+                        });
+                        return;
+                      }
+
+                      if (next === "excepcion_2_cuotas") {
+                        const total = Number(tempConfig.amount || 0);
+                        const half =
+                          total > 0 ? Math.round((total / 2) * 100) / 100 : 0;
+                        setTempConfig({
+                          ...tempConfig,
+                          planType: next,
+                          hasReservation: false,
+                          frequency: "mensual",
+                          installments: [
+                            {
+                              id: Math.random().toString(36).substr(2, 9),
+                              cuotaCodigo: "CUOTA_001",
+                              date: isoPlusDays(0),
+                              amount: half,
+                              type: "regular",
+                              concept: "Cuota 1",
+                            },
+                            {
+                              id: Math.random().toString(36).substr(2, 9),
+                              cuotaCodigo: "CUOTA_002",
+                              date: isoPlusDays(30),
+                              amount: half,
+                              type: "regular",
+                              concept: "Cuota 2",
+                            },
+                          ],
+                        });
+                        return;
+                      }
+
+                      // reserva
+                      setTempConfig({
+                        ...tempConfig,
+                        planType: next,
+                        hasReservation: true,
+                        frequency: "unico",
+                        reservationDate:
+                          tempConfig.reservationDate || isoPlusDays(0),
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contado">Venta al contado</SelectItem>
+                      <SelectItem value="cuotas">
+                        Venta en cuotas (estándar)
+                      </SelectItem>
+                      <SelectItem value="excepcion_2_cuotas">
+                        Excepción: 2 cuotas personalizadas
+                      </SelectItem>
+                      <SelectItem value="reserva">Reserva</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tarifa *</Label>
+                  <Select
+                    value={(tempConfig.pricingPreset || "descuento") as any}
+                    onValueChange={(v: any) => {
+                      const nextPreset = v as CrmPaymentPricingPreset;
+                      const std = getStdPricing(
+                        String(tempConfig.program || "HOTSELLING PRO"),
+                        nextPreset,
+                      );
+                      const plan = (tempConfig.planType ||
+                        "contado") as CrmPaymentPlanType;
+
+                      if (plan === "contado" && std?.stdCash) {
+                        setTempConfig({
+                          ...tempConfig,
+                          pricingPreset: nextPreset,
+                          amount: Number(std.stdCash),
+                          installments: [
+                            {
+                              id: Math.random().toString(36).substr(2, 9),
+                              cuotaCodigo: "CUOTA_001",
+                              date: isoPlusDays(0),
+                              amount: Number(std.stdCash),
+                              type: "regular",
+                              concept: "Pago total",
+                            },
+                          ],
+                        });
+                        return;
+                      }
+                      if (plan === "cuotas" && std?.stdInstallments) {
+                        const cnt = std.stdInstallments.count;
+                        const per = std.stdInstallments.amount;
+                        const current = Array.isArray(tempConfig.installments)
+                          ? tempConfig.installments.filter(
+                              (i) => i.type !== "bono",
+                            )
+                          : [];
+                        const schedule = buildStandardScheduleFromCount(
+                          current.map((x) => ({
+                            id: x.id,
+                            amount: String(x.amount ?? per),
+                            dueDate: String(x.date || ""),
+                          })),
+                          cnt,
+                          String(per),
+                        );
+                        setTempConfig({
+                          ...tempConfig,
+                          pricingPreset: nextPreset,
+                          amount: cnt * per,
+                          installments: schedule.map((it, idx) => ({
+                            id: String(
+                              it.id || Math.random().toString(36).substr(2, 9),
+                            ),
+                            cuotaCodigo: `CUOTA_${String(idx + 1).padStart(3, "0")}`,
+                            date: it.dueDate || isoPlusDays(idx * 30),
+                            amount: Number(String(it.amount || per)) || 0,
+                            type: "regular",
+                            concept: `Cuota ${idx + 1}`,
+                          })),
+                        });
+                        return;
+                      }
+
+                      setTempConfig({
+                        ...tempConfig,
+                        pricingPreset: nextPreset,
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="descuento">
+                        Descuento estándar
+                      </SelectItem>
+                      <SelectItem value="lista">Precio lista</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Producto</Label>
+                  <Select
+                    value={
+                      String(tempConfig.program || "HOTSELLING PRO") as any
+                    }
+                    onValueChange={(v: any) => {
+                      const nextProgram = String(v);
+                      const plan = (tempConfig.planType ||
+                        "contado") as CrmPaymentPlanType;
+                      const preset = (tempConfig.pricingPreset ||
+                        "descuento") as CrmPaymentPricingPreset;
+                      const std = getStdPricing(nextProgram, preset);
+
+                      if (plan === "contado" && std?.stdCash) {
+                        setTempConfig({
+                          ...tempConfig,
+                          program: nextProgram,
+                          amount: Number(std.stdCash),
+                          installments: [
+                            {
+                              id: Math.random().toString(36).substr(2, 9),
+                              cuotaCodigo: "CUOTA_001",
+                              date: isoPlusDays(0),
+                              amount: Number(std.stdCash),
+                              type: "regular",
+                              concept: "Pago total",
+                            },
+                          ],
+                        });
+                        return;
+                      }
+
+                      if (plan === "cuotas" && std?.stdInstallments) {
+                        const cnt = std.stdInstallments.count;
+                        const per = std.stdInstallments.amount;
+                        const current = Array.isArray(tempConfig.installments)
+                          ? tempConfig.installments.filter(
+                              (i) => i.type !== "bono",
+                            )
+                          : [];
+                        const schedule = buildStandardScheduleFromCount(
+                          current.map((x) => ({
+                            id: x.id,
+                            amount: String(x.amount ?? per),
+                            dueDate: String(x.date || ""),
+                          })),
+                          cnt,
+                          String(per),
+                        );
+                        setTempConfig({
+                          ...tempConfig,
+                          program: nextProgram,
+                          amount:
+                            std.stdInstallments.count *
+                            std.stdInstallments.amount,
+                          installments: schedule.map((it, idx) => ({
+                            id: String(
+                              it.id || Math.random().toString(36).substr(2, 9),
+                            ),
+                            cuotaCodigo: `CUOTA_${String(idx + 1).padStart(3, "0")}`,
+                            date: it.dueDate || isoPlusDays(idx * 30),
+                            amount: Number(String(it.amount || per)) || 0,
+                            type: "regular",
+                            concept: `Cuota ${idx + 1}`,
+                          })),
+                        });
+                        return;
+                      }
+
+                      setTempConfig({ ...tempConfig, program: nextProgram });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CRM_PRODUCT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Moneda</Label>
+                  <div className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                    USD
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Método</Label>
+                  <Select
+                    value={String(tempConfig.metodo || "transfer")}
+                    onValueChange={(v) =>
+                      setTempConfig({ ...tempConfig, metodo: v })
                     }
                   >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="mensual">Mensual</SelectItem>
-                      <SelectItem value="trimestral">Trimestral</SelectItem>
-                      <SelectItem value="semanal">Semanal</SelectItem>
-                      <SelectItem value="unico">Pago Único</SelectItem>
+                      <SelectItem value="transfer">Transferencia</SelectItem>
+                      <SelectItem value="card">Tarjeta</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label>Fecha inicio</Label>
-                  <Input
-                    type="date"
-                    value={tempConfig.startDate}
-                    onChange={(e) =>
-                      setTempConfig({
-                        ...tempConfig,
-                        startDate: e.target.value,
-                      })
-                    }
-                  />
-                </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Monto Total del Programa</Label>
+                  <Label>Monto Total del Programa (USD)</Label>
                   <Input
                     type="number"
-                    value={tempConfig.amount}
+                    value={
+                      ((tempConfig.planType || "contado") as any) ===
+                        "cuotas" ||
+                      ((tempConfig.planType || "contado") as any) ===
+                        "excepcion_2_cuotas"
+                        ? Array.isArray(tempConfig.installments)
+                          ? tempConfig.installments
+                              .filter((i) => i.type !== "bono")
+                              .reduce(
+                                (sum, i) => sum + (Number(i.amount) || 0),
+                                0,
+                              )
+                          : 0
+                        : tempConfig.amount
+                    }
                     onChange={(e) =>
                       setTempConfig({
                         ...tempConfig,
                         amount: Number(e.target.value),
                       })
                     }
+                    disabled={
+                      ((tempConfig.planType || "contado") as any) ===
+                        "cuotas" ||
+                      ((tempConfig.planType || "contado") as any) ===
+                        "excepcion_2_cuotas"
+                    }
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Moneda</Label>
-                  <Select
-                    value={tempConfig.currency}
-                    onValueChange={(v) =>
-                      setTempConfig({ ...tempConfig, currency: v })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="USD">USD</SelectItem>
-                      <SelectItem value="COP">COP</SelectItem>
-                      <SelectItem value="MXN">MXN</SelectItem>
-                      <SelectItem value="EUR">EUR</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label>Resumen</Label>
+                  <div className="text-sm text-muted-foreground border rounded-md px-3 py-2">
+                    {labelForPlanType(
+                      (tempConfig.planType || "contado") as CrmPaymentPlanType,
+                    )}
+                  </div>
                 </div>
               </div>
 
+              {(((tempConfig.planType || "contado") as any) === "cuotas" ||
+                ((tempConfig.planType || "contado") as any) ===
+                  "excepcion_2_cuotas") && (
+                <div className="border rounded-lg p-4 bg-muted/30">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <Label>
+                        {((tempConfig.planType || "contado") as any) ===
+                        "cuotas"
+                          ? "Plan en cuotas (editable)"
+                          : "Cuotas personalizadas (editable)"}
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Agrega/quita cuotas y edita monto y fecha (igual que
+                        CRM).
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const base = Array.isArray(tempConfig.installments)
+                          ? tempConfig.installments.filter(
+                              (i) => i.type !== "bono",
+                            )
+                          : [];
+                        const last = base[base.length - 1];
+                        const nextDate = last?.date
+                          ? ymdPlusDays(last.date, 30)
+                          : isoPlusDays(0);
+                        const nextAmount = Number(last?.amount || 0);
+                        const next = normalizeScheduleInstallments([
+                          ...base,
+                          {
+                            id: Math.random().toString(36).substr(2, 9),
+                            cuotaCodigo: nextCuotaCodigo(base),
+                            date: nextDate,
+                            amount: nextAmount,
+                            type: "regular",
+                            concept: `Cuota ${base.length + 1}`,
+                          },
+                        ] as any);
+                        setTempConfig({
+                          ...tempConfig,
+                          installments: next,
+                          amount: next.reduce(
+                            (sum, i) => sum + (Number(i.amount) || 0),
+                            0,
+                          ),
+                        });
+                      }}
+                    >
+                      <Plus className="w-4 h-4 mr-2" /> Agregar cuota
+                    </Button>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {(Array.isArray(tempConfig.installments)
+                      ? tempConfig.installments.filter((i) => i.type !== "bono")
+                      : []
+                    ).map((it, idx, arr) => (
+                      <div
+                        key={it.id}
+                        className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-md border border-slate-200 bg-white p-3"
+                      >
+                        <div className="md:col-span-2">
+                          <Label className="text-xs text-slate-600">
+                            Cuota
+                          </Label>
+                          <div className="h-10 flex items-center text-sm font-medium">
+                            #{idx + 1}
+                          </div>
+                        </div>
+
+                        <div className="md:col-span-5 space-y-1.5">
+                          <Label>Monto (USD) *</Label>
+                          <Input
+                            type="number"
+                            value={String(it.amount ?? "")}
+                            onChange={(e) => {
+                              const base = Array.isArray(
+                                tempConfig.installments,
+                              )
+                                ? tempConfig.installments.filter(
+                                    (i) => i.type !== "bono",
+                                  )
+                                : [];
+                              const nextBase = base.map((x, i) =>
+                                i === idx
+                                  ? {
+                                      ...x,
+                                      amount: Number(e.target.value || 0),
+                                    }
+                                  : x,
+                              );
+                              const next = normalizeScheduleInstallments(
+                                nextBase as any,
+                              );
+                              setTempConfig({
+                                ...tempConfig,
+                                installments: next,
+                                amount: next.reduce(
+                                  (sum, i) => sum + (Number(i.amount) || 0),
+                                  0,
+                                ),
+                              });
+                            }}
+                          />
+                        </div>
+
+                        <div className="md:col-span-5 space-y-1.5">
+                          <Label>Fecha de pago *</Label>
+                          <Input
+                            type="date"
+                            value={it.date || ""}
+                            onChange={(e) => {
+                              const base = Array.isArray(
+                                tempConfig.installments,
+                              )
+                                ? tempConfig.installments.filter(
+                                    (i) => i.type !== "bono",
+                                  )
+                                : [];
+                              const nextBase = base.map((x, i) =>
+                                i === idx ? { ...x, date: e.target.value } : x,
+                              );
+                              const next = normalizeScheduleInstallments(
+                                nextBase as any,
+                              );
+                              setTempConfig({
+                                ...tempConfig,
+                                installments: next,
+                                amount: next.reduce(
+                                  (sum, i) => sum + (Number(i.amount) || 0),
+                                  0,
+                                ),
+                              });
+                            }}
+                          />
+                        </div>
+
+                        <div className="md:col-span-12 flex justify-end">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={arr.length <= 1}
+                            onClick={() => {
+                              if (arr.length <= 1) return;
+                              const base = Array.isArray(
+                                tempConfig.installments,
+                              )
+                                ? tempConfig.installments.filter(
+                                    (i) => i.type !== "bono",
+                                  )
+                                : [];
+                              const nextBase = base.filter((_, i) => i !== idx);
+                              const next = normalizeScheduleInstallments(
+                                nextBase as any,
+                              );
+                              setTempConfig({
+                                ...tempConfig,
+                                installments: next,
+                                amount: next.reduce(
+                                  (sum, i) => sum + (Number(i.amount) || 0),
+                                  0,
+                                ),
+                              });
+                            }}
+                          >
+                            Quitar
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Sección Reserva */}
-              <div className="border rounded-lg p-4 bg-muted/30">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="space-y-0.5">
-                    <Label>¿Llegó por reserva?</Label>
+              {(tempConfig.planType || "contado") === "reserva" && (
+                <div className="border rounded-lg p-4 bg-muted/30">
+                  <div className="space-y-0.5 mb-4">
+                    <Label>Reserva</Label>
                     <p className="text-xs text-muted-foreground">
-                      Si se activa, el monto de reserva se descontará del total
-                      a dividir en cuotas.
+                      Igual que en CRM: monto de reserva y fecha de pago.
                     </p>
                   </div>
-                  <Switch
-                    checked={tempConfig.hasReservation}
-                    onCheckedChange={(c) =>
-                      setTempConfig({ ...tempConfig, hasReservation: c })
-                    }
-                  />
-                </div>
-                {tempConfig.hasReservation && (
                   <div className="grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
                     <div className="space-y-2">
                       <Label>Monto Reserva</Label>
@@ -1145,8 +1986,8 @@ export default function StudentPaymentsPage() {
                       />
                     </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Sección de Bonos Iniciales */}
               <div className="border-t pt-4">
@@ -1294,7 +2135,7 @@ export default function StudentPaymentsPage() {
                       style: "currency",
                       currency: config?.currency || "USD",
                     }).format(
-                      editingInstallments.reduce((sum, i) => sum + i.amount, 0)
+                      editingInstallments.reduce((sum, i) => sum + i.amount, 0),
                     )}
                   </p>
                 </div>
@@ -1434,7 +2275,7 @@ export default function StudentPaymentsPage() {
                                   className="text-red-500 hover:text-red-700"
                                   onClick={() => {
                                     const newInst = editingInstallments.filter(
-                                      (i) => i.id !== inst.id
+                                      (i) => i.id !== inst.id,
                                     );
                                     setEditingInstallments(newInst);
                                   }}
@@ -1710,7 +2551,7 @@ export default function StudentPaymentsPage() {
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
                 {Array.from({ length: splitData.parts }).map((_, i) => {
                   const originalInst = editingInstallments.find(
-                    (inst) => inst.id === splitPopoverOpen
+                    (inst) => inst.id === splitPopoverOpen,
                   );
                   const amount = originalInst
                     ? originalInst.amount / splitData.parts
@@ -1796,12 +2637,12 @@ export default function StudentPaymentsPage() {
                         ? format(
                             new Date(selectedPayment.created_at),
                             "dd MMM yyyy HH:mm:ss",
-                            { locale: es }
+                            { locale: es },
                           )
                         : format(
                             new Date(selectedPayment.fecha_pago),
                             "dd MMM yyyy",
-                            { locale: es }
+                            { locale: es },
                           )}
                     </p>
                   </div>
@@ -1842,8 +2683,8 @@ export default function StudentPaymentsPage() {
                       selectedPayment.estado === "aprobado"
                         ? "Completado"
                         : selectedPayment.estado === "pending"
-                        ? "Pendiente"
-                        : selectedPayment.estado || "Completado"}
+                          ? "Pendiente"
+                          : selectedPayment.estado || "Completado"}
                     </Badge>
                   </div>
                 </div>
@@ -1897,24 +2738,14 @@ export default function StudentPaymentsPage() {
                       <Button
                         variant="outline"
                         size="sm"
+                        disabled
                         onClick={() => {
-                          // Mock upload
-                          const newUrl = "https://example.com/comprobante.jpg";
-                          const updatedPayments = payments.map((p) =>
-                            p.id === selectedPayment.id
-                              ? { ...p, comprobante_url: newUrl }
-                              : p
-                          );
-                          setPayments(updatedPayments);
-                          setSelectedPayment({
-                            ...selectedPayment,
-                            comprobante_url: newUrl,
+                          toast({
+                            title: "Funcionalidad pendiente",
+                            description:
+                              "Aún no hay endpoint para adjuntar comprobantes desde esta vista.",
+                            variant: "destructive",
                           });
-                          localStorage.setItem(
-                            `mock-payments-${code}`,
-                            JSON.stringify(updatedPayments)
-                          );
-                          toast({ title: "Comprobante subido exitosamente" });
                         }}
                       >
                         Subir foto del pago
