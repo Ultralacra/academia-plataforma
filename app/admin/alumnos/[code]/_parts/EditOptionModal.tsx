@@ -46,6 +46,8 @@ export default function EditOptionModal({
   const [nicho, setNicho] = useState<string | undefined>(current?.nicho);
   const [saving, setSaving] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const [pendingSaveAfterPauseDetails, setPendingSaveAfterPauseDetails] =
+    useState(false);
   const [pauseRange, setPauseRange] = useState<{
     start?: string;
     end?: string;
@@ -72,6 +74,7 @@ export default function EditOptionModal({
     setNicho(current?.nicho);
     // Limpiar pauseRange al abrir el modal
     setPauseRange(null);
+    setPendingSaveAfterPauseDetails(false);
   }, [current, open]);
 
   // Determinar si el estado ACTUAL del estudiante ya es PAUSADO
@@ -80,10 +83,18 @@ export default function EditOptionModal({
     return label.includes("PAUSADO") || label.includes("PAUSA");
   })();
 
-  async function save() {
+  async function save(
+    nextPauseRange?: {
+      start?: string;
+      end?: string;
+      tipo?: "CONTRACTUAL" | "EXTRAORDINARIA";
+      motivo?: string;
+    } | null,
+  ) {
     if (!clientCode) return;
     setSaving(true);
     try {
+      const effectivePauseRange = nextPauseRange ?? pauseRange;
       const fd = new FormData();
 
       // Detectar si el estado seleccionado es PAUSADO
@@ -107,34 +118,48 @@ export default function EditOptionModal({
 
       // Si ya está en pausa y quiere agregar más pausas, solo necesitamos las fechas
       const isAddingPauseToAlreadyPaused =
-        isCurrentlyPaused && isPaused && pauseRange?.start && pauseRange?.end;
+        isCurrentlyPaused &&
+        isPaused &&
+        effectivePauseRange?.start &&
+        effectivePauseRange?.end;
 
       const hasPauseDetails =
-        !!pauseRange?.start &&
-        !!pauseRange?.end &&
-        !!pauseRange?.tipo &&
-        !!pauseRange?.motivo;
+        !!effectivePauseRange?.start &&
+        !!effectivePauseRange?.end &&
+        !!effectivePauseRange?.tipo &&
+        !!effectivePauseRange?.motivo;
 
       // Si NO está en pausa y quiere pausar, enviar estado + fechas + tipo/motivo
       // Si YA está en pausa y agrega otra pausa, reenviar estado + fechas + tipo/motivo
       if (isAddingPauseToAlreadyPaused) {
         const estadoToSend = String(estado ?? current?.estado ?? "").trim();
         if (estadoToSend) fd.set("estado", estadoToSend);
-        if (pauseRange?.start) fd.set("fecha_desde", String(pauseRange.start));
-        if (pauseRange?.end) fd.set("fecha_hasta", String(pauseRange.end));
-        if (pauseRange?.tipo) fd.set("tipo", String(pauseRange.tipo));
-        if (pauseRange?.motivo) fd.set("motivo", String(pauseRange.motivo));
+        if (effectivePauseRange?.start)
+          fd.set("fecha_desde", String(effectivePauseRange.start));
+        if (effectivePauseRange?.end)
+          fd.set("fecha_hasta", String(effectivePauseRange.end));
+        if (effectivePauseRange?.tipo)
+          fd.set("tipo", String(effectivePauseRange.tipo));
+        if (effectivePauseRange?.motivo)
+          fd.set("motivo", String(effectivePauseRange.motivo));
       } else {
         // Lógica normal: enviar estado si cambió
         if (wantsEstado && estado) fd.set("estado", String(estado));
         if (wantsEtapa && etapa) fd.set("etapa", String(etapa));
 
         // Si se está poniendo en pausa (desde un estado no-pausado), agregar fechas
-        if (wantsEstado && isPaused && pauseRange?.start && pauseRange?.end) {
-          fd.set("fecha_desde", String(pauseRange.start));
-          fd.set("fecha_hasta", String(pauseRange.end));
-          if (pauseRange?.tipo) fd.set("tipo", String(pauseRange.tipo));
-          if (pauseRange?.motivo) fd.set("motivo", String(pauseRange.motivo));
+        if (
+          wantsEstado &&
+          isPaused &&
+          effectivePauseRange?.start &&
+          effectivePauseRange?.end
+        ) {
+          fd.set("fecha_desde", String(effectivePauseRange.start));
+          fd.set("fecha_hasta", String(effectivePauseRange.end));
+          if (effectivePauseRange?.tipo)
+            fd.set("tipo", String(effectivePauseRange.tipo));
+          if (effectivePauseRange?.motivo)
+            fd.set("motivo", String(effectivePauseRange.motivo));
         }
       }
 
@@ -149,6 +174,7 @@ export default function EditOptionModal({
 
       // Si se selecciona PAUSADO y no tenemos rango/tipo/motivo, primero pedirlos
       if (isPaused && !hasPauseDetails) {
+        setPendingSaveAfterPauseDetails(true);
         setPauseOpen(true);
         setSaving(false);
         return; // esperar confirmación del modal; el usuario pulsará Guardar de nuevo
@@ -176,6 +202,7 @@ export default function EditOptionModal({
       });
       // Limpiar el pauseRange después de guardar para permitir agregar otra pausa
       setPauseRange(null);
+      setPendingSaveAfterPauseDetails(false);
       onOpenChange(false);
       onSaved?.();
     } catch (e) {
@@ -260,7 +287,11 @@ export default function EditOptionModal({
                       variant="outline"
                       size="sm"
                       className="w-full"
-                      onClick={() => setPauseOpen(true)}
+                      onClick={() => {
+                        // UX: si el usuario abre "Agregar nueva pausa", asumimos que quiere guardarla.
+                        setPendingSaveAfterPauseDetails(true);
+                        setPauseOpen(true);
+                      }}
                     >
                       + Agregar nueva pausa
                     </Button>
@@ -349,6 +380,14 @@ export default function EditOptionModal({
         initialRange={pauseRange || undefined}
         onConfirm={(r) => {
           setPauseRange(r);
+          // Si el guardado estaba pendiente (caso típico: eligió PAUSADO y faltaban fechas),
+          // guardamos automáticamente para que el contador/historial se actualice sin un click extra.
+          if (pendingSaveAfterPauseDetails) {
+            // Evitar depender del setState async: usar el rango recién confirmado.
+            queueMicrotask(() => {
+              void save(r);
+            });
+          }
         }}
       />
     </>

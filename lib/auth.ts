@@ -6,6 +6,9 @@ export interface User {
   name: string;
   role: UserRole;
   codigo?: string;
+  tipo?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuthState {
@@ -82,6 +85,10 @@ class AuthService {
   setAuthState(authState: AuthState): void {
     if (typeof window === "undefined") return;
 
+    // Si el usuario cambia (p. ej. actualiza email), invalidar cache de /auth/me
+    this.meCache = null;
+    this.meInFlight = null;
+
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(authState));
       try {
@@ -119,15 +126,22 @@ class AuthService {
 
       const json: any = await res.json();
 
+      // Algunos endpoints devuelven { data: {...}, token } o { code/status/data }
+      const payload: any = json?.data ?? json;
+
       const user: User = {
-        id: json.id,
-        email: json.email,
-        name: json.name,
-        role: this.normalizeRole(json.role, json.tipo),
-        codigo: json.codigo,
+        id: payload?.id,
+        email: payload?.email,
+        name: payload?.name,
+        role: this.normalizeRole(payload?.role, payload?.tipo),
+        codigo: payload?.codigo,
+        tipo: payload?.tipo,
+        created_at: payload?.created_at,
+        updated_at: payload?.updated_at,
       };
 
-      this.setAuthState({ user, isAuthenticated: true, token: json.token });
+      const token = json?.token ?? payload?.token;
+      this.setAuthState({ user, isAuthenticated: true, token });
       return user;
     } catch (e: any) {
       // Re-throw with readable message
@@ -187,12 +201,16 @@ class AuthService {
           }
 
           const json: any = await res.json();
+          const payload: any = json?.data ?? json;
           const user: User = {
-            id: json.id,
-            email: json.email,
-            name: json.name,
-            role: this.normalizeRole(json.role, json.tipo),
-            codigo: json.codigo,
+            id: payload?.id,
+            email: payload?.email,
+            name: payload?.name,
+            role: this.normalizeRole(payload?.role, payload?.tipo),
+            codigo: payload?.codigo,
+            tipo: payload?.tipo,
+            created_at: payload?.created_at,
+            updated_at: payload?.updated_at,
           };
           this.meCache = { token, user, at: Date.now() };
           return user;

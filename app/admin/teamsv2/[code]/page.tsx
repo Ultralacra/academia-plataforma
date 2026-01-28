@@ -104,7 +104,7 @@ export default function CoachDetailPage({
   const [allStudentsList, setAllStudentsList] = useState<StudentMini[]>([]);
   const [studentsLoading, setStudentsLoading] = useState<boolean>(false);
   const [targetStudentCode, setTargetStudentCode] = useState<string | null>(
-    null
+    null,
   );
   const [targetStudentName, setTargetStudentName] = useState<string>("");
   const [chatList, setChatList] = useState<any[]>([]);
@@ -130,14 +130,16 @@ export default function CoachDetailPage({
   const [currentOpenChatId, setCurrentOpenChatId] = useState<
     string | number | null
   >(null);
-  
+
   // Estado para rastrear qué chats tienen a alguien escribiendo
-  const [typingByChatId, setTypingByChatId] = useState<Record<string, boolean>>({});
+  const [typingByChatId, setTypingByChatId] = useState<Record<string, boolean>>(
+    {},
+  );
   const typingTimersRef = useMemo(() => new Map<string, NodeJS.Timeout>(), []);
 
   // Duplicados: guardar lista de chat IDs duplicados para la conversación actual
   const [duplicateChatIds, setDuplicateChatIds] = useState<(string | number)[]>(
-    []
+    [],
   );
 
   // Pestañas de conversaciones abiertas (solo nombres, sin IDs)
@@ -153,7 +155,7 @@ export default function CoachDetailPage({
 
   // Tabs control + sessions prefill
   const [activeTab, setActiveTab] = useState<string>(
-    isStandaloneChatRoute ? "chat" : "tickets"
+    isStandaloneChatRoute ? "chat" : "tickets",
   );
   const [sessionsPrefillAlumno, setSessionsPrefillAlumno] = useState<
     string | null
@@ -198,8 +200,9 @@ export default function CoachDetailPage({
         if (ctrl.signal.aborted) return;
         setTeamsList(
           list.filter(
-            (t) => (t.codigo || "").toLowerCase() !== (code || "").toLowerCase()
-          )
+            (t) =>
+              (t.codigo || "").toLowerCase() !== (code || "").toLowerCase(),
+          ),
         );
       } catch {}
     })();
@@ -288,7 +291,7 @@ export default function CoachDetailPage({
   function chatHasClienteEquipoPair(
     it: any,
     clienteId: string,
-    equipoId: string
+    equipoId: string,
   ): boolean {
     try {
       const parts = itemParticipants(it);
@@ -364,41 +367,107 @@ export default function CoachDetailPage({
   function getChatLastMessage(it: any): { text: string; at: number } {
     try {
       const m = it?.last_message || {};
-      let text =
-        String(
-          m?.contenido ?? m?.Contenido ?? m?.text ?? it?.last_message_text ?? ""
-        ) || "";
-      
-      // Si no hay texto, verificar si hay archivos adjuntos y mostrar tipo descriptivo
-      if (!text.trim()) {
-        const archivos = m?.archivos ?? m?.Archivos ?? m?.archivos_cargados ?? m?.attachments ?? [];
-        if (Array.isArray(archivos) && archivos.length > 0) {
-          const firstFile = archivos[0];
-          const mime = String(firstFile?.mime ?? firstFile?.tipo_mime ?? firstFile?.type ?? "").toLowerCase();
-          
-          if (mime.startsWith("audio/")) {
-            text = "🎤 Mensaje de voz";
-          } else if (mime.startsWith("image/")) {
-            text = "📷 Imagen";
-          } else if (mime.startsWith("video/")) {
-            text = "🎬 Video";
-          } else if (mime.includes("pdf")) {
-            text = "📄 Documento PDF";
-          } else if (mime.includes("word") || mime.includes("document")) {
-            text = "📝 Documento";
-          } else if (mime.includes("sheet") || mime.includes("excel")) {
-            text = "📊 Hoja de cálculo";
-          } else {
-            text = "📎 Archivo adjunto";
-          }
-          
-          // Si hay múltiples archivos, indicarlo
-          if (archivos.length > 1) {
-            text += ` (+${archivos.length - 1})`;
-          }
+      const rawText = String(
+        m?.contenido ?? m?.Contenido ?? m?.text ?? it?.last_message_text ?? "",
+      );
+      let text = rawText.trim();
+
+      if (!text) {
+        // Adjuntos pueden venir en arrays o en un solo campo/url
+        const rawFiles =
+          m?.archivos ??
+          m?.Archivos ??
+          m?.archivos_cargados ??
+          m?.attachments ??
+          m?.adjuntos ??
+          m?.files ??
+          m?.file ??
+          m?.archivo ??
+          null;
+        const files: any[] = Array.isArray(rawFiles)
+          ? rawFiles
+          : rawFiles
+            ? [rawFiles]
+            : [];
+
+        const first = files[0] || {};
+        const url = String(
+          first?.url ??
+            first?.path ??
+            m?.url ??
+            m?.file_url ??
+            m?.archivo_url ??
+            m?.media_url ??
+            m?.audio_url ??
+            m?.imagen_url ??
+            m?.image_url ??
+            m?.documento_url ??
+            m?.document_url ??
+            "",
+        );
+        const name = String(
+          first?.nombre ??
+            first?.name ??
+            first?.filename ??
+            first?.fileName ??
+            url,
+        );
+        const mime = String(
+          first?.mime ??
+            first?.tipo_mime ??
+            first?.mimetype ??
+            first?.content_type ??
+            first?.type ??
+            m?.mime ??
+            m?.tipo_mime ??
+            "",
+        ).toLowerCase();
+
+        const nameLc = name.toLowerCase();
+        const ext = (() => {
+          const clean = nameLc.split("?")[0].split("#")[0];
+          const i = clean.lastIndexOf(".");
+          return i >= 0 ? clean.slice(i + 1) : "";
+        })();
+
+        const isAudio =
+          mime.startsWith("audio/") ||
+          ["mp3", "wav", "m4a", "aac", "ogg", "opus"].includes(ext);
+        const isImage =
+          mime.startsWith("image/") ||
+          ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
+        const isVideo =
+          mime.startsWith("video/") ||
+          ["mp4", "mov", "webm", "mkv"].includes(ext);
+        const isPdf = mime.includes("pdf") || ext === "pdf";
+        const isDoc =
+          mime.includes("word") ||
+          mime.includes("document") ||
+          ["doc", "docx"].includes(ext);
+        const isSheet =
+          mime.includes("sheet") ||
+          mime.includes("excel") ||
+          ["xls", "xlsx", "csv"].includes(ext);
+
+        if (isAudio) text = "Mensaje de voz";
+        else if (isImage) text = "Imagen";
+        else if (isVideo) text = "Video";
+        else if (isPdf) text = "Documento PDF";
+        else if (isDoc) text = "Documento";
+        else if (isSheet) text = "Hoja de cálculo";
+        else if (files.length > 0 || url) text = "Archivo adjunto";
+
+        if (files.length > 1) {
+          text =
+            (text || "Archivo adjunto") +
+            " (+" +
+            String(files.length - 1) +
+            ")";
         }
       }
-      
+
+      if (!text) text = "Archivo adjunto";
+
       const atFields = [
         m?.fecha_envio_local,
         m?.created_at_local,
@@ -426,20 +495,26 @@ export default function CoachDetailPage({
       minute: "2-digit",
     });
   };
-  
+
   // Handler para eventos de typing desde el chat
   const handleTypingChange = useMemo(() => {
-    return ({ chatId, isTyping }: { chatId: string | number; isTyping: boolean }) => {
+    return ({
+      chatId,
+      isTyping,
+    }: {
+      chatId: string | number;
+      isTyping: boolean;
+    }) => {
       const id = String(chatId);
       console.log("[Page TYPING] Recibido:", { chatId: id, isTyping });
-      
+
       // Limpiar timer previo si existe
       const prevTimer = typingTimersRef.get(id);
       if (prevTimer) {
         clearTimeout(prevTimer);
         typingTimersRef.delete(id);
       }
-      
+
       if (isTyping) {
         setTypingByChatId((prev) => ({ ...prev, [id]: true }));
         // Auto-limpiar después de 2 segundos si no llega otro evento
@@ -461,7 +536,7 @@ export default function CoachDetailPage({
       }
     };
   }, [typingTimersRef]);
-  
+
   function getLastReadByChatId(chatId: any): number {
     try {
       const key = `chatLastReadById:coach:${String(chatId)}`;
@@ -483,16 +558,16 @@ export default function CoachDetailPage({
     }
   }
   function pickExistingChatIdForTarget(
-    targetCode: string
+    targetCode: string,
   ): string | number | null {
     const list = Array.isArray(chatList) ? chatList : [];
     const matches = list.filter((it) =>
-      chatHasEquipoPair(it, code, targetCode)
+      chatHasEquipoPair(it, code, targetCode),
     );
     if (matches.length === 0) {
       // Fallback: sometimes `chat.list` no incluye participantes; intentar empatar por id_chat === targetCode
       const byId = list.find(
-        (it) => String(it?.id_chat ?? it?.id ?? "") === String(targetCode)
+        (it) => String(it?.id_chat ?? it?.id ?? "") === String(targetCode),
       );
       if (byId) return byId?.id_chat ?? byId?.id ?? null;
       return null;
@@ -503,28 +578,30 @@ export default function CoachDetailPage({
   }
 
   function pickExistingChatIdForStudent(
-    alumnoCode: string
+    alumnoCode: string,
   ): string | number | null {
     const list = Array.isArray(chatList) ? chatList : [];
     // Try to resolve ID
     const s =
       studentsList.find(
-        (x) => (x.code || "").toLowerCase() === String(alumnoCode).toLowerCase()
+        (x) =>
+          (x.code || "").toLowerCase() === String(alumnoCode).toLowerCase(),
       ) ||
       allStudentsList.find(
-        (x) => (x.code || "").toLowerCase() === String(alumnoCode).toLowerCase()
+        (x) =>
+          (x.code || "").toLowerCase() === String(alumnoCode).toLowerCase(),
       );
     const sId = s?.id;
 
     const matches = list.filter(
       (it) =>
         chatHasClienteEquipoPair(it, String(alumnoCode), String(code)) ||
-        (sId && chatHasClienteEquipoPair(it, String(sId), String(code)))
+        (sId && chatHasClienteEquipoPair(it, String(sId), String(code))),
     );
     if (matches.length === 0) {
       // Fallback: intentar empatar por id_chat === alumnoCode cuando falta info de participantes
       const byId = list.find(
-        (it) => String(it?.id_chat ?? it?.id ?? "") === String(alumnoCode)
+        (it) => String(it?.id_chat ?? it?.id ?? "") === String(alumnoCode),
       );
       if (byId) return byId?.id_chat ?? byId?.id ?? null;
       return null;
@@ -537,7 +614,7 @@ export default function CoachDetailPage({
   function getParticipantNameFromChat(
     chat: any,
     type: "cliente" | "equipo",
-    id: string
+    id: string,
   ): string | null {
     try {
       const parts = itemParticipants(chat);
@@ -545,7 +622,7 @@ export default function CoachDetailPage({
       for (const p of parts) {
         if (normalizeTipo(p?.participante_tipo) === type) {
           const pId =
-            type === "cliente" ? p?.id_cliente ?? p?.id_alumno : p?.id_equipo;
+            type === "cliente" ? (p?.id_cliente ?? p?.id_alumno) : p?.id_equipo;
           if (String(pId).toLowerCase() === String(id).toLowerCase()) {
             if (p?.nombre_participante) return p.nombre_participante;
           }
@@ -554,7 +631,7 @@ export default function CoachDetailPage({
       for (const p of parts) {
         if (normalizeTipo(p?.participante_tipo) === type) {
           const pId =
-            type === "cliente" ? p?.id_cliente ?? p?.id_alumno : p?.id_equipo;
+            type === "cliente" ? (p?.id_cliente ?? p?.id_alumno) : p?.id_equipo;
           if (String(pId).toLowerCase() === String(id).toLowerCase()) {
             // Try to find name in nested objects
             if (p?.cliente?.nombre) return p.cliente.nombre;
@@ -584,7 +661,7 @@ export default function CoachDetailPage({
       chats.sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
       const targetCode = chatsByKeyToOriginalCode(chats, key);
       const target = teamsList.find(
-        (t) => (t.codigo || "").toLowerCase() === key
+        (t) => (t.codigo || "").toLowerCase() === key,
       );
       const targetName = target?.nombre ?? targetCode ?? key;
       const top = chats[0];
@@ -612,7 +689,7 @@ export default function CoachDetailPage({
 
   function chatsByKeyToOriginalCode(
     chats: any[],
-    keyLower: string
+    keyLower: string,
   ): string | null {
     for (const it of chats) {
       const other = chatOtherTeamCode(it, code);
@@ -662,7 +739,7 @@ export default function CoachDetailPage({
       const stu = studentsList.find(
         (s) =>
           (s.code || "").toLowerCase() === key ||
-          (s.id && String(s.id).toLowerCase() === key)
+          (s.id && String(s.id).toLowerCase() === key),
       );
       let targetName = stu?.name;
       if (!targetName) {
@@ -695,18 +772,18 @@ export default function CoachDetailPage({
 
   const contactsWithoutChat = useMemo(() => {
     const withChat = new Set(
-      chatsByContact.map((c) => c.targetCode.toLowerCase())
+      chatsByContact.map((c) => c.targetCode.toLowerCase()),
     );
     const list = Array.isArray(teamsList) ? teamsList : [];
     const noChat = list.filter(
-      (t) => !withChat.has(String(t.codigo || "").toLowerCase())
+      (t) => !withChat.has(String(t.codigo || "").toLowerCase()),
     );
     const q = (contactQuery || "").trim().toLowerCase();
     if (!q) return noChat;
     return noChat.filter(
       (t) =>
         (t.nombre || "").toLowerCase().includes(q) ||
-        (t.codigo || "").toLowerCase().includes(q)
+        (t.codigo || "").toLowerCase().includes(q),
     );
   }, [teamsList, chatsByContact, contactQuery]);
 
@@ -724,7 +801,7 @@ export default function CoachDetailPage({
       const otherTeam = chatOtherTeamCode(chat, code);
       const otherStudent = chatOtherStudentCode(chat);
       const hasParticipants = Array.isArray(
-        chat.participants || chat.participantes
+        chat.participants || chat.participantes,
       );
       // const isLoading = !hasParticipants; // Moved down
 
@@ -745,7 +822,7 @@ export default function CoachDetailPage({
         const matchTeam = arr.find(
           (p: any) =>
             normalizeTipo(p?.participante_tipo) === "equipo" &&
-            String(p?.id_equipo).toLowerCase() === targetCode.toLowerCase()
+            String(p?.id_equipo).toLowerCase() === targetCode.toLowerCase(),
         );
         name = matchTeam?.nombre_participante || targetCode;
         avatarColor = "bg-teal-500";
@@ -761,8 +838,8 @@ export default function CoachDetailPage({
           (p: any) =>
             normalizeTipo(p?.participante_tipo) === "cliente" &&
             String(
-              p?.id_cliente ?? p?.id_alumno ?? p?.client_id
-            ).toLowerCase() === targetCode.toLowerCase()
+              p?.id_cliente ?? p?.id_alumno ?? p?.client_id,
+            ).toLowerCase() === targetCode.toLowerCase(),
         );
         name = matchClient?.nombre_participante || targetCode;
         avatarColor = "bg-emerald-500";
@@ -837,7 +914,7 @@ export default function CoachDetailPage({
       if (topChatId && group.name && group.name !== "(Sin nombre)") {
         setCachedContactName(topChatId, group.name);
       }
-      
+
       // Verificar si alguien está escribiendo en alguno de los chats del grupo
       const isTyping = group.chats.some((chat: any) => {
         const cid = chat?.id_chat ?? chat?.id;
@@ -947,26 +1024,38 @@ export default function CoachDetailPage({
 
   // Calcular el total de mensajes sin leer (suma de todos los unreadCount)
   const totalUnreadMessages = useMemo(() => {
-    const total = unifiedChatList.reduce((acc: number, it: any) => acc + (it?.unreadCount ?? 0), 0);
-    console.log("[PAGE TITLE] 📊 Total mensajes sin leer:", total, "de", unifiedChatList.length, "conversaciones");
+    const total = unifiedChatList.reduce(
+      (acc: number, it: any) => acc + (it?.unreadCount ?? 0),
+      0,
+    );
+    console.log(
+      "[PAGE TITLE] 📊 Total mensajes sin leer:",
+      total,
+      "de",
+      unifiedChatList.length,
+      "conversaciones",
+    );
     return total;
   }, [unifiedChatList]);
 
   // Actualizar el título de la pestaña del navegador con mensajes sin leer
   // También hace parpadear cuando la pestaña no está activa (como WhatsApp)
   useEffect(() => {
-    const baseTitle = coach?.nombre ? `${coach.nombre} - Chat` : "Chat Academia";
+    const baseTitle = coach?.nombre
+      ? `${coach.nombre} - Chat`
+      : "Chat Academia";
     let blinkInterval: NodeJS.Timeout | null = null;
     let isAltTitle = false;
-    
+
     const updateTitle = () => {
-      const newTitle = totalUnreadMessages > 0 
-        ? `(${totalUnreadMessages}) ${baseTitle}` 
-        : baseTitle;
+      const newTitle =
+        totalUnreadMessages > 0
+          ? `(${totalUnreadMessages}) ${baseTitle}`
+          : baseTitle;
       console.log("[PAGE TITLE] 📝 Actualizando título a:", newTitle);
       document.title = newTitle;
     };
-    
+
     const startBlinking = () => {
       if (blinkInterval) return;
       blinkInterval = setInterval(() => {
@@ -978,7 +1067,7 @@ export default function CoachDetailPage({
         }
       }, 1000);
     };
-    
+
     const stopBlinking = () => {
       if (blinkInterval) {
         clearInterval(blinkInterval);
@@ -987,7 +1076,7 @@ export default function CoachDetailPage({
       isAltTitle = false;
       updateTitle();
     };
-    
+
     const handleVisibilityChange = () => {
       if (document.hidden && totalUnreadMessages > 0) {
         startBlinking();
@@ -995,15 +1084,15 @@ export default function CoachDetailPage({
         stopBlinking();
       }
     };
-    
+
     // Inicializar
     updateTitle();
     if (document.hidden && totalUnreadMessages > 0) {
       startBlinking();
     }
-    
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    
+
     // Cleanup
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -1048,7 +1137,7 @@ export default function CoachDetailPage({
       setTargetTeamCode(null);
       setTargetStudentCode(codeKey);
       const stu = studentsList.find(
-        (s) => (s.code || "").toLowerCase() === codeKey.toLowerCase()
+        (s) => (s.code || "").toLowerCase() === codeKey.toLowerCase(),
       );
       setTargetStudentName(stu?.name || codeKey);
       const existing = pickExistingChatIdForStudent(codeKey);
@@ -1118,7 +1207,7 @@ export default function CoachDetailPage({
             name: s.name,
             state: s.state,
             stage: s.stage,
-          }))
+          })),
         );
       } catch {
       } finally {
@@ -1224,7 +1313,7 @@ export default function CoachDetailPage({
         if (e?.detail?.role === "coach") {
           console.log(
             "[CoachDetailPage] Contador de no leídos actualizado:",
-            e?.detail
+            e?.detail,
           );
           setUnreadBump((n) => n + 1);
           // Forzar refresco de lista para reordenar
@@ -1240,7 +1329,7 @@ export default function CoachDetailPage({
     // Listener para actualizar localmente el snippet cuando el coach envía un mensaje
     const onMessageSent = (e: any) => {
       try {
-        const { chatId, text, at } = e?.detail || {};
+        const { chatId, text, at, attachments } = e?.detail || {};
         if (chatId == null) return;
         const chatIdStr = String(chatId);
         setChatList((prev) => {
@@ -1255,6 +1344,9 @@ export default function CoachDetailPage({
                 last_message: {
                   ...(it?.last_message || {}),
                   contenido: text || "",
+                  ...(Array.isArray(attachments) && attachments.length
+                    ? { attachments }
+                    : {}),
                   fecha_envio_local: new Date(at || Date.now()).toISOString(),
                   fecha_envio: new Date(at || Date.now()).toISOString(),
                 },
@@ -1274,13 +1366,16 @@ export default function CoachDetailPage({
     // Esto hace que la conversación suba al tope inmediatamente
     const onMessageReceived = (e: any) => {
       try {
-        const { chatId, text, at } = e?.detail || {};
+        const { chatId, text, at, attachments } = e?.detail || {};
         if (chatId == null) return;
         const chatIdStr = String(chatId);
-        console.log("[CoachDetailPage] Mensaje recibido, actualizando lastAt:", {
-          chatId: chatIdStr,
-          at,
-        });
+        console.log(
+          "[CoachDetailPage] Mensaje recibido, actualizando lastAt:",
+          {
+            chatId: chatIdStr,
+            at,
+          },
+        );
         setChatList((prev) => {
           const next = [...prev];
           for (let i = 0; i < next.length; i++) {
@@ -1293,6 +1388,9 @@ export default function CoachDetailPage({
                 last_message: {
                   ...(it?.last_message || {}),
                   contenido: text || it?.last_message?.contenido || "",
+                  ...(Array.isArray(attachments) && attachments.length
+                    ? { attachments }
+                    : {}),
                   fecha_envio_local: new Date(at || Date.now()).toISOString(),
                   fecha_envio: new Date(at || Date.now()).toISOString(),
                 },
@@ -1312,7 +1410,7 @@ export default function CoachDetailPage({
     window.addEventListener("chat:last-read-updated", onLastReadUpdated as any);
     window.addEventListener(
       "chat:unread-count-updated",
-      onUnreadCountUpdated as any
+      onUnreadCountUpdated as any,
     );
     window.addEventListener("chat:list-refresh", onListRefresh as any);
     window.addEventListener("chat:message-sent", onMessageSent as any);
@@ -1325,17 +1423,17 @@ export default function CoachDetailPage({
       window.removeEventListener("storage", onStorage);
       window.removeEventListener(
         "chat:last-read-updated",
-        onLastReadUpdated as any
+        onLastReadUpdated as any,
       );
       window.removeEventListener(
         "chat:unread-count-updated",
-        onUnreadCountUpdated as any
+        onUnreadCountUpdated as any,
       );
       window.removeEventListener("chat:list-refresh", onListRefresh as any);
       window.removeEventListener("chat:message-sent", onMessageSent as any);
       window.removeEventListener(
         "chat:message-received",
-        onMessageReceived as any
+        onMessageReceived as any,
       );
       // clearInterval(iv);
     };
@@ -1581,7 +1679,8 @@ export default function CoachDetailPage({
                                         try {
                                           const chatIds = (item.chats || [])
                                             .map(
-                                              (it: any) => it?.id_chat ?? it?.id
+                                              (it: any) =>
+                                                it?.id_chat ?? it?.id,
                                             )
                                             .filter((x: any) => x != null);
                                           console.log(
@@ -1592,7 +1691,7 @@ export default function CoachDetailPage({
                                               nombre: item.name,
                                               chatIds,
                                               topChatId: item.topChatId ?? null,
-                                            }
+                                            },
                                           );
                                         } catch {}
                                         setMobileChatOpen(true);
@@ -1611,16 +1710,16 @@ export default function CoachDetailPage({
                                           myParticipantId: null,
                                         });
                                         setCurrentOpenChatId(
-                                          item.topChatId ?? null
+                                          item.topChatId ?? null,
                                         );
 
                                         // Add to tabs (normalizar clave a tipo:codigo)
                                         const tabKey = `${item.type}:${String(
-                                          item.code
+                                          item.code,
                                         )}`;
                                         setOpenTabs((prev) => {
                                           const exists = prev.some(
-                                            (p) => p.key === tabKey
+                                            (p) => p.key === tabKey,
                                           );
                                           return exists
                                             ? prev
@@ -1643,15 +1742,15 @@ export default function CoachDetailPage({
                                             const id = it?.id_chat ?? it?.id;
                                             if (id == null) continue;
                                             const uKey = `chatUnreadById:coach:${String(
-                                              id
+                                              id,
                                             )}`;
                                             const readKey = `chatReadAt:coach:${String(
-                                              id
+                                              id,
                                             )}`;
                                             localStorage.setItem(uKey, "0");
                                             localStorage.setItem(
                                               readKey,
-                                              String(readTimestamp)
+                                              String(readTimestamp),
                                             );
                                             window.dispatchEvent(
                                               new CustomEvent(
@@ -1662,8 +1761,8 @@ export default function CoachDetailPage({
                                                     role: "coach",
                                                     count: 0,
                                                   },
-                                                }
-                                              )
+                                                },
+                                              ),
                                             );
                                           }
                                           setUnreadBump((n) => n + 1);
@@ -1687,7 +1786,9 @@ export default function CoachDetailPage({
                                               : "bg-emerald-500 text-white"
                                           }`}
                                         >
-                                          {item.type === "team" ? "Coach" : "Alumno"}
+                                          {item.type === "team"
+                                            ? "Coach"
+                                            : "Alumno"}
                                         </span>
                                       </div>
 
@@ -1705,7 +1806,9 @@ export default function CoachDetailPage({
                                                   : "bg-emerald-100 text-emerald-700"
                                               }`}
                                             >
-                                              {item.type === "team" ? "Coach" : "Alumno"}
+                                              {item.type === "team"
+                                                ? "Coach"
+                                                : "Alumno"}
                                             </span>
                                           </div>
                                           <div
@@ -1724,16 +1827,31 @@ export default function CoachDetailPage({
                                               item.isTyping
                                                 ? "text-teal-600 font-medium italic"
                                                 : item.unreadCount > 0
-                                                ? "text-slate-800 font-medium"
-                                                : "text-slate-500"
+                                                  ? "text-slate-800 font-medium"
+                                                  : "text-slate-500"
                                             }`}
                                           >
                                             {item.isTyping ? (
                                               <span className="flex items-center gap-1">
                                                 <span className="flex gap-0.5">
-                                                  <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></span>
-                                                  <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></span>
-                                                  <span className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></span>
+                                                  <span
+                                                    className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce"
+                                                    style={{
+                                                      animationDelay: "0ms",
+                                                    }}
+                                                  ></span>
+                                                  <span
+                                                    className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce"
+                                                    style={{
+                                                      animationDelay: "150ms",
+                                                    }}
+                                                  ></span>
+                                                  <span
+                                                    className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-bounce"
+                                                    style={{
+                                                      animationDelay: "300ms",
+                                                    }}
+                                                  ></span>
                                                 </span>
                                                 <span>escribiendo...</span>
                                               </span>
@@ -1767,11 +1885,11 @@ export default function CoachDetailPage({
                                             const id = it?.id_chat ?? it?.id;
                                             if (id == null) continue;
                                             const uKey = `chatUnreadById:coach:${String(
-                                              id
+                                              id,
                                             )}`;
                                             const prev = Number.parseInt(
                                               localStorage.getItem(uKey) || "0",
-                                              10
+                                              10,
                                             );
                                             const next =
                                               Number.isFinite(prev) && prev > 0
@@ -1779,7 +1897,7 @@ export default function CoachDetailPage({
                                                 : 1;
                                             localStorage.setItem(
                                               uKey,
-                                              String(next)
+                                              String(next),
                                             );
                                             window.dispatchEvent(
                                               new CustomEvent(
@@ -1790,8 +1908,8 @@ export default function CoachDetailPage({
                                                     role: "coach",
                                                     count: next,
                                                   },
-                                                }
-                                              )
+                                                },
+                                              ),
                                             );
                                           }
                                           setUnreadBump((n) => n + 1);
@@ -1927,55 +2045,55 @@ export default function CoachDetailPage({
                     {/* Pestañas de contactos/alumnos abiertos (ELIMINADAS POR SOLICITUD) */}
 
                     <CoachChatInline
-                        onBack={() => setMobileChatOpen(false)}
-                        onTypingChange={handleTypingChange}
-                        key={`chat-${code}-${
-                          targetTeamCode ?? targetStudentCode ?? "inbox"
-                        }`}
-                        room={`${code}:equipo:${
-                          targetTeamCode ?? targetStudentCode ?? "inbox"
-                        }`}
-                        role="coach"
-                        // Mostrar el nombre del contacto de la conversación (no el coach)
-                        title={
-                          targetStudentCode
-                            ? targetStudentName || targetStudentCode
-                            : targetTeamCode
+                      onBack={() => setMobileChatOpen(false)}
+                      onTypingChange={handleTypingChange}
+                      key={`chat-${code}-${
+                        targetTeamCode ?? targetStudentCode ?? "inbox"
+                      }`}
+                      room={`${code}:equipo:${
+                        targetTeamCode ?? targetStudentCode ?? "inbox"
+                      }`}
+                      role="coach"
+                      // Mostrar el nombre del contacto de la conversación (no el coach)
+                      title={
+                        targetStudentCode
+                          ? targetStudentName || targetStudentCode
+                          : targetTeamCode
                             ? targetTeamName || targetTeamCode
                             : coach?.nombre
-                            ? `Equipo: ${coach?.nombre}`
-                            : `Equipo ${code}`
-                        }
-                        subtitle={
-                          targetStudentCode
-                            ? coach?.nombre
-                              ? `con ${coach?.nombre}`
+                              ? `Equipo: ${coach?.nombre}`
                               : `Equipo ${code}`
-                            : targetTeamCode
+                      }
+                      subtitle={
+                        targetStudentCode
+                          ? coach?.nombre
+                            ? `con ${coach?.nombre}`
+                            : `Equipo ${code}`
+                          : targetTeamCode
                             ? coach?.nombre
                               ? `Equipo: ${coach?.nombre}`
                               : `Equipo ${code}`
                             : undefined
-                        }
-                        variant="card"
-                        className="h-full"
-                        precreateOnParticipants
-                        socketio={{
-                          url: chatServerUrl,
-                          idEquipo: String(code),
-                          myUserCode: coach?.codigo,
-                          participants: targetTeamCode
-                            ? [
-                                {
-                                  participante_tipo: "equipo",
-                                  id_equipo: String(code),
-                                },
-                                {
-                                  participante_tipo: "equipo",
-                                  id_equipo: String(targetTeamCode),
-                                },
-                              ]
-                            : targetStudentCode
+                      }
+                      variant="card"
+                      className="h-full"
+                      precreateOnParticipants
+                      socketio={{
+                        url: chatServerUrl,
+                        idEquipo: String(code),
+                        myUserCode: coach?.codigo,
+                        participants: targetTeamCode
+                          ? [
+                              {
+                                participante_tipo: "equipo",
+                                id_equipo: String(code),
+                              },
+                              {
+                                participante_tipo: "equipo",
+                                id_equipo: String(targetTeamCode),
+                              },
+                            ]
+                          : targetStudentCode
                             ? [
                                 {
                                   participante_tipo: "equipo",
@@ -1987,141 +2105,137 @@ export default function CoachDetailPage({
                                 },
                               ]
                             : undefined,
-                          autoCreate: true,
-                          autoJoin: chatInfo.chatId != null,
-                          chatId: chatInfo.chatId ?? undefined,
-                        }}
-                        joinSignal={sessionsOfferSignal}
-                        resolveName={(tipo, id) => {
-                          const key = String(id || "").toLowerCase();
-                          if (tipo === "equipo") {
-                            const t = teamsMap.get(key);
-                            return t?.nombre || String(id || "");
-                          }
-                          if (tipo === "cliente") {
-                            const s = studentsMap.get(key);
-                            return s?.name || String(id || "");
-                          }
-                          return String(id || "");
-                        }}
-                        onConnectionChange={setChatConnected}
-                        onChatInfo={(info) => {
-                          setChatInfo(info);
-                          setChatsLoading(false);
-                          setCurrentOpenChatId(info?.chatId ?? null);
-                          if (!chatInfo.chatId && info.chatId) {
-                            setChatsLoading(true);
-                            setRequestListSignal((n) => (n ?? 0) + 1);
-                          }
-                          try {
-                            const parts = Array.isArray(info.participants)
-                              ? info.participants
-                              : [];
-                            if (targetTeamCode) {
-                              const setEq = new Set<string>();
-                              for (const p of parts) {
-                                const tipo = String(
-                                  p?.participante_tipo || ""
-                                ).toLowerCase();
-                                if (tipo === "equipo" && p?.id_equipo)
-                                  setEq.add(String(p.id_equipo).toLowerCase());
+                        autoCreate: true,
+                        autoJoin: chatInfo.chatId != null,
+                        chatId: chatInfo.chatId ?? undefined,
+                      }}
+                      joinSignal={sessionsOfferSignal}
+                      resolveName={(tipo, id) => {
+                        const key = String(id || "").toLowerCase();
+                        if (tipo === "equipo") {
+                          const t = teamsMap.get(key);
+                          return t?.nombre || String(id || "");
+                        }
+                        if (tipo === "cliente") {
+                          const s = studentsMap.get(key);
+                          return s?.name || String(id || "");
+                        }
+                        return String(id || "");
+                      }}
+                      onConnectionChange={setChatConnected}
+                      onChatInfo={(info) => {
+                        setChatInfo(info);
+                        setChatsLoading(false);
+                        setCurrentOpenChatId(info?.chatId ?? null);
+                        if (!chatInfo.chatId && info.chatId) {
+                          setChatsLoading(true);
+                          setRequestListSignal((n) => (n ?? 0) + 1);
+                        }
+                        try {
+                          const parts = Array.isArray(info.participants)
+                            ? info.participants
+                            : [];
+                          if (targetTeamCode) {
+                            const setEq = new Set<string>();
+                            for (const p of parts) {
+                              const tipo = String(
+                                p?.participante_tipo || "",
+                              ).toLowerCase();
+                              if (tipo === "equipo" && p?.id_equipo)
+                                setEq.add(String(p.id_equipo).toLowerCase());
+                            }
+                            const hasPair =
+                              info.chatId != null &&
+                              setEq.has(String(code).toLowerCase()) &&
+                              setEq.has(String(targetTeamCode).toLowerCase());
+                            if (
+                              hasPair &&
+                              decisionStamp !== `exist:${targetTeamCode}`
+                            ) {
+                              setDecisionStamp(`exist:${targetTeamCode}`);
+                            }
+                          } else if (targetStudentCode) {
+                            let okCli = false;
+                            let okEq = false;
+                            for (const p of parts) {
+                              const tipo = String(
+                                p?.participante_tipo || "",
+                              ).toLowerCase();
+                              if (tipo === "cliente" && p?.id_cliente) {
+                                if (
+                                  String(p.id_cliente).toLowerCase() ===
+                                  String(targetStudentCode).toLowerCase()
+                                )
+                                  okCli = true;
                               }
-                              const hasPair =
-                                info.chatId != null &&
-                                setEq.has(String(code).toLowerCase()) &&
-                                setEq.has(String(targetTeamCode).toLowerCase());
-                              if (
-                                hasPair &&
-                                decisionStamp !== `exist:${targetTeamCode}`
-                              ) {
+                              if (tipo === "equipo" && p?.id_equipo) {
+                                if (
+                                  String(p.id_equipo).toLowerCase() ===
+                                  String(code).toLowerCase()
+                                )
+                                  okEq = true;
+                              }
+                            }
+                            const hasPair =
+                              info.chatId != null && okCli && okEq;
+                            if (
+                              hasPair &&
+                              decisionStamp !== `exist-stu:${targetStudentCode}`
+                            ) {
+                              setDecisionStamp(
+                                `exist-stu:${targetStudentCode}`,
+                              );
+                            }
+                          }
+                        } catch {}
+                      }}
+                      requestListSignal={requestListSignal}
+                      listParams={{
+                        participante_tipo: "equipo",
+                        id_equipo: String(code),
+                        include_participants: true,
+                        with_participants: true,
+                      }}
+                      onChatsList={(list) => {
+                        // Mostrar TODAS las conversaciones tal como vienen del servidor.
+                        const fullList = Array.isArray(list) ? list : [];
+
+                        setChatList(fullList);
+                        setChatsLoading(false);
+                        try {
+                          if (targetTeamCode) {
+                            const existing =
+                              pickExistingChatIdForTarget(targetTeamCode);
+                            if (existing != null) {
+                              if (decisionStamp !== `exist:${targetTeamCode}`) {
                                 setDecisionStamp(`exist:${targetTeamCode}`);
                               }
-                            } else if (targetStudentCode) {
-                              let okCli = false;
-                              let okEq = false;
-                              for (const p of parts) {
-                                const tipo = String(
-                                  p?.participante_tipo || ""
-                                ).toLowerCase();
-                                if (tipo === "cliente" && p?.id_cliente) {
-                                  if (
-                                    String(p.id_cliente).toLowerCase() ===
-                                    String(targetStudentCode).toLowerCase()
-                                  )
-                                    okCli = true;
-                                }
-                                if (tipo === "equipo" && p?.id_equipo) {
-                                  if (
-                                    String(p.id_equipo).toLowerCase() ===
-                                    String(code).toLowerCase()
-                                  )
-                                    okEq = true;
-                                }
-                              }
-                              const hasPair =
-                                info.chatId != null && okCli && okEq;
+                              setChatInfo({
+                                chatId: existing,
+                                myParticipantId: null,
+                              });
+                            }
+                          } else if (targetStudentCode) {
+                            const existingStu =
+                              pickExistingChatIdForStudent(targetStudentCode);
+                            if (existingStu != null) {
                               if (
-                                hasPair &&
                                 decisionStamp !==
-                                  `exist-stu:${targetStudentCode}`
+                                `exist-stu:${targetStudentCode}`
                               ) {
                                 setDecisionStamp(
-                                  `exist-stu:${targetStudentCode}`
+                                  `exist-stu:${targetStudentCode}`,
                                 );
                               }
+                              setChatInfo({
+                                chatId: existingStu,
+                                myParticipantId: null,
+                              });
                             }
-                          } catch {}
-                        }}
-                        requestListSignal={requestListSignal}
-                        listParams={{
-                          participante_tipo: "equipo",
-                          id_equipo: String(code),
-                          include_participants: true,
-                          with_participants: true,
-                        }}
-                        onChatsList={(list) => {
-                          // Mostrar TODAS las conversaciones tal como vienen del servidor.
-                          const fullList = Array.isArray(list) ? list : [];
-
-                          setChatList(fullList);
-                          setChatsLoading(false);
-                          try {
-                            if (targetTeamCode) {
-                              const existing =
-                                pickExistingChatIdForTarget(targetTeamCode);
-                              if (existing != null) {
-                                if (
-                                  decisionStamp !== `exist:${targetTeamCode}`
-                                ) {
-                                  setDecisionStamp(`exist:${targetTeamCode}`);
-                                }
-                                setChatInfo({
-                                  chatId: existing,
-                                  myParticipantId: null,
-                                });
-                              }
-                            } else if (targetStudentCode) {
-                              const existingStu =
-                                pickExistingChatIdForStudent(targetStudentCode);
-                              if (existingStu != null) {
-                                if (
-                                  decisionStamp !==
-                                  `exist-stu:${targetStudentCode}`
-                                ) {
-                                  setDecisionStamp(
-                                    `exist-stu:${targetStudentCode}`
-                                  );
-                                }
-                                setChatInfo({
-                                  chatId: existingStu,
-                                  myParticipantId: null,
-                                });
-                              }
-                            }
-                          } catch {}
-                        }}
-                      />
-                    )}
+                          }
+                        } catch {}
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -2321,7 +2435,7 @@ function CoachStudentsInline({
   onOfferStudent?: (
     code: string | null | undefined,
     stage?: string | null,
-    name?: string | null
+    name?: string | null,
   ) => void;
 }) {
   const [loading, setLoading] = useState(false);
@@ -2504,16 +2618,22 @@ function CoachStudentsInline({
           onChange={(e) => setStageFilter(e.target.value)}
         >
           <option value="">Fase: Todas</option>
-          {(etapaOptions.length ? etapaOptions : stagesOptions).map((s: any) => {
-            const key = typeof s === "string" ? s : String(s.opcion_key ?? "");
-            const label = typeof s === "string" ? s : String(s.opcion_value ?? s.opcion_key ?? "");
-            if (!key) return null;
-            return (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            );
-          })}
+          {(etapaOptions.length ? etapaOptions : stagesOptions).map(
+            (s: any) => {
+              const key =
+                typeof s === "string" ? s : String(s.opcion_key ?? "");
+              const label =
+                typeof s === "string"
+                  ? s
+                  : String(s.opcion_value ?? s.opcion_key ?? "");
+              if (!key) return null;
+              return (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              );
+            },
+          )}
         </select>
         {(search || stateFilter || stageFilter) && (
           <button
@@ -2641,7 +2761,7 @@ function CoachStudentsInline({
                       d.getHours(),
                       d.getMinutes(),
                       0,
-                      0
+                      0,
                     ).toISOString();
                     const payload = {
                       codigo_alumno: quickAlumnoCode,
@@ -2692,7 +2812,7 @@ function CoachStudentsInline({
                     acc[k].push(it);
                     return acc;
                   },
-                  {}
+                  {},
                 );
                 const order = Object.keys(groups).sort();
                 const fmt = new Intl.DateTimeFormat("es-ES", {

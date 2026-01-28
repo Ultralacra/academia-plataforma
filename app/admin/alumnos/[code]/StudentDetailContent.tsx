@@ -1112,6 +1112,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
     return x;
   }
 
+  function asDateOnly(v?: string | null) {
+    const s = String(v ?? "").trim();
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : s;
+  }
+
   function daysBetweenInclusive(a: Date, b: Date) {
     const msPerDay = 24 * 60 * 60 * 1000;
     const aa = toDayDate(a).getTime();
@@ -1182,8 +1188,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
     // Usar pausas del endpoint de historial de estatus
     for (const h of pausesFromStatusHistory || []) {
-      const s = parseMaybe(h.start);
-      const e = parseMaybe(h.end);
+      const s = parseMaybe(asDateOnly(h.start));
+      const e = parseMaybe(asDateOnly(h.end));
       if (!s || !e) continue;
       allRanges.push({ start: toDayDate(s), end: toDayDate(e) });
     }
@@ -1213,7 +1219,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
   const accessStats = useMemo(() => {
     const ingresoIso = pIngreso || student?.ingreso || student?.raw?.ingreso;
-    const start = parseMaybe(ingresoIso);
+    const start = parseMaybe(asDateOnly(ingresoIso));
     if (!start) return null;
 
     const startDay = toDayDate(start);
@@ -1224,16 +1230,29 @@ export default function StudentDetailContent({ code }: { code: string }) {
       businessDaysBetweenInclusive(startDay, today),
     );
 
-    // Pausas acumuladas hasta hoy (sin doble conteo)
-    // - Hábiles: para descontar consumo
-    // - Calendario: para extender el vencimiento (mantener compatibilidad con lógica previa)
+    // Pausas (sin doble conteo)
+    // - ELAPSED: desde ingreso hasta hoy (para descontar consumo real)
+    // - TOTAL: desde ingreso hasta fin de cada pausa (incluye pausas futuras; para extender vencimiento)
     let pausedBusinessDaysElapsed = 0;
     let pausedCalendarDaysElapsed = 0;
+    let pausedBusinessDaysTotal = 0;
+    let pausedCalendarDaysTotal = 0;
     for (const r of mergedPauseIntervals) {
-      const a = r.start < startDay ? startDay : r.start;
-      const b = r.end > today ? today : r.end;
-      pausedBusinessDaysElapsed += businessDaysBetweenInclusive(a, b);
-      pausedCalendarDaysElapsed += daysBetweenInclusive(a, b);
+      const aTotal = r.start < startDay ? startDay : r.start;
+      const bTotal = r.end;
+      if (bTotal.getTime() >= aTotal.getTime()) {
+        pausedBusinessDaysTotal += businessDaysBetweenInclusive(aTotal, bTotal);
+        pausedCalendarDaysTotal += daysBetweenInclusive(aTotal, bTotal);
+      }
+
+      const bElapsed = r.end > today ? today : r.end;
+      if (bElapsed.getTime() >= aTotal.getTime()) {
+        pausedBusinessDaysElapsed += businessDaysBetweenInclusive(
+          aTotal,
+          bElapsed,
+        );
+        pausedCalendarDaysElapsed += daysBetweenInclusive(aTotal, bElapsed);
+      }
     }
 
     const effectiveDays = Math.max(
@@ -1242,8 +1261,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
     );
     const PROGRAM_DAYS = 120; // 4 meses ~ 120 días (regla operativa)
 
-    // Base (sin metadata): 4 meses + días pausados
-    const baseEnd = addDays(startDay, PROGRAM_DAYS + pausedCalendarDaysElapsed);
+    // Base (sin metadata): 4 meses + días pausados (TOTAL; incluye pausas futuras planificadas)
+    const baseEnd = addDays(startDay, PROGRAM_DAYS + pausedCalendarDaysTotal);
 
     // Vence: se calcula como 4 meses + pausas + meses_extra (si existe en metadata)
     // Retrocompatibilidad: si existe un `vence_estimado` antiguo (fecha),
@@ -1336,6 +1355,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
       daysSinceStart: businessDaysSinceStart,
       pausedBusinessDaysElapsed,
       pausedCalendarDaysElapsed,
+      pausedBusinessDaysTotal,
+      pausedCalendarDaysTotal,
       effectiveDays,
       programDays: PROGRAM_DAYS,
       remainingDays: remaining,
@@ -1786,10 +1807,10 @@ export default function StudentDetailContent({ code }: { code: string }) {
                     </div>
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">
-                        Días desde ingreso (hábiles)
+                        Días consumidos (hábiles)
                       </span>
                       <span className="font-medium">
-                        {accessStats.daysSinceStart}
+                        {accessStats.effectiveDays}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
@@ -1797,7 +1818,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         Días en pausa (no cuentan)
                       </span>
                       <span className="font-medium">
-                        {accessStats.pausedBusinessDaysElapsed}
+                        {accessStats.pausedCalendarDaysTotal}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
@@ -1896,12 +1917,17 @@ export default function StudentDetailContent({ code }: { code: string }) {
                             .slice()
                             .sort(
                               (a, b) =>
-                                new Date(b.setAt || b.start).getTime() -
-                                new Date(a.setAt || a.start).getTime(),
+                                (parseMaybe(b.setAt || b.start)?.getTime() ??
+                                  0) -
+                                (parseMaybe(a.setAt || a.start)?.getTime() ??
+                                  0),
                             )
                             .map((r, idx) => {
-                              const startDate = toDayDate(new Date(r.start));
-                              const endDate = toDayDate(new Date(r.end));
+                              const s0 = parseMaybe(r.start);
+                              const e0 = parseMaybe(r.end);
+                              const startDate = s0 ? toDayDate(s0) : null;
+                              const endDate = e0 ? toDayDate(e0) : null;
+                              if (!startDate || !endDate) return null;
                               const days = daysBetweenInclusive(
                                 startDate,
                                 endDate,
