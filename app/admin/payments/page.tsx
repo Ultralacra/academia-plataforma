@@ -989,12 +989,16 @@ function PaymentsContent() {
         search: debouncedSyncUserSearch.trim(),
       });
       const raw = Array.isArray(res?.data) ? res.data : [];
-      const onlyAlumnos = raw.filter((u) => {
+      const onlyClientes = raw.filter((u) => {
         const role = String(u?.role ?? "").toLowerCase();
-        // Mostrar solo alumnos (excluir admin/equipo)
-        return role === "alumno" || role === "student";
+        const tipo = String((u as any)?.tipo ?? "").toLowerCase();
+        // Mostrar usuarios clientes/alumnos (excluir admin/equipo por defecto)
+        if (tipo === "cliente") return true;
+        if (role === "alumno" || role === "student") return true;
+        if (role === "cliente" || role === "customer") return true;
+        return false;
       });
-      setSyncUsers(onlyAlumnos);
+      setSyncUsers(onlyClientes);
       setSyncUsersPage(Number(res?.page ?? p) || p);
       setSyncUsersTotalPages(Number(res?.totalPages ?? 1) || 1);
     } catch (e: any) {

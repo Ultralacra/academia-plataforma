@@ -965,8 +965,14 @@ function Content({ id }: { id: string }) {
 
   const planSummary = (() => {
     const plan0 = (effectiveSalePayload as any)?.payment?.plans?.[0];
+    const draftType = String((draft as any)?.paymentPlanType || "")
+      .trim()
+      .toLowerCase();
     const type = String(
-      plan0?.type || (effectiveSalePayload as any)?.payment?.plan_type || "",
+      draftType ||
+        plan0?.type ||
+        (effectiveSalePayload as any)?.payment?.plan_type ||
+        "",
     )
       .trim()
       .toLowerCase();
@@ -974,23 +980,45 @@ function Content({ id }: { id: string }) {
     if (!type) return "—";
     if (type === "contado") return "Contado";
     if (type === "cuotas") {
-      const count = plan0?.installments?.count;
-      const amount = plan0?.installments?.amount;
+      const draftStd = Array.isArray(
+        (draft as any)?.paymentInstallmentsSchedule,
+      )
+        ? ((draft as any)?.paymentInstallmentsSchedule as any[])
+        : [];
+      const draftCustom = Array.isArray(
+        (draft as any)?.paymentCustomInstallments,
+      )
+        ? ((draft as any)?.paymentCustomInstallments as any[])
+        : [];
+      const count =
+        (draft as any)?.paymentInstallmentsCount ??
+        (draftStd.length ? draftStd.length : null) ??
+        (draftCustom.length ? draftCustom.length : null) ??
+        plan0?.installments?.count;
+      const amount =
+        (draft as any)?.paymentInstallmentAmount ?? plan0?.installments?.amount;
       if (count && amount) return `Cuotas: ${count} x ${amount}`;
+      if (count) return `Cuotas: ${count}`;
       return "Cuotas";
     }
     if (type === "excepcion_2_cuotas") {
-      const a = plan0?.first_amount;
-      const b = plan0?.second_amount;
-      const due = plan0?.second_due_date;
+      const a =
+        (draft as any)?.paymentFirstInstallmentAmount ?? plan0?.first_amount;
+      const b =
+        (draft as any)?.paymentSecondInstallmentAmount ?? plan0?.second_amount;
+      const due =
+        (draft as any)?.paymentSecondInstallmentDate ?? plan0?.second_due_date;
       const parts = ["Excepción 2 cuotas"];
       if (a || b) parts.push(`(${String(a ?? "?")} + ${String(b ?? "?")})`);
       if (due) parts.push(`vence ${fmtDate(due)}`);
       return parts.join(" ");
     }
     if (type === "reserva") {
-      const amount = plan0?.reserve?.amount;
-      const due = plan0?.reserve?.remaining_due_date;
+      const amount =
+        (draft as any)?.paymentReserveAmount ?? plan0?.reserve?.amount;
+      const due =
+        (draft as any)?.reserveRemainingDueDate ??
+        plan0?.reserve?.remaining_due_date;
       const parts = ["Reserva"];
       if (amount) parts.push(`(${String(amount)})`);
       if (due) parts.push(`resto vence ${fmtDate(due)}`);

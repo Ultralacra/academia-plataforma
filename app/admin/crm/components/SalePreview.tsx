@@ -226,21 +226,32 @@ export function SalePreview({
     ? bonuses.map((k) => BONOS_BY_KEY[k]?.title || k).join(", ")
     : "—";
 
+  const rawMode = String(pay?.mode || "").toLowerCase();
+
   const cuotas = (() => {
+    // Prioridad: cálculos del ticket (usan draft/schedules) -> parseo del modo
+    const fromTicket = Number((ticket as any)?.cuotasCount);
+    if (Number.isFinite(fromTicket) && fromTicket > 0) return fromTicket;
+
     const m = String(
       draft?.paymentMode || payload?.paymentMode || pay?.mode || "",
-    );
-    const c = m.match(/(\d+)\s*cuotas?/i);
-    return c
-      ? Number(c[1])
-      : m.includes("cuota")
-        ? 2
-        : m.includes("pago_total")
-          ? 1
-          : undefined;
-  })();
+    )
+      .trim()
+      .toLowerCase();
 
-  const rawMode = String(pay?.mode || "").toLowerCase();
+    const ex = m.match(/excepcion_(\d+)_cuotas/);
+    if (ex?.[1]) return Number(ex[1]);
+
+    const u = m.match(/(\d+)_cuotas/);
+    if (u?.[1]) return Number(u[1]);
+
+    const s = m.match(/(\d+)\s*cuotas?/i);
+    if (s?.[1]) return Number(s[1]);
+
+    if (/pago[_\s-]*total|contado/.test(m)) return 1;
+    if (m.includes("cuota")) return 2;
+    return undefined;
+  })();
   const reserveAmountRaw = (pay?.reserveAmount ??
     payload?.reserveAmount ??
     payload?.reservationAmount ??
@@ -555,7 +566,7 @@ export function SalePreview({
             <DollarSign className="h-4 w-4 text-slate-400" />
             <span className="truncate">
               Monto: {pay?.amount || "—"} · Modalidad: {pay?.mode || "—"}
-              {cuotas ? ` (${cuotas} cuotas)` : ""}
+              {cuotas && cuotas > 1 ? ` (${cuotas} cuotas)` : ""}
             </span>
           </div>
           <div className="flex items-center gap-2 min-w-0">

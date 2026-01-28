@@ -238,13 +238,16 @@ export function TabResumen({
                 <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
                   <span className="text-slate-500">Monto</span>
                   <span className="font-semibold text-teal-600 truncate">
-                    {(p.payment_amount ??
+                    {((draft as any)?.paymentAmount ??
+                      p.payment_amount ??
                       effectiveSalePayload?.payment?.amount) === null ||
-                    (p.payment_amount ??
+                    ((draft as any)?.paymentAmount ??
+                      p.payment_amount ??
                       effectiveSalePayload?.payment?.amount) === undefined
                       ? "—"
                       : String(
-                          p.payment_amount ??
+                          (draft as any)?.paymentAmount ??
+                            p.payment_amount ??
                             effectiveSalePayload?.payment?.amount,
                         )}
                   </span>
@@ -252,10 +255,12 @@ export function TabResumen({
                 <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
                   <span className="text-slate-500">Próximo cobro</span>
                   <span className="font-medium text-slate-700 truncate">
-                    {p.next_charge_date ||
+                    {(draft as any)?.nextChargeDate ||
+                    p.next_charge_date ||
                     effectiveSalePayload?.payment?.nextChargeDate
                       ? fmtDate(
-                          p.next_charge_date ||
+                          (draft as any)?.nextChargeDate ||
+                            p.next_charge_date ||
                             effectiveSalePayload?.payment?.nextChargeDate,
                         )
                       : "—"}
