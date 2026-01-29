@@ -126,6 +126,8 @@ export default function CoachDetailPage({
   const [readsBump, setReadsBump] = useState<number>(0);
   // Bump para forzar re-render cuando cambian contadores persistentes de no leídos
   const [unreadBump, setUnreadBump] = useState<number>(0);
+  // Bump para forzar re-render cuando se actualiza info del último mensaje
+  const [lastMsgBump, setLastMsgBump] = useState<number>(0);
   // Chat abierto (por chatId) — opcional, solo informativo
   const [currentOpenChatId, setCurrentOpenChatId] = useState<
     string | number | null
@@ -168,6 +170,15 @@ export default function CoachDetailPage({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStandaloneChatRoute]);
+
+  // Listener para actualizar la lista cuando cambia info del último mensaje
+  useEffect(() => {
+    const handler = () => {
+      setLastMsgBump((n) => n + 1);
+    };
+    window.addEventListener("chat:last-msg-updated", handler);
+    return () => window.removeEventListener("chat:last-msg-updated", handler);
+  }, []);
 
   const [puestoOptionsApi, setPuestoOptionsApi] = useState<OpcionItem[]>([]);
   const [areaOptionsApi, setAreaOptionsApi] = useState<OpcionItem[]>([]);
@@ -364,8 +375,98 @@ export default function CoachDetailPage({
       return "";
     }
   }
+
+  // Obtener info del último mensaje desde localStorage (guardada por CoachChatInline)
+  function getStoredLastMsgInfo(chatId: any): {
+    text: string;
+    attachments: any[];
+    at: string;
+    sender: string;
+  } | null {
+    try {
+      if (!chatId) return null;
+      const key = `chatLastMsgInfo:${String(chatId)}`;
+      const stored = localStorage.getItem(key);
+      if (!stored) return null;
+      return JSON.parse(stored);
+    } catch {
+      return null;
+    }
+  }
+
+  // Helper para generar texto descriptivo de un attachment
+  function getAttachmentLabel(att: any): string {
+    const name = String(att?.name ?? att?.nombre ?? att?.filename ?? "").trim();
+    const mime = String(
+      att?.mime ?? att?.tipo_mime ?? att?.type ?? "",
+    ).toLowerCase();
+    const nameLc = name.toLowerCase();
+    const ext = (() => {
+      const clean = nameLc.split("?")[0].split("#")[0];
+      const i = clean.lastIndexOf(".");
+      return i >= 0 ? clean.slice(i + 1) : "";
+    })();
+
+    const isAudio =
+      mime.startsWith("audio/") ||
+      ["mp3", "wav", "m4a", "aac", "ogg", "opus", "webm"].includes(ext) ||
+      nameLc.includes("grabacion") ||
+      nameLc.includes("audio") ||
+      nameLc.includes("voice");
+    const isImage =
+      mime.startsWith("image/") ||
+      ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(ext);
+    const isVideo =
+      mime.startsWith("video/") ||
+      ["mp4", "mov", "webm", "mkv", "avi"].includes(ext);
+    const isPdf = mime.includes("pdf") || ext === "pdf";
+    const isDoc =
+      mime.includes("word") ||
+      mime.includes("document") ||
+      mime.includes("officedocument.wordprocessing") ||
+      ["doc", "docx"].includes(ext);
+    const isSheet =
+      mime.includes("sheet") ||
+      mime.includes("excel") ||
+      mime.includes("spreadsheet") ||
+      ["xls", "xlsx", "csv"].includes(ext);
+
+    if (isAudio) return `🎤 ${name || "Mensaje de voz"}`;
+    if (isImage) return `📷 ${name || "Imagen"}`;
+    if (isVideo) return `🎬 ${name || "Video"}`;
+    if (isPdf) return `📄 ${name || "Documento PDF"}`;
+    if (isDoc) return `📄 ${name || "Documento"}`;
+    if (isSheet) return `📊 ${name || "Hoja de cálculo"}`;
+    return `📎 ${name || "Archivo adjunto"}`;
+  }
+
   function getChatLastMessage(it: any): { text: string; at: number } {
     try {
+      const chatId = it?.id_chat ?? it?.id;
+
+      // PRIMERO: Intentar usar la info guardada (incluye attachments reales)
+      const storedInfo = getStoredLastMsgInfo(chatId);
+      if (storedInfo) {
+        let text = (storedInfo.text || "").trim();
+        // Si no hay texto pero hay attachments, mostrar el attachment
+        if (
+          !text &&
+          Array.isArray(storedInfo.attachments) &&
+          storedInfo.attachments.length > 0
+        ) {
+          const firstAtt = storedInfo.attachments[0];
+          text = getAttachmentLabel(firstAtt);
+          if (storedInfo.attachments.length > 1) {
+            text += ` (+${storedInfo.attachments.length - 1})`;
+          }
+        }
+        if (text) {
+          const atTs = Date.parse(storedInfo.at || "") || 0;
+          return { text, at: atTs };
+        }
+      }
+
+      // FALLBACK: Usar last_message del servidor (sin attachments detallados)
       const m = it?.last_message || {};
       const rawText = String(
         m?.contenido ?? m?.Contenido ?? m?.text ?? it?.last_message_text ?? "",
@@ -374,6 +475,7 @@ export default function CoachDetailPage({
 
       if (!text) {
         // Adjuntos pueden venir en arrays o en un solo campo/url
+        // Buscar en múltiples lugares: last_message, root del chat, etc.
         const rawFiles =
           m?.archivos ??
           m?.Archivos ??
@@ -383,6 +485,10 @@ export default function CoachDetailPage({
           m?.files ??
           m?.file ??
           m?.archivo ??
+          it?.last_message_archivos ??
+          it?.last_message_attachments ??
+          it?.archivos ??
+          it?.attachments ??
           null;
         const files: any[] = Array.isArray(rawFiles)
           ? rawFiles
@@ -390,11 +496,9 @@ export default function CoachDetailPage({
             ? [rawFiles]
             : [];
 
-        const first = files[0] || {};
-        const url = String(
-          first?.url ??
-            first?.path ??
-            m?.url ??
+        // También verificar si hay URL de archivo directamente en last_message
+        const directUrl = String(
+          m?.url ??
             m?.file_url ??
             m?.archivo_url ??
             m?.media_url ??
@@ -403,13 +507,19 @@ export default function CoachDetailPage({
             m?.image_url ??
             m?.documento_url ??
             m?.document_url ??
+            m?.video_url ??
             "",
-        );
+        ).trim();
+
+        const first = files[0] || {};
+        const url = String(first?.url ?? first?.path ?? directUrl ?? "");
         const name = String(
           first?.nombre ??
             first?.name ??
             first?.filename ??
             first?.fileName ??
+            m?.nombre_archivo ??
+            m?.file_name ??
             url,
         );
         const mime = String(
@@ -420,6 +530,8 @@ export default function CoachDetailPage({
             first?.type ??
             m?.mime ??
             m?.tipo_mime ??
+            m?.content_type ??
+            m?.tipo_archivo ??
             "",
         ).toLowerCase();
 
@@ -430,43 +542,53 @@ export default function CoachDetailPage({
           return i >= 0 ? clean.slice(i + 1) : "";
         })();
 
+        // También detectar por nombre de archivo si no hay mime
         const isAudio =
           mime.startsWith("audio/") ||
-          ["mp3", "wav", "m4a", "aac", "ogg", "opus"].includes(ext);
+          ["mp3", "wav", "m4a", "aac", "ogg", "opus", "webm"].includes(ext) ||
+          nameLc.includes("grabacion") ||
+          nameLc.includes("audio") ||
+          nameLc.includes("voice");
         const isImage =
           mime.startsWith("image/") ||
-          ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext);
+          ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "heic"].includes(
+            ext,
+          );
         const isVideo =
           mime.startsWith("video/") ||
-          ["mp4", "mov", "webm", "mkv"].includes(ext);
+          ["mp4", "mov", "webm", "mkv", "avi"].includes(ext);
         const isPdf = mime.includes("pdf") || ext === "pdf";
         const isDoc =
           mime.includes("word") ||
           mime.includes("document") ||
+          mime.includes("officedocument.wordprocessing") ||
           ["doc", "docx"].includes(ext);
         const isSheet =
           mime.includes("sheet") ||
           mime.includes("excel") ||
+          mime.includes("spreadsheet") ||
           ["xls", "xlsx", "csv"].includes(ext);
 
-        if (isAudio) text = "Mensaje de voz";
-        else if (isImage) text = "Imagen";
-        else if (isVideo) text = "Video";
-        else if (isPdf) text = "Documento PDF";
-        else if (isDoc) text = "Documento";
-        else if (isSheet) text = "Hoja de cálculo";
-        else if (files.length > 0 || url) text = "Archivo adjunto";
+        if (isAudio) text = "🎤 Mensaje de voz";
+        else if (isImage) text = "📷 Imagen";
+        else if (isVideo) text = "🎬 Video";
+        else if (isPdf) text = "📄 Documento PDF";
+        else if (isDoc) text = "📄 Documento";
+        else if (isSheet) text = "📊 Hoja de cálculo";
+        else if (files.length > 0 || url || directUrl)
+          text = "📎 Archivo adjunto";
 
         if (files.length > 1) {
           text =
-            (text || "Archivo adjunto") +
+            (text || "📎 Archivo adjunto") +
             " (+" +
             String(files.length - 1) +
             ")";
         }
       }
 
-      if (!text) text = "Archivo adjunto";
+      // Si después de todo no hay texto, mostrar placeholder genérico
+      if (!text) text = "";
 
       const atFields = [
         m?.fecha_envio_local,
@@ -1023,6 +1145,7 @@ export default function CoachDetailPage({
     contactQuery,
     readsBump,
     unreadBump,
+    lastMsgBump,
     teamsMap,
     studentsMap,
     code,

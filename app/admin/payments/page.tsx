@@ -9,6 +9,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -51,13 +52,25 @@ import {
   upsertPaymentDetalle,
   createPaymentDetalle,
   deletePaymentDetalle,
+  updatePayment,
+  PAYMENT_STATUS_OPTIONS,
   type PaymentRow,
   type PaymentCuotaRow,
   type CreateDetallePayload,
+  type UpdatePaymentPayload,
 } from "./api";
 import { fetchUsers, type SysUser } from "../users/api";
 import { toast } from "@/components/ui/use-toast";
-import { CreditCard, Plus, Pencil, Trash2 } from "lucide-react";
+import {
+  CreditCard,
+  Plus,
+  Pencil,
+  Trash2,
+  Save,
+  Check,
+  X,
+  Loader2,
+} from "lucide-react";
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState<T>(value);
@@ -506,6 +519,80 @@ function PaymentsContent() {
     concepto: "",
     notas: "",
   });
+
+  // Estado para edición inline del pago principal
+  const [paymentEditingField, setPaymentEditingField] = useState<string | null>(
+    null,
+  );
+  const [paymentEditValue, setPaymentEditValue] = useState<string>("");
+  const [paymentFieldSaving, setPaymentFieldSaving] = useState(false);
+
+  function startEditingPaymentField(field: string, currentValue: any) {
+    setPaymentEditingField(field);
+    setPaymentEditValue(currentValue != null ? String(currentValue) : "");
+  }
+
+  function cancelEditingPaymentField() {
+    setPaymentEditingField(null);
+    setPaymentEditValue("");
+  }
+
+  async function savePaymentField(field: string) {
+    if (!detailCodigo) return;
+    setPaymentFieldSaving(true);
+    try {
+      const payload: UpdatePaymentPayload = {};
+
+      if (field === "monto") {
+        const v = parseFloat(paymentEditValue);
+        if (!isNaN(v)) payload.monto = v;
+      } else if (field === "monto_reserva") {
+        const v = parseFloat(paymentEditValue);
+        if (!isNaN(v)) payload.monto_reserva = v;
+      } else if (field === "nro_cuotas") {
+        const v = parseInt(paymentEditValue);
+        if (!isNaN(v)) payload.nro_cuotas = v;
+      } else if (field === "estatus") {
+        payload.estatus = paymentEditValue;
+      } else if (field === "moneda") {
+        payload.moneda = paymentEditValue;
+      } else if (field === "metodo") {
+        payload.metodo = paymentEditValue;
+      } else if (field === "modalidad") {
+        payload.modalidad = paymentEditValue;
+      } else if (field === "referencia") {
+        payload.referencia = paymentEditValue;
+      } else if (field === "concepto") {
+        payload.concepto = paymentEditValue;
+      } else if (field === "notas") {
+        payload.notas = paymentEditValue;
+      }
+
+      await updatePayment(detailCodigo, payload);
+
+      toast({
+        title: "Campo actualizado",
+        description: "El dato se ha guardado correctamente",
+      });
+
+      // Refrescar detalle
+      const json = await getPaymentByCodigo(detailCodigo);
+      setDetail(json?.data ?? null);
+      setPaymentEditingField(null);
+      setPaymentEditValue("");
+
+      // Refrescar lista principal
+      loadList();
+    } catch (e: any) {
+      toast({
+        variant: "destructive",
+        title: "Error al guardar",
+        description: e?.message || "No se pudo actualizar el campo",
+      });
+    } finally {
+      setPaymentFieldSaving(false);
+    }
+  }
 
   function openCuotaModal(cuota?: any) {
     if (cuota) {
@@ -2156,13 +2243,70 @@ function PaymentsContent() {
                       <div className="text-xs text-muted-foreground">
                         Estatus
                       </div>
-                      <div className="text-right">
-                        <Badge
-                          variant="outline"
-                          className={getStatusChipClass(detail.estatus)}
-                        >
-                          {formatPaymentStatusLabel(detail.estatus)}
-                        </Badge>
+                      <div className="text-right flex items-center gap-2">
+                        {paymentEditingField === "estatus" ? (
+                          <div className="flex items-center gap-1">
+                            <Select
+                              value={paymentEditValue}
+                              onValueChange={setPaymentEditValue}
+                            >
+                              <SelectTrigger className="h-7 w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PAYMENT_STATUS_OPTIONS.map((opt) => (
+                                  <SelectItem key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => savePaymentField("estatus")}
+                              disabled={paymentFieldSaving}
+                            >
+                              {paymentFieldSaving ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={cancelEditingPaymentField}
+                              disabled={paymentFieldSaving}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <Badge
+                              variant="outline"
+                              className={getStatusChipClass(detail.estatus)}
+                            >
+                              {formatPaymentStatusLabel(detail.estatus)}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() =>
+                                startEditingPaymentField(
+                                  "estatus",
+                                  detail.estatus || "en_proceso",
+                                )
+                              }
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -2183,8 +2327,66 @@ function PaymentsContent() {
                       <div className="text-xs text-muted-foreground">
                         Moneda
                       </div>
-                      <div className="text-sm text-right">
-                        {detail.moneda || "—"}
+                      <div className="text-sm text-right flex items-center gap-1">
+                        {paymentEditingField === "moneda" ? (
+                          <>
+                            <Select
+                              value={paymentEditValue}
+                              onValueChange={setPaymentEditValue}
+                            >
+                              <SelectTrigger className="h-7 w-20">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="USD">USD</SelectItem>
+                                <SelectItem value="EUR">EUR</SelectItem>
+                                <SelectItem value="MXN">MXN</SelectItem>
+                                <SelectItem value="COP">COP</SelectItem>
+                                <SelectItem value="VES">VES</SelectItem>
+                                <SelectItem value="CLP">CLP</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => savePaymentField("moneda")}
+                              disabled={paymentFieldSaving}
+                            >
+                              {paymentFieldSaving ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={cancelEditingPaymentField}
+                              disabled={paymentFieldSaving}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>{detail.moneda || "—"}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() =>
+                                startEditingPaymentField(
+                                  "moneda",
+                                  detail.moneda || "USD",
+                                )
+                              }
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -2199,8 +2401,61 @@ function PaymentsContent() {
                       <div className="text-xs text-muted-foreground">
                         Reserva
                       </div>
-                      <div className="text-sm text-right">
-                        {formatMoney(detail.monto_reserva, detail.moneda)}
+                      <div className="text-sm text-right flex items-center gap-1">
+                        {paymentEditingField === "monto_reserva" ? (
+                          <>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={paymentEditValue}
+                              onChange={(e) =>
+                                setPaymentEditValue(e.target.value)
+                              }
+                              className="h-7 w-24"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => savePaymentField("monto_reserva")}
+                              disabled={paymentFieldSaving}
+                            >
+                              {paymentFieldSaving ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={cancelEditingPaymentField}
+                              disabled={paymentFieldSaving}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>
+                              {formatMoney(detail.monto_reserva, detail.moneda)}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() =>
+                                startEditingPaymentField(
+                                  "monto_reserva",
+                                  detail.monto_reserva,
+                                )
+                              }
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -2217,8 +2472,58 @@ function PaymentsContent() {
                       <div className="text-xs text-muted-foreground">
                         Método
                       </div>
-                      <div className="text-sm text-right break-words">
-                        {detail.metodo || "—"}
+                      <div className="text-sm text-right break-words flex items-center gap-1">
+                        {paymentEditingField === "metodo" ? (
+                          <>
+                            <Input
+                              value={paymentEditValue}
+                              onChange={(e) =>
+                                setPaymentEditValue(e.target.value)
+                              }
+                              className="h-7 w-32"
+                              placeholder="Método"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => savePaymentField("metodo")}
+                              disabled={paymentFieldSaving}
+                            >
+                              {paymentFieldSaving ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={cancelEditingPaymentField}
+                              disabled={paymentFieldSaving}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>{detail.metodo || "—"}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() =>
+                                startEditingPaymentField(
+                                  "metodo",
+                                  detail.metodo || "",
+                                )
+                              }
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -2226,8 +2531,58 @@ function PaymentsContent() {
                       <div className="text-xs text-muted-foreground">
                         Modalidad
                       </div>
-                      <div className="text-sm text-right break-words">
-                        {detail.modalidad || "—"}
+                      <div className="text-sm text-right break-words flex items-center gap-1">
+                        {paymentEditingField === "modalidad" ? (
+                          <>
+                            <Input
+                              value={paymentEditValue}
+                              onChange={(e) =>
+                                setPaymentEditValue(e.target.value)
+                              }
+                              className="h-7 w-32"
+                              placeholder="Modalidad"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => savePaymentField("modalidad")}
+                              disabled={paymentFieldSaving}
+                            >
+                              {paymentFieldSaving ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={cancelEditingPaymentField}
+                              disabled={paymentFieldSaving}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>{detail.modalidad || "—"}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() =>
+                                startEditingPaymentField(
+                                  "modalidad",
+                                  detail.modalidad || "",
+                                )
+                              }
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -2235,8 +2590,58 @@ function PaymentsContent() {
                       <div className="text-xs text-muted-foreground">
                         Referencia
                       </div>
-                      <div className="text-sm text-right break-words">
-                        {detail.referencia || "—"}
+                      <div className="text-sm text-right break-words flex items-center gap-1">
+                        {paymentEditingField === "referencia" ? (
+                          <>
+                            <Input
+                              value={paymentEditValue}
+                              onChange={(e) =>
+                                setPaymentEditValue(e.target.value)
+                              }
+                              className="h-7 w-32"
+                              placeholder="Referencia"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => savePaymentField("referencia")}
+                              disabled={paymentFieldSaving}
+                            >
+                              {paymentFieldSaving ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={cancelEditingPaymentField}
+                              disabled={paymentFieldSaving}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>{detail.referencia || "—"}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() =>
+                                startEditingPaymentField(
+                                  "referencia",
+                                  detail.referencia || "",
+                                )
+                              }
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -2258,27 +2663,121 @@ function PaymentsContent() {
                       </div>
                     </div>
 
-                    {detail.concepto ? (
-                      <div className="md:col-span-2 flex items-start justify-between gap-3">
-                        <div className="text-xs text-muted-foreground">
-                          Concepto
-                        </div>
-                        <div className="text-sm text-right whitespace-pre-wrap break-words">
-                          {fixMojibake(detail.concepto)}
-                        </div>
+                    <div className="md:col-span-2 flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">
+                        Concepto
                       </div>
-                    ) : null}
+                      <div className="text-sm text-right whitespace-pre-wrap break-words flex items-center gap-1">
+                        {paymentEditingField === "concepto" ? (
+                          <>
+                            <Textarea
+                              value={paymentEditValue}
+                              onChange={(e) =>
+                                setPaymentEditValue(e.target.value)
+                              }
+                              className="min-h-[60px] w-64"
+                              placeholder="Concepto"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => savePaymentField("concepto")}
+                              disabled={paymentFieldSaving}
+                            >
+                              {paymentFieldSaving ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={cancelEditingPaymentField}
+                              disabled={paymentFieldSaving}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>{fixMojibake(detail.concepto) || "—"}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() =>
+                                startEditingPaymentField(
+                                  "concepto",
+                                  detail.concepto || "",
+                                )
+                              }
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
 
-                    {detail.notas ? (
-                      <div className="md:col-span-2 flex items-start justify-between gap-3">
-                        <div className="text-xs text-muted-foreground">
-                          Notas
-                        </div>
-                        <div className="text-sm text-right whitespace-pre-wrap break-words">
-                          {fixMojibake(detail.notas)}
-                        </div>
+                    <div className="md:col-span-2 flex items-start justify-between gap-3">
+                      <div className="text-xs text-muted-foreground">Notas</div>
+                      <div className="text-sm text-right whitespace-pre-wrap break-words flex items-center gap-1">
+                        {paymentEditingField === "notas" ? (
+                          <>
+                            <Textarea
+                              value={paymentEditValue}
+                              onChange={(e) =>
+                                setPaymentEditValue(e.target.value)
+                              }
+                              className="min-h-[60px] w-64"
+                              placeholder="Notas"
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={() => savePaymentField("notas")}
+                              disabled={paymentFieldSaving}
+                            >
+                              {paymentFieldSaving ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Check className="h-3 w-3 text-green-600" />
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0"
+                              onClick={cancelEditingPaymentField}
+                              disabled={paymentFieldSaving}
+                            >
+                              <X className="h-3 w-3 text-red-600" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <span>{fixMojibake(detail.notas) || "—"}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0"
+                              onClick={() =>
+                                startEditingPaymentField(
+                                  "notas",
+                                  detail.notas || "",
+                                )
+                              }
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </Button>
+                          </>
+                        )}
                       </div>
-                    ) : null}
+                    </div>
                   </div>
                 </div>
 

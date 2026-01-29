@@ -234,3 +234,47 @@ export async function getPaymentCuotas(opts: {
 
   return fetchJson<PaymentCuotasEnvelope>(`/payments/get/cuotas?${q.toString()}`);
 }
+
+// Estatus disponibles para el pago principal
+export const PAYMENT_STATUS_OPTIONS = [
+  { value: "listo", label: "Listo" },
+  { value: "en_proceso", label: "En proceso" },
+  { value: "moroso", label: "Moroso" },
+  { value: "reembolsado", label: "Reembolsado" },
+  { value: "no_aplica", label: "No Aplicó" },
+] as const;
+
+export type UpdatePaymentPayload = {
+  cliente_codigo?: string;
+  monto?: number;
+  monto_reserva?: number;
+  nro_cuotas?: number;
+  moneda?: string;
+  estatus?: string;
+  fecha_pago?: string;
+  metodo?: string;
+  modalidad?: string;
+  referencia?: string;
+  concepto?: string;
+  notas?: string;
+};
+
+export type UpdatePaymentEnvelope = {
+  code?: number;
+  status?: string;
+  data?: any;
+};
+
+export async function updatePayment(
+  paymentCodigo: string,
+  payload: UpdatePaymentPayload
+): Promise<UpdatePaymentEnvelope> {
+  const safePayment = encodeURIComponent(String(paymentCodigo || "").trim());
+  return fetchJson<UpdatePaymentEnvelope>(
+    `/payments/update/payment/${safePayment}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }
+  );
+}
