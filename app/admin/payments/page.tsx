@@ -594,6 +594,54 @@ function PaymentsContent() {
     }
   }
 
+  // Verifica si todas las cuotas están pagadas y actualiza el estatus del pago automáticamente
+  async function checkAndUpdatePaymentStatus(paymentCodigo: string) {
+    try {
+      // Obtener el pago actualizado
+      const freshPayment = await getPaymentByCodigo(paymentCodigo);
+      const paymentData = freshPayment?.data;
+      if (!paymentData) return;
+
+      const cuotas = Array.isArray(paymentData.detalles) ? paymentData.detalles : [];
+      
+      // Si no hay cuotas, no hacer nada
+      if (cuotas.length === 0) return;
+
+      // Verificar si todas las cuotas están pagadas
+      const allPaid = cuotas.every((c: any) => {
+        const status = String(c.estatus ?? "").toLowerCase().trim();
+        return status === "pagado" || status === "pagada" || status === "listo";
+      });
+
+      // Verificar estatus actual del pago
+      const currentStatus = String(paymentData.estatus ?? "").toLowerCase().trim();
+      const isCurrentlyListo = currentStatus === "listo" || currentStatus === "pagado";
+
+      let newStatus: string | null = null;
+
+      if (allPaid && !isCurrentlyListo) {
+        // Todas pagadas pero el pago no está en "listo" → cambiar a "listo"
+        newStatus = "listo";
+      } else if (!allPaid && isCurrentlyListo) {
+        // No todas pagadas pero el pago está en "listo" → cambiar a "en_proceso"
+        newStatus = "en_proceso";
+      }
+
+      if (newStatus) {
+        await updatePayment(paymentCodigo, { estatus: newStatus });
+        
+        toast({
+          title: newStatus === "listo" ? "¡Pago completado!" : "Pago en proceso",
+          description: newStatus === "listo" 
+            ? "Todas las cuotas han sido pagadas" 
+            : "Hay cuotas pendientes de pago",
+        });
+      }
+    } catch (e) {
+      console.error("Error al verificar estatus del pago:", e);
+    }
+  }
+
   function openCuotaModal(cuota?: any) {
     if (cuota) {
       // Editar existente
@@ -720,6 +768,22 @@ function PaymentsContent() {
         setDetail(fresh?.data ?? null);
       } catch {}
 
+      // Verificar si todas las cuotas están pagadas para actualizar estatus del pago
+      await checkAndUpdatePaymentStatus(paymentCodigo);
+
+      // Refrescar detalle nuevamente después de posible cambio de estatus
+      try {
+        const fresh = await getPaymentByCodigo(paymentCodigo);
+        setDetail(fresh?.data ?? null);
+        // Limpiar estados de edición para que reflejen los nuevos valores
+        setDetailEditStatusByKey({});
+        setDetailEditConceptByKey({});
+        setDetailEditNotesByKey({});
+      } catch {}
+
+      // Refrescar lista principal
+      loadList();
+
       setCuotaModalOpen(false);
       setCuotaEditing(null);
     } catch (e: any) {
@@ -767,11 +831,21 @@ function PaymentsContent() {
         description: `Se eliminó la cuota ${cuotaToDelete.cuota_codigo || detalleCodigo}`,
       });
 
+      // Verificar si todas las cuotas están pagadas para actualizar estatus del pago
+      await checkAndUpdatePaymentStatus(paymentCodigo);
+
       // Refrescar detalle desde backend
       try {
         const fresh = await getPaymentByCodigo(paymentCodigo);
         setDetail(fresh?.data ?? null);
+        // Limpiar estados de edición para que reflejen los nuevos valores
+        setDetailEditStatusByKey({});
+        setDetailEditConceptByKey({});
+        setDetailEditNotesByKey({});
       } catch {}
+
+      // Refrescar lista principal
+      loadList();
 
       setDeleteConfirmOpen(false);
       setCuotaToDelete(null);
@@ -890,8 +964,10 @@ function PaymentsContent() {
     setDetailLoading(true);
     setDetailError(null);
     setDetail(null);
+    // Limpiar todos los estados de edición de cuotas
     setDetailEditStatusByKey({});
     setDetailEditConceptByKey({});
+    setDetailEditNotesByKey({});
     setDetailSavingByKey({});
     try {
       const json = await getPaymentByCodigo(safe);
@@ -1198,8 +1274,10 @@ function PaymentsContent() {
   }, [detailEditNotesByKey]);
 
   function getDetailRowKey(d: any) {
+    // Incluir el código del pago padre para evitar colisiones entre pagos diferentes
+    const parentCode = String(detail?.codigo ?? detailCodigo ?? "");
     const k = d?.codigo ?? d?.cuota_codigo ?? d?.id;
-    return String(k ?? "");
+    return `${parentCode}_${String(k ?? "")}`;
   }
 
   async function saveDetalle(d: any) {
@@ -1318,6 +1396,22 @@ function PaymentsContent() {
       } catch {
         // noop
       }
+
+      // Verificar si todas las cuotas están pagadas para actualizar estatus del pago
+      await checkAndUpdatePaymentStatus(paymentCodigo);
+
+      // Refrescar detalle nuevamente después de posible cambio de estatus
+      try {
+        const fresh = await getPaymentByCodigo(paymentCodigo);
+        setDetail(fresh?.data ?? null);
+        // Limpiar estados de edición para que reflejen los nuevos valores
+        setDetailEditStatusByKey({});
+        setDetailEditConceptByKey({});
+        setDetailEditNotesByKey({});
+      } catch {}
+
+      // Refrescar lista principal
+      loadList();
     } catch (e: any) {
       try {
         console.error("[payments] saveDetalle:error", {
@@ -2889,6 +2983,7 @@ function PaymentsContent() {
                                   return (
                                     <div className="flex flex-col gap-1 min-w-[220px]">
                                       <Select
+                                        key={`select-status-${key}`}
                                         value={value || ""}
                                         onValueChange={(v) => {
                                           const vLower =
