@@ -16,6 +16,7 @@ import {
   updateMetadata,
 } from "@/lib/metadata";
 import { useAuth } from "@/hooks/use-auth";
+import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { isoDay, parseMaybe } from "./detail-utils";
 
@@ -125,6 +126,7 @@ export default function AdsMetricsForm({
     pauta_activa?: boolean;
     requiere_interv?: boolean;
     fase?: string;
+    subfase?: string;
     fase_data?: Record<string, { obs?: string; interv_sugerida?: string }>;
     coach_copy?: string;
     coach_plat?: string;
@@ -481,6 +483,7 @@ export default function AdsMetricsForm({
         setMatchedMetadataCount(count || 1);
         applyMetadataToForm(updatedDetail);
         console.log("[ADS][metadata] updated detail ->", updatedDetail);
+        toast({ title: "Guardado", description: "Métricas ADS actualizadas" });
         return;
       }
 
@@ -497,12 +500,20 @@ export default function AdsMetricsForm({
         setMatchedMetadataCount(1);
         applyMetadataToForm(detail);
         console.log("[ADS][metadata] detail ->", detail);
+        toast({ title: "Guardado", description: "Métricas ADS guardadas" });
       } else {
         // Fallback: recargar por lista
         await reloadStudentMetadata();
       }
     } catch (e) {
       console.error("[ADS][metadata] error guardando/consultando:", e);
+      try {
+        toast({
+          title: "Error",
+          description: String(e?.message ?? e ?? "Error"),
+          variant: "destructive",
+        });
+      } catch {}
     } finally {
       setMetadataSaving(false);
     }
@@ -1140,26 +1151,31 @@ export default function AdsMetricsForm({
                       <option value="Fase de optimización">
                         Fase de optimización
                       </option>
-                      <optgroup label="Subfases (optimización)">
-                        <option value="Fase de optimización - Copy/Ads">
-                          Copy/Ads
-                        </option>
-                        <option value="Fase de optimización - Copy/VSL">
-                          Copy/VSL
-                        </option>
-                        <option value="Fase de optimización - Copy/Página">
-                          Copy/Página
-                        </option>
-                        <option value="Fase de optimización - Copy/Oferta">
-                          Copy/Oferta
-                        </option>
-                        <option value="Fase de optimización - Técnica">
-                          Técnica
-                        </option>
-                        <option value="Fase de optimización - Ads">Ads</option>
-                      </optgroup>
                       <option value="Fase de Escala">Fase de Escala</option>
                     </select>
+                    <div className="mt-2">
+                      <Label>Subfase</Label>
+                      <select
+                        value={data.subfase ? data.subfase : "sin-subfase"}
+                        onChange={(e) =>
+                          onChange(
+                            "subfase",
+                            e.target.value === "sin-subfase"
+                              ? ""
+                              : e.target.value,
+                          )
+                        }
+                        className="w-full h-9 rounded-md border px-3 text-sm"
+                      >
+                        <option value="sin-subfase">Sin subfase</option>
+                        <option value="Copy/Ads">Copy/Ads</option>
+                        <option value="Copy/VSL">Copy/VSL</option>
+                        <option value="Copy/Página">Copy/Página</option>
+                        <option value="Copy/Oferta">Copy/Oferta</option>
+                        <option value="Técnica">Técnica</option>
+                        <option value="Ads">Ads</option>
+                      </select>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1328,6 +1344,11 @@ export default function AdsMetricsForm({
                   <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs border-border">
                     {data.fase || "Sin fase"}
                   </span>
+                  {data.subfase ? (
+                    <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs text-background">
+                      {data.subfase}
+                    </span>
+                  ) : null}
                 </div>
               </div>
               <div>

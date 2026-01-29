@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -15,6 +16,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api-config";
+import { createMetadata, listMetadata } from "@/lib/metadata";
+import { toast } from "@/components/ui/use-toast";
 import { isoDay, parseMaybe } from "../_parts/detail-utils";
 
 function normPhaseId(v: unknown) {
@@ -121,6 +124,7 @@ export default function AdsMetricsForm({
     pauta_activa?: boolean;
     requiere_interv?: boolean;
     fase?: string;
+    subfase?: string;
     coach_copy?: string;
     coach_plat?: string;
     obs?: string;
@@ -253,6 +257,81 @@ export default function AdsMetricsForm({
 
   function onChange<K extends keyof Metrics>(k: K, v: Metrics[K]) {
     setData({ ...data, [k]: v });
+  }
+
+  const [savingMeta, setSavingMeta] = useState(false);
+  const [metaMsg, setMetaMsg] = useState<string>("");
+
+  async function saveToMetadata() {
+    setSavingMeta(true);
+    try {
+      // Buscar ID de alumno por código
+      const qUrl = `/client/get/clients?page=1&search=${encodeURIComponent(
+        studentCode,
+      )}`;
+      const j = await apiFetch<any>(qUrl);
+      const rows = Array.isArray(j?.data) ? j.data : [];
+      const matched = rows.find(
+        (r: any) =>
+          String(r.codigo ?? r.code ?? "").toLowerCase() ===
+          studentCode.toLowerCase(),
+      );
+      const alumnoId = matched?.id ? String(matched.id) : String(studentCode);
+
+      // Cargar metadata existentes y buscar registro para este alumno
+      const all = await listMetadata<any>();
+      const items = Array.isArray(all?.items) ? all.items : [];
+      const existing = items.find(
+        (m) =>
+          m &&
+          m.entity === "alumno_ads_metrics" &&
+          String(m.entity_id) === String(alumnoId),
+      );
+
+      const payload = {
+        alumno_id: matched?.id ?? null,
+        alumno_codigo: studentCode,
+        form: data,
+        saved_at: new Date().toISOString(),
+      };
+
+      if (existing && existing.id) {
+        const body = {
+          entity: existing.entity,
+          entity_id: existing.entity_id,
+          payload: {
+            ...(existing.payload ?? {}),
+            ...payload,
+            ultimo_cambio_at: new Date().toISOString(),
+          },
+        };
+        await apiFetch(`/metadata/${encodeURIComponent(String(existing.id))}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } else {
+        await createMetadata({
+          entity: "alumno_ads_metrics",
+          entity_id: alumnoId,
+          payload,
+        });
+      }
+
+      setMetaMsg("Guardado en metadata");
+      toast({ title: "Guardado", description: "Métricas ADS guardadas" });
+    } catch (e: any) {
+      console.error("Error guardando metadata ADS", e);
+      setMetaMsg(String(e?.message ?? e ?? "Error"));
+      toast({
+        title: "Error",
+        description: String(e?.message ?? e ?? "Error"),
+        variant: "destructive",
+      });
+    } finally {
+      setSavingMeta(false);
+      setTimeout(() => setMetaMsg(""), 3000);
+    }
   }
 
   // Derivados automáticos
@@ -671,27 +750,31 @@ export default function AdsMetricsForm({
                       <SelectItem value="Fase de optimización">
                         Fase de optimización
                       </SelectItem>
-                      <SelectItem value="Fase de optimización - Copy/Ads">
-                        Copy/Ads
-                      </SelectItem>
-                      <SelectItem value="Fase de optimización - Copy/VSL">
-                        Copy/VSL
-                      </SelectItem>
-                      <SelectItem value="Fase de optimización - Copy/Página">
-                        Copy/Página
-                      </SelectItem>
-                      <SelectItem value="Fase de optimización - Copy/Oferta">
-                        Copy/Oferta
-                      </SelectItem>
-                      <SelectItem value="Fase de optimización - Técnica">
-                        Técnica
-                      </SelectItem>
-                      <SelectItem value="Fase de optimización - Ads">
-                        Ads
-                      </SelectItem>
                       <SelectItem value="Fase de Escala">
                         Fase de Escala
                       </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Subfase</Label>
+                  <Select
+                    value={data.subfase ? data.subfase : "sin-subfase"}
+                    onValueChange={(v) =>
+                      onChange("subfase", v === "sin-subfase" ? "" : v)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona subfase" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sin-subfase">Sin subfase</SelectItem>
+                      <SelectItem value="Copy/Ads">Copy/Ads</SelectItem>
+                      <SelectItem value="Copy/VSL">Copy/VSL</SelectItem>
+                      <SelectItem value="Copy/Página">Copy/Página</SelectItem>
+                      <SelectItem value="Copy/Oferta">Copy/Oferta</SelectItem>
+                      <SelectItem value="Técnica">Técnica</SelectItem>
+                      <SelectItem value="Ads">Ads</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -872,7 +955,12 @@ export default function AdsMetricsForm({
                     ? "Requiere intervención"
                     : "Sin intervención"}
                 </Badge>
-                <Badge variant="outline">{data.fase || "Sin fase"}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">{data.fase || "Sin fase"}</Badge>
+                  {data.subfase ? (
+                    <Badge variant="secondary">{data.subfase}</Badge>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
 
@@ -914,6 +1002,19 @@ export default function AdsMetricsForm({
             Guardado local automáticamente. Esta vista no envía datos al
             servidor.
           </div>
+          <Card>
+            <CardHeader className="py-3">
+              <CardTitle className="text-sm">Persistir</CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center gap-3">
+              <Button onClick={saveToMetadata} disabled={savingMeta}>
+                {savingMeta ? "Guardando…" : "Guardar en metadata"}
+              </Button>
+              {metaMsg ? (
+                <div className="text-sm text-muted-foreground">{metaMsg}</div>
+              ) : null}
+            </CardContent>
+          </Card>
         </CardContent>
       </Card>
     </div>
