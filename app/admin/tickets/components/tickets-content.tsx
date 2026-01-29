@@ -18,6 +18,7 @@ import { Charts } from "./charts";
 import KPIs from "./kpis";
 import TeamsTable from "./teams-table";
 import { computeTicketMetrics, type TicketsMetrics } from "./metrics";
+import TicketsSummaryCard from "./tickets-summary-card";
 
 /* ---------------------------------------
   UI helpers lightweight (sin shadcn)
@@ -199,7 +200,7 @@ export default function TicketsContent() {
   const [tipo, setTipo] = useState<string>("all");
   // Por defecto: desde el primer día del mes actual hasta hoy
   const [fechaDesde, setFechaDesde] = useState<string>(
-    firstDayOfMonthYMDLocal()
+    firstDayOfMonthYMDLocal(),
   );
   const [fechaHasta, setFechaHasta] = useState<string>(todayYMDLocal());
 
@@ -269,7 +270,7 @@ export default function TicketsContent() {
         ]
           .join(" ")
           .toLowerCase()
-          .includes(q)
+          .includes(q),
       );
     }
     return items;
@@ -279,7 +280,7 @@ export default function TicketsContent() {
   const estadoOpts = useMemo(() => {
     const set = new Set<string>();
     (allTickets ?? []).forEach((t) =>
-      set.add((t.estado ?? "SIN ESTADO").toLowerCase())
+      set.add((t.estado ?? "SIN ESTADO").toLowerCase()),
     );
     return ["all", ...Array.from(set)];
   }, [allTickets]);
@@ -287,7 +288,7 @@ export default function TicketsContent() {
   const tipoOpts = useMemo(() => {
     const set = new Set<string>();
     (allTickets ?? []).forEach((t) =>
-      set.add((t.tipo ?? "SIN TIPO").toLowerCase())
+      set.add((t.tipo ?? "SIN TIPO").toLowerCase()),
     );
     return ["all", ...Array.from(set)];
   }, [allTickets]);
@@ -295,13 +296,13 @@ export default function TicketsContent() {
   // 📊 NUEVO: métricas completas
   const metrics: TicketsMetrics = useMemo(
     () => computeTicketMetrics(filtered ?? []),
-    [filtered]
+    [filtered],
   );
 
   // Serie por día (para el area chart) — puedes seguir usando la de tu dataService
   const ticketsPorDia = useMemo(
     () => dataService.ticketsByDay(filtered ?? []),
-    [filtered]
+    [filtered],
   );
 
   // Paginación local
@@ -325,7 +326,7 @@ export default function TicketsContent() {
       try {
         setTicketLoading(true);
         const url = buildUrl(
-          `/ticket/get/ticket/${encodeURIComponent(String(codigo))}`
+          `/ticket/get/ticket/${encodeURIComponent(String(codigo))}`,
         );
         const token = typeof window !== "undefined" ? getAuthToken() : null;
         const res = await fetch(url, {
@@ -445,6 +446,9 @@ export default function TicketsContent() {
 
       {/* KPIs nuevas */}
       <KPIs metrics={metrics} loading={loading} />
+
+      {/* Resumen adicional (por alumno/tipo) */}
+      <TicketsSummaryCard tickets={filtered} metrics={metrics} />
 
       {/* Gráficas */}
       <Charts ticketsPorDia={ticketsPorDia} tickets={filtered} />
@@ -634,15 +638,15 @@ export default function TicketsContent() {
                           try {
                             await updateTicket(
                               String(selectedTicket.id_externo),
-                              { descripcion: (descDraft || "").trim() }
+                              { descripcion: (descDraft || "").trim() },
                             );
                             toast({ title: "Descripción actualizada" });
                             // recargar detalle
                             setTicketModalOpen(true); // mantener abierto
                             const url = buildUrl(
                               `/ticket/get/ticket/${encodeURIComponent(
-                                String(selectedTicket.id_externo)
-                              )}`
+                                String(selectedTicket.id_externo),
+                              )}`,
                             );
                             const token =
                               typeof window !== "undefined"
