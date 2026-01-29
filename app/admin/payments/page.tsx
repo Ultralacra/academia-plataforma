@@ -602,20 +602,27 @@ function PaymentsContent() {
       const paymentData = freshPayment?.data;
       if (!paymentData) return;
 
-      const cuotas = Array.isArray(paymentData.detalles) ? paymentData.detalles : [];
-      
+      const cuotas = Array.isArray(paymentData.detalles)
+        ? paymentData.detalles
+        : [];
+
       // Si no hay cuotas, no hacer nada
       if (cuotas.length === 0) return;
 
       // Verificar si todas las cuotas están pagadas
       const allPaid = cuotas.every((c: any) => {
-        const status = String(c.estatus ?? "").toLowerCase().trim();
+        const status = String(c.estatus ?? "")
+          .toLowerCase()
+          .trim();
         return status === "pagado" || status === "pagada" || status === "listo";
       });
 
       // Verificar estatus actual del pago
-      const currentStatus = String(paymentData.estatus ?? "").toLowerCase().trim();
-      const isCurrentlyListo = currentStatus === "listo" || currentStatus === "pagado";
+      const currentStatus = String(paymentData.estatus ?? "")
+        .toLowerCase()
+        .trim();
+      const isCurrentlyListo =
+        currentStatus === "listo" || currentStatus === "pagado";
 
       let newStatus: string | null = null;
 
@@ -629,12 +636,14 @@ function PaymentsContent() {
 
       if (newStatus) {
         await updatePayment(paymentCodigo, { estatus: newStatus });
-        
+
         toast({
-          title: newStatus === "listo" ? "¡Pago completado!" : "Pago en proceso",
-          description: newStatus === "listo" 
-            ? "Todas las cuotas han sido pagadas" 
-            : "Hay cuotas pendientes de pago",
+          title:
+            newStatus === "listo" ? "¡Pago completado!" : "Pago en proceso",
+          description:
+            newStatus === "listo"
+              ? "Todas las cuotas han sido pagadas"
+              : "Hay cuotas pendientes de pago",
         });
       }
     } catch (e) {
