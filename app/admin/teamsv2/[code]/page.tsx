@@ -889,7 +889,13 @@ export default function CoachDetailPage({
       const lastAtLabel = getChatLastAtLabel(top);
       const last = getChatLastMessage(top);
 
+      // Usar el campo "unread" del servidor (mensajes no leídos por MÍ)
+      // El servidor ya calcula esto basándose en my_participante
       const unreadCount = group.chats.reduce((acc: number, it: any) => {
+        // Primero intentar usar el campo unread del servidor
+        const serverUnread = typeof it?.unread === "number" ? it.unread : 0;
+        if (serverUnread > 0) return acc + serverUnread;
+        // Fallback a localStorage si el servidor no envía unread
         const cid = it?.id_chat ?? it?.id;
         return acc + (cid ? getUnreadCountByChatId(cid) : 0);
       }, 0);
@@ -908,8 +914,14 @@ export default function CoachDetailPage({
             })()
           : 0;
 
+      // Usar unread del servidor si está disponible, sino fallback a comparación de timestamps
+      const serverUnreadTop =
+        typeof top?.unread === "number" ? top.unread : null;
       const lastRead = topChatId != null ? getLastReadByChatId(topChatId) : 0;
-      const hasUnread = lastAt > (lastRead || 0);
+      const hasUnread =
+        serverUnreadTop !== null
+          ? serverUnreadTop > 0
+          : lastAt > (lastRead || 0);
 
       if (topChatId && group.name && group.name !== "(Sin nombre)") {
         setCachedContactName(topChatId, group.name);
