@@ -244,6 +244,28 @@ export default function TicketsSummaryCard({
           </Card>
         </div>
       )}
+
+      {metrics.avgInformanteResponseMs !== null &&
+        metrics.informanteRespondedCount > 0 && (
+          <div className="md:col-span-4">
+            <Card className="border-sky-200 shadow-none">
+              <CardHeader className="flex items-center gap-3">
+                <div className="rounded-lg bg-sky-50 p-2 border border-sky-200">
+                  <Clock className="h-4 w-4 text-sky-600" />
+                </div>
+                <div className="text-sm font-semibold">Tiempo medio - informantes</div>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="mt-2 text-sm text-gray-700">
+                  {fmtDuration(metrics.avgInformanteResponseMs ?? 0)}
+                </div>
+                <div className="mt-2 text-xs text-gray-500">
+                  {metrics.informanteRespondedCount} tickets con respuesta ({metrics.informanteRespondedPct}% del total)
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
     </div>
   );
 }

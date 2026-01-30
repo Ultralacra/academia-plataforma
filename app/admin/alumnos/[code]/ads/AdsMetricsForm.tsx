@@ -125,6 +125,7 @@ export default function AdsMetricsForm({
     requiere_interv?: boolean;
     fase?: string;
     subfase?: string;
+    subfase_color?: string;
     coach_copy?: string;
     coach_plat?: string;
     obs?: string;
@@ -292,6 +293,7 @@ export default function AdsMetricsForm({
         alumno_id: matched?.id ?? null,
         alumno_codigo: studentCode,
         form: data,
+        subfase_color: data.subfase_color ?? null,
         saved_at: new Date().toISOString(),
       };
 
@@ -775,6 +777,22 @@ export default function AdsMetricsForm({
                       <SelectItem value="Copy/Oferta">Copy/Oferta</SelectItem>
                       <SelectItem value="Técnica">Técnica</SelectItem>
                       <SelectItem value="Ads">Ads</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Trascendencia</Label>
+                  <Select
+                    value={data.subfase_color || ""}
+                    onValueChange={(v) => onChange("subfase_color", v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona color" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="No aplica">No aplica</SelectItem>
+                      <SelectItem value="Por definir">Por definir</SelectItem>
+                      <SelectItem value="Realizado">Realizado</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
