@@ -3483,7 +3483,20 @@ export default function TicketsBoard({
             </div>
           </SheetHeader>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto relative">
+            {(ticketDetailLoading ||
+              filesLoading ||
+              commentsLoading ||
+              internalNotesLoading ||
+              previousTicketsLoading ||
+              historyDetailLoading ||
+              historyFilesLoading ||
+              historyCommentsLoading) &&
+              selectedTicket && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 dark:bg-black/60">
+                  <Spinner />
+                </div>
+              )}
             {!selectedTicket ? (
               <div className="flex items-center justify-center h-full text-sm text-slate-500">
                 Selecciona un {uiTicketLower}
