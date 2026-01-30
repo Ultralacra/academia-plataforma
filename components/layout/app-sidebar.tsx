@@ -84,7 +84,11 @@ const adminItems: MenuItem[] = [
       { title: "Alumnos", url: "/admin/students", icon: GraduationCap },
       { title: "Coachs", url: "/admin/teams", icon: Users },
       { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
-      { title: "Métricas Chat", url: "/admin/metrics/chat", icon: MessageSquare },
+      {
+        title: "Métricas Chat",
+        url: "/admin/metrics/chat",
+        icon: MessageSquare,
+      },
     ],
   },
   { title: "Opciones", url: "/admin/opciones", icon: Settings },

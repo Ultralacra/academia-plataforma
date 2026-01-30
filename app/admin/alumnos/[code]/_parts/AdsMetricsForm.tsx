@@ -1176,18 +1176,20 @@ export default function AdsMetricsForm({
                         <option value="Técnica">Técnica</option>
                         <option value="Ads">Ads</option>
                       </select>
-                        <div className="mt-2">
-                          <Label>Trascendencia</Label>
-                          <select
-                            value={data.subfase_color || ""}
-                            onChange={(e) => onChange("subfase_color", e.target.value)}
-                            className="w-full h-9 rounded-md border px-3 text-sm"
-                          >
-                            <option value="No aplica">No aplica</option>
-                            <option value="Por definir">Por definir</option>
-                            <option value="Realizado">Realizado</option>
-                          </select>
-                        </div>
+                      <div className="mt-2">
+                        <Label>Trascendencia</Label>
+                        <select
+                          value={data.subfase_color || ""}
+                          onChange={(e) =>
+                            onChange("subfase_color", e.target.value)
+                          }
+                          className="w-full h-9 rounded-md border px-3 text-sm"
+                        >
+                          <option value="No aplica">No aplica</option>
+                          <option value="Por definir">Por definir</option>
+                          <option value="Realizado">Realizado</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 </CardContent>
