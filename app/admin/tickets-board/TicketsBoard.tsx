@@ -5,6 +5,7 @@ import type React from "react";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
+import { listMetadata } from "@/lib/metadata";
 import {
   getTickets,
   type TicketBoardItem,
@@ -270,6 +271,7 @@ export default function TicketsBoard({
   const canManageTickets =
     isAdmin || privilegedTicketManagerCodes.has(currentUserCodigo);
   const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
+  const [adsMetadataMap, setAdsMetadataMap] = useState<Record<string, any>>({});
   const ticketsRef = useRef<TicketBoardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshBump, setRefreshBump] = useState(0);
@@ -744,6 +746,54 @@ export default function TicketsBoard({
           );
         });
         setTickets(validTickets);
+        // Cargar metadata ADS y mapear por alumno
+        try {
+          const md = await listMetadata<any>();
+          const items = Array.isArray(md?.items) ? md.items : [];
+          const map: Record<string, any> = {};
+          for (const m of items) {
+            try {
+              if (String(m?.entity) !== "ads_metrics") continue;
+              const p = m.payload || {};
+
+              // Normalizar posibles claves: entity_id, payload.alumno_id, payload.alumno_codigo, payload.alumno_nombre
+              const rawKeys: Array<string | null> = [];
+              if (m.entity_id != null) rawKeys.push(String(m.entity_id));
+              if (p?.alumno_id != null) rawKeys.push(String(p.alumno_id));
+              if (p?.alumno_codigo != null)
+                rawKeys.push(String(p.alumno_codigo));
+              if (p?.alumno_nombre != null)
+                rawKeys.push(String(p.alumno_nombre));
+
+              // Also add lowercased / trimmed name variant for matching by name
+              const extraKeys: string[] = [];
+              for (const k of rawKeys) {
+                if (!k) continue;
+                extraKeys.push(k);
+                const t = String(k).trim();
+                if (t && t !== k) extraKeys.push(t);
+                const lower = t.toLowerCase();
+                if (lower && lower !== t) extraKeys.push(lower);
+              }
+
+              const keys = Array.from(
+                new Set([
+                  ...(rawKeys.filter(Boolean) as string[]),
+                  ...extraKeys,
+                ]),
+              );
+              for (const k of keys) {
+                // preferir la más reciente (sobrescribe si existe)
+                map[k] = m;
+              }
+            } catch (err) {
+              console.error("metadata map error", err);
+            }
+          }
+          setAdsMetadataMap(map);
+        } catch (e) {
+          console.error("Error cargando metadata ADS:", e);
+        }
       } catch (e) {
         console.error(e);
         toast({ title: `Error cargando ${uiTicketsLower}` });
@@ -2545,9 +2595,86 @@ export default function TicketsBoard({
 
                                 // 4. Renderizar
                                 if (result.length === 0) return null;
+                                // --- Render ADS metadata summary for this ticket (canvas) ---
+                                // Try multiple keys to find ADS metadata: id_alumno, alumno_nombre (trim/lower), and studentCode
+                                const candidates: string[] = [];
+                                const rawIdAlumno = String(
+                                  (t as any).id_alumno ?? "",
+                                ).trim();
+                                if (rawIdAlumno) candidates.push(rawIdAlumno);
+                                const alumnoNombre = String(
+                                  (t as any).alumno_nombre ?? "",
+                                ).trim();
+                                if (alumnoNombre) {
+                                  candidates.push(alumnoNombre);
+                                  candidates.push(alumnoNombre.toLowerCase());
+                                }
+                                if (studentCode)
+                                  candidates.push(String(studentCode).trim());
+
+                                let adm: any = null;
+                                for (const c of candidates) {
+                                  if (!c) continue;
+                                  adm = adsMetadataMap[c] ?? null;
+                                  if (adm) break;
+                                }
+                                const admPayload = adm?.payload ?? null;
 
                                 return (
                                   <div className="flex flex-wrap gap-1.5">
+                                    {admPayload ? (
+                                      // Mostrar todas las badges: permitir wrap para que no se corten
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
+                                          Fase: {admPayload?.fase ?? "—"}
+                                        </Badge>
+                                        {admPayload?.subfase ? (
+                                          <Badge
+                                            variant="secondary"
+                                            className="text-xs"
+                                          >
+                                            {admPayload.subfase}
+                                          </Badge>
+                                        ) : null}
+                                        {admPayload?.subfase_color ? (
+                                          <Badge
+                                            variant="default"
+                                            className="text-xs"
+                                          >
+                                            {admPayload.subfase_color}
+                                          </Badge>
+                                        ) : null}
+                                        <Badge
+                                          variant={
+                                            admPayload?.pauta_activa
+                                              ? "default"
+                                              : "outline"
+                                          }
+                                          className="text-xs"
+                                        >
+                                          Pauta activa:{" "}
+                                          {admPayload?.pauta_activa
+                                            ? "Sí"
+                                            : "No"}
+                                        </Badge>
+                                        <Badge
+                                          variant={
+                                            admPayload?.requiere_interv
+                                              ? "destructive"
+                                              : "secondary"
+                                          }
+                                          className="text-xs"
+                                        >
+                                          Requiere intervención:{" "}
+                                          {admPayload?.requiere_interv
+                                            ? "Sí"
+                                            : "No"}
+                                        </Badge>
+                                      </div>
+                                    ) : null}
                                     {result.slice(0, 3).map((c, idx) => (
                                       <span
                                         key={`${
@@ -3082,6 +3209,91 @@ export default function TicketsBoard({
                           );
                         })}
                       </div>
+
+                      {/* ADS metadata (detalle) - justo debajo de coaches asignados */}
+                      {(() => {
+                        const alumnoId = String(
+                          historyDetail?.id_alumno ?? "",
+                        ).trim();
+                        const alumnoNombre = String(
+                          historyDetail?.alumno_nombre ?? "",
+                        ).trim();
+                        const candidates: string[] = [];
+                        if (alumnoId) candidates.push(alumnoId);
+                        if (alumnoNombre) {
+                          candidates.push(alumnoNombre);
+                          candidates.push(alumnoNombre.toLowerCase());
+                        }
+                        if (studentCode)
+                          candidates.push(String(studentCode).trim());
+
+                        let adm: any = null;
+                        for (const c of candidates) {
+                          if (!c) continue;
+                          adm = adsMetadataMap[c] ?? null;
+                          if (adm) break;
+                        }
+                        const admPayload = adm?.payload ?? null;
+                        if (!admPayload) return null;
+                        return (
+                          <div className="space-y-2">
+                            <div className="text-xs font-medium text-slate-600">
+                              ADS (último registro)
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="inline-flex items-center">
+                                <Badge variant="outline" className="text-sm">
+                                  <span className="truncate max-w-[160px]">
+                                    {admPayload?.fase ?? "—"}
+                                  </span>
+                                </Badge>
+                              </div>
+                              {admPayload?.subfase ? (
+                                <Badge variant="secondary" className="text-sm">
+                                  <span className="truncate max-w-[220px]">
+                                    {admPayload.subfase}
+                                  </span>
+                                </Badge>
+                              ) : null}
+                              {admPayload?.subfase_color ? (
+                                <Badge variant="default" className="text-sm">
+                                  <span className="truncate max-w-[120px]">
+                                    {admPayload.subfase_color}
+                                  </span>
+                                </Badge>
+                              ) : null}
+                              <Badge
+                                variant={
+                                  admPayload?.pauta_activa
+                                    ? "default"
+                                    : "outline"
+                                }
+                                className="text-sm"
+                              >
+                                <span className="truncate max-w-[180px]">
+                                  {admPayload?.pauta_activa
+                                    ? "Pauta activa"
+                                    : "Pauta inactiva"}
+                                </span>
+                              </Badge>
+                              <Badge
+                                variant={
+                                  admPayload?.requiere_interv
+                                    ? "destructive"
+                                    : "secondary"
+                                }
+                                className="text-sm"
+                              >
+                                <span className="truncate max-w-[200px]">
+                                  {admPayload?.requiere_interv
+                                    ? "Requiere intervención"
+                                    : "Sin intervención"}
+                                </span>
+                              </Badge>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })()}

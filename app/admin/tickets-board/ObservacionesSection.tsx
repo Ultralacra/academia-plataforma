@@ -46,6 +46,8 @@ import {
 } from "@/components/ui/select";
 import { buildUrl } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
+import { listMetadata } from "@/lib/metadata";
+import { Badge } from "@/components/ui/badge";
 
 const AREAS = [
   "COPY",
@@ -87,11 +89,57 @@ export default function ObservacionesSection({
     string[]
   >([]);
   const [submitting, setSubmitting] = useState(false);
+  const [adsMetadata, setAdsMetadata] = useState<any | null>(null);
+  const [adsMetadataLoading, setAdsMetadataLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadObservaciones();
+    loadAdsMetadata();
   }, [ticketCode, alumnoId]);
+
+  const loadAdsMetadata = async () => {
+    if (!alumnoId) return setAdsMetadata(null);
+    setAdsMetadataLoading(true);
+    try {
+      const res = await listMetadata<any>();
+      const items = Array.isArray(res?.items) ? res.items : [];
+      // Buscar metadata de entidad 'ads_metrics' para este alumno
+      const matches = items.filter((m: any) => {
+        try {
+          if (String(m?.entity) !== "ads_metrics") return false;
+          if (String(m?.entity_id) === String(alumnoId)) return true;
+          const p = m?.payload || {};
+          if (p?.alumno_id && String(p.alumno_id) === String(alumnoId))
+            return true;
+          if (p?.alumno_codigo && String(p.alumno_codigo) === String(alumnoId))
+            return true;
+        } catch {}
+        return false;
+      });
+      if (matches.length === 0) {
+        setAdsMetadata(null);
+      } else {
+        // elegir la más reciente por payload._saved_at si existe, sino la de mayor id
+        matches.sort((a: any, b: any) => {
+          const ta = a?.payload?._saved_at
+            ? Date.parse(a.payload._saved_at)
+            : 0;
+          const tb = b?.payload?._saved_at
+            ? Date.parse(b.payload._saved_at)
+            : 0;
+          if (ta !== tb) return tb - ta;
+          return (b.id || 0) - (a.id || 0);
+        });
+        setAdsMetadata(matches[0]);
+      }
+    } catch (e) {
+      console.error("Error cargando metadata ADS:", e);
+      setAdsMetadata(null);
+    } finally {
+      setAdsMetadataLoading(false);
+    }
+  };
 
   const loadObservaciones = async () => {
     if (!ticketCode) return;
@@ -210,6 +258,18 @@ export default function ObservacionesSection({
       const allUrls = [...existingConstanciaUrls, ...uploadedUrls];
       const constanciaJson = JSON.stringify(allUrls);
 
+      // Preparar snapshot de metadata ADS para asociar a la observación
+      const adsSnapshot = adsMetadata
+        ? {
+            id: adsMetadata.id,
+            fase: adsMetadata.payload?.fase ?? null,
+            subfase: adsMetadata.payload?.subfase ?? null,
+            trascendencia: adsMetadata.payload?.subfase_color ?? null,
+            pauta_activa: adsMetadata.payload?.pauta_activa ?? null,
+            requiere_interv: adsMetadata.payload?.requiere_interv ?? null,
+          }
+        : null;
+
       if (editingId && editingObservacion) {
         // Actualizar - IMPORTANTE: enviar TODOS los campos del payload original
         const originalPayload = editingObservacion.payload;
@@ -227,6 +287,10 @@ export default function ObservacionesSection({
           alumno_nombre: originalPayload.alumno_nombre,
           ticket_codigo: originalPayload.ticket_codigo,
           deleted: false, // Explícitamente mantener como no eliminado
+          ads_metadata_id:
+            adsSnapshot?.id ?? originalPayload?.ads_metadata_id ?? null,
+          ads_metadata_snapshot:
+            adsSnapshot ?? originalPayload?.ads_metadata_snapshot ?? null,
         });
         toast({
           title: "Actualizado",
@@ -244,6 +308,8 @@ export default function ObservacionesSection({
           creado_por_id: coachId,
           alumno_id: alumnoId,
           ticket_codigo: ticketCode,
+          ads_metadata_id: adsSnapshot?.id ?? null,
+          ads_metadata_snapshot: adsSnapshot ?? null,
         });
         toast({
           title: "Creado",
@@ -252,7 +318,8 @@ export default function ObservacionesSection({
       }
       setDialogOpen(false);
       resetForm();
-      loadObservaciones();
+      await loadObservaciones();
+      await loadAdsMetadata();
     } catch (error) {
       console.error("Error guardando observación:", error);
       toast({
@@ -274,7 +341,8 @@ export default function ObservacionesSection({
         title: "Eliminado",
         description: "Observación eliminada correctamente",
       });
-      loadObservaciones();
+      await loadObservaciones();
+      await loadAdsMetadata();
     } catch (error) {
       console.error("Error eliminando observación:", error);
       toast({
@@ -346,7 +414,8 @@ export default function ObservacionesSection({
             ? "Marcada como pendiente"
             : "Marcada como realizada",
       });
-      loadObservaciones();
+      await loadObservaciones();
+      await loadAdsMetadata();
     } catch (error) {
       console.error("Error actualizando estado:", error);
       toast({
@@ -403,6 +472,8 @@ export default function ObservacionesSection({
           Nueva tarea
         </Button>
       </div>
+
+      {/* Nota: la vista de ADS se muestra ahora en la pestaña General del detalle */}
 
       {!alumnoId ? (
         <div className="text-sm text-amber-600 py-4 text-center bg-amber-50 rounded border border-amber-200 p-3">
