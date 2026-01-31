@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,7 @@ export default function EditOptionModal({
   const [nicho, setNicho] = useState<string | undefined>(current?.nicho);
   const [saving, setSaving] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const pauseToggleRef = useRef(false);
   const [pendingSaveAfterPauseDetails, setPendingSaveAfterPauseDetails] =
     useState(false);
   const [pauseRange, setPauseRange] = useState<{
@@ -93,8 +95,15 @@ export default function EditOptionModal({
   ) {
     if (!clientCode) return;
     setSaving(true);
+    console.debug("save() start", { nextPauseRange });
     try {
       const effectivePauseRange = nextPauseRange ?? pauseRange;
+      console.debug("save() effectivePauseRange", {
+        effectivePauseRange,
+        pauseRange,
+        nextPauseRange,
+        pendingSaveAfterPauseDetails,
+      });
       const fd = new FormData();
 
       // Detectar si el estado seleccionado es PAUSADO
@@ -116,12 +125,15 @@ export default function EditOptionModal({
         etapa !== current?.etapa;
       // Pedido explícito: no enviar nicho por ahora.
 
-      // Si ya está en pausa y quiere agregar más pausas, solo necesitamos las fechas
+      // Si ya está en pausa y quiere agregar más pausas, solo necesitamos las fechas.
+      // Antes se requería que `isPaused` fuera true (es decir, que el select mostrara
+      // explícitamente PAUSADO). Pero cuando el alumno ya está pausado y el usuario
+      // abre "Agregar nueva pausa" no siempre se cambia el select, por lo que
+      // `estado` puede ser undefined. Tratar ese caso igualmente como "agregar pausa".
       const isAddingPauseToAlreadyPaused =
         isCurrentlyPaused &&
-        isPaused &&
-        effectivePauseRange?.start &&
-        effectivePauseRange?.end;
+        !!effectivePauseRange?.start &&
+        !!effectivePauseRange?.end;
 
       const hasPauseDetails =
         !!effectivePauseRange?.start &&
@@ -131,6 +143,7 @@ export default function EditOptionModal({
 
       // Si NO está en pausa y quiere pausar, enviar estado + fechas + tipo/motivo
       // Si YA está en pausa y agrega otra pausa, reenviar estado + fechas + tipo/motivo
+      console.debug("save() flags", { isAddingPauseToAlreadyPaused, isPaused });
       if (isAddingPauseToAlreadyPaused) {
         const estadoToSend = String(estado ?? current?.estado ?? "").trim();
         if (estadoToSend) fd.set("estado", estadoToSend);
@@ -233,7 +246,20 @@ export default function EditOptionModal({
                     const match = estados.find((x) => x.key === v);
                     const label = String(match?.value || v || "").toUpperCase();
                     if (label.includes("PAUSADO")) {
-                      setPauseOpen(true);
+                      // Marcar que el guardado quedó pendiente y abrir el modal.
+                      setPendingSaveAfterPauseDetails(true);
+                      // Evitar abrir el modal en ráfaga si ya se está abriendo/cerrando
+                      if (!pauseOpen && !pauseToggleRef.current) {
+                        pauseToggleRef.current = true;
+                        setPauseOpen(true);
+                        // permitir toggles otra vez tras 400ms
+                        setTimeout(() => (pauseToggleRef.current = false), 400);
+                      } else {
+                        console.debug("Ignored rapid pause open request", {
+                          label,
+                          pauseOpen,
+                        });
+                      }
                     }
                   }}
                 >
@@ -290,7 +316,14 @@ export default function EditOptionModal({
                       onClick={() => {
                         // UX: si el usuario abre "Agregar nueva pausa", asumimos que quiere guardarla.
                         setPendingSaveAfterPauseDetails(true);
-                        setPauseOpen(true);
+                        if (!pauseOpen && !pauseToggleRef.current) {
+                          pauseToggleRef.current = true;
+                          setPauseOpen(true);
+                          setTimeout(
+                            () => (pauseToggleRef.current = false),
+                            400,
+                          );
+                        }
                       }}
                     >
                       + Agregar nueva pausa
@@ -367,7 +400,7 @@ export default function EditOptionModal({
               >
                 Cancelar
               </Button>
-              <Button onClick={save} disabled={saving}>
+              <Button onClick={() => save()} disabled={saving}>
                 Guardar
               </Button>
             </div>
@@ -376,18 +409,23 @@ export default function EditOptionModal({
       </Dialog>
       <PauseDatesModal
         open={pauseOpen}
-        onOpenChange={(v) => setPauseOpen(v)}
+        onOpenChange={(v) => {
+          // sincronizar flag para evitar toggles en ráfaga
+          if (!v) {
+            pauseToggleRef.current = true;
+            setTimeout(() => (pauseToggleRef.current = false), 400);
+          }
+          setPauseOpen(v);
+        }}
         initialRange={pauseRange || undefined}
         onConfirm={(r) => {
+          console.debug("PauseDatesModal onConfirm", {
+            r,
+            pendingSaveAfterPauseDetails,
+          });
+          // Solo almacenar el rango; no ejecutar el guardado automático.
+          // El guardado real debe ocurrir cuando el usuario pulse el botón "Guardar".
           setPauseRange(r);
-          // Si el guardado estaba pendiente (caso típico: eligió PAUSADO y faltaban fechas),
-          // guardamos automáticamente para que el contador/historial se actualice sin un click extra.
-          if (pendingSaveAfterPauseDetails) {
-            // Evitar depender del setState async: usar el rango recién confirmado.
-            queueMicrotask(() => {
-              void save(r);
-            });
-          }
         }}
       />
     </>
