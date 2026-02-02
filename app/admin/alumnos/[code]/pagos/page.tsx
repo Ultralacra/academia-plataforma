@@ -627,6 +627,76 @@ export default function StudentPaymentsPage() {
     setRegisterOpen(true);
   }
 
+  async function handleSendPaymentReminder(
+    detalleCodigo: string,
+    cuotaCodigo: string,
+    date: Date,
+    amount: number,
+  ) {
+    if (!studentEmail) {
+      toast({ title: "No hay correo del alumno", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const formattedDate = format(new Date(date), "dd 'de' MMM yyyy", {
+        locale: es,
+      });
+      const subject = `Recordatorio de pago: cuota ${cuotaCodigo} vence ${formattedDate}`;
+
+      const body = {
+        template: "payment_reminder",
+        recipients: [
+          {
+            email: studentEmail,
+            name: studentName ?? undefined,
+          },
+        ],
+        subject,
+        appName: "Hotselling",
+        origin:
+          typeof window !== "undefined" ? window.location.origin : undefined,
+        portalLink:
+          typeof window !== "undefined"
+            ? window.location.origin + "/login"
+            : undefined,
+        payment: {
+          cuotaCodigo: String(cuotaCodigo || ""),
+          dueDate: format(new Date(date), "yyyy-MM-dd"),
+          amount: amount,
+        },
+      } as any;
+
+      const res = await fetch("/api/brevo/send-test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        credentials: "include",
+      });
+
+      const jsonRes = await res
+        .json()
+        .catch(() => ({ status: "error", message: "Respuesta inválida" }));
+      if (!res.ok || jsonRes?.status !== "success") {
+        console.error("[Pagos] Error enviando mail", jsonRes);
+        toast({
+          title: "Error enviando mail",
+          description: String(jsonRes?.message ?? "Error"),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Correo enviado",
+        description: `Notificación enviada a ${studentEmail}`,
+      });
+    } catch (e) {
+      console.error("[Pagos] Excepción enviando mail", e);
+      toast({ title: "Error enviando mail", variant: "destructive" });
+    }
+  }
+
   function handleSplitInstallment(originalId: string) {
     const originalIndex = editingInstallments.findIndex(
       (i) => i.id === originalId,
@@ -1314,6 +1384,25 @@ export default function StudentPaymentsPage() {
                                     }
                                   >
                                     Validar
+                                  </Button>
+                                )}
+                                {item.status !== "paid" && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-6 text-xs px-2"
+                                    onClick={() =>
+                                      void handleSendPaymentReminder(
+                                        String(
+                                          (item as any).detalleCodigo || "",
+                                        ),
+                                        String(item.cuotaCodigo || ""),
+                                        item.date,
+                                        item.amount,
+                                      )
+                                    }
+                                  >
+                                    Enviar mail
                                   </Button>
                                 )}
                               </div>

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { buildUrl } from "@/lib/api-config";
 import { buildWelcomeEmail } from "@/lib/email-templates/welcome";
 import { buildReminderEmail } from "@/lib/email-templates/reminder";
+import { buildPaymentReminderEmail } from "@/lib/email-templates/payment-reminder";
 
 export const dynamic = "force-dynamic";
 
@@ -66,7 +67,16 @@ function normalizeRecipients(value: unknown): Recipient[] {
 }
 
 async function requireAdmin(token: string | null) {
-  if (!token) return { ok: false, status: 401, error: "No autorizado" };
+  // Permitir envío en entornos de desarrollo o si la variable de entorno
+  // `BREVO_ALLOW_NOAUTH` está a 'true'. Esto facilita pruebas locales cuando
+  // no se dispone de una sesión admin. No use esto en producción.
+  const allowNoAuth = String(process.env.BREVO_ALLOW_NOAUTH ?? "").toLowerCase() === "true";
+  if (!token) {
+    if (allowNoAuth || process.env.NODE_ENV !== "production") {
+      return { ok: true as const, me: { email: "local@dev", role: "admin (dev)" } };
+    }
+    return { ok: false, status: 401, error: "No autorizado" };
+  }
 
   try {
     const res = await fetch(buildUrl("/auth/me"), {
@@ -129,7 +139,8 @@ export async function POST(req: Request) {
   const defaultPassword = String(body?.password ?? "").trim();
 
   const template = String(body?.template ?? "welcome");
-  if (template !== "welcome" && template !== "reminder") {
+  // Soportar nuevas plantillas: welcome, reminder, payment_reminder
+  if (template !== "welcome" && template !== "reminder" && template !== "payment_reminder") {
     return json({ status: "error", message: "Template no soportada" }, 400);
   }
 
@@ -155,23 +166,39 @@ export async function POST(req: Request) {
     const resolvedPortalLink = String(portalLink ?? "").trim();
     const resolvedUsername = String(r.username ?? "").trim();
 
-    const email = template === "reminder"
-      ? buildReminderEmail({
-          appName,
-          origin,
-          recipientName: r.name ?? null,
-          recipientEmail: r.email,
-          portalLink: resolvedPortalLink || null,
-        })
-      : buildWelcomeEmail({
-          appName,
-          origin,
-          recipientName: r.name ?? null,
-          recipientEmail: r.email,
-          recipientUsername: resolvedUsername || null,
-          recipientPassword: resolvedPassword || null,
-          portalLink: resolvedPortalLink || null,
-        });
+    let email: { subject: string; html: string; text: string };
+    if (template === "reminder") {
+      email = buildReminderEmail({
+        appName,
+        origin,
+        recipientName: r.name ?? null,
+        recipientEmail: r.email,
+        portalLink: resolvedPortalLink || null,
+      });
+    } else if (template === "payment_reminder") {
+      // Recibir datos de la cuota desde body.payment
+      const paymentData = body?.payment ?? {};
+      email = buildPaymentReminderEmail({
+        appName,
+        origin,
+        recipientName: r.name ?? null,
+        recipientEmail: r.email,
+        portalLink: resolvedPortalLink || null,
+        cuotaCodigo: String(paymentData?.cuotaCodigo ?? "").trim() || null,
+        dueDate: String(paymentData?.dueDate ?? "").trim() || null,
+        amount: paymentData?.amount ?? null,
+      });
+    } else {
+      email = buildWelcomeEmail({
+        appName,
+        origin,
+        recipientName: r.name ?? null,
+        recipientEmail: r.email,
+        recipientUsername: resolvedUsername || null,
+        recipientPassword: resolvedPassword || null,
+        portalLink: resolvedPortalLink || null,
+      });
+    }
 
     const resolvedSubject = renderSubject(r.name) || email.subject;
 

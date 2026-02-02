@@ -2621,57 +2621,33 @@ export default function TicketsBoard({
                                 const admPayload = adm?.payload ?? null;
 
                                 return (
-                                  <div className="flex flex-wrap gap-1.5">
+                                  <div className="flex flex-col items-start gap-1.5">
                                     {admPayload ? (
                                       // Mostrar todas las badges: permitir wrap para que no se corten
-                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                      <div className="flex flex-col items-start gap-1.5">
                                         <Badge
                                           variant="outline"
                                           className="text-xs"
                                         >
-                                          Fase: {admPayload?.fase ?? "—"}
-                                        </Badge>
-                                        {admPayload?.subfase ? (
-                                          <Badge
-                                            variant="secondary"
-                                            className="text-xs"
-                                          >
-                                            {admPayload.subfase}
-                                          </Badge>
-                                        ) : null}
-                                        {admPayload?.subfase_color ? (
-                                          <Badge
-                                            variant="default"
-                                            className="text-xs"
-                                          >
-                                            {admPayload.subfase_color}
-                                          </Badge>
-                                        ) : null}
-                                        <Badge
-                                          variant={
-                                            admPayload?.pauta_activa
-                                              ? "default"
-                                              : "outline"
-                                          }
-                                          className="text-xs"
-                                        >
-                                          Pauta activa:{" "}
-                                          {admPayload?.pauta_activa
-                                            ? "Sí"
-                                            : "No"}
+                                          {`Fase: ${admPayload?.fase ?? "—"}`}
                                         </Badge>
                                         <Badge
-                                          variant={
-                                            admPayload?.requiere_interv
-                                              ? "destructive"
-                                              : "secondary"
-                                          }
+                                          variant="outline"
                                           className="text-xs"
                                         >
-                                          Requiere intervención:{" "}
-                                          {admPayload?.requiere_interv
-                                            ? "Sí"
-                                            : "No"}
+                                          {`Trascendencia: ${admPayload?.subfase ?? "Por definir"}`}
+                                        </Badge>
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
+                                          {`Pauta activa: ${admPayload?.pauta_activa ? "Sí" : "No"}`}
+                                        </Badge>
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
+                                          {`Requiere intervención: ${admPayload?.requiere_interv ? "Sí" : "No"}`}
                                         </Badge>
                                       </div>
                                     ) : null}
@@ -3240,14 +3216,14 @@ export default function TicketsBoard({
                             <div className="text-xs font-medium text-slate-600">
                               ADS (último registro)
                             </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="inline-flex items-center">
-                                <Badge variant="outline" className="text-sm">
-                                  <span className="truncate max-w-[160px]">
-                                    {admPayload?.fase ?? "—"}
-                                  </span>
-                                </Badge>
-                              </div>
+
+                            <div className="flex flex-col items-start gap-2">
+                              <Badge variant="outline" className="text-sm">
+                                <span className="truncate max-w-[160px]">
+                                  {admPayload?.fase ?? "—"}
+                                </span>
+                              </Badge>
+
                               {admPayload?.subfase ? (
                                 <Badge variant="secondary" className="text-sm">
                                   <span className="truncate max-w-[220px]">
@@ -3255,6 +3231,7 @@ export default function TicketsBoard({
                                   </span>
                                 </Badge>
                               ) : null}
+
                               {admPayload?.subfase_color ? (
                                 <Badge variant="default" className="text-sm">
                                   <span className="truncate max-w-[120px]">
@@ -3262,6 +3239,7 @@ export default function TicketsBoard({
                                   </span>
                                 </Badge>
                               ) : null}
+
                               <Badge
                                 variant={
                                   admPayload?.pauta_activa
@@ -3276,6 +3254,7 @@ export default function TicketsBoard({
                                     : "Pauta inactiva"}
                                 </span>
                               </Badge>
+
                               <Badge
                                 variant={
                                   admPayload?.requiere_interv
