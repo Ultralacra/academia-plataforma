@@ -2635,7 +2635,14 @@ export default function TicketsBoard({
                                           variant="outline"
                                           className="text-xs"
                                         >
-                                          {`Trascendencia: ${admPayload?.subfase ?? "Por definir"}`}
+                                          {`Subfase: ${admPayload?.subfase ?? "Por definir"}`}
+                                        </Badge>
+
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
+                                          {`Trascendencia: ${admPayload?.subfase.color ?? "Por definir"}`}
                                         </Badge>
                                         <Badge
                                           variant="outline"
@@ -3219,11 +3226,20 @@ export default function TicketsBoard({
 
                             <div className="flex flex-col items-start gap-2">
                               <Badge variant="outline" className="text-sm">
-                                <span className="truncate max-w-[160px]">
-                                  {admPayload?.fase ?? "—"}
-                                </span>
+                                Fase de optimizacion Ads:{" "}
+                                {admPayload?.fase ?? "—"}
                               </Badge>
-
+                              <Badge variant="outline" className="text-sm">
+                                Subfase: {admPayload?.subfase ?? "—"}
+                              </Badge>
+                              <Badge variant="outline" className="text-sm">
+                                Trascendencia:{" "}
+                                {admPayload?.subfase_color ?? "Por definir"}
+                              </Badge>
+                              <Badge variant="outline" className="text-xs">
+                                Trascendencia:{" "}
+                                {admPayload?.subfase_color ?? "Por definir"}
+                              </Badge>
                               {admPayload?.subfase ? (
                                 <Badge variant="secondary" className="text-sm">
                                   <span className="truncate max-w-[220px]">
