@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
+import { apiFetch } from "@/lib/api-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import {
@@ -129,6 +130,8 @@ export default function StudentPaymentsPage() {
   const [config, setConfig] = useState<PaymentConfig | null>(null);
   const [logs, setLogs] = useState<ChangeLog[]>([]);
   const [paymentCodigo, setPaymentCodigo] = useState<string | null>(null);
+  const [studentName, setStudentName] = useState<string | null>(null);
+  const [studentEmail, setStudentEmail] = useState<string | null>(null);
   const [selectedDetalleCodigo, setSelectedDetalleCodigo] = useState<
     string | null
   >(null);
@@ -277,6 +280,64 @@ export default function StudentPaymentsPage() {
       const plan = (rawDetail as any)?.data ?? rawDetail;
       setPaymentCodigo(planCodigo);
 
+      // Extraer nombre y correo del cliente desde los datos disponibles
+      const nameCandidates = [
+        planRow?.cliente_nombre,
+        planRow?.nombre,
+        (plan as any)?.cliente_nombre,
+        (plan as any)?.nombre,
+        (plan as any)?.nombre_cliente,
+        (plan as any)?.alumno_nombre,
+      ];
+      const emailCandidates = [
+        planRow?.email,
+        planRow?.correo,
+        (plan as any)?.email,
+        (plan as any)?.cliente_email,
+        (plan as any)?.contact_email,
+        (plan as any)?.correo,
+      ];
+      const resolvedName = nameCandidates.find((v) => v && String(v).trim());
+      let resolvedEmail = emailCandidates.find((v) => v && String(v).trim());
+      setStudentName(resolvedName ? String(resolvedName).trim() : null);
+      setStudentEmail(resolvedEmail ? String(resolvedEmail).trim() : null);
+
+      // Si no encontramos email en el plan, consultar /users/:codigo para obtener datos completos
+      if (!resolvedEmail && code) {
+        try {
+          const userResp: any = await apiFetch(`/users/${encodeURIComponent(code)}`);
+          const user = (userResp && (userResp.data ?? userResp)) || null;
+          if (user) {
+            const userEmail = user.email || user.correo || user.contact_email || user.email_address;
+            const userName = user.name || user.nombre || user.fullname;
+            if (userEmail) {
+              resolvedEmail = String(userEmail).trim();
+              setStudentEmail(resolvedEmail);
+            }
+            if (userName && !resolvedName) {
+              setStudentName(String(userName).trim());
+            }
+          }
+        } catch (e) {
+          // no bloquear la vista por fallo de este request
+          console.warn("[Pagos] Error consultando /users/:codigo", e);
+        }
+      }
+      // Debug: imprimir en consola datos crudos y resueltos del alumno
+      try {
+        console.info("[Pagos] Alumno datos (candidates):", {
+          code,
+          planRow,
+          plan,
+          resolvedName,
+          resolvedEmail,
+          studentName: resolvedName ? String(resolvedName).trim() : null,
+          studentEmail: resolvedEmail ? String(resolvedEmail).trim() : null,
+        });
+      } catch (err) {
+        console.error("[Pagos] Error al imprimir datos del alumno", err);
+      }
+
       // Cargar config desde el plan (cuotas/detalles) y renderizar en campos
       const cfg = apiDetailToConfig(
         code,
@@ -309,6 +370,19 @@ export default function StudentPaymentsPage() {
         created_at: d?.created_at ?? undefined,
       }));
       setPayments(paidPayments);
+      // Imprimir en consola las fechas (y códigos) de las cuotas que faltan por pagar
+      try {
+        const unpaid = detalles.filter((d) => !isPaidStatus(d?.estatus));
+        const unpaidDates = unpaid.map((d) => ({
+          cuota: d?.cuota_codigo ?? d?.codigo ?? null,
+          date: (d?.fecha_pago || "").slice(0, 10) || null,
+          monto: d?.monto ?? null,
+          estatus: d?.estatus ?? null,
+        }));
+        console.info("[Pagos] Cuotas pendientes fechas:", unpaidDates);
+      } catch (err) {
+        console.error("[Pagos] Error calculando cuotas pendientes", err);
+      }
     } catch (e) {
       console.error("Error cargando plan de pagos", e);
       setConfig(null);
@@ -1025,9 +1099,19 @@ export default function StudentPaymentsPage() {
     <ProtectedRoute allowedRoles={["admin", "coach", "equipo"]}>
       <DashboardLayout>
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
-          <h1 className="text-xl font-semibold flex items-center gap-2">
-            <CreditCard className="w-5 h-5" /> Seguimiento de pagos
-          </h1>
+          <div className="flex flex-col">
+            <h1 className="text-xl font-semibold flex items-center gap-2">
+              <CreditCard className="w-5 h-5" /> Seguimiento de pagos
+            </h1>
+            {(studentName || studentEmail) && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {studentName && <span className="font-medium">{studentName}</span>}
+                {studentEmail && (
+                  <span className="ml-3">{studentEmail}</span>
+                )}
+              </p>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={openConfigBuilder}>
               <Settings className="w-4 h-4 mr-2" />

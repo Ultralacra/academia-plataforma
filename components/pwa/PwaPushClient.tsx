@@ -53,7 +53,7 @@ export function PwaPushClient() {
     const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     if (!publicKey) {
       try {
-        console.debug("[PWA] Falta NEXT_PUBLIC_VAPID_PUBLIC_KEY");
+        // console.debug("[PWA] Falta NEXT_PUBLIC_VAPID_PUBLIC_KEY");
       } catch {}
       return;
     }
@@ -82,7 +82,7 @@ export function PwaPushClient() {
       });
     } catch (e) {
       try {
-        console.debug("[PWA] No se pudo suscribir a push", e);
+        // console.debug("[PWA] No se pudo suscribir a push", e);
       } catch {}
     }
   }, [user]);

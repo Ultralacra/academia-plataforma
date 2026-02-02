@@ -252,16 +252,16 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
           const elapsedMs = startedAt ? Date.now() - startedAt : 0;
           const elapsedMin = Math.floor(elapsedMs / 60000);
           const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
-          console.log("[SSE] evento recibido", {
-            event: eventName,
-            sseId,
-            id,
-            type,
-            title,
-            at,
-            connectedFor: startedAt ? `${elapsedMin}m ${elapsedSec}s` : null,
-            raw: json,
-          });
+          // console.log("[SSE] evento recibido", {
+          //   event: eventName,
+          //   sseId,
+          //   id,
+          //   type,
+          //   title,
+          //   at,
+          //   connectedFor: startedAt ? `${elapsedMin}m ${elapsedSec}s` : null,
+          //   raw: json,
+          // });
         } catch {}
       } catch (e) {
         try {
@@ -332,7 +332,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     retryRef.current += 1;
     const attempt = retryRef.current;
     try {
-      console.log("[SSE] iniciando conexión", { attempt, url });
+      // console.log("[SSE] iniciando conexión", { attempt, url });
     } catch {}
 
     (async () => {

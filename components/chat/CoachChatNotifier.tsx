@@ -167,7 +167,7 @@ export function CoachChatNotifier() {
     } catch {}
     socketRef.current = null;
 
-    console.log("[CoachChatNotifier] Initializing for:", user.email);
+    // console.log("[CoachChatNotifier] Initializing for:", user.email);
 
     const socket = io(CHAT_HOST, {
       auth: { token },

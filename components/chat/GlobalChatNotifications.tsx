@@ -80,13 +80,13 @@ export function GlobalChatNotifications() {
     joinedChatIds.current = new Set();
     myParticipantIds.current = {};
 
-    console.log(
-      "[GlobalChatNotifications] Connecting for user:",
-      user.email,
-      user.role,
-      "Code:",
-      (user as any).codigo,
-    );
+    // console.log(
+    //   "[GlobalChatNotifications] Connecting for user:",
+    //   user.email,
+    //   user.role,
+    //   "Code:",
+    //   (user as any).codigo,
+    // );
 
     // Connect to Socket.IO
     const socket = io(CHAT_HOST, {
