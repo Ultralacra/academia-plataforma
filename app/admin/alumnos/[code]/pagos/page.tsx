@@ -305,10 +305,16 @@ export default function StudentPaymentsPage() {
       // Si no encontramos email en el plan, consultar /users/:codigo para obtener datos completos
       if (!resolvedEmail && code) {
         try {
-          const userResp: any = await apiFetch(`/users/${encodeURIComponent(code)}`);
+          const userResp: any = await apiFetch(
+            `/users/${encodeURIComponent(code)}`,
+          );
           const user = (userResp && (userResp.data ?? userResp)) || null;
           if (user) {
-            const userEmail = user.email || user.correo || user.contact_email || user.email_address;
+            const userEmail =
+              user.email ||
+              user.correo ||
+              user.contact_email ||
+              user.email_address;
             const userName = user.name || user.nombre || user.fullname;
             if (userEmail) {
               resolvedEmail = String(userEmail).trim();
@@ -1105,10 +1111,10 @@ export default function StudentPaymentsPage() {
             </h1>
             {(studentName || studentEmail) && (
               <p className="text-sm text-muted-foreground mt-1">
-                {studentName && <span className="font-medium">{studentName}</span>}
-                {studentEmail && (
-                  <span className="ml-3">{studentEmail}</span>
+                {studentName && (
+                  <span className="font-medium">{studentName}</span>
                 )}
+                {studentEmail && <span className="ml-3">{studentEmail}</span>}
               </p>
             )}
           </div>

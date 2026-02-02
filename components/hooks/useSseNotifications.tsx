@@ -62,7 +62,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
   const [unread, setUnread] = useState(0);
   const [connected, setConnected] = useState(false);
   const [lastReceived, setLastReceived] = useState<SseNotificationItem | null>(
-    null
+    null,
   );
   const [hasMore, setHasMore] = useState(true);
   const controllerRef = useRef<AbortController | null>(null);
@@ -88,14 +88,17 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       type === "ticket.updated"
         ? "Ticket actualizado"
         : type === "ticket.created" && nombre
-        ? `Ticket creado · ${nombre}`
-        : type === "ticket.created"
-        ? "Ticket creado"
-        : action
-        ? String(type)
-        : String(
-            src?.title ?? src?.message ?? src?.descripcion ?? "Notificación"
-          );
+          ? `Ticket creado · ${nombre}`
+          : type === "ticket.created"
+            ? "Ticket creado"
+            : action
+              ? String(type)
+              : String(
+                  src?.title ??
+                    src?.message ??
+                    src?.descripcion ??
+                    "Notificación",
+                );
     const at =
       src?.at ||
       src?.created_at ||
@@ -128,8 +131,8 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       const arr: any[] = Array.isArray((json as any)?.data)
         ? (json as any).data
         : Array.isArray(json)
-        ? (json as any)
-        : [];
+          ? (json as any)
+          : [];
       const mapped: SseNotificationItem[] = arr.map(mapNotif);
       pagingOffsetRef.current = mapped.length;
       setHasMore(mapped.length === limit);
@@ -174,8 +177,8 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       const arr: any[] = Array.isArray((json as any)?.data)
         ? (json as any).data
         : Array.isArray(json)
-        ? (json as any)
-        : [];
+          ? (json as any)
+          : [];
       const mapped: SseNotificationItem[] = arr.map(mapNotif);
       pagingOffsetRef.current = offset + mapped.length;
       setHasMore(mapped.length === limit);
@@ -193,7 +196,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       setUnread((prevUnread) => {
         const addedUnread = mapped.reduce(
           (acc, it) => acc + (it.unread ? 1 : 0),
-          0
+          0,
         );
         return Math.max(0, prevUnread + addedUnread);
       });
@@ -231,7 +234,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         const id = String(
           base.id ||
             json.id ||
-            Date.now() + "-" + Math.random().toString(36).slice(2, 8)
+            Date.now() + "-" + Math.random().toString(36).slice(2, 8),
         );
         const title = base.title;
         const at = base.at;
