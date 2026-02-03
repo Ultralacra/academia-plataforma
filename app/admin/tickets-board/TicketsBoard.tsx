@@ -2644,12 +2644,6 @@ export default function TicketsBoard({
                                           variant="outline"
                                           className="text-xs"
                                         >
-                                          {`Trascendencia: ${admPayload?.subfase.color ?? "Por definir"}`}
-                                        </Badge>
-                                        <Badge
-                                          variant="outline"
-                                          className="text-xs"
-                                        >
                                           {`Pauta activa: ${admPayload?.pauta_activa ? "Sí" : "No"}`}
                                         </Badge>
                                         <Badge
