@@ -23,6 +23,8 @@ import {
   X,
   Loader2,
   Pencil,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -743,12 +745,69 @@ export default function StudentsContent() {
     });
   }, [filtered, filterStage, filterState]);
 
+  // Ordenamiento local por columnas: Última actividad / Días inactividad
+  const [lastActivitySort, setLastActivitySort] = useState<
+    "asc" | "desc" | null
+  >(null);
+  const [inactivitySort, setInactivitySort] = useState<"asc" | "desc" | null>(
+    null,
+  );
+
+  const toggleLastActivitySort = () => {
+    setInactivitySort(null);
+    setLastActivitySort((s) =>
+      s === null ? "desc" : s === "desc" ? "asc" : null,
+    );
+    setPage(1);
+  };
+
+  const toggleInactivitySort = () => {
+    setLastActivitySort(null);
+    setInactivitySort((s) =>
+      s === null ? "desc" : s === "desc" ? "asc" : null,
+    );
+    setPage(1);
+  };
+
+  const sortedRows = useMemo(() => {
+    if (!lastActivitySort && !inactivitySort) return finalRows;
+    const copy = [...finalRows];
+    if (inactivitySort) {
+      copy.sort((a, b) => {
+        const ai = a.inactivityDays == null ? NaN : Number(a.inactivityDays);
+        const bi = b.inactivityDays == null ? NaN : Number(b.inactivityDays);
+        const aValid = !Number.isNaN(ai);
+        const bValid = !Number.isNaN(bi);
+        if (!aValid && !bValid) return 0;
+        if (!aValid) return 1;
+        if (!bValid) return -1;
+        if (ai === bi) return 0;
+        return inactivitySort === "asc" ? ai - bi : bi - ai;
+      });
+      return copy;
+    }
+
+    // fallback: sort by lastActivity
+    copy.sort((a, b) => {
+      const ta = a.lastActivity ? Date.parse(String(a.lastActivity)) : NaN;
+      const tb = b.lastActivity ? Date.parse(String(b.lastActivity)) : NaN;
+      const aValid = !Number.isNaN(ta);
+      const bValid = !Number.isNaN(tb);
+      if (!aValid && !bValid) return 0;
+      if (!aValid) return 1;
+      if (!bValid) return -1;
+      if (ta === tb) return 0;
+      return lastActivitySort === "asc" ? ta - tb : tb - ta;
+    });
+    return copy;
+  }, [finalRows, lastActivitySort, inactivitySort]);
+
   const total = finalRows.length;
   const totalPages = Math.max(1, Math.ceil(total / UI_PAGE_SIZE));
   const pageItems = useMemo(() => {
     const start = (page - 1) * UI_PAGE_SIZE;
-    return finalRows.slice(start, start + UI_PAGE_SIZE);
-  }, [finalRows, page]);
+    return sortedRows.slice(start, start + UI_PAGE_SIZE);
+  }, [sortedRows, page]);
 
   const coachMetrics = useMemo(() => getCoachMetrics(finalRows), [finalRows]);
 
@@ -1265,13 +1324,115 @@ export default function StudentsContent() {
                 <th className="px-3 py-2 text-left font-medium">Estado</th>
                 <th className="px-3 py-2 text-left font-medium">Ingreso</th>
                 <th className="px-3 py-2 text-left font-medium">
-                  <div className="flex items-center gap-1.5">
-                    <Activity className="h-3.5 w-3.5" />
-                    Última actividad
-                  </div>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2"
+                        title="Opciones de orden para Última actividad"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Activity className="h-3.5 w-3.5" />
+                          <span>Última actividad</span>
+                        </div>
+                        <span className="text-muted-foreground">
+                          <ChevronsUpDown className="h-4 w-4" />
+                        </span>
+                        {lastActivitySort === "desc" ? (
+                          <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                        ) : lastActivitySort === "asc" ? (
+                          <ArrowUp className="h-3 w-3 text-muted-foreground" />
+                        ) : null}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[180px] p-2">
+                      <div className="flex flex-col">
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setInactivitySort(null);
+                            setLastActivitySort("desc");
+                            setPage(1);
+                          }}
+                        >
+                          Mayor → Menor
+                        </button>
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setInactivitySort(null);
+                            setLastActivitySort("asc");
+                            setPage(1);
+                          }}
+                        >
+                          Menor → Mayor
+                        </button>
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setLastActivitySort(null);
+                            setPage(1);
+                          }}
+                        >
+                          Por defecto
+                        </button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </th>
                 <th className="px-3 py-2 text-left font-medium">
-                  Días inactividad
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2"
+                        title="Opciones de orden para Días inactividad"
+                      >
+                        <span>Días inactividad</span>
+                        <span className="text-muted-foreground">
+                          <ChevronsUpDown className="h-4 w-4" />
+                        </span>
+                        {inactivitySort === "desc" ? (
+                          <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                        ) : inactivitySort === "asc" ? (
+                          <ArrowUp className="h-3 w-3 text-muted-foreground" />
+                        ) : null}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[180px] p-2">
+                      <div className="flex flex-col">
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setLastActivitySort(null);
+                            setInactivitySort("desc");
+                            setPage(1);
+                          }}
+                        >
+                          Mayor → Menor
+                        </button>
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setLastActivitySort(null);
+                            setInactivitySort("asc");
+                            setPage(1);
+                          }}
+                        >
+                          Menor → Mayor
+                        </button>
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setInactivitySort(null);
+                            setPage(1);
+                          }}
+                        >
+                          Por defecto
+                        </button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </th>
               </tr>
             </thead>
