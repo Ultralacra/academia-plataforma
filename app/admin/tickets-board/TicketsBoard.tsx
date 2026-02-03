@@ -107,6 +107,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import ObservacionesSection from "./ObservacionesSection";
+import AdsMetricsForm from "@/app/admin/alumnos/[code]/_parts/AdsMetricsForm";
 import {
   getTicketFiles,
   getTicketFile,
@@ -319,6 +320,7 @@ export default function TicketsBoard({
     | "notas"
     | "anteriores"
     | "observaciones"
+    | "ads"
   >("general");
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
@@ -3552,6 +3554,7 @@ export default function TicketsBoard({
                     )}
                     <button
                       type="button"
+                      hidden={!selectedTicket?.id_alumno}
                       onClick={() => setDetailTab("observaciones")}
                       className={`px-3 py-1.5 text-xs border-l ${
                         detailTab === "observaciones"
@@ -3562,6 +3565,21 @@ export default function TicketsBoard({
                     >
                       Observaciones
                     </button>
+                    {/* Botón para abrir métricas ADS (solo si hay id_alumno) */}
+                    {selectedTicket?.id_alumno ? (
+                      <button
+                        type="button"
+                        onClick={() => setDetailTab("ads")}
+                        className={`px-3 py-1.5 text-xs border-l ${
+                          detailTab === "ads"
+                            ? "bg-slate-900 text-white"
+                            : "hover:bg-gray-50"
+                        }`}
+                        title="Métricas ADS"
+                      >
+                        Métricas ADS
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
@@ -5240,6 +5258,26 @@ export default function TicketsBoard({
                     </div>
                   </div>
                 )}
+
+                {/* Tab: ADS - Métricas ADS (editable) */}
+                <div className={detailTab === "ads" ? "block" : "hidden"}>
+                  <div className="p-6">
+                    {selectedTicket?.id_alumno ? (
+                      <AdsMetricsForm
+                        studentCode={String(selectedTicket?.id_alumno || "")}
+                        studentName={String(
+                          selectedTicket?.alumno_nombre ||
+                            selectedTicket?.alumno_name ||
+                            "",
+                        )}
+                      />
+                    ) : (
+                      <div className="text-sm text-slate-500">
+                        No hay información del alumno para mostrar métricas ADS.
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* Tab: Observaciones */}
                 <div

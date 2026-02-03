@@ -851,6 +851,7 @@ export default function AdsMetricsForm({
                   onChange={(e) => onChange("fecha_inicio", e.target.value)}
                 />
               </div>
+              {/* Comentado: Fecha asignación y Fecha fin ocultas temporalmente
               <div className="space-y-1.5">
                 <Label>Fecha asignación</Label>
                 <Input
@@ -867,6 +868,7 @@ export default function AdsMetricsForm({
                   onChange={(e) => onChange("fecha_fin", e.target.value)}
                 />
               </div>
+              */}
             </div>
 
             <div className="grid grid-cols-1 gap-4">

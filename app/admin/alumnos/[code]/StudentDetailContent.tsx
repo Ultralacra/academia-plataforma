@@ -3389,6 +3389,7 @@ function AdsMetricsForm({
                 onChange={(e) => onChange("fecha_inicio", e.target.value)}
               />
             </div>
+            {/* Comentado: Fecha asignación y Fecha fin ocultas temporalmente
             <div className="space-y-1.5">
               <Label>Fecha asignación</Label>
               <Input
@@ -3405,6 +3406,7 @@ function AdsMetricsForm({
                 onChange={(e) => onChange("fecha_fin", e.target.value)}
               />
             </div>
+            */}
           </div>
 
           {/* Fila superior: Rendimiento (1/2) y Notas/Adjuntos (1/2) */}

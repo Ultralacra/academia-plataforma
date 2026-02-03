@@ -18,6 +18,7 @@ export default function AdsMetricsInputs({ data, onChange, view }: any) {
             onChange={(e) => onChange("fecha_inicio", e.target.value)}
           />
         </div>
+        {/*
         <div className="space-y-1.5">
           <Label>Fecha asignación</Label>
           <Input
@@ -34,6 +35,7 @@ export default function AdsMetricsInputs({ data, onChange, view }: any) {
             onChange={(e) => onChange("fecha_fin", e.target.value)}
           />
         </div>
+        */}
       </div>
 
       <Card>
