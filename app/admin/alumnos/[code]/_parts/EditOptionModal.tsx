@@ -413,7 +413,11 @@ export default function EditOptionModal({
           </div>
         </DialogContent>
       </Dialog>
-      <MembershipContractModal open={membershipOpen} onOpenChange={setMembershipOpen} clientCode={clientCode} />
+      <MembershipContractModal
+        open={membershipOpen}
+        onOpenChange={setMembershipOpen}
+        clientCode={clientCode}
+      />
       <PauseDatesModal
         open={pauseOpen}
         onOpenChange={(v) => {
