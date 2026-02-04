@@ -21,6 +21,7 @@ import { toast } from "@/components/ui/use-toast";
 import { buildUrl } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
 import PauseDatesModal from "./PauseDatesModal";
+import MembershipContractModal from "./MembershipContractModal";
 import { fmtES } from "./detail-utils";
 
 export default function EditOptionModal({
@@ -47,6 +48,7 @@ export default function EditOptionModal({
   const [nicho, setNicho] = useState<string | undefined>(current?.nicho);
   const [saving, setSaving] = useState(false);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const [membershipOpen, setMembershipOpen] = useState(false);
   const pauseToggleRef = useRef(false);
   const [pendingSaveAfterPauseDetails, setPendingSaveAfterPauseDetails] =
     useState(false);
@@ -245,6 +247,10 @@ export default function EditOptionModal({
                     setEstado(v);
                     const match = estados.find((x) => x.key === v);
                     const label = String(match?.value || v || "").toUpperCase();
+                    // Abrir modal de membresía si el estado seleccionado es Membresía
+                    if (label.includes("MEMBRE")) {
+                      setMembershipOpen(true);
+                    }
                     if (label.includes("PAUSADO")) {
                       // Marcar que el guardado quedó pendiente y abrir el modal.
                       setPendingSaveAfterPauseDetails(true);
@@ -407,6 +413,7 @@ export default function EditOptionModal({
           </div>
         </DialogContent>
       </Dialog>
+      <MembershipContractModal open={membershipOpen} onOpenChange={setMembershipOpen} clientCode={clientCode} />
       <PauseDatesModal
         open={pauseOpen}
         onOpenChange={(v) => {
