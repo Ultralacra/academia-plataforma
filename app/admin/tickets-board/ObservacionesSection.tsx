@@ -274,7 +274,7 @@ export default function ObservacionesSection({
         // Actualizar - IMPORTANTE: enviar TODOS los campos del payload original
         const originalPayload = editingObservacion.payload;
         await updateObservacion(editingId, {
-          fecha: fecha || new Date().toISOString(),
+          fecha: fecha ? `${fecha}T12:00:00` : new Date().toISOString(),
           recomendacion,
           area,
           estado,
@@ -299,7 +299,7 @@ export default function ObservacionesSection({
       } else {
         // Crear
         await createObservacion({
-          fecha: fecha || new Date().toISOString(),
+          fecha: fecha ? `${fecha}T12:00:00` : new Date().toISOString(),
           recomendacion,
           area,
           estado,
