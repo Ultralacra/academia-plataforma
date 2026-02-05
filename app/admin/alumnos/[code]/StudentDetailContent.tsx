@@ -12,6 +12,7 @@ import MetricsStrip from "./_parts/MetricsStrip";
 import PhasesTimeline from "./_parts/PhasesTimeline";
 import PhaseHistory from "./_parts/PhaseHistory";
 import CoachesCard from "./_parts/CoachesCard";
+import PaymentSummaryCard from "./_parts/PaymentSummaryCard";
 import {
   buildPhasesFor,
   buildLifecycleFor,
@@ -123,6 +124,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   >([]);
   const [loadingVenceMeta, setLoadingVenceMeta] = useState(false);
   const [openVenceHistory, setOpenVenceHistory] = useState(false);
+  const [showAllPauses, setShowAllPauses] = useState(false);
 
   // Edición/corrección de extensiones de membresía (manteniendo histórico)
   const [editMembresiaOpen, setEditMembresiaOpen] = useState(false);
@@ -1655,6 +1657,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
           </div>
           {/* Columna lateral: equipo y contrato (sticky) */}
           <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24 self-start">
+            {/* Cuotas de pago - compacto */}
+            <PaymentSummaryCard code={student.code || code} />
+
             {canSeeAdminAccessInfo && (
               <div className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-center justify-between gap-2">
@@ -1913,72 +1918,91 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         </p>
                       ) : (
                         <div className="mt-2 space-y-2">
-                          {pausesFromStatusHistory
-                            .slice()
-                            .sort(
-                              (a, b) =>
-                                (parseMaybe(b.setAt || b.start)?.getTime() ??
-                                  0) -
-                                (parseMaybe(a.setAt || a.start)?.getTime() ??
-                                  0),
-                            )
-                            .map((r, idx) => {
-                              const s0 = parseMaybe(r.start);
-                              const e0 = parseMaybe(r.end);
-                              const startDate = s0 ? toDayDate(s0) : null;
-                              const endDate = e0 ? toDayDate(e0) : null;
-                              if (!startDate || !endDate) return null;
-                              const days = daysBetweenInclusive(
-                                startDate,
-                                endDate,
+                          {(() => {
+                            const sorted = pausesFromStatusHistory
+                              .slice()
+                              .sort(
+                                (a, b) =>
+                                  (parseMaybe(b.setAt || b.start)?.getTime() ??
+                                    0) -
+                                  (parseMaybe(a.setAt || a.start)?.getTime() ??
+                                    0),
                               );
-                              const today = toDayDate(new Date());
-                              const isActive =
-                                today >= startDate && today <= endDate;
-                              return (
-                                <div
-                                  key={`pause-${idx}-${r.start}-${r.end}`}
-                                  className="rounded-md border border-border bg-muted/30 p-2"
-                                >
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="text-sm font-medium">
-                                      {fmtES(r.start)} → {fmtES(r.end)}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {r.tipo ? (
-                                        <Badge
-                                          variant="outline"
-                                          className="h-5"
-                                        >
-                                          {String(r.tipo).toUpperCase()}
-                                        </Badge>
+                            const visible = showAllPauses
+                              ? sorted
+                              : sorted.slice(0, 3);
+                            const hasMore = sorted.length > 3;
+                            return (
+                              <>
+                                {visible.map((r, idx) => {
+                                  const s0 = parseMaybe(r.start);
+                                  const e0 = parseMaybe(r.end);
+                                  const startDate = s0 ? toDayDate(s0) : null;
+                                  const endDate = e0 ? toDayDate(e0) : null;
+                                  if (!startDate || !endDate) return null;
+                                  const days = daysBetweenInclusive(
+                                    startDate,
+                                    endDate,
+                                  );
+                                  const today = toDayDate(new Date());
+                                  const isActive =
+                                    today >= startDate && today <= endDate;
+                                  return (
+                                    <div
+                                      key={`pause-${idx}-${r.start}-${r.end}`}
+                                      className="rounded-md border border-border bg-muted/30 p-2"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="text-xs font-medium">
+                                          {fmtES(r.start)} → {fmtES(r.end)}
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {r.tipo ? (
+                                            <Badge
+                                              variant="outline"
+                                              className="h-5 text-[10px]"
+                                            >
+                                              {String(r.tipo).toUpperCase()}
+                                            </Badge>
+                                          ) : null}
+                                          {isActive ? (
+                                            <Badge
+                                              variant="secondary"
+                                              className="h-5 text-[10px]"
+                                            >
+                                              Activa
+                                            </Badge>
+                                          ) : null}
+                                          <span className="text-[10px] text-muted-foreground">
+                                            {days} días
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {r.motivo ? (
+                                        <div className="text-[10px] text-muted-foreground mt-1">
+                                          Motivo: {r.motivo}
+                                        </div>
                                       ) : null}
-                                      {isActive ? (
-                                        <Badge
-                                          variant="secondary"
-                                          className="h-5"
-                                        >
-                                          Activa
-                                        </Badge>
-                                      ) : null}
-                                      <span className="text-xs text-muted-foreground">
-                                        {days} días
-                                      </span>
                                     </div>
-                                  </div>
-                                  {r.motivo ? (
-                                    <div className="text-xs text-muted-foreground mt-1">
-                                      Motivo: {r.motivo}
-                                    </div>
-                                  ) : null}
-                                  {r.setAt && (
-                                    <div className="text-[10px] text-muted-foreground mt-1">
-                                      Registrada: {fmtES(r.setAt)}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
+                                  );
+                                })}
+                                {hasMore && (
+                                  <button
+                                    onClick={() =>
+                                      setShowAllPauses(!showAllPauses)
+                                    }
+                                    className="flex items-center gap-1 text-xs text-primary hover:underline"
+                                  >
+                                    {showAllPauses ? (
+                                      <>Ver menos</>
+                                    ) : (
+                                      <>Ver {sorted.length - 3} más</>
+                                    )}
+                                  </button>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
@@ -1996,6 +2020,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 onChangeMember={(idx, candidate) => changeCoach(idx, candidate)}
               />
             </div>
+
             {/* Contrato card */}
             <div className="rounded-xl border border-border bg-card p-4">
               <h3 className="mb-2 text-sm font-medium">Contrato</h3>

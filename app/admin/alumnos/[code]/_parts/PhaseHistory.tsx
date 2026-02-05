@@ -1,8 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { fmtES, getOptionBadgeClass } from "./detail-utils";
 import { Badge } from "@/components/ui/badge";
+import { ChevronDown, ChevronUp } from "lucide-react";
+
+const MAX_VISIBLE = 3;
 
 export default function PhaseHistory({
   history,
@@ -28,24 +31,42 @@ export default function PhaseHistory({
     created_at: string;
   }> | null;
 }) {
+  const [showAllPhases, setShowAllPhases] = useState(false);
+  const [showAllStatus, setShowAllStatus] = useState(false);
+  const [showAllTasks, setShowAllTasks] = useState(false);
+
   const phasesSorted = (history || [])
     .slice()
     .sort(
       (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
   const statusSorted = (statusHistory || [])
     .slice()
     .sort(
       (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
   const tasksSorted = (tasksHistory || [])
     .slice()
     .sort(
       (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
+
+  const visiblePhases = showAllPhases
+    ? phasesSorted
+    : phasesSorted.slice(0, MAX_VISIBLE);
+  const visibleStatus = showAllStatus
+    ? statusSorted
+    : statusSorted.slice(0, MAX_VISIBLE);
+  const visibleTasks = showAllTasks
+    ? tasksSorted
+    : tasksSorted.slice(0, MAX_VISIBLE);
+
+  const hasMorePhases = phasesSorted.length > MAX_VISIBLE;
+  const hasMoreStatus = statusSorted.length > MAX_VISIBLE;
+  const hasMoreTasks = tasksSorted.length > MAX_VISIBLE;
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">
@@ -61,29 +82,49 @@ export default function PhaseHistory({
               Sin cambios de etapa.
             </p>
           ) : (
-            <div className="relative ml-2">
-              <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
-              <ol className="space-y-6">
-                {phasesSorted.map((h) => (
-                  <li key={h.id} className="relative pl-8">
-                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-background" />
-                    <div className="rounded-md border border-border bg-muted/50 p-3">
-                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                        <span>Cambio a</span>
-                        <Badge
-                          className={getOptionBadgeClass("etapa", h.etapa_id)}
-                        >
-                          {String(h.etapa_id).toUpperCase()}
-                        </Badge>
+            <>
+              <div className="relative ml-2">
+                <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
+                <ol className="space-y-4">
+                  {visiblePhases.map((h) => (
+                    <li key={h.id} className="relative pl-8">
+                      <div className="absolute left-0 top-1 w-3 h-3 rounded-full bg-primary ring-2 ring-background" />
+                      <div className="rounded-md border border-border bg-muted/50 p-2">
+                        <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+                          <span>Cambio a</span>
+                          <Badge
+                            className={`${getOptionBadgeClass("etapa", h.etapa_id)} h-5 text-[10px]`}
+                          >
+                            {String(h.etapa_id).toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground">
+                          {fmtES(h.created_at)}
+                        </div>
                       </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {fmtES(h.created_at)}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              {hasMorePhases && (
+                <button
+                  onClick={() => setShowAllPhases(!showAllPhases)}
+                  className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  {showAllPhases ? (
+                    <>
+                      <ChevronUp className="h-3 w-3" />
+                      Ver menos
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3" />
+                      Ver {phasesSorted.length - MAX_VISIBLE} más
+                    </>
+                  )}
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -97,29 +138,49 @@ export default function PhaseHistory({
               Sin cambios de estatus.
             </p>
           ) : (
-            <div className="relative ml-2">
-              <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
-              <ol className="space-y-6">
-                {statusSorted.map((h) => (
-                  <li key={h.id} className="relative pl-8">
-                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-background" />
-                    <div className="rounded-md border border-border bg-muted/50 p-3">
-                      <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                        <span>Cambio a</span>
-                        <Badge
-                          className={getOptionBadgeClass("estado", h.estado_id)}
-                        >
-                          {String(h.estado_id).toUpperCase()}
-                        </Badge>
+            <>
+              <div className="relative ml-2">
+                <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
+                <ol className="space-y-4">
+                  {visibleStatus.map((h) => (
+                    <li key={h.id} className="relative pl-8">
+                      <div className="absolute left-0 top-1 w-3 h-3 rounded-full bg-primary ring-2 ring-background" />
+                      <div className="rounded-md border border-border bg-muted/50 p-2">
+                        <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+                          <span>Cambio a</span>
+                          <Badge
+                            className={`${getOptionBadgeClass("estado", h.estado_id)} h-5 text-[10px]`}
+                          >
+                            {String(h.estado_id).toUpperCase()}
+                          </Badge>
+                        </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground">
+                          {fmtES(h.created_at)}
+                        </div>
                       </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {fmtES(h.created_at)}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              {hasMoreStatus && (
+                <button
+                  onClick={() => setShowAllStatus(!showAllStatus)}
+                  className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  {showAllStatus ? (
+                    <>
+                      <ChevronUp className="h-3 w-3" />
+                      Ver menos
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3" />
+                      Ver {statusSorted.length - MAX_VISIBLE} más
+                    </>
+                  )}
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -129,8 +190,8 @@ export default function PhaseHistory({
             Tareas
           </h4>
           {tasksSorted.length > 0 ? (
-            <div className="mb-2 text-xs text-muted-foreground">
-              Última actualización: {fmtES(tasksSorted[0].created_at)}
+            <div className="mb-2 text-[10px] text-muted-foreground">
+              Última: {fmtES(tasksSorted[0].created_at)}
             </div>
           ) : null}
           {tasksSorted.length === 0 ? (
@@ -138,24 +199,44 @@ export default function PhaseHistory({
               Sin tareas registradas.
             </p>
           ) : (
-            <div className="relative ml-2">
-              <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
-              <ol className="space-y-6">
-                {tasksSorted.map((h) => (
-                  <li key={h.id} className="relative pl-8">
-                    <div className="absolute left-0 top-1 w-4 h-4 rounded-full bg-primary ring-2 ring-background" />
-                    <div className="rounded-md border border-border bg-muted/50 p-3">
-                      <div className="text-sm font-medium text-foreground">
-                        {h.descripcion || "Tarea registrada"}
+            <>
+              <div className="relative ml-2">
+                <div className="absolute left-2 top-6 bottom-0 w-px bg-border" />
+                <ol className="space-y-4">
+                  {visibleTasks.map((h) => (
+                    <li key={h.id} className="relative pl-8">
+                      <div className="absolute left-0 top-1 w-3 h-3 rounded-full bg-primary ring-2 ring-background" />
+                      <div className="rounded-md border border-border bg-muted/50 p-2">
+                        <div className="text-xs font-medium text-foreground line-clamp-2">
+                          {h.descripcion || "Tarea registrada"}
+                        </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground">
+                          {fmtES(h.created_at)}
+                        </div>
                       </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {fmtES(h.created_at)}
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+              {hasMoreTasks && (
+                <button
+                  onClick={() => setShowAllTasks(!showAllTasks)}
+                  className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  {showAllTasks ? (
+                    <>
+                      <ChevronUp className="h-3 w-3" />
+                      Ver menos
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-3 w-3" />
+                      Ver {tasksSorted.length - MAX_VISIBLE} más
+                    </>
+                  )}
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
