@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,16 +79,24 @@ export default function TareasCard({
     (async () => {
       setLoading(true);
       try {
-        // Preferimos filtrar del lado del backend.
-        // El endpoint ya soporta filtros por query (en tickets usa ticket_codigo y alumno_id).
-        const res = await apiFetch<any>(
-          `/metadata?alumno_id=${encodeURIComponent(String(alumnoId))}`,
+        // Proxy interno: evita exponer /metadata real y permite control por rol.
+        const token = getAuthToken();
+        const res = await fetch(
+          `/api/alumnos/${encodeURIComponent(String(alumnoId))}/metadata`,
+          {
+            method: "GET",
+            headers: {
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            cache: "no-store",
+          },
         );
-        const list = Array.isArray(res?.data)
-          ? res.data
-          : Array.isArray(res)
-            ? res
-            : [];
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
+        const json = (await res.json().catch(() => null)) as any;
+        const list = Array.isArray(json?.items) ? json.items : [];
 
         const mapped: ObservacionRecord[] = (list as unknown[])
           .filter(isTaskLike)
@@ -152,11 +160,22 @@ export default function TareasCard({
         estado: Boolean(next),
         deleted: row.payload.deleted ?? false,
       };
-      await apiFetch<any>(`/metadata/${encodeURIComponent(String(row.id))}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/metadata/${encodeURIComponent(String(row.id))}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(payload),
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
       setItems((prev) =>
         prev.map((x) => (x.id === row.id ? { ...x, payload } : x)),
       );

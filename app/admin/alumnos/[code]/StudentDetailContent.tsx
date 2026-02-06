@@ -77,11 +77,8 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
 import { deleteStudent } from "../api";
 import { useRouter } from "next/navigation";
-import {
-  createMetadata,
-  listMetadata,
-  type MetadataRecord,
-} from "@/lib/metadata";
+import { type MetadataRecord } from "@/lib/metadata";
+import { getAuthToken } from "@/lib/auth";
 
 export default function StudentDetailContent({ code }: { code: string }) {
   const { user } = useAuth();
@@ -486,88 +483,24 @@ export default function StudentDetailContent({ code }: { code: string }) {
     }
     setLoadingVenceMeta(true);
     try {
-      // Backend puede no soportar query; cargamos y filtramos en cliente
-      const res = await listMetadata<any>();
-      const items = Array.isArray(res?.items) ? res.items : [];
-      const matchesBase = items.filter((m) => {
-        if (!m) return false;
-        if (m.entity !== "alumno_acceso_vence_estimado") return false;
-        if (String(m.entity_id) !== id) return false;
-        // Seguridad extra: si viene alumno_id en payload, debe coincidir
-        const pid = (m as any)?.payload?.alumno_id;
-        if (pid !== undefined && pid !== null && String(pid) !== id)
-          return false;
-        return true;
-      });
-
-      const matchesMembresia = items.filter((m) => {
-        if (!m) return false;
-        if (m.entity !== "alumno_acceso_extension_membresia") return false;
-        if (String(m.entity_id) !== id) return false;
-        const pid = (m as any)?.payload?.alumno_id;
-        if (pid !== undefined && pid !== null && String(pid) !== id)
-          return false;
-        return true;
-      });
-
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[admin/alumnos] metadata vence: matches", {
-          alumnoId: id,
-          totalItems: items.length,
-          matchesCount: matchesBase.length,
-          matches: matchesBase.map((m: any) => ({
-            id: m?.id,
-            entity: m?.entity,
-            entity_id: m?.entity_id,
-            updated_at: m?.updated_at ?? null,
-            created_at: m?.created_at ?? null,
-            vence_estimado: m?.payload?.vence_estimado ?? null,
-            meses_extra: m?.payload?.meses_extra ?? null,
-            vence_tipo: m?.payload?.vence_tipo ?? null,
-            vence_motivo: m?.payload?.vence_motivo ?? null,
-            ultimo_cambio_at: m?.payload?.ultimo_cambio_at ?? null,
-            historialCount: Array.isArray(m?.payload?.historial)
-              ? m.payload.historial.length
-              : 0,
-            payloadAlumnoId: m?.payload?.alumno_id ?? null,
-          })),
-          membresiaCount: matchesMembresia.length,
-        });
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/alumnos/${encodeURIComponent(id)}/metadata/vence`,
+        {
+          method: "GET",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          cache: "no-store",
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
       }
-
-      // Si hay varios, tomamos el más reciente por updated_at/created_at/id
-      matchesBase.sort((a: any, b: any) => {
-        const ta = new Date(a?.updated_at || a?.created_at || 0).getTime();
-        const tb = new Date(b?.updated_at || b?.created_at || 0).getTime();
-        if (tb !== ta) return tb - ta;
-        return Number(b?.id || 0) - Number(a?.id || 0);
-      });
-
-      const picked = matchesBase[0] ?? null;
-      if (process.env.NODE_ENV !== "production") {
-        console.log("[admin/alumnos] metadata vence: picked", {
-          alumnoId: id,
-          pickedId: (picked as any)?.id ?? null,
-          pickedVence: (picked as any)?.payload?.vence_estimado ?? null,
-          pickedMesesExtra: (picked as any)?.payload?.meses_extra ?? null,
-          pickedTipo: (picked as any)?.payload?.vence_tipo ?? null,
-          pickedMotivo: (picked as any)?.payload?.vence_motivo ?? null,
-          pickedUltimoCambioAt:
-            (picked as any)?.payload?.ultimo_cambio_at ?? null,
-          pickedHistorial: (picked as any)?.payload?.historial ?? null,
-        });
-      }
-
-      setVenceMeta(picked);
-
-      // Membresía: mantenemos TODAS las extensiones como registros separados
-      matchesMembresia.sort((a: any, b: any) => {
-        const ta = new Date(a?.updated_at || a?.created_at || 0).getTime();
-        const tb = new Date(b?.updated_at || b?.created_at || 0).getTime();
-        if (tb !== ta) return tb - ta;
-        return Number(b?.id || 0) - Number(a?.id || 0);
-      });
-      setMembresiaExts(matchesMembresia as any);
+      const json = (await res.json().catch(() => null)) as any;
+      setVenceMeta((json?.venceMeta ?? null) as any);
+      setMembresiaExts((json?.membresiaExts ?? []) as any);
     } catch (e) {
       console.warn("Error cargando metadata vence", e);
       setVenceMeta(null);
@@ -630,19 +563,31 @@ export default function StudentDetailContent({ code }: { code: string }) {
           return;
         }
 
-        await createMetadata({
-          entity: "alumno_acceso_extension_membresia",
-          entity_id: alumnoId,
-          payload: {
-            alumno_id: Number(student.id),
-            alumno_codigo: code,
-            alumno_nombre: student?.name ?? null,
-            meses: mesesExtra,
-            motivo: effectiveMotivo || null,
-            created_at: now,
-            changed_by: changedBy,
+        const token = getAuthToken();
+        const res = await fetch("/api/metadata", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
+          body: JSON.stringify({
+            entity: "alumno_acceso_extension_membresia",
+            entity_id: alumnoId,
+            payload: {
+              alumno_id: Number(student.id),
+              alumno_codigo: code,
+              alumno_nombre: student?.name ?? null,
+              meses: mesesExtra,
+              motivo: effectiveMotivo || null,
+              created_at: now,
+              changed_by: changedBy,
+            },
+          }),
         });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
 
         await loadVenceMetadata(student.id);
         setEditVenceOpen(false);
@@ -657,14 +602,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
 
       // 2) Si existe, actualizamos el MISMO registro (no crear otro)
       if (venceMeta?.id) {
-        const detailResp = await apiFetch<any>(
-          `/metadata/${encodeURIComponent(String(venceMeta.id))}`,
-          { method: "GET" },
-        );
-        const curr = (detailResp as any)?.data ?? detailResp;
-        if (!curr || !curr.id)
-          throw new Error("No existe metadata para actualizar");
-
+        const curr = venceMeta as any;
         const prevPayload = (curr as any)?.payload ?? {};
         const prevExtraRaw = prevPayload?.meses_extra;
         let prevExtra: number | null =
@@ -733,17 +671,22 @@ export default function StudentDetailContent({ code }: { code: string }) {
           payload: mergedPayload,
         };
 
-        const updateResp = await apiFetch<any>(
-          `/metadata/${encodeURIComponent(String(curr.id))}`,
+        const token = getAuthToken();
+        const res = await fetch(
+          `/api/metadata/${encodeURIComponent(String(curr.id))}`,
           {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify(body),
           },
         );
-
-        const updated = (updateResp as any)?.data ?? updateResp;
-        setVenceMeta(updated ?? null);
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
 
         // Feedback claro: si solo cambió el motivo/tipo pero no los meses, no se verá extensión.
         if (!monthsChanged) {
@@ -780,14 +723,26 @@ export default function StudentDetailContent({ code }: { code: string }) {
           ],
         };
 
-        const created = await createMetadata({
-          entity: "alumno_acceso_vence_estimado",
-          entity_id: alumnoId,
-          payload,
+        const token = getAuthToken();
+        const res = await fetch("/api/metadata", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            entity: "alumno_acceso_vence_estimado",
+            entity_id: alumnoId,
+            payload,
+          }),
         });
-        setVenceMeta(created ?? null);
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
       }
 
+      await loadVenceMetadata(student.id);
       setEditVenceOpen(false);
       toast({ title: "Acceso actualizado" });
     } catch (e: any) {
@@ -852,14 +807,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     try {
       setSavingMembresia(true);
 
-      const detailResp = await apiFetch<any>(
-        `/metadata/${encodeURIComponent(String(editingMembresia.id))}`,
-        { method: "GET" },
-      );
-      const curr = (detailResp as any)?.data ?? detailResp;
-      if (!curr || !curr.id)
-        throw new Error("No existe metadata para actualizar");
-
+      const curr = editingMembresia as any;
       const prevPayload = (curr as any)?.payload ?? {};
       const nextPayload: any = {
         ...prevPayload,
@@ -888,11 +836,22 @@ export default function StudentDetailContent({ code }: { code: string }) {
         payload: nextPayload,
       };
 
-      await apiFetch<any>(`/metadata/${encodeURIComponent(String(curr.id))}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/metadata/${encodeURIComponent(String(curr.id))}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
 
       await loadVenceMetadata(student.id);
       setEditMembresiaOpen(false);
@@ -944,14 +903,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     try {
       setRemovingMembresia(true);
 
-      const detailResp = await apiFetch<any>(
-        `/metadata/${encodeURIComponent(String(removeMembresiaTarget.id))}`,
-        { method: "GET" },
-      );
-      const curr = (detailResp as any)?.data ?? detailResp;
-      if (!curr || !curr.id)
-        throw new Error("No existe metadata para actualizar");
-
+      const curr = removeMembresiaTarget as any;
       const prevPayload = (curr as any)?.payload ?? {};
       const prevMotivo = String(prevPayload?.motivo ?? "").trim();
       const nextPayload: any = {
@@ -974,11 +926,22 @@ export default function StudentDetailContent({ code }: { code: string }) {
         payload: nextPayload,
       };
 
-      await apiFetch<any>(`/metadata/${encodeURIComponent(String(curr.id))}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/metadata/${encodeURIComponent(String(curr.id))}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
 
       await loadVenceMetadata(student.id);
       setConfirmRemoveMembresiaOpen(false);

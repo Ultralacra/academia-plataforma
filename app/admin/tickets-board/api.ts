@@ -1,6 +1,30 @@
 // app/admin/tickets-board/api.ts
 // API local para el tablero de tickets (usa apiFetch con Bearer)
 import { apiFetch } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
+
+async function internalFetchJson<T = any>(
+  url: string,
+  init?: RequestInit,
+): Promise<T> {
+  const token = getAuthToken();
+  const res = await fetch(url, {
+    ...(init ?? {}),
+    headers: {
+      ...(init?.headers ?? {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    throw new Error(txt || `HTTP ${res.status}`);
+  }
+
+  const json = await res.json().catch(() => null);
+  return json as T;
+}
 
 export type TicketBoardItem = {
   id: number;
@@ -418,15 +442,17 @@ export async function getTickets(opts: {
    */
   export async function getObservaciones(ticketCode: string, alumnoId?: string): Promise<Observacion[]> {
     if (!ticketCode) return [];
-    let path = `/metadata?ticket_codigo=${encodeURIComponent(ticketCode)}`;
-    
-    // Filtrar por alumno_id si está disponible
-    if (alumnoId) {
-      path += `&alumno_id=${encodeURIComponent(alumnoId)}`;
-    }
-    
-    const res = await apiFetch<any>(path);
-    const list = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+    // En UI de alumno, si no tenemos alumnoId, NO consultamos (evita traer demasiado)
+    if (!alumnoId) return [];
+
+    // Proxy interno: evita exponer /metadata real en Network.
+    const json = await internalFetchJson<{ items: any[] }>(
+      `/api/alumnos/${encodeURIComponent(
+        String(alumnoId),
+      )}/metadata?ticket_codigo=${encodeURIComponent(ticketCode)}`,
+      { method: "GET" },
+    );
+    const list = Array.isArray(json?.items) ? json.items : [];
     
     // Filtrar SOLO las eliminadas con 'deleted: true'
     // Las observaciones con 'realizada: true' se siguen mostrando (en verde)
@@ -460,9 +486,10 @@ export async function getTickets(opts: {
     creado_por_id: string;
     alumno_id: string;
     ticket_codigo: string;
+    ads_metadata_id?: string | number | null;
+    ads_metadata_snapshot?: any;
   }) {
-    const path = `/metadata`;
-    return apiFetch<any>(path, {
+    return internalFetchJson<any>("/api/metadata", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -493,19 +520,23 @@ export async function getTickets(opts: {
       alumno_nombre?: string;
       ticket_codigo?: string;
       deleted?: boolean;
+      ads_metadata_id?: string | number | null;
+      ads_metadata_snapshot?: any;
     }>
   ) {
     if (!id) throw new Error("ID de observación requerido");
-    const path = `/metadata/${id}`;
-    return apiFetch<any>(path, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...payload,
-        // Asegurarnos de que deleted sea false al actualizar (a menos que se especifique)
-        deleted: payload.deleted !== undefined ? payload.deleted : false,
-      }),
-    });
+    return internalFetchJson<any>(
+      `/api/metadata/${encodeURIComponent(String(id))}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          // Asegurarnos de que deleted sea false al actualizar (a menos que se especifique)
+          deleted: payload.deleted !== undefined ? payload.deleted : false,
+        }),
+      },
+    );
   }
 
   /**
@@ -514,10 +545,12 @@ export async function getTickets(opts: {
    */
   export async function deleteObservacion(id: number) {
     if (!id) throw new Error("ID de observación requerido");
-    const path = `/metadata/${id}`;
-    return apiFetch<any>(path, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deleted: true }),
-    });
+    return internalFetchJson<any>(
+      `/api/metadata/${encodeURIComponent(String(id))}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deleted: true }),
+      },
+    );
   }

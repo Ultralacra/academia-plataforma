@@ -844,8 +844,31 @@ export default function TicketsBoard({
         setTickets(validTickets);
         // Cargar metadata ADS y mapear por alumno
         try {
-          const md = await listMetadata<any>();
-          const items = Array.isArray(md?.items) ? md.items : [];
+          let items: any[] = [];
+          if (studentCode) {
+            const token = getAuthToken();
+            const res = await fetch(
+              `/api/alumnos/${encodeURIComponent(
+                String(studentCode),
+              )}/metadata?entity=${encodeURIComponent("ads_metrics")}`,
+              {
+                method: "GET",
+                headers: {
+                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+                cache: "no-store",
+              },
+            );
+            if (!res.ok) {
+              const txt = await res.text().catch(() => "");
+              throw new Error(txt || `HTTP ${res.status}`);
+            }
+            const json = (await res.json().catch(() => null)) as any;
+            items = Array.isArray(json?.items) ? json.items : [];
+          } else {
+            const md = await listMetadata<any>();
+            items = Array.isArray(md?.items) ? md.items : [];
+          }
           const map: Record<string, any> = {};
           for (const m of items) {
             try {
@@ -5504,7 +5527,7 @@ export default function TicketsBoard({
                   <div className="p-6">
                     <ObservacionesSection
                       ticketCode={selectedTicket?.codigo || ""}
-                      alumnoId={selectedTicket?.id_alumno || ""}
+                      alumnoId={selectedTicket?.id_alumno || studentCode || ""}
                       coachId={user?.codigo || user?.id || ""}
                       canEdit={canEdit}
                     />

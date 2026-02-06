@@ -46,7 +46,6 @@ import {
 } from "@/components/ui/select";
 import { buildUrl } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
-import { listMetadata } from "@/lib/metadata";
 import { Badge } from "@/components/ui/badge";
 
 const AREAS = [
@@ -102,8 +101,25 @@ export default function ObservacionesSection({
     if (!alumnoId) return setAdsMetadata(null);
     setAdsMetadataLoading(true);
     try {
-      const res = await listMetadata<any>();
-      const items = Array.isArray(res?.items) ? res.items : [];
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/alumnos/${encodeURIComponent(
+          String(alumnoId),
+        )}/metadata?entity=${encodeURIComponent("ads_metrics")}`,
+        {
+          method: "GET",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          cache: "no-store",
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      const json = (await res.json().catch(() => null)) as any;
+      const items = Array.isArray(json?.items) ? json.items : [];
       // Buscar metadata de entidad 'ads_metrics' para este alumno
       const matches = items.filter((m: any) => {
         try {

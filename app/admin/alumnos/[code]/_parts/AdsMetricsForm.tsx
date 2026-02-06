@@ -8,13 +8,8 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { apiFetch } from "@/lib/api-config";
-import {
-  createMetadata,
-  getMetadata,
-  listMetadata,
-  type MetadataRecord,
-  updateMetadata,
-} from "@/lib/metadata";
+import { getAuthToken } from "@/lib/auth";
+import { type MetadataRecord } from "@/lib/metadata";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -370,7 +365,26 @@ export default function AdsMetricsForm({
     const alumnoId = studentInfo?.id ?? null;
     setMetadataLoading(true);
     try {
-      const { items } = await listMetadata<any>();
+      const idForRoute = String(alumnoId ?? studentCode);
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/alumnos/${encodeURIComponent(idForRoute)}/metadata?entity=${encodeURIComponent(
+          "ads_metrics",
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          cache: "no-store",
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      const json = (await res.json().catch(() => null)) as any;
+      const items = Array.isArray(json?.items) ? json.items : [];
       const { best, count } = pickBestMetadataForStudent(items, {
         studentCode,
         alumnoId,
@@ -437,8 +451,27 @@ export default function AdsMetricsForm({
 
     setMetadataSaving(true);
     try {
-      // 1) Listar TODO y filtrar la del alumno (sin tocar el resto)
-      const { items } = await listMetadata<any>();
+      // 1) Listar SOLO lo del alumno (proxy interno) y filtrar el mejor registro
+      const idForRoute = String(alumnoId ?? studentCode);
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/alumnos/${encodeURIComponent(idForRoute)}/metadata?entity=${encodeURIComponent(
+          body.entity,
+        )}`,
+        {
+          method: "GET",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          cache: "no-store",
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      const listJson = (await res.json().catch(() => null)) as any;
+      const items = Array.isArray(listJson?.items) ? listJson.items : [];
       const { best, count } = pickBestMetadataForStudent(items, {
         studentCode,
         alumnoId,
@@ -453,11 +486,8 @@ export default function AdsMetricsForm({
           best.id,
         );
 
-        const detail = await getMetadata<any>(best.id);
-
-        // Body EXACTO con el shape del detalle: {id, entity, entity_id, payload}
         // Preservamos creado_por_* si ya existe, para no modificar creador.
-        const existingPayload = (detail as any)?.payload ?? {};
+        const existingPayload = (best as any)?.payload ?? {};
         const mergedPayload = {
           ...existingPayload,
           ...payload,
@@ -470,42 +500,72 @@ export default function AdsMetricsForm({
         };
 
         const updateBody = {
-          id: (detail as any)?.id,
-          entity: (detail as any)?.entity,
-          entity_id: (detail as any)?.entity_id,
+          id: (best as any)?.id,
+          entity: (best as any)?.entity,
+          entity_id: (best as any)?.entity_id,
           payload: mergedPayload,
         };
 
         console.log("[ADS][metadata] update body ->", updateBody);
-        await updateMetadata<any>(best.id, updateBody as any);
 
-        const updatedDetail = await getMetadata<any>(best.id);
-        setMatchedMetadata(updatedDetail);
+        const updateRes = await fetch(
+          `/api/metadata/${encodeURIComponent(String(best.id))}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(updateBody),
+          },
+        );
+        if (!updateRes.ok) {
+          const txt = await updateRes.text().catch(() => "");
+          throw new Error(txt || `HTTP ${updateRes.status}`);
+        }
+
+        const updatedLocal: MetadataRecord<any> = {
+          ...(best as any),
+          payload: mergedPayload,
+          updated_at: new Date().toISOString(),
+        };
+        setMatchedMetadata(updatedLocal);
         setMatchedMetadataCount(count || 1);
-        applyMetadataToForm(updatedDetail);
-        console.log("[ADS][metadata] updated detail ->", updatedDetail);
+        applyMetadataToForm(updatedLocal);
+        console.log("[ADS][metadata] updated local ->", updatedLocal);
         toast({ title: "Guardado", description: "Métricas ADS actualizadas" });
         return;
       }
 
       // 2) Crear metadata SOLO para este alumno
       console.log("[ADS][metadata] create body ->", body);
-      const created = await createMetadata<any>(body);
-      console.log("[ADS][metadata] created ->", created);
-
-      // 3) Consultar por id para confirmar
-      const createdId = (created as any)?.id;
-      if (createdId != null) {
-        const detail = await getMetadata<any>(createdId);
-        setMatchedMetadata(detail);
-        setMatchedMetadataCount(1);
-        applyMetadataToForm(detail);
-        console.log("[ADS][metadata] detail ->", detail);
-        toast({ title: "Guardado", description: "Métricas ADS guardadas" });
-      } else {
-        // Fallback: recargar por lista
-        await reloadStudentMetadata();
+      const createRes = await fetch("/api/metadata", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!createRes.ok) {
+        const txt = await createRes.text().catch(() => "");
+        throw new Error(txt || `HTTP ${createRes.status}`);
       }
+      const createdJson = (await createRes.json().catch(() => null)) as any;
+      const createdId = createdJson?.id ?? null;
+      const createdLocal: MetadataRecord<any> = {
+        id: createdId ?? `tmp_${Date.now()}`,
+        entity: body.entity,
+        entity_id: body.entity_id,
+        payload: body.payload,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      setMatchedMetadata(createdLocal);
+      setMatchedMetadataCount(1);
+      applyMetadataToForm(createdLocal);
+      console.log("[ADS][metadata] created local ->", createdLocal);
+      toast({ title: "Guardado", description: "Métricas ADS guardadas" });
     } catch (e) {
       console.error("[ADS][metadata] error guardando/consultando:", e);
       try {
