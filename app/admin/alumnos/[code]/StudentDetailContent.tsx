@@ -29,6 +29,7 @@ import SessionsStudentPanel from "./_parts/SessionsStudentPanel";
 import BonosPanel from "./_parts/BonosPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
 import TareasCard from "./_parts/TareasCard";
+import EditPauseRangeModal from "./_parts/EditPauseRangeModal";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -126,6 +127,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [loadingVenceMeta, setLoadingVenceMeta] = useState(false);
   const [openVenceHistory, setOpenVenceHistory] = useState(false);
   const [showAllPauses, setShowAllPauses] = useState(false);
+
+  const [editPauseOpen, setEditPauseOpen] = useState(false);
+  const [editingPause, setEditingPause] = useState<{
+    id: string | number;
+    start: string;
+    end: string;
+  } | null>(null);
+  const [savingPauseEdit, setSavingPauseEdit] = useState(false);
 
   // Edición/corrección de extensiones de membresía (manteniendo histórico)
   const [editMembresiaOpen, setEditMembresiaOpen] = useState(false);
@@ -1337,6 +1346,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
         return isPaused && h.fecha_desde && h.fecha_hasta;
       })
       .map((h) => ({
+        id: h.id,
         start: h.fecha_desde!,
         end: h.fecha_hasta!,
         setAt: h.created_at,
@@ -1344,6 +1354,19 @@ export default function StudentDetailContent({ code }: { code: string }) {
         motivo: h.motivo ?? null,
       }));
   }, [statusHistory]);
+
+  async function updatePauseDatesById(
+    id: string | number,
+    body: { fecha_desde: string; fecha_hasta: string },
+  ) {
+    const path = `/client/update/cliente-estatus-fechas/${encodeURIComponent(
+      String(id),
+    )}`;
+    await apiFetch(path, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
+  }
 
   const mergedPauseIntervals = useMemo(() => {
     const allRanges: Array<{ start: Date; end: Date }> = [];
@@ -2137,7 +2160,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           <p className="text-xs text-muted-foreground">
                             * Acceso extendido con meses extra.
                           </p>
-                        ) : accessStats.pausedDaysElapsed > 0 ? (
+                        ) : accessStats.pausedCalendarDaysElapsed > 0 ? (
                           <p className="text-xs text-muted-foreground">
                             * El vencimiento se calcula descontando días de
                             pausa registrados.
@@ -2187,7 +2210,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                     today >= startDate && today <= endDate;
                                   return (
                                     <div
-                                      key={`pause-${idx}-${r.start}-${r.end}`}
+                                      key={`pause-${String(r.id)}-${idx}`}
                                       className="rounded-md border border-border bg-muted/30 p-2"
                                     >
                                       <div className="flex items-center justify-between gap-2">
@@ -2195,6 +2218,21 @@ export default function StudentDetailContent({ code }: { code: string }) {
                                           {fmtES(r.start)} → {fmtES(r.end)}
                                         </div>
                                         <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            className="p-1 rounded hover:bg-muted transition-colors"
+                                            title="Editar pausa"
+                                            onClick={() => {
+                                              setEditingPause({
+                                                id: r.id,
+                                                start: r.start,
+                                                end: r.end,
+                                              });
+                                              setEditPauseOpen(true);
+                                            }}
+                                          >
+                                            <Pencil className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                                          </button>
                                           {r.tipo ? (
                                             <Badge
                                               variant="outline"
@@ -2243,6 +2281,49 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           })()}
                         </div>
                       )}
+
+                      <EditPauseRangeModal
+                        open={editPauseOpen}
+                        onOpenChange={(v) => {
+                          setEditPauseOpen(v);
+                          if (!v) setEditingPause(null);
+                        }}
+                        initialRange={
+                          editingPause
+                            ? {
+                                start: editingPause.start,
+                                end: editingPause.end,
+                              }
+                            : null
+                        }
+                        saving={savingPauseEdit}
+                        onConfirm={async (body) => {
+                          if (!editingPause?.id || !student?.code) return;
+                          setSavingPauseEdit(true);
+                          try {
+                            await updatePauseDatesById(editingPause.id, body);
+
+                            toast({
+                              title: "Pausa actualizada",
+                              description: `${fmtES(body.fecha_desde as any)} → ${fmtES(body.fecha_hasta as any)}`,
+                            });
+
+                            const eh = await getClienteEstatus(student.code);
+                            setStatusHistory(eh);
+                            setEditPauseOpen(false);
+                            setEditingPause(null);
+                          } catch (e: any) {
+                            toast({
+                              title: "Error",
+                              description:
+                                e?.message ?? "No se pudo actualizar la pausa",
+                              variant: "destructive",
+                            });
+                          } finally {
+                            setSavingPauseEdit(false);
+                          }
+                        }}
+                      />
                     </div>
                   </div>
                 )}
