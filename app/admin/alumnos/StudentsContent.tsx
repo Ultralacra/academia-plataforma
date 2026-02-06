@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/command";
 import { cn, getSpanishApiError } from "@/lib/utils";
 import Link from "next/link";
+import { getAuthToken } from "@/lib/auth";
 
 function getUniqueCoaches(students: StudentRow[]) {
   const allCoaches = students.flatMap(
@@ -85,6 +86,10 @@ const dtDateOnly = new Intl.DateTimeFormat("es-ES", {
   year: "numeric",
 });
 
+const nfNumber = new Intl.NumberFormat("es-ES", {
+  maximumFractionDigits: 0,
+});
+
 const clean = (s: string) => s.replaceAll(".", "");
 
 function fmtDateSmart(value?: string | null) {
@@ -107,6 +112,60 @@ function fmtDateSmart(value?: string | null) {
   const d = new Date(value);
   if (!isNaN(d.getTime())) return clean(dtDateTime.format(d));
   return value;
+}
+
+function parseAmount(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const s = value.trim();
+  if (!s) return null;
+
+  const cleaned = s.replace(/[^\d.,-]/g, "");
+  if (!cleaned) return null;
+
+  const lastDot = cleaned.lastIndexOf(".");
+  const lastComma = cleaned.lastIndexOf(",");
+
+  let normalized = cleaned;
+  if (lastDot !== -1 && lastComma !== -1) {
+    if (lastDot > lastComma) {
+      normalized = cleaned.replace(/,/g, "");
+    } else {
+      normalized = cleaned.replace(/\./g, "").replace(/,/g, ".");
+    }
+  } else if (lastComma !== -1) {
+    const parts = cleaned.split(",");
+    const decimals = parts[parts.length - 1] ?? "";
+    if (decimals.length > 0 && decimals.length <= 2) {
+      normalized = cleaned.replace(/\./g, "").replace(/,/g, ".");
+    } else {
+      normalized = cleaned.replace(/,/g, "");
+    }
+  } else {
+    normalized = cleaned.replace(/,/g, "");
+  }
+
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+function fmtAmount(value: unknown) {
+  const n = parseAmount(value);
+  if (n == null) return "—";
+  return nfNumber.format(n);
+}
+
+type AdsMetricsSummary = {
+  alumnoId: string;
+  metaId: string | number | null;
+  savedAt: string | null;
+  inversion: number | null;
+  facturacion: number | null;
+};
+
+function chunk<T>(arr: T[], size: number): T[] {
+  return arr.length > size ? arr.slice(0, size) : arr;
 }
 
 function toDateInputValue(value?: string | null) {
@@ -753,7 +812,70 @@ export default function StudentsContent() {
     null,
   );
 
+  const [adsInversionSort, setAdsInversionSort] = useState<
+    "asc" | "desc" | null
+  >(null);
+  const [adsFacturacionSort, setAdsFacturacionSort] = useState<
+    "asc" | "desc" | null
+  >(null);
+
+  const [adsSummaryByAlumnoId, setAdsSummaryByAlumnoId] = useState<
+    Record<string, AdsMetricsSummary>
+  >({});
+  const adsSummaryRef = useRef<Record<string, AdsMetricsSummary>>({});
+  const [adsSummaryLoading, setAdsSummaryLoading] = useState(false);
+
+  useEffect(() => {
+    adsSummaryRef.current = adsSummaryByAlumnoId;
+  }, [adsSummaryByAlumnoId]);
+
+  useEffect(() => {
+    const ids = (all || [])
+      .map((s) => (s?.id != null ? String(s.id).trim() : ""))
+      .filter(Boolean);
+    if (ids.length === 0) return;
+
+    const missing = ids.filter((id) => !(id in adsSummaryRef.current));
+    if (missing.length === 0) return;
+
+    let alive = true;
+    (async () => {
+      setAdsSummaryLoading(true);
+      try {
+        // evitar payloads gigantes: pedir un chunk y el resto se completará
+        const alumnoIds = chunk(missing, 250);
+        const token = getAuthToken();
+        const res = await fetch("/api/ads-metrics/summary", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ alumnoIds }),
+        });
+        if (!res.ok) return;
+        const json = await res.json().catch(() => null);
+        const byAlumnoId =
+          json && typeof json === "object" ? (json as any).byAlumnoId : null;
+        if (!alive || !byAlumnoId || typeof byAlumnoId !== "object") return;
+
+        setAdsSummaryByAlumnoId((prev) => ({
+          ...prev,
+          ...(byAlumnoId as Record<string, AdsMetricsSummary>),
+        }));
+      } finally {
+        if (alive) setAdsSummaryLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [all]);
+
   const toggleLastActivitySort = () => {
+    setAdsInversionSort(null);
+    setAdsFacturacionSort(null);
     setInactivitySort(null);
     setLastActivitySort((s) =>
       s === null ? "desc" : s === "desc" ? "asc" : null,
@@ -762,6 +884,8 @@ export default function StudentsContent() {
   };
 
   const toggleInactivitySort = () => {
+    setAdsInversionSort(null);
+    setAdsFacturacionSort(null);
     setLastActivitySort(null);
     setInactivitySort((s) =>
       s === null ? "desc" : s === "desc" ? "asc" : null,
@@ -770,8 +894,53 @@ export default function StudentsContent() {
   };
 
   const sortedRows = useMemo(() => {
-    if (!lastActivitySort && !inactivitySort) return finalRows;
+    if (
+      !adsInversionSort &&
+      !adsFacturacionSort &&
+      !lastActivitySort &&
+      !inactivitySort
+    )
+      return finalRows;
     const copy = [...finalRows];
+
+    if (adsInversionSort) {
+      copy.sort((a, b) => {
+        const aid = a.id != null ? String(a.id).trim() : "";
+        const bid = b.id != null ? String(b.id).trim() : "";
+        const av = aid ? adsSummaryByAlumnoId[aid]?.inversion : null;
+        const bv = bid ? adsSummaryByAlumnoId[bid]?.inversion : null;
+        const aValid = av != null && Number.isFinite(Number(av));
+        const bValid = bv != null && Number.isFinite(Number(bv));
+        if (!aValid && !bValid) return 0;
+        if (!aValid) return 1;
+        if (!bValid) return -1;
+        if (Number(av) === Number(bv)) return 0;
+        return adsInversionSort === "asc"
+          ? Number(av) - Number(bv)
+          : Number(bv) - Number(av);
+      });
+      return copy;
+    }
+
+    if (adsFacturacionSort) {
+      copy.sort((a, b) => {
+        const aid = a.id != null ? String(a.id).trim() : "";
+        const bid = b.id != null ? String(b.id).trim() : "";
+        const av = aid ? adsSummaryByAlumnoId[aid]?.facturacion : null;
+        const bv = bid ? adsSummaryByAlumnoId[bid]?.facturacion : null;
+        const aValid = av != null && Number.isFinite(Number(av));
+        const bValid = bv != null && Number.isFinite(Number(bv));
+        if (!aValid && !bValid) return 0;
+        if (!aValid) return 1;
+        if (!bValid) return -1;
+        if (Number(av) === Number(bv)) return 0;
+        return adsFacturacionSort === "asc"
+          ? Number(av) - Number(bv)
+          : Number(bv) - Number(av);
+      });
+      return copy;
+    }
+
     if (inactivitySort) {
       copy.sort((a, b) => {
         const ai = a.inactivityDays == null ? NaN : Number(a.inactivityDays);
@@ -800,7 +969,14 @@ export default function StudentsContent() {
       return lastActivitySort === "asc" ? ta - tb : tb - ta;
     });
     return copy;
-  }, [finalRows, lastActivitySort, inactivitySort]);
+  }, [
+    finalRows,
+    lastActivitySort,
+    inactivitySort,
+    adsInversionSort,
+    adsFacturacionSort,
+    adsSummaryByAlumnoId,
+  ]);
 
   const total = finalRows.length;
   const totalPages = Math.max(1, Math.ceil(total / UI_PAGE_SIZE));
@@ -1329,6 +1505,122 @@ export default function StudentsContent() {
                       <button
                         type="button"
                         className="inline-flex items-center gap-2"
+                        title="Opciones de orden para Inversión"
+                      >
+                        <span>Inversión</span>
+                        <span className="text-muted-foreground">
+                          <ChevronsUpDown className="h-4 w-4" />
+                        </span>
+                        {adsInversionSort === "desc" ? (
+                          <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                        ) : adsInversionSort === "asc" ? (
+                          <ArrowUp className="h-3 w-3 text-muted-foreground" />
+                        ) : null}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[180px] p-2">
+                      <div className="flex flex-col">
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setLastActivitySort(null);
+                            setInactivitySort(null);
+                            setAdsFacturacionSort(null);
+                            setAdsInversionSort("desc");
+                            setPage(1);
+                          }}
+                        >
+                          Mayor → Menor
+                        </button>
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setLastActivitySort(null);
+                            setInactivitySort(null);
+                            setAdsFacturacionSort(null);
+                            setAdsInversionSort("asc");
+                            setPage(1);
+                          }}
+                        >
+                          Menor → Mayor
+                        </button>
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setAdsInversionSort(null);
+                            setPage(1);
+                          }}
+                        >
+                          Por defecto
+                        </button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </th>
+                <th className="px-3 py-2 text-left font-medium">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2"
+                        title="Opciones de orden para Facturación"
+                      >
+                        <span>Facturación</span>
+                        <span className="text-muted-foreground">
+                          <ChevronsUpDown className="h-4 w-4" />
+                        </span>
+                        {adsFacturacionSort === "desc" ? (
+                          <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                        ) : adsFacturacionSort === "asc" ? (
+                          <ArrowUp className="h-3 w-3 text-muted-foreground" />
+                        ) : null}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[180px] p-2">
+                      <div className="flex flex-col">
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setLastActivitySort(null);
+                            setInactivitySort(null);
+                            setAdsInversionSort(null);
+                            setAdsFacturacionSort("desc");
+                            setPage(1);
+                          }}
+                        >
+                          Mayor → Menor
+                        </button>
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setLastActivitySort(null);
+                            setInactivitySort(null);
+                            setAdsInversionSort(null);
+                            setAdsFacturacionSort("asc");
+                            setPage(1);
+                          }}
+                        >
+                          Menor → Mayor
+                        </button>
+                        <button
+                          className="text-left px-2 py-1 rounded hover:bg-muted/50"
+                          onClick={() => {
+                            setAdsFacturacionSort(null);
+                            setPage(1);
+                          }}
+                        >
+                          Por defecto
+                        </button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </th>
+                <th className="px-3 py-2 text-left font-medium">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-2"
                         title="Opciones de orden para Última actividad"
                       >
                         <div className="flex items-center gap-1.5">
@@ -1350,6 +1642,8 @@ export default function StudentsContent() {
                         <button
                           className="text-left px-2 py-1 rounded hover:bg-muted/50"
                           onClick={() => {
+                            setAdsInversionSort(null);
+                            setAdsFacturacionSort(null);
                             setInactivitySort(null);
                             setLastActivitySort("desc");
                             setPage(1);
@@ -1360,6 +1654,8 @@ export default function StudentsContent() {
                         <button
                           className="text-left px-2 py-1 rounded hover:bg-muted/50"
                           onClick={() => {
+                            setAdsInversionSort(null);
+                            setAdsFacturacionSort(null);
                             setInactivitySort(null);
                             setLastActivitySort("asc");
                             setPage(1);
@@ -1370,6 +1666,8 @@ export default function StudentsContent() {
                         <button
                           className="text-left px-2 py-1 rounded hover:bg-muted/50"
                           onClick={() => {
+                            setAdsInversionSort(null);
+                            setAdsFacturacionSort(null);
                             setLastActivitySort(null);
                             setPage(1);
                           }}
@@ -1404,6 +1702,8 @@ export default function StudentsContent() {
                         <button
                           className="text-left px-2 py-1 rounded hover:bg-muted/50"
                           onClick={() => {
+                            setAdsInversionSort(null);
+                            setAdsFacturacionSort(null);
                             setLastActivitySort(null);
                             setInactivitySort("desc");
                             setPage(1);
@@ -1414,6 +1714,8 @@ export default function StudentsContent() {
                         <button
                           className="text-left px-2 py-1 rounded hover:bg-muted/50"
                           onClick={() => {
+                            setAdsInversionSort(null);
+                            setAdsFacturacionSort(null);
                             setLastActivitySort(null);
                             setInactivitySort("asc");
                             setPage(1);
@@ -1424,6 +1726,8 @@ export default function StudentsContent() {
                         <button
                           className="text-left px-2 py-1 rounded hover:bg-muted/50"
                           onClick={() => {
+                            setAdsInversionSort(null);
+                            setAdsFacturacionSort(null);
                             setInactivitySort(null);
                             setPage(1);
                           }}
@@ -1440,7 +1744,7 @@ export default function StudentsContent() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="px-3 py-4 text-center text-muted-foreground"
                   >
                     <div className="flex flex-col items-center justify-center gap-2 py-2">
@@ -1459,7 +1763,7 @@ export default function StudentsContent() {
               ) : pageItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={8}
                     className="px-3 py-4 text-center text-muted-foreground"
                   >
                     No se encontraron estudiantes
@@ -1700,6 +2004,28 @@ export default function StudentsContent() {
                           </button>
                         )}
                       </div>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {(() => {
+                        const id =
+                          student.id != null ? String(student.id).trim() : "";
+                        const v = id
+                          ? adsSummaryByAlumnoId[id]?.inversion
+                          : null;
+                        if (v == null) return adsSummaryLoading ? "…" : "—";
+                        return nfNumber.format(v);
+                      })()}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {(() => {
+                        const id =
+                          student.id != null ? String(student.id).trim() : "";
+                        const v = id
+                          ? adsSummaryByAlumnoId[id]?.facturacion
+                          : null;
+                        if (v == null) return adsSummaryLoading ? "…" : "—";
+                        return nfNumber.format(v);
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {fmtDateSmart(student.lastActivity)}

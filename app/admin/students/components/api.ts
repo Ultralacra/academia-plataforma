@@ -80,10 +80,10 @@ export async function fetchMetricsV2(params?: {
 			keys: json && typeof json === "object" && json.data ? Object.keys(json.data) : [],
 		};
 		// eslint-disable-next-line no-console
-		console.log("[metrics-v2] GET", url, "→", preview);
+				/* console.log("[metrics-v2] GET", url, "→", preview); */
 	} catch {
 		// eslint-disable-next-line no-console
-		console.log("[metrics-v2] GET", url, "(preview logging failed)");
+				/* console.log("[metrics-v2] GET", url, "(preview logging failed)"); */
 	}
 
 	return json as MetricsV2Envelope;

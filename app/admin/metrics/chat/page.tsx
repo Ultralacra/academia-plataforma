@@ -247,7 +247,7 @@ function UserRow({
   const handleView = async () => {
     try {
       const list = await onView(user.codigo ?? null);
-      console.log("Conversaciones de:", user.codigo ?? user.id, list);
+            /* console.log("Conversaciones de:", user.codigo ?? user.id, list); */
     } catch (e) {
       console.error("Error fetching conversations", e);
     }

@@ -127,7 +127,7 @@ export function AppSidebar() {
     const userRole = (user?.role || "").toLowerCase();
 
     // Debug: verificar el rol del usuario
-    console.log("User role:", user?.role, "Normalized:", userRole);
+        /* console.log("User role:", user?.role, "Normalized:", userRole); */
 
     switch (userRole) {
       case "sales":

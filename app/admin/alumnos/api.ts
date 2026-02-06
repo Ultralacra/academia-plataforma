@@ -664,7 +664,7 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
     // eslint-disable-next-line no-console
     console.debug('[createTicket] Enviando FormData (debug):', entries);
     // eslint-disable-next-line no-console
-    console.log('[createTicket] Enviando FormData (log):', entries);
+        /* console.log('[createTicket] Enviando FormData (log):', entries); */
   } catch {}
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const res = await fetch(url, { method: 'POST', body: fd, cache: 'no-store', headers: token ? { Authorization: `Bearer ${token}` } : undefined });
@@ -679,7 +679,7 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   const json = await res.json().catch(() => ({}));
   try {
     // eslint-disable-next-line no-console
-    console.log('[createTicket] OK response:', json);
+        /* console.log('[createTicket] OK response:', json); */
   } catch {}
   return json;
 }

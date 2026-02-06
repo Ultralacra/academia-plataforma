@@ -54,5 +54,5 @@ export function getAllSubscriptions(): PushSubscription[] {
  */
 export function removeInvalidSubscription(endpoint: string): void {
   pushSubscriptions.delete(endpoint);
-  console.log(`[Push Store] Removed invalid subscription: ${endpoint.slice(0, 50)}...`);
+    /* console.log(`[Push Store] Removed invalid subscription: ${endpoint.slice(0, 50)}...`); */
 }

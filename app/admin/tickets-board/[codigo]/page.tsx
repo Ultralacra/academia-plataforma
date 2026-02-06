@@ -271,15 +271,15 @@ function TicketDetailContent() {
     if (!ticket) return;
 
     // Debug: ver qué campos tiene el ticket
-    console.log("Ticket cargado:", ticket);
-    console.log("Campos del ticket:", Object.keys(ticket));
+        /* console.log("Ticket cargado:", ticket); */
+        /* console.log("Campos del ticket:", Object.keys(ticket)); */
 
     const alumnoNombre =
       ticket?.alumno_nombre ?? ticket?.alumnoNombre ?? ticket?.nombre;
-    console.log("Nombre del alumno detectado:", alumnoNombre);
+        /* console.log("Nombre del alumno detectado:", alumnoNombre); */
 
     if (!alumnoNombre) {
-      console.log("No se encontró nombre de alumno en el ticket");
+            /* console.log("No se encontró nombre de alumno en el ticket"); */
       return;
     }
 

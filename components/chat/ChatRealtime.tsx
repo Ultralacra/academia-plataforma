@@ -646,19 +646,19 @@ export default function ChatRealtime({
               : "<current-origin>";
           const base = url || defaultOrigin;
           const endpoint = `${base.replace(/\/$/, "")}/socket.io`;
-          console.log("[ChatRealtime] socket url (base):", url ?? "<default>");
-          console.log("[ChatRealtime] connect endpoint:", endpoint);
-          console.log(
+                    /* console.log("[ChatRealtime] socket url (base):", url ?? "<default>"); */
+                    /* console.log("[ChatRealtime] connect endpoint:", endpoint); */
+                    /* console.log(
             "[ChatRealtime] token override (prop):",
             (socketio as any)?.token ?? null
-          );
-          console.log("[ChatRealtime] auth token used:", token);
+          ); */
+                    /* console.log("[ChatRealtime] auth token used:", token); */
           if ((socketio as any)?.tokenEndpoint || (socketio as any)?.tokenId) {
-            console.log(
+                        /* console.log(
               "[ChatRealtime] tokenEndpoint:",
               (socketio as any)?.tokenEndpoint
-            );
-            console.log("[ChatRealtime] tokenId:", (socketio as any)?.tokenId);
+            ); */
+                        /* console.log("[ChatRealtime] tokenId:", (socketio as any)?.tokenId); */
           }
         } catch {}
         if (!token) {
@@ -1298,12 +1298,12 @@ export default function ChatRealtime({
           if ("id_equipo" in payload) delete payload.id_equipo;
         }
       }
-      console.log("[chat.list] payload =>", payload);
+            /* console.log("[chat.list] payload =>", payload); */
       sio.emit("chat.list", payload, (ack: any) => {
         try {
-          console.log("[chat.list] ack <=", ack);
+                    /* console.log("[chat.list] ack <=", ack); */
           if (ack && ack.success === false) {
-            console.log("[chat.list] error:", ack.error);
+                        /* console.log("[chat.list] error:", ack.error); */
             // No sobrescribir la lista previa del padre en caso de error
             return;
           }
@@ -1429,12 +1429,12 @@ export default function ChatRealtime({
           if ("id_equipo" in payload) delete payload.id_equipo;
         }
       }
-      console.log("[chat.list/refresh] payload =>", payload);
+            /* console.log("[chat.list/refresh] payload =>", payload); */
       sio.emit("chat.list", payload, (ack: any) => {
         try {
-          console.log("[chat.list/refresh] ack <=", ack);
+                    /* console.log("[chat.list/refresh] ack <=", ack); */
           if (ack && ack.success === false) {
-            console.log("[chat.list/refresh] error:", ack.error);
+                        /* console.log("[chat.list/refresh] error:", ack.error); */
             // Mantener la lista actual del padre
             return;
           }
@@ -1761,7 +1761,7 @@ export default function ChatRealtime({
       joinInFlightRef.current = true;
       const payload = { id_chat: newId } as any;
       try {
-        console.log("[chat.join] =>", payload);
+                /* console.log("[chat.join] =>", payload); */
       } catch {}
       sio.emit("chat.join", payload, (ack: any) => {
         try {
@@ -2054,13 +2054,13 @@ export default function ChatRealtime({
         return null;
       }
       try {
-        console.log("[chat.list/resolveMyParticipant] payload =>", payload);
+                /* console.log("[chat.list/resolveMyParticipant] payload =>", payload); */
       } catch {}
       return await new Promise((resolve) => {
         try {
           sio.emit("chat.list", payload, (ack: any) => {
             try {
-              console.log("[chat.list/resolveMyParticipant] ack <=", ack);
+                            /* console.log("[chat.list/resolveMyParticipant] ack <=", ack); */
               const list: any[] = Array.isArray(ack?.data) ? ack.data : [];
               const currentId = chatId != null ? String(chatId) : null;
               const item = currentId
@@ -2699,7 +2699,7 @@ export default function ChatRealtime({
       }
       const participants = participantsRef.current ?? socketio?.participants;
       if (!Array.isArray(participants) || participants.length === 0) {
-        console.log("[ensureChatReadyForSend] faltan participants para crear");
+                /* console.log("[ensureChatReadyForSend] faltan participants para crear"); */
         return false;
       }
       creatingRef.current = true;
@@ -2707,13 +2707,13 @@ export default function ChatRealtime({
       // Intentar encontrar existente
       const desiredSet = buildKeySetFromArray(participants);
       try {
-        console.log("[ensureChatReadyForSend] participantes deseados =>", {
+                /* console.log("[ensureChatReadyForSend] participantes deseados =>", {
           desired: Array.from(desiredSet.values()),
           raw: participants,
           role: currentRole,
           idCliente: socketio?.idCliente,
           idEquipo: socketio?.idEquipo,
-        });
+        }); */
       } catch {}
       // NOTA: el backend requiere participante_tipo + id_*, por lo que evitamos pedir chat.list por participants aquí.
       const listPayload: any = {};
@@ -2760,10 +2760,10 @@ export default function ChatRealtime({
             (ack: any) => {
               const arr = Array.isArray(ack?.data) ? ack.data : [];
               try {
-                console.log("[ensureChatReadyForSend] chat.list <=", {
+                                /* console.log("[ensureChatReadyForSend] chat.list <=", {
                   payload: listPayload,
                   total: arr.length,
-                });
+                }); */
               } catch {}
               resolve(arr);
             }
@@ -2789,7 +2789,7 @@ export default function ChatRealtime({
       }
       if (!matched && subsetMatched) matched = subsetMatched;
       try {
-        console.log("[ensureChatReadyForSend] resultado match =>", {
+                /* console.log("[ensureChatReadyForSend] resultado match =>", {
           matched: matched?.id_chat ?? matched?.id ?? null,
           via: matched
             ? equalKeySets(
@@ -2801,7 +2801,7 @@ export default function ChatRealtime({
               ? "equal"
               : "subset"
             : "none",
-        });
+        }); */
       } catch {}
       // Fallback: si no hay participantes en el listado, probar unirse a los más recientes para leer participantes
       if (!matched && Array.isArray(list) && list.length > 0) {
@@ -2890,10 +2890,10 @@ export default function ChatRealtime({
               });
               setItems(mapped);
               for (const mm of mapped) seenRef.current.add(mm.id);
-              console.log(
+                            /* console.log(
                 "[ensureChatReadyForSend] detectado existente via probeJoin <=",
                 { id_chat: cid }
-              );
+              ); */
               setIsJoining(false);
               creatingRef.current = false;
               return true;
@@ -2989,11 +2989,11 @@ export default function ChatRealtime({
                   setItems(mapped);
                   for (const mm of mapped) seenRef.current.add(mm.id);
                   try {
-                    console.log("[ensureChatReadyForSend] join existente <=", {
+                                        /* console.log("[ensureChatReadyForSend] join existente <=", {
                       id_chat: cid,
                       my_participante: data?.my_participante,
                       total_mensajes: mapped.length,
-                    });
+                    }); */
                   } catch {}
                   setIsJoining(false);
                   creatingRef.current = false;
@@ -3039,10 +3039,10 @@ export default function ChatRealtime({
                   const parts = data.participants || data.participantes;
                   assignMyParticipantIdFromList(parts);
                   try {
-                    console.log("[ensureChatReadyForSend] creado chat", {
+                                        /* console.log("[ensureChatReadyForSend] creado chat", {
                       id_chat: cid,
                       participants: parts,
-                    });
+                    }); */
                   } catch {}
                   // Unir para obtener my_participante definitivo y mensajes
                   const finalizeWithJoin = (finalChatId: any) => {
@@ -3059,13 +3059,13 @@ export default function ChatRealtime({
                               assignMyParticipantIdFromList(
                                 dj.participants || dj.participantes || parts
                               );
-                              console.log(
+                                                            /* console.log(
                                 "[ensureChatReadyForSend] join tras crear <=",
                                 {
                                   id_chat: finalChatId,
                                   my_participante: dj?.my_participante,
                                 }
-                              );
+                              ); */
                             }
                           } catch {}
                         }
@@ -3122,10 +3122,10 @@ export default function ChatRealtime({
                       if (found && (found.id_chat || found.id)) {
                         const finalId = found.id_chat ?? found.id;
                         setChatId(finalId);
-                        console.log(
+                                                /* console.log(
                           "[ensureChatReadyForSend] CREATE fallback: localizado chatId",
                           { id_chat: finalId }
-                        );
+                        ); */
                         finalizeWithJoin(finalId);
                       } else {
                         console.warn(
@@ -3853,7 +3853,7 @@ export default function ChatRealtime({
               <Select
                 value={ticketType}
                 onValueChange={(value: string) => {
-                  console.log("[v0] Select changed to:", value);
+                                    /* console.log("[v0] Select changed to:", value); */
                   setTicketType(value as TicketType);
                 }}
               >

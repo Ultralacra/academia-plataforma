@@ -19,13 +19,13 @@ export default function MetricsV2Logger() {
 
     // Imprimir la consulta
     // eslint-disable-next-line no-console
-    console.log("[metrics-v2] Request:", url);
+        /* console.log("[metrics-v2] Request:", url); */
 
     fetchMetricsV2({ fechaDesde, fechaHasta })
       .then((json) => {
         // Imprimir respuesta completa
         // eslint-disable-next-line no-console
-        console.log("[metrics-v2] Response:", json);
+                /* console.log("[metrics-v2] Response:", json); */
       })
       .catch((err) => {
         // eslint-disable-next-line no-console

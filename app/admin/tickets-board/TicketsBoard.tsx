@@ -1043,7 +1043,7 @@ export default function TicketsBoard({
       try {
         const urls = (list || []).map((f: any) => f?.url).filter(Boolean);
         // Log de URLs para verificación
-        console.log("Ticket files URLs:", urls);
+                /* console.log("Ticket files URLs:", urls); */
       } catch {}
     } catch (e) {
       console.error(e);
@@ -1791,7 +1791,7 @@ export default function TicketsBoard({
       setFiles(list);
       try {
         const urls = (list || []).map((f: any) => f?.url).filter(Boolean);
-        console.log("Ticket files URLs:", urls);
+                /* console.log("Ticket files URLs:", urls); */
       } catch {}
     } catch (e) {
       console.error(e);
@@ -1859,15 +1859,15 @@ export default function TicketsBoard({
 
           if (isImage) {
             const originalSizeKb = Math.round(f.size / 1024);
-            console.log(
+                        /* console.log(
               `[Upload] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`,
-            );
+            ); */
             try {
               const webp = await compressImageToWebp(f, 0.8);
               const webpSizeKb = Math.round(webp.size / 1024);
-              console.log(
+                            /* console.log(
                 `[Upload] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`,
-              );
+              ); */
               processed.push(webp);
             } catch (err) {
               console.error(
@@ -1883,9 +1883,9 @@ export default function TicketsBoard({
           ) {
             // Convertir audio a MP3 si no lo es
             try {
-              console.log(`[Upload] Convirtiendo audio a MP3: ${f.name}`);
+                            /* console.log(`[Upload] Convirtiendo audio a MP3: ${f.name}`); */
               const mp3 = await convertBlobToMp3(f);
-              console.log(`[Upload] Audio convertido: ${mp3.name}`);
+                            /* console.log(`[Upload] Audio convertido: ${mp3.name}`); */
               processed.push(mp3);
             } catch (e) {
               console.error("Error converting audio to mp3", e);
@@ -1893,11 +1893,11 @@ export default function TicketsBoard({
             }
           } else {
             // No imagen ni audio convertible: mantener archivo, log básico
-            console.log(
+                        /* console.log(
               `[Upload] Archivo: name=${f.name}, type=${
                 f.type
               }, size=${Math.round(f.size / 1024)} KB`,
-            );
+            ); */
             processed.push(f);
           }
         }
@@ -3671,7 +3671,7 @@ export default function TicketsBoard({
                     )}
                     <button
                       type="button"
-                      hidden={!selectedTicket?.id_alumno}
+                      hidden={!selectedTicket?.id_alumno && !studentCode}
                       onClick={() => setDetailTab("observaciones")}
                       className={`px-3 py-1.5 text-xs border-l ${
                         detailTab === "observaciones"
@@ -3683,7 +3683,7 @@ export default function TicketsBoard({
                       Observaciones
                     </button>
                     {/* Botón para abrir métricas ADS (solo si hay id_alumno) */}
-                    {selectedTicket?.id_alumno ? (
+                    {selectedTicket?.id_alumno || studentCode ? (
                       <button
                         type="button"
                         onClick={() => setDetailTab("ads")}
@@ -4923,9 +4923,9 @@ export default function TicketsBoard({
                                     const originalSizeKb = Math.round(
                                       f.size / 1024,
                                     );
-                                    console.log(
+                                                                        /* console.log(
                                       `[UploadButton] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`,
-                                    );
+                                    ); */
                                     try {
                                       const webp = await compressImageToWebp(
                                         f,
@@ -4934,9 +4934,9 @@ export default function TicketsBoard({
                                       const webpSizeKb = Math.round(
                                         webp.size / 1024,
                                       );
-                                      console.log(
+                                                                            /* console.log(
                                         `[UploadButton] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`,
-                                      );
+                                      ); */
                                       processed.push(webp);
                                     } catch (err) {
                                       console.error(
@@ -4946,13 +4946,13 @@ export default function TicketsBoard({
                                       processed.push(f);
                                     }
                                   } else {
-                                    console.log(
+                                                                        /* console.log(
                                       `[UploadButton] Archivo no imagen: name=${
                                         f.name
                                       }, type=${f.type}, size=${Math.round(
                                         f.size / 1024,
                                       )} KB`,
-                                    );
+                                    ); */
                                     processed.push(f);
                                   }
                                 }
@@ -5503,14 +5503,17 @@ export default function TicketsBoard({
                 {/* Tab: ADS - Métricas ADS (editable) */}
                 <div className={detailTab === "ads" ? "block" : "hidden"}>
                   <div className="p-6">
-                    {selectedTicket?.id_alumno ? (
+                    {selectedTicket?.id_alumno || studentCode ? (
                       <AdsMetricsForm
-                        studentCode={String(selectedTicket?.id_alumno || "")}
+                        studentCode={String(
+                          studentCode || selectedTicket?.id_alumno || "",
+                        )}
                         studentName={String(
                           selectedTicket?.alumno_nombre ||
                             selectedTicket?.alumno_name ||
                             "",
                         )}
+                        readOnly={!canEdit}
                       />
                     ) : (
                       <div className="text-sm text-slate-500">

@@ -28,7 +28,7 @@ async function sendPushNotification(
     // Usamos fetch para enviar al endpoint del push service
     // NOTA: En producción, usar librería web-push que maneja la encriptación correctamente
     // Por ahora, usamos el SW para mostrar notificaciones locales
-    console.log(`[Push] Intentando enviar a: ${subscription.endpoint.slice(0, 50)}...`);
+        /* console.log(`[Push] Intentando enviar a: ${subscription.endpoint.slice(0, 50)}...`); */
     
     // Para una implementación completa de Web Push se necesita:
     // 1. Encriptar el payload con ECDH
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       : getAllSubscriptions();
 
     if (subscriptions.length === 0) {
-      console.log(`[Push] No hay suscripciones para topic: ${topic || "all"}`);
+            /* console.log(`[Push] No hay suscripciones para topic: ${topic || "all"}`); */
       return NextResponse.json({
         success: true,
         sent: 0,
@@ -98,9 +98,9 @@ export async function POST(request: NextRequest) {
       ...data,
     };
 
-    console.log(
+        /* console.log(
       `[Push] Enviando a ${subscriptions.length} suscriptores, topic: ${topic || "all"}`
-    );
+    ); */
 
     // Enviar a todas las suscripciones en paralelo
     const results = await Promise.allSettled(

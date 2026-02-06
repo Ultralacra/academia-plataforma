@@ -52,7 +52,7 @@ export function useChatSocket({
       try {
         // Imprimir en consola el token usado para la conexión del chat
         // (útil para debugging en cliente)
-        console.log("[useChatSocket] chat connection token:", token);
+                /* console.log("[useChatSocket] chat connection token:", token); */
       } catch {}
       const sio = io(url, {
         auth: { token },

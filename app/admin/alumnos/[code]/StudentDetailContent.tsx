@@ -1077,12 +1077,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
         codigo_cliente: student.code,
         codigo_equipo: coachId,
       };
-      console.log("Removing coach - request:", body);
+            /* console.log("Removing coach - request:", body); */
       const json = await apiFetch<any>("/team/associate/team-client", {
         method: "DELETE",
         body: JSON.stringify(body),
       });
-      console.log("removeCoach response", json);
+            /* console.log("removeCoach response", json); */
       // refresh coaches
       await loadCoaches(student.code);
     } catch (e) {
@@ -1553,7 +1553,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     if (lastAccessLogKeyRef.current === logKey) return;
     lastAccessLogKeyRef.current = logKey;
 
-    console.log("[admin/alumnos] vencimiento acceso (UI)", {
+        /* console.log("[admin/alumnos] vencimiento acceso (UI)", {
       student: {
         id: student.id,
         code: student.code,
@@ -1587,7 +1587,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
         iso: venceShownIso,
         es: fmtES(venceShownIso as any),
       },
-    });
+    }); */
   }, [
     student,
     accessStats,

@@ -180,13 +180,13 @@ export default function TransitionsPanel({
     // Debug: imprime en consola el preset, etapa y muestra de alumnos
     try {
       // eslint-disable-next-line no-console
-      console.log("[transitions] click", {
+            /* console.log("[transitions] click", {
         presetDays: activeDays,
         stageId: k,
         stageLabel: label,
         total: raw.length,
         sample: raw.slice(0, 5),
-      });
+      }); */
     } catch {}
     onOpenList(`Transiciones — ${label} (últimos ${activeDays} días)`, rows);
   };

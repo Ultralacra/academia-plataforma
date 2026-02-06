@@ -84,7 +84,7 @@ function chatDebug(): boolean {
 function dbg(...args: any[]) {
   try {
     // Prefijo consistente para facilitar lectura
-    console.log("[Chat]", ...args);
+        /* console.log("[Chat]", ...args); */
   } catch {}
 }
 
@@ -224,7 +224,7 @@ export default function CoachChatInline({
     itemsRef.current = items;
     if (!chatDebug()) return;
     if (items.length > 0) {
-      console.log(
+            /* console.log(
         "[CoachChatInline] Lista de horas:",
         items.map((m) => ({
           id: m.id,
@@ -233,7 +233,7 @@ export default function CoachChatInline({
           dateObj: new Date(m.at),
           localTime: new Date(m.at).toLocaleTimeString(),
         })),
-      );
+      ); */
     }
   }, [items]);
   // Debug opcional: imprimir un resumen solo si chatDebug=1
@@ -284,7 +284,7 @@ export default function CoachChatInline({
   // Log selection changes
   React.useEffect(() => {
     if (selectedMessageIds.size > 0 || selectedAttachmentIds.size > 0) {
-      console.log(
+            /* console.log(
         JSON.stringify(
           {
             message_ids: Array.from(selectedMessageIds),
@@ -293,7 +293,7 @@ export default function CoachChatInline({
           null,
           3,
         ),
-      );
+      ); */
     }
   }, [selectedMessageIds, selectedAttachmentIds]);
 
@@ -623,10 +623,10 @@ export default function CoachChatInline({
   React.useEffect(() => {
     try {
       if (socketio?.participants) {
-        console.log(
+                /* console.log(
           "[CoachChatInline] socketio.participants changed (selection):",
           socketio.participants,
-        );
+        ); */
       }
     } catch {}
   }, [socketio?.participants]);
@@ -850,11 +850,11 @@ export default function CoachChatInline({
       try {
         const mensajes = Array.from(selectedMessageIds);
         const adjuntos = Array.from(selectedAttachmentIds);
-        console.log("[Chat] selección para ticket", {
+                /* console.log("[Chat] selección para ticket", {
           mensajes,
           adjuntos,
           vacio: mensajes.length === 0 && adjuntos.length === 0,
-        });
+        }); */
       } catch {}
 
       if (selectedMessageIds.size === 0 && selectedAttachmentIds.size === 0) {
@@ -1934,7 +1934,7 @@ export default function CoachChatInline({
         const token = await resolveToken();
         // Log explícito del token cuando inicia el chat (coach/alumno/admin)
         try {
-          console.log("[CoachChatInline] Token de conexión:", token);
+                    /* console.log("[CoachChatInline] Token de conexión:", token); */
         } catch {}
         if (!token) {
           setConnected(false);
@@ -2132,7 +2132,7 @@ export default function CoachChatInline({
               );
               if (tipoNormMsg === "cliente") {
                 const emitter = getEmitter(msg);
-                console.log("[CoachChatInline] ← Mensaje de alumno", {
+                                /* console.log("[CoachChatInline] ← Mensaje de alumno", {
                   id_chat: msg?.id_chat,
                   id_mensaje: msg?.id_mensaje ?? msg?.id,
                   texto_preview: String(
@@ -2145,7 +2145,7 @@ export default function CoachChatInline({
                   nombre_emisor: msg?.nombre_emisor,
                   client_session: msg?.client_session,
                   emitter_participante: emitter,
-                });
+                }); */
               }
             } catch {}
             const currentChatId = chatIdRef.current;
@@ -2309,9 +2309,9 @@ export default function CoachChatInline({
               !senderIsMeByTipo &&
               !mine(tipoNorm as unknown as Sender)
             ) {
-              console.log(
+                            /* console.log(
                 "[CoachChatInline] Playing sound for incoming message",
-              );
+              ); */
               playNotificationSound();
             } else {
               // Es mi propio mensaje (eco), marcar como leído para evitar que aparezca como no leído
@@ -2518,13 +2518,13 @@ export default function CoachChatInline({
           } catch {}
         });
 
-        console.log("[CoachChat] 🔌 Registrando listener chat.typing");
+                /* console.log("[CoachChat] 🔌 Registrando listener chat.typing"); */
         sio.on("chat.typing", (data: any) => {
           try {
-            console.log(
+                        /* console.log(
               "[CoachChat TYPING] ✏️ Evento recibido:",
               JSON.stringify(data),
-            );
+            ); */
             const idChat = data?.id_chat ?? data?.chatId ?? null;
 
             // Ignorar si es mi propia sesión
@@ -2532,9 +2532,9 @@ export default function CoachChatInline({
               data?.client_session &&
               String(data.client_session) === String(clientSessionRef.current)
             ) {
-              console.log(
+                            /* console.log(
                 "[CoachChat TYPING] ⏭️ Ignorado: misma sesión cliente",
-              );
+              ); */
               return;
             }
 
@@ -2555,9 +2555,9 @@ export default function CoachChatInline({
               myPidNow2 != null &&
               String(emitter) === String(myPidNow2)
             ) {
-              console.log(
+                            /* console.log(
                 "[CoachChat TYPING] ⏭️ Ignorado: soy yo el emisor (por participante)",
-              );
+              ); */
               return;
             }
 
@@ -2581,9 +2581,9 @@ export default function CoachChatInline({
                 String(myEquipoCode).toLowerCase();
 
             if (isMyOwnEquipo) {
-              console.log(
+                            /* console.log(
                 "[CoachChat TYPING] ⏭️ Ignorado: soy yo (mismo id_equipo)",
-              );
+              ); */
               return;
             }
 
@@ -2596,10 +2596,10 @@ export default function CoachChatInline({
                 String(myUserCode).toLowerCase();
 
             if (isMyOwnUser) {
-              console.log(
+                            /* console.log(
                 "[CoachChat TYPING] ⏭️ Ignorado: soy yo (mismo myUserCode)",
                 { myUserCode, userIdFromPayload },
-              );
+              ); */
               return;
             }
 
@@ -2618,21 +2618,21 @@ export default function CoachChatInline({
               hasClientDiff || isOtherByEmitter || isOtherByUser;
 
             if (!isDefinitelyOther) {
-              console.log(
+                            /* console.log(
                 "[CoachChat TYPING] ⏭️ Ignorado: no se pudo confirmar que es otro usuario",
-              );
+              ); */
               return;
             }
 
             const isOn = data?.typing === true || data?.on === true;
             const isOff = data?.typing === false || data?.on === false;
-            console.log("[CoachChat TYPING] ✅ Procesando:", {
+                        /* console.log("[CoachChat TYPING] ✅ Procesando:", {
               isOn,
               isOff,
               idChat,
               emitter,
               userIdFromPayload,
-            });
+            }); */
 
             // Notificar al padre para que actualice la lista de chats
             if (idChat != null) {
@@ -2647,20 +2647,20 @@ export default function CoachChatInline({
               chatId != null &&
               String(idChat) === String(chatId);
             if (!isCurrentChat) {
-              console.log(
+                            /* console.log(
                 "[CoachChat TYPING] 📋 Evento para otro chat, solo notificando lista",
-              );
+              ); */
               return;
             }
 
             if (isOff) {
-              console.log("[CoachChat TYPING] ⬇️ Ocultando indicador");
+                            /* console.log("[CoachChat TYPING] ⬇️ Ocultando indicador"); */
               return setOtherTyping(false);
             }
             if (!isOn) return;
-            console.log(
+                        /* console.log(
               "[CoachChat TYPING] ⬆️ Mostrando indicador 'escribiendo...'",
-            );
+            ); */
             setOtherTyping(true);
             setTimeout(() => setOtherTyping(false), 1800);
           } catch {}
@@ -2856,13 +2856,13 @@ export default function CoachChatInline({
               clientes === 0 && equipos >= 2 && arr.length <= 3;
 
             // DEBUG: Imprimir tipo de chat detectado
-            console.log("===== [CoachChatInline] TIPO DE CHAT DETECTADO =====");
-            console.log("Participantes:", arr);
-            console.log("Clientes:", clientes, "Equipos:", equipos);
-            console.log("isCoachToCoach:", isCoachToCoachChatRef.current);
-            console.log("myParticipantId:", myParticipantIdRef.current);
-            console.log("socketio.idEquipo:", socketio?.idEquipo);
-            console.log("====================================================");
+                        /* console.log("===== [CoachChatInline] TIPO DE CHAT DETECTADO ====="); */
+                        /* console.log("Participantes:", arr); */
+                        /* console.log("Clientes:", clientes, "Equipos:", equipos); */
+                        /* console.log("isCoachToCoach:", isCoachToCoachChatRef.current); */
+                        /* console.log("myParticipantId:", myParticipantIdRef.current); */
+                        /* console.log("socketio.idEquipo:", socketio?.idEquipo); */
+                        /* console.log("===================================================="); */
           } catch {}
           if (
             !myParticipantIdRef.current &&
@@ -2988,7 +2988,7 @@ export default function CoachChatInline({
             // Log completo solicitado: imprimir todos los mensajes de la conversación al hacer JOIN
             try {
               // console.log("[Chat] JOIN full messages", mapped);
-              console.log(
+                            /* console.log(
                 "[Chat] JOIN messages IDs & Attachments",
                 mapped.map((m) => ({
                   id: m.id,
@@ -2996,13 +2996,13 @@ export default function CoachChatInline({
                     ? m.attachments.map((a) => a.id)
                     : [],
                 })),
-              );
+              ); */
 
-              console.log("--- [DEBUG] CONVERSACIÓN ALUMNO ---");
-              console.log("Chat ID:", cid);
-              console.log("Participantes:", joinedParticipantsRef.current);
-              console.log("Mensajes:", mapped);
-              console.log("-----------------------------------");
+                            /* console.log("--- [DEBUG] CONVERSACIÓN ALUMNO ---"); */
+                            /* console.log("Chat ID:", cid); */
+                            /* console.log("Participantes:", joinedParticipantsRef.current); */
+                            /* console.log("Mensajes:", mapped); */
+                            /* console.log("-----------------------------------"); */
             } catch {}
           } catch {}
 
@@ -3105,7 +3105,7 @@ export default function CoachChatInline({
           });
 
           if (Array.isArray(ack?.data)) {
-            console.log("--- LISTA DE CHATS RECIBIDA DEL SERVIDOR ---");
+                        /* console.log("--- LISTA DE CHATS RECIBIDA DEL SERVIDOR ---"); */
 
             // DETECTAR CONVERSACIONES DUPLICADAS
             const chatIds = new Map<string, number>();
@@ -3147,13 +3147,13 @@ export default function CoachChatInline({
                 equipo?.nombre_participante ||
                 null;
               const myName = (c as any)?.my_participante_nombre || null;
-              console.log(`[${i}]`, {
+                            /* console.log(`[${i}]`, {
                 id_chat: c?.id_chat ?? c?.id ?? null,
                 my_participante: c?.my_participante ?? null,
                 my_participante_nombre: myName,
                 otros_participantes: arr,
                 resolved_contact_name: contactName,
-              });
+              }); */
             });
 
             if (duplicates.length > 0) {
@@ -3162,9 +3162,9 @@ export default function CoachChatInline({
                 duplicados: duplicates,
               });
             } else {
-              console.log("✅ No se detectaron conversaciones duplicadas");
+                            /* console.log("✅ No se detectaron conversaciones duplicadas"); */
             }
-            console.log("--------------------------------------------");
+                        /* console.log("--------------------------------------------"); */
 
             // Usar el nombre del contacto del chat activo (si existe); de lo contrario, el primero
             try {
@@ -3578,7 +3578,7 @@ export default function CoachChatInline({
       };
       const matched = findMatch(list);
       if (matched && (matched.id_chat || matched.id)) {
-        console.log("[DEBUG] Chat encontrado existente:", matched);
+                /* console.log("[DEBUG] Chat encontrado existente:", matched); */
         const idToJoin = matched.id_chat ?? matched.id;
         const ok = await new Promise<boolean>((resolve) => {
           try {
@@ -3645,11 +3645,11 @@ export default function CoachChatInline({
                         ),
                       } as Message;
                     });
-                    console.log("[CoachChatInline] JOIN OK", {
+                                        /* console.log("[CoachChatInline] JOIN OK", {
                       chatId: cid,
                       mensajes_count: mapped.length,
-                    });
-                    console.log("[CoachChatInline] MENSAJES (array)", mapped);
+                    }); */
+                                        /* console.log("[CoachChatInline] MENSAJES (array)", mapped); */
                   } catch {}
                   resolve(true);
                 } else resolve(false);
@@ -3672,12 +3672,12 @@ export default function CoachChatInline({
         return await new Promise<boolean>((resolve) => {
           try {
             try {
-              console.log(
+                            /* console.log(
                 "[CoachChatInline] Emitting create event:",
                 eventName,
                 "participants:",
                 participants,
-              );
+              ); */
             } catch {}
             sio.emit(eventName, { participants }, (ack: any) => {
               try {
@@ -3727,12 +3727,12 @@ export default function CoachChatInline({
         (await tryCreate("chat.create-with-participants")) ||
         (await tryCreate("chat.create"));
 
-      console.log(
+            /* console.log(
         "[DEBUG] Resultado creación chat:",
         created,
         "ChatID:",
         chatIdRef.current,
-      );
+      ); */
 
       if (!created || chatIdRef.current == null) return false;
 
@@ -4080,33 +4080,33 @@ export default function CoachChatInline({
     try {
       const sio = sioRef.current;
       if (!sio || chatIdRef.current == null) {
-        console.log("[CoachChat EMIT_TYPING] ❌ No socket o chatId", {
+                /* console.log("[CoachChat EMIT_TYPING] ❌ No socket o chatId", {
           hasSocket: !!sio,
           chatId: chatIdRef.current,
-        });
+        }); */
         return;
       }
       const payload: any = { id_chat: chatIdRef.current, typing: !!on };
       if (myParticipantId != null)
         payload.id_chat_participante_emisor = myParticipantId;
       payload.client_session = clientSessionRef.current;
-      console.log("[CoachChat EMIT_TYPING] 📤 Emitiendo:", on, payload);
+            /* console.log("[CoachChat EMIT_TYPING] 📤 Emitiendo:", on, payload); */
       sio.emit("chat.typing", payload);
     } catch {}
   }
 
   const notifyTyping = (on: boolean) => {
-    console.log("[CoachChat NOTIFY_TYPING] Llamado con on=", on);
+        /* console.log("[CoachChat NOTIFY_TYPING] Llamado con on=", on); */
     try {
       const state = typingRef.current;
-      console.log(
+            /* console.log(
         "[CoachChat NOTIFY_TYPING] Estado actual:",
         state.on,
         "timer:",
         !!state.timer,
-      );
+      ); */
       if (on && !state.on) {
-        console.log("[CoachChat NOTIFY_TYPING] ✅ Disparando emitTyping(true)");
+                /* console.log("[CoachChat NOTIFY_TYPING] ✅ Disparando emitTyping(true)"); */
         emitTyping(true);
         state.on = true;
       }

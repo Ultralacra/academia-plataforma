@@ -49,7 +49,7 @@ export async function getOptionByCode(code: string) {
 export async function createOption(payload: { opcion_key: string; opcion_value: string; opcion_grupo: string }) {
   const path = `/opcion/create/opcion`;
   const fullUrl = buildUrl(path);
-  console.log('[opciones api] POST', fullUrl, 'payload=', payload);
+    /* console.log('[opciones api] POST', fullUrl, 'payload=', payload); */
   const json = await fetchJson<any>(path, {
     method: "POST",
     body: JSON.stringify(payload),
@@ -61,7 +61,7 @@ export async function createOption(payload: { opcion_key: string; opcion_value: 
 export async function updateOption(code: string, payload: { opcion_key?: string; opcion_value?: string; opcion_grupo?: string }) {
   const path = `/opcion/update/opcion/${encodeURIComponent(code)}`;
   const fullUrl = buildUrl(path);
-  console.log('[opciones api] PUT', fullUrl, 'codigo=', code, 'payload=', payload);
+    /* console.log('[opciones api] PUT', fullUrl, 'codigo=', code, 'payload=', payload); */
   const json = await fetchJson<any>(path, {
     method: "PUT",
     body: JSON.stringify(payload),
@@ -74,8 +74,8 @@ export async function updateOption(code: string, payload: { opcion_key?: string;
 export async function deleteOption(code: string) {
   const path = `/opcion/delete/opcion/${encodeURIComponent(code)}`;
   const fullUrl = buildUrl(path);
-  console.log('[opciones api] DELETE', fullUrl, 'codigo=', code);
+    /* console.log('[opciones api] DELETE', fullUrl, 'codigo=', code); */
   const json = await fetchJson<any>(path, { method: "DELETE" });
-  console.log('[opciones api] DELETE response:', json);
+    /* console.log('[opciones api] DELETE response:', json); */
   return json;
 }

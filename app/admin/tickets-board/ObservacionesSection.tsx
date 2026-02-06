@@ -417,10 +417,10 @@ export default function ObservacionesSection({
         updatePayload.alumno_nombre = payload.alumno_nombre;
       }
 
-      console.log("Actualizando observación (toggle realizada):", {
+            /* console.log("Actualizando observación (toggle realizada):", {
         id: obs.id,
         payload: updatePayload,
-      });
+      }); */
 
       await updateObservacion(obs.id, updatePayload);
 

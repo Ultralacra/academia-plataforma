@@ -159,31 +159,31 @@ export default function StudentCoachChatPanel({
         });
 
         // LOG DETALLADO: TODOS LOS COACHES ASIGNADOS
-        console.log("═══════════════════════════════════════════════════════");
-        console.log("🔍 [CHAT ALUMNO] COACHES ASIGNADOS AL ALUMNO");
-        console.log("═══════════════════════════════════════════════════════");
-        console.log(`📋 Alumno: ${code} (${studentName || "Sin nombre"})`);
-        console.log(`📊 Total coaches asignados: ${asignados.length}`);
-        console.log("");
-        console.log("👥 LISTA COMPLETA DE COACHES:");
+                /* console.log("═══════════════════════════════════════════════════════"); */
+                /* console.log("🔍 [CHAT ALUMNO] COACHES ASIGNADOS AL ALUMNO"); */
+                /* console.log("═══════════════════════════════════════════════════════"); */
+                /* console.log(`📋 Alumno: ${code} (${studentName || "Sin nombre"})`); */
+                /* console.log(`📊 Total coaches asignados: ${asignados.length}`); */
+                /* console.log(""); */
+                /* console.log("👥 LISTA COMPLETA DE COACHES:"); */
         asignados.forEach((c, idx) => {
           const esAC = hasCustomerCare((c as any).area);
-          console.log(`  ${idx + 1}. ${esAC ? "✅" : "❌"} Coach:`);
-          console.log(`     ID: ${c.id}`);
-          console.log(`     Código: ${c.codigo}`);
-          console.log(`     Nombre: ${c.nombre || "N/A"}`);
-          console.log(`     Área: ${(c as any).area || "N/A"}`);
-          console.log(`     Puesto: ${c.puesto || "N/A"}`);
-          console.log(
+                    /* console.log(`  ${idx + 1}. ${esAC ? "✅" : "❌"} Coach:`); */
+                    /* console.log(`     ID: ${c.id}`); */
+                    /* console.log(`     Código: ${c.codigo}`); */
+                    /* console.log(`     Nombre: ${c.nombre || "N/A"}`); */
+                    /* console.log(`     Área: ${(c as any).area || "N/A"}`); */
+                    /* console.log(`     Puesto: ${c.puesto || "N/A"}`); */
+                    /* console.log(
             `     ${
               esAC
                 ? "👉 ES ATENCIÓN AL CLIENTE / SOPORTE"
                 : "No es Atención al Cliente"
             }`
-          );
-          console.log("");
+          ); */
+                    /* console.log(""); */
         });
-        console.log("═══════════════════════════════════════════════════════");
+                /* console.log("═══════════════════════════════════════════════════════"); */
 
         // Guardar catálogo completo para resolver nombres en títulos/logs
         setTeamsAll(asignados);
@@ -197,33 +197,33 @@ export default function StudentCoachChatPanel({
         // Filtrar coaches VSL
         const onlyVSL = asignados.filter((t) => isVSLCoach(t));
 
-        console.log("🎯 COACHES DE ATENCIÓN AL CLIENTE FILTRADOS:");
-        console.log(`   Total encontrados: ${onlyCustomerCare.length}`);
+                /* console.log("🎯 COACHES DE ATENCIÓN AL CLIENTE FILTRADOS:"); */
+                /* console.log(`   Total encontrados: ${onlyCustomerCare.length}`); */
         if (onlyCustomerCare.length > 0) {
           onlyCustomerCare.forEach((c, idx) => {
-            console.log(
+                        /* console.log(
               `   ${idx + 1}. ${c.nombre} (${c.codigo}) - Área: ${
                 (c as any).area
               }`
-            );
+            ); */
           });
         } else {
-          console.log("   ⚠️ NO SE ENCONTRARON COACHES DE ATENCIÓN AL CLIENTE");
+                    /* console.log("   ⚠️ NO SE ENCONTRARON COACHES DE ATENCIÓN AL CLIENTE"); */
         }
-        console.log("🎯 COACHES VSL FILTRADOS:");
-        console.log(`   Total encontrados: ${onlyVSL.length}`);
+                /* console.log("🎯 COACHES VSL FILTRADOS:"); */
+                /* console.log(`   Total encontrados: ${onlyVSL.length}`); */
         if (onlyVSL.length > 0) {
           onlyVSL.forEach((c, idx) => {
-            console.log(
+                        /* console.log(
               `   ${idx + 1}. ${c.nombre} (${c.codigo}) - Área: ${
                 (c as any).area
               } - Puesto: ${c.puesto}`
-            );
+            ); */
           });
         } else {
-          console.log("   ⚠️ NO SE ENCONTRARON COACHES VSL");
+                    /* console.log("   ⚠️ NO SE ENCONTRARON COACHES VSL"); */
         }
-        console.log("═══════════════════════════════════════════════════════");
+                /* console.log("═══════════════════════════════════════════════════════"); */
 
         // Fallback: si no hay nadie con area "Atención al Cliente", buscar por nombre o puesto que contenga "Soporte" o "Atención"
         if (onlyCustomerCare.length === 0) {
@@ -267,25 +267,25 @@ export default function StudentCoachChatPanel({
             const firstCode = pick?.id ?? pick?.codigo ?? null; // Preferir ID
             if (firstCode != null) {
               setTargetCoachId(String(firstCode));
-              console.log("✅ COACH SELECCIONADO AUTOMÁTICAMENTE:");
-              console.log(`   Nombre: ${pick?.nombre}`);
-              console.log(`   Código: ${pick?.codigo}`);
-              console.log(`   ID: ${pick?.id}`);
-              console.log(`   Área: ${pick?.area}`);
-              console.log(`   Puesto: ${pick?.puesto}`);
-              console.log(`   Canal: ${initialChannel.toUpperCase()}`);
-              console.log(
+                            /* console.log("✅ COACH SELECCIONADO AUTOMÁTICAMENTE:"); */
+                            /* console.log(`   Nombre: ${pick?.nombre}`); */
+                            /* console.log(`   Código: ${pick?.codigo}`); */
+                            /* console.log(`   ID: ${pick?.id}`); */
+                            /* console.log(`   Área: ${pick?.area}`); */
+                            /* console.log(`   Puesto: ${pick?.puesto}`); */
+                            /* console.log(`   Canal: ${initialChannel.toUpperCase()}`); */
+                            /* console.log(
                 "═══════════════════════════════════════════════════════"
-              );
+              ); */
             }
           } catch {}
         } else if (initialList.length === 0) {
-          console.log(
+                    /* console.log(
             "⚠️ NO SE PUDO PRESELECCIONAR COACH: No hay coaches disponibles"
-          );
-          console.log(
+          ); */
+                    /* console.log(
             "═══════════════════════════════════════════════════════"
-          );
+          ); */
         }
       } catch {
         setTeams([]);
@@ -309,10 +309,10 @@ export default function StudentCoachChatPanel({
         setTeamsGlobal(arr);
       } catch (e) {
         try {
-          console.log(
+                    /* console.log(
             "[StudentCoachChatPanel] No se pudo cargar teamsGlobal",
             e
-          );
+          ); */
         } catch {}
         setTeamsGlobal([]);
       }
@@ -433,10 +433,10 @@ export default function StudentCoachChatPanel({
     if (idEquipoVal)
       arr.push({ participante_tipo: "equipo", id_equipo: idEquipoVal });
     try {
-      console.log("[StudentCoachChatPanel] participants", arr, {
+            /* console.log("[StudentCoachChatPanel] participants", arr, {
         targetCoachId,
         resolvedEquipoCode: idEquipoVal,
-      });
+      }); */
     } catch {}
     return arr as any[];
   }, [code, targetCoachId, resolvedEquipoCode]);
@@ -552,18 +552,18 @@ export default function StudentCoachChatPanel({
           (a) => String(a.area || "").toUpperCase() === CUSTOMER_CARE_AREA
         );
         // Logs claros para depuración
-        console.log("[Chat alumno] Equipos asignados:", {
+                /* console.log("[Chat alumno] Equipos asignados:", {
           alumno: code,
           total: asignados.length,
           asignados,
-        });
-        console.log("[Chat alumno] Atención al Cliente:", {
+        }); */
+                /* console.log("[Chat alumno] Atención al Cliente:", {
           alumno: code,
           total: atencion.length,
           atencion,
-        });
+        }); */
       } catch (e) {
-        console.log("[Chat alumno] No se pudo obtener equipos del alumno", e);
+                /* console.log("[Chat alumno] No se pudo obtener equipos del alumno", e); */
       }
     })();
     return () => {
@@ -573,10 +573,10 @@ export default function StudentCoachChatPanel({
   // Log de depuración: qué enviamos para listar
   useEffect(() => {
     try {
-      console.log("[StudentCoachChatPanel] listParams =>", listParams, {
+            /* console.log("[StudentCoachChatPanel] listParams =>", listParams, {
         connected,
         listSignal,
-      });
+      }); */
     } catch {}
   }, [listParams, connected, listSignal]);
 
@@ -857,12 +857,12 @@ export default function StudentCoachChatPanel({
                           }`}
                           onClick={() => {
                             try {
-                              console.log(
+                                                            /* console.log(
                                 "[StudentCoachChatPanel] click chat",
                                 {
                                   id,
                                 }
-                              );
+                              ); */
                             } catch {}
                             manualSelectionRef.current = true;
                             setTargetCoachId(null);
@@ -1002,18 +1002,18 @@ export default function StudentCoachChatPanel({
                       const arr = Array.isArray(list) ? list : [];
 
                       // FILTRO: Solo mostrar conversaciones según el canal activo (AC o VSL)
-                      console.log(
+                                            /* console.log(
                         "═══════════════════════════════════════════════════════"
-                      );
-                      console.log(
+                      ); */
+                                            /* console.log(
                         `🔍 [CHAT ALUMNO] FILTRANDO CONVERSACIONES PARA CANAL: ${channel.toUpperCase()}`
-                      );
-                      console.log(
+                      ); */
+                                            /* console.log(
                         "═══════════════════════════════════════════════════════"
-                      );
-                      console.log(
+                      ); */
+                                            /* console.log(
                         `📋 Total conversaciones recibidas: ${arr.length}`
-                      );
+                      ); */
 
                       const filtered = arr.filter((chat: any) => {
                         const parts =
@@ -1025,11 +1025,11 @@ export default function StudentCoachChatPanel({
                             ) === "equipo"
                         );
                         if (!coachP) {
-                          console.log(
+                                                    /* console.log(
                             `❌ Chat ${
                               chat.id_chat || chat.id
                             }: Sin participante equipo`
-                          );
+                          ); */
                           return false;
                         }
                         const sid = String(coachP.id_equipo || "");
@@ -1046,11 +1046,11 @@ export default function StudentCoachChatPanel({
                           );
 
                         if (!t) {
-                          console.log(
+                                                    /* console.log(
                             `❌ Chat ${
                               chat.id_chat || chat.id
                             }: Coach ${sid} no identificado`
-                          );
+                          ); */
                           return false; // Si no identificamos al equipo, ocultar por seguridad
                         }
 
@@ -1059,32 +1059,32 @@ export default function StudentCoachChatPanel({
                         const isAC = hasCustomerCare(t.area);
                         
                         if (channel === "vsl") {
-                          console.log(
+                                                    /* console.log(
                             `${isVSL ? "✅" : "❌"} Chat ${
                               chat.id_chat || chat.id
                             }: Coach ${t.nombre} (${sid}) - Área: ${t.area} ${
                               isVSL ? "👉 ES VSL" : ""
                             }`
-                          );
+                          ); */
                           return isVSL;
                         } else {
-                          console.log(
+                                                    /* console.log(
                             `${isAC ? "✅" : "❌"} Chat ${
                               chat.id_chat || chat.id
                             }: Coach ${t.nombre} (${sid}) - Área: ${t.area} ${
                               isAC ? "👉 ES ATENCIÓN AL CLIENTE" : ""
                             }`
-                          );
+                          ); */
                           return isAC;
                         }
                       });
 
-                      console.log("");
-                      console.log(
+                                            /* console.log(""); */
+                                            /* console.log(
                         `✅ Conversaciones de ${channel === "vsl" ? "VSL" : "Atención al Cliente"}: ${filtered.length}`
-                      );
+                      ); */
                       if (filtered.length > 0) {
-                        console.log("📋 Lista de chats válidos:");
+                                                /* console.log("📋 Lista de chats válidos:"); */
                         filtered.forEach((c: any, idx: number) => {
                           const chatId = c.id_chat || c.id;
                           const parts = c.participants || c.participantes || [];
@@ -1096,18 +1096,18 @@ export default function StudentCoachChatPanel({
                             (x) =>
                               String(x.id) === sid || String(x.codigo) === sid
                           );
-                          console.log(
+                                                    /* console.log(
                             `   ${idx + 1}. Chat ID: ${chatId} - Coach: ${
                               t?.nombre
                             } (${t?.codigo}) - Canal: ${channel.toUpperCase()}`
-                          );
+                          ); */
                         });
                       }
-                      console.log(
+                                            /* console.log(
                         "═══════════════════════════════════════════════════════"
-                      );
+                      ); */
                       try {
-                        console.log("[StudentCoachChatPanel] onChatsList", {
+                                                /* console.log("[StudentCoachChatPanel] onChatsList", {
                           channel,
                           original: arr.length,
                           filtered: filtered.length,
@@ -1119,7 +1119,7 @@ export default function StudentCoachChatPanel({
                               it?.last?.text ??
                               null,
                           })),
-                        });
+                        }); */
                       } catch {}
 
                       setStudentChats(filtered);
@@ -1147,26 +1147,26 @@ export default function StudentCoachChatPanel({
                               String(x.id) === sid || String(x.codigo) === sid
                           );
 
-                          console.log(
+                                                    /* console.log(
                             "═══════════════════════════════════════════════════════"
-                          );
-                          console.log(
+                          ); */
+                                                    /* console.log(
                             `🔄 [AUTO-LOAD] CARGANDO CONVERSACIÓN DE ${channel.toUpperCase()}`
-                          );
-                          console.log(
+                          ); */
+                                                    /* console.log(
                             "═══════════════════════════════════════════════════════"
-                          );
-                          console.log(`Chat ID: ${id}`);
-                          console.log(
+                          ); */
+                                                    /* console.log(`Chat ID: ${id}`); */
+                                                    /* console.log(
                             `Coach: ${t?.nombre || "Desconocido"} (${
                               t?.codigo || sid
                             })`
-                          );
-                          console.log(`Área: ${t?.area || "N/A"}`);
-                          console.log(`Puesto: ${t?.puesto || "N/A"}`);
-                          console.log(
+                          ); */
+                                                    /* console.log(`Área: ${t?.area || "N/A"}`); */
+                                                    /* console.log(`Puesto: ${t?.puesto || "N/A"}`); */
+                                                    /* console.log(
                             "═══════════════════════════════════════════════════════"
-                          );
+                          ); */
 
                           setSelectedChatId(id);
                           setTargetCoachId(null);
@@ -1176,7 +1176,7 @@ export default function StudentCoachChatPanel({
                     onChatInfo={(info) => {
                       setCurrentOpenChatId(info?.chatId ?? null);
                       try {
-                        console.log("[StudentCoachChatPanel] onChatInfo", {
+                                                /* console.log("[StudentCoachChatPanel] onChatInfo", {
                           chatId: info?.chatId ?? null,
                           myParticipantId: info?.myParticipantId ?? null,
                           participants: Array.isArray(info?.participants)
@@ -1188,7 +1188,7 @@ export default function StudentCoachChatPanel({
                                 id_chat_participante: p?.id_chat_participante,
                               }))
                             : info?.participants,
-                        });
+                        }); */
                       } catch {}
                       // Si abrimos por chatId (no por coach seleccionado), intenta fijar encabezado con nombre del coach y su área/puesto
                       try {
@@ -1226,7 +1226,7 @@ export default function StudentCoachChatPanel({
                               );
                             // El título se calcula automáticamente via computedTitle/computedSubtitle
                             // Solo logueamos para depuración
-                            console.log("[onChatInfo] Coach encontrado:", tg?.nombre, "Canal:", channel);
+                                                        /* console.log("[onChatInfo] Coach encontrado:", tg?.nombre, "Canal:", channel); */
                           }
                         }
                       } catch {}

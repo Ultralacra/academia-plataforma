@@ -82,6 +82,39 @@ function coerceList(res: any): any[] {
   return [];
 }
 
+async function resolveAlumnoIdFromCodigo(
+  authorization: string,
+  codigo: string,
+): Promise<string | null> {
+  const c = String(codigo ?? "").trim();
+  if (!c) return null;
+
+  const qs = new URLSearchParams();
+  qs.set("page", "1");
+  qs.set("pageSize", "50");
+  qs.set("search", c);
+
+  const res = await fetch(buildUrl(`/client/get/clients?${qs.toString()}`), {
+    method: "GET",
+    headers: {
+      Authorization: authorization,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const json = await res.json().catch(() => null);
+  const rows = coerceList(json);
+  const found = rows.find((r: any) => {
+    const code = String(r?.codigo ?? r?.code ?? "").trim();
+    return code === c;
+  });
+  const id = found?.id;
+  if (id == null) return null;
+  const s = String(id).trim();
+  return s ? s : null;
+}
+
 /**
  * Lista metadata para un alumno.
  * - Siempre filtra por alumno_id en el upstream (si el backend lo soporta).
@@ -97,12 +130,15 @@ export async function GET(
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  let meRole: string | null = null;
+  let meId = "";
+  let meCodigo = "";
   const me = await fetchMe(auth);
   if (me) {
-    const role = normalizeRole(me.role, me.tipo);
-    if (role === "student") {
-      const meId = me.id != null ? String(me.id) : "";
-      const meCodigo = me.codigo != null ? String(me.codigo) : "";
+    meRole = normalizeRole(me.role, me.tipo);
+    meId = me.id != null ? String(me.id) : "";
+    meCodigo = me.codigo != null ? String(me.codigo) : "";
+    if (meRole === "student") {
       const requested = String(alumnoId);
       const okById = meId && requested === meId;
       const okByCodigo = meCodigo && requested === meCodigo;
@@ -112,17 +148,27 @@ export async function GET(
     }
   }
 
-  const id = String(alumnoId ?? "").trim();
-  if (!id) {
+  const requested = String(alumnoId ?? "").trim();
+  if (!requested) {
     return NextResponse.json({ items: [] }, { status: 200 });
   }
+
+  // Si el parámetro no es numérico, lo tratamos como código y resolvemos a alumno_id.
+  // Esto es crítico para rutas como /admin/alumnos/[code]/feedback.
+  const isNumeric = /^[0-9]+$/.test(requested);
+  const resolvedAlumnoId = isNumeric
+    ? requested
+    : meRole === "student" && meId
+      ? meId
+      : await resolveAlumnoIdFromCodigo(auth, requested);
+  const effectiveAlumnoId = resolvedAlumnoId ?? requested;
 
   // Propagar filtros opcionales (ej: ticket_codigo) pero siempre con alumno_id
   const url = new URL(req.url);
   const ticketCodigo = url.searchParams.get("ticket_codigo");
   const entity = url.searchParams.get("entity");
   const qs = new URLSearchParams();
-  qs.set("alumno_id", id);
+  qs.set("alumno_id", effectiveAlumnoId);
   if (ticketCodigo) qs.set("ticket_codigo", ticketCodigo);
   if (entity) qs.set("entity", entity);
 
@@ -151,22 +197,31 @@ export async function GET(
   // - payload.alumno_id == :alumnoId
   // - payload.alumno_codigo == :alumnoId (cuando el param es el código)
   // - entity_id == :alumnoId (algunas entidades guardan el id/código ahí)
-  const idNorm = id.trim();
-  const idLower = idNorm.toLowerCase();
+  const requestedNorm = requested.trim();
+  const requestedLower = requestedNorm.toLowerCase();
+  const resolvedNorm = resolvedAlumnoId ? resolvedAlumnoId.trim() : "";
   const filtered = items.filter((m: any) => {
     if (!m || typeof m !== "object") return false;
 
     const entityId = String((m as any)?.entity_id ?? "").trim();
-    if (entityId && entityId === idNorm) return true;
+    if (entityId) {
+      if (entityId === requestedNorm) return true;
+      if (resolvedNorm && entityId === resolvedNorm) return true;
+    }
 
     const payload = (m as any)?.payload;
     if (!payload || typeof payload !== "object") return false;
 
     const pid = payload?.alumno_id;
-    if (pid != null && String(pid).trim() === idNorm) return true;
+    if (pid != null) {
+      const pidStr = String(pid).trim();
+      if (pidStr === requestedNorm) return true;
+      if (resolvedNorm && pidStr === resolvedNorm) return true;
+    }
 
     const pc = payload?.alumno_codigo;
-    if (pc != null && String(pc).trim().toLowerCase() === idLower) return true;
+    if (pc != null && String(pc).trim().toLowerCase() === requestedLower)
+      return true;
 
     return false;
   });

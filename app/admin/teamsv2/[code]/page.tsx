@@ -252,10 +252,10 @@ export default function CoachDetailPage({
     setRequestListSignal((n) => (n ?? 0) + 1);
     setDecisionStamp(null);
     try {
-      console.log("[teamsv2] contacto seleccionado =>", {
+            /* console.log("[teamsv2] contacto seleccionado =>", {
         target: t.codigo,
         myself: code,
-      });
+      }); */
     } catch {}
   }
 
@@ -628,7 +628,7 @@ export default function CoachDetailPage({
       isTyping: boolean;
     }) => {
       const id = String(chatId);
-      console.log("[Page TYPING] Recibido:", { chatId: id, isTyping });
+            /* console.log("[Page TYPING] Recibido:", { chatId: id, isTyping }); */
 
       // Limpiar timer previo si existe
       const prevTimer = typingTimersRef.get(id);
@@ -1163,13 +1163,13 @@ export default function CoachDetailPage({
       (acc: number, it: any) => acc + (it?.unreadCount ?? 0),
       0,
     );
-    console.log(
+        /* console.log(
       "[PAGE TITLE] 📊 Total mensajes sin leer:",
       total,
       "de",
       unifiedChatList.length,
       "conversaciones",
-    );
+    ); */
     return total;
   }, [unifiedChatList]);
 
@@ -1187,7 +1187,7 @@ export default function CoachDetailPage({
         totalUnreadMessages > 0
           ? `(${totalUnreadMessages}) ${baseTitle}`
           : baseTitle;
-      console.log("[PAGE TITLE] 📝 Actualizando título a:", newTitle);
+            /* console.log("[PAGE TITLE] 📝 Actualizando título a:", newTitle); */
       document.title = newTitle;
     };
 
@@ -1247,7 +1247,7 @@ export default function CoachDetailPage({
     const [type, ...rest] = activeChatTab.split(":");
     const codeKey = rest.join(":");
     try {
-      console.log("[teamsv2] Tab activa:", activeChatTab, { type, codeKey });
+            /* console.log("[teamsv2] Tab activa:", activeChatTab, { type, codeKey }); */
     } catch {}
     if (type === "team") {
       setTargetStudentCode(null);
@@ -1255,11 +1255,11 @@ export default function CoachDetailPage({
       setTargetTeamCode(codeKey);
       const existing = pickExistingChatIdForTarget(codeKey);
       try {
-        console.log("[teamsv2] Cambiando a chat EQUIPO", {
+                /* console.log("[teamsv2] Cambiando a chat EQUIPO", {
           my: code,
           target: codeKey,
           existingChatId: existing,
-        });
+        }); */
       } catch {}
       setChatInfo({ chatId: existing, myParticipantId: null });
       setCurrentOpenChatId(existing ?? null);
@@ -1277,11 +1277,11 @@ export default function CoachDetailPage({
       setTargetStudentName(stu?.name || codeKey);
       const existing = pickExistingChatIdForStudent(codeKey);
       try {
-        console.log("[teamsv2] Cambiando a chat ALUMNO", {
+                /* console.log("[teamsv2] Cambiando a chat ALUMNO", {
           my: code,
           target: codeKey,
           existingChatId: existing,
-        });
+        }); */
       } catch {}
       setChatInfo({ chatId: existing, myParticipantId: null });
       setCurrentOpenChatId(existing ?? null);
@@ -1293,7 +1293,7 @@ export default function CoachDetailPage({
       // Soporte para pestañas creadas por id_chat directo
       const id = codeKey;
       try {
-        console.log("[teamsv2] Cambiando a chat por ID", { chatId: id });
+                /* console.log("[teamsv2] Cambiando a chat por ID", { chatId: id }); */
       } catch {}
       setTargetTeamCode(null);
       setTargetStudentCode(null);
@@ -1446,10 +1446,10 @@ export default function CoachDetailPage({
     const onUnreadCountUpdated = (e: any) => {
       try {
         if (e?.detail?.role === "coach") {
-          console.log(
+                    /* console.log(
             "[CoachDetailPage] Contador de no leídos actualizado:",
             e?.detail,
-          );
+          ); */
           setUnreadBump((n) => n + 1);
           // Forzar refresco de lista para reordenar
           setRequestListSignal((n) => (n ?? 0) + 1);
@@ -1457,7 +1457,7 @@ export default function CoachDetailPage({
       } catch {}
     };
     const onListRefresh = () => {
-      console.log("[CoachDetailPage] Refrescando lista de chats");
+            /* console.log("[CoachDetailPage] Refrescando lista de chats"); */
       setChatsLoading(true);
       setRequestListSignal((n) => (n ?? 0) + 1);
     };
@@ -1504,13 +1504,13 @@ export default function CoachDetailPage({
         const { chatId, text, at, attachments } = e?.detail || {};
         if (chatId == null) return;
         const chatIdStr = String(chatId);
-        console.log(
+                /* console.log(
           "[CoachDetailPage] Mensaje recibido, actualizando lastAt:",
           {
             chatId: chatIdStr,
             at,
           },
-        );
+        ); */
         setChatList((prev) => {
           const next = [...prev];
           for (let i = 0; i < next.length; i++) {
@@ -1818,7 +1818,7 @@ export default function CoachDetailPage({
                                                 it?.id_chat ?? it?.id,
                                             )
                                             .filter((x: any) => x != null);
-                                          console.log(
+                                                                                    /* console.log(
                                             "[CoachDetailPage] Click en conversación",
                                             {
                                               tipo: item.type,
@@ -1827,7 +1827,7 @@ export default function CoachDetailPage({
                                               chatIds,
                                               topChatId: item.topChatId ?? null,
                                             },
-                                          );
+                                          ); */
                                         } catch {}
                                         setMobileChatOpen(true);
                                         if (item.type === "team") {
@@ -2907,7 +2907,7 @@ function CoachStudentsInline({
                       notas: quickNotas.trim(),
                     } as const;
                     // eslint-disable-next-line no-console
-                    console.log("[sessions] quick-offer payload", payload);
+                                        /* console.log("[sessions] quick-offer payload", payload); */
                     await offerSession(payload);
                     toast({ title: "Sesión ofrecida" });
                     setQuickOpen(false);

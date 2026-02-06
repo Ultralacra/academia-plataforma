@@ -448,7 +448,7 @@ export default function SessionsPanel({
                               onClick={async () => {
                                 try {
                                   // eslint-disable-next-line no-console
-                                  console.log("[sessions] approve", s.id);
+                                                                    /* console.log("[sessions] approve", s.id); */
                                   await approveSession(s.id);
                                   toast({ title: "Sesión aprobada" });
                                   fetchAll();
@@ -506,7 +506,7 @@ export default function SessionsPanel({
                               onClick={async () => {
                                 try {
                                   // eslint-disable-next-line no-console
-                                  console.log("[sessions] complete", s.id);
+                                                                    /* console.log("[sessions] complete", s.id); */
                                   await completeSession(s.id);
                                   toast({ title: "Sesión completada" });
                                   fetchAll();
@@ -528,7 +528,7 @@ export default function SessionsPanel({
                               onClick={async () => {
                                 try {
                                   // eslint-disable-next-line no-console
-                                  console.log("[sessions] cancel", s.id);
+                                                                    /* console.log("[sessions] cancel", s.id); */
                                   await cancelSession(s.id);
                                   toast({ title: "Sesión cancelada" });
                                   fetchAll();
@@ -813,7 +813,7 @@ export default function SessionsPanel({
                     };
                     // Print body before executing
                     // eslint-disable-next-line no-console
-                    console.log("[sessions] offer payload", payload);
+                                        /* console.log("[sessions] offer payload", payload); */
                     await offerSession(payload);
                     toast({ title: "Sesión ofrecida" });
                     setOfferOpen(false);
@@ -1020,11 +1020,11 @@ export default function SessionsPanel({
                       notas: editNotas.trim() || undefined,
                     } as const;
                     // eslint-disable-next-line no-console
-                    console.log("[sessions] save", {
+                                        /* console.log("[sessions] save", {
                       mode: editMode,
                       id: selected.id,
                       ...payload,
-                    });
+                    }); */
                     if (editMode === "reschedule") {
                       await rescheduleSession(selected.id, payload);
                       toast({ title: "Sesión reprogramada" });

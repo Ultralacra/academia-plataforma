@@ -193,14 +193,14 @@ export default function OpcionesPage() {
         }
       }
       if (!codigoToDelete) {
-        console.log("[opciones] codigoToDelete RESOLVED: ", codigoToDelete);
+                /* console.log("[opciones] codigoToDelete RESOLVED: ", codigoToDelete); */
         throw new Error(
           "No se pudo resolver el identificador de la opción para eliminar."
         );
       }
-      console.log("[opciones] Eliminando opción con codigo:", codigoToDelete);
+            /* console.log("[opciones] Eliminando opción con codigo:", codigoToDelete); */
       const resp = await deleteOption(codigoToDelete);
-      console.log("[opciones] respuesta deleteOption:", resp);
+            /* console.log("[opciones] respuesta deleteOption:", resp); */
       toast({
         title: "Eliminado",
         description: "La opción fue eliminada.",

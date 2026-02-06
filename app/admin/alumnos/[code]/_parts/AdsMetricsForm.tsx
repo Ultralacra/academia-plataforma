@@ -91,11 +91,14 @@ function fmtPct(n?: string | number | null) {
 export default function AdsMetricsForm({
   studentCode,
   studentName,
+  readOnly,
 }: {
   studentCode: string;
   studentName?: string;
+  readOnly?: boolean;
 }) {
   const { user } = useAuth();
+  const isReadOnly = Boolean(readOnly);
 
   type Metrics = {
     fecha_inicio?: string;
@@ -394,14 +397,14 @@ export default function AdsMetricsForm({
       setMatchedMetadata(best);
       setMatchedMetadataCount(count);
       if (best) applyMetadataToForm(best);
-      console.log(
+            /* console.log(
         "[ADS][metadata] list -> total:",
         items.length,
         "matches:",
         count,
         "best:",
         best,
-      );
+      ); */
     } catch (e) {
       console.warn("[ADS][metadata] no se pudo listar metadata:", e);
       setMatchedMetadata(null);
@@ -412,6 +415,7 @@ export default function AdsMetricsForm({
   }
 
   async function handleGuardarMetadata() {
+    if (isReadOnly) return;
     const alumnoId = studentInfo?.id ?? null;
     const alumnoNombre =
       String(studentName || studentInfo?.name || "").trim() || studentCode;
@@ -481,10 +485,10 @@ export default function AdsMetricsForm({
 
       if (best?.id != null) {
         // Ya existe: actualizar (PUT) y luego consultar por id
-        console.log(
+                /* console.log(
           "[ADS][metadata] ya existe para este alumno, actualizando por id:",
           best.id,
-        );
+        ); */
 
         // Preservamos creado_por_* si ya existe, para no modificar creador.
         const existingPayload = (best as any)?.payload ?? {};
@@ -506,7 +510,7 @@ export default function AdsMetricsForm({
           payload: mergedPayload,
         };
 
-        console.log("[ADS][metadata] update body ->", updateBody);
+                /* console.log("[ADS][metadata] update body ->", updateBody); */
 
         const updateRes = await fetch(
           `/api/metadata/${encodeURIComponent(String(best.id))}`,
@@ -532,13 +536,13 @@ export default function AdsMetricsForm({
         setMatchedMetadata(updatedLocal);
         setMatchedMetadataCount(count || 1);
         applyMetadataToForm(updatedLocal);
-        console.log("[ADS][metadata] updated local ->", updatedLocal);
+                /* console.log("[ADS][metadata] updated local ->", updatedLocal); */
         toast({ title: "Guardado", description: "Métricas ADS actualizadas" });
         return;
       }
 
       // 2) Crear metadata SOLO para este alumno
-      console.log("[ADS][metadata] create body ->", body);
+            /* console.log("[ADS][metadata] create body ->", body); */
       const createRes = await fetch("/api/metadata", {
         method: "POST",
         headers: {
@@ -564,14 +568,15 @@ export default function AdsMetricsForm({
       setMatchedMetadata(createdLocal);
       setMatchedMetadataCount(1);
       applyMetadataToForm(createdLocal);
-      console.log("[ADS][metadata] created local ->", createdLocal);
+            /* console.log("[ADS][metadata] created local ->", createdLocal); */
       toast({ title: "Guardado", description: "Métricas ADS guardadas" });
-    } catch (e) {
+    } catch (e: unknown) {
       console.error("[ADS][metadata] error guardando/consultando:", e);
       try {
+        const desc = e instanceof Error ? e.message : String(e ?? "Error");
         toast({
           title: "Error",
-          description: String(e?.message ?? e ?? "Error"),
+          description: desc,
           variant: "destructive",
         });
       } catch {}
@@ -583,8 +588,6 @@ export default function AdsMetricsForm({
   // Cargar metadata del alumno al montar (lista completa + filtro local)
   useEffect(() => {
     if (!studentCode) return;
-    // esperamos a tener studentInfo para decidir entity_id preferente
-    if (studentInfo === null) return;
     reloadStudentMetadata();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studentCode, studentInfo?.id]);
@@ -632,6 +635,11 @@ export default function AdsMetricsForm({
 
   // Cargar métrica existente por estudiante
   useEffect(() => {
+    if (isReadOnly) {
+      setLoading(false);
+      didInitRef.current = true;
+      return;
+    }
     let mounted = true;
     (async () => {
       setLoading(true);
@@ -639,7 +647,7 @@ export default function AdsMetricsForm({
         const fase5Start = await fetchFase5StartDateISO(studentCode);
         const key = `ads-metrics:${studentCode}`;
         const raw =
-          typeof window !== "undefined"
+          !isReadOnly && typeof window !== "undefined"
             ? window.localStorage.getItem(key)
             : null;
         if (!mounted) return;
@@ -685,10 +693,11 @@ export default function AdsMetricsForm({
       mounted = false;
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
-  }, [studentCode]);
+  }, [studentCode, isReadOnly]);
 
   // Autosave con debounce al cambiar datos
   useEffect(() => {
+    if (isReadOnly) return;
     if (!didInitRef.current) return;
     if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     saveTimerRef.current = window.setTimeout(async () => {
@@ -708,9 +717,10 @@ export default function AdsMetricsForm({
         setSaving(false);
       }
     }, 600);
-  }, [JSON.stringify(data), studentCode]);
+  }, [JSON.stringify(data), studentCode, isReadOnly]);
 
   function persist(next: Metrics) {
+    if (isReadOnly) return;
     setData(next);
   }
 
@@ -777,7 +787,7 @@ export default function AdsMetricsForm({
       const clicsN = toNum(data.clics) ?? null;
       const visitasN = toNum(data.visitas) ?? null;
       const pagosN = toNum(data.pagos) ?? null;
-      console.log(
+            /* console.log(
         "[ADS] Embudo → Alcance:",
         alcanceN,
         "Clics:",
@@ -786,7 +796,7 @@ export default function AdsMetricsForm({
         visitasN,
         "Pagos iniciados:",
         pagosN,
-      );
+      ); */
 
       const effAdsRatio = effAdsCalc != null ? Number(effAdsCalc) : null;
       const effPagoRatio = effPagoCalc != null ? Number(effPagoCalc) : null;
@@ -795,34 +805,34 @@ export default function AdsMetricsForm({
       const effAdsPct = effAdsRatio != null ? effAdsRatio * 100 : null;
       const effPagoPct = effPagoRatio != null ? effPagoRatio * 100 : null;
       const effCompraPct = effCompraRatio != null ? effCompraRatio * 100 : null;
-      console.log(
+            /* console.log(
         "[ADS] Efectividades (ratio) → Ads (clics/alcance):",
         effAdsRatio,
         "Pago iniciado (pagos/visitas):",
         effPagoRatio,
         "Compra (carnada/visitas):",
         effCompraRatio,
-      );
-      console.log(
+      ); */
+            /* console.log(
         "[ADS] Efectividades (%) → Ads (clics/alcance):",
         effAdsPct != null ? `${effAdsPct.toFixed(1)}%` : null,
         "Pago iniciado (pagos/visitas):",
         effPagoPct != null ? `${effPagoPct.toFixed(1)}%` : null,
         "Compra (carnada/visitas):",
         effCompraPct != null ? `${effCompraPct.toFixed(1)}%` : null,
-      );
+      ); */
 
       const dispEffAds = fmtRatioToPercent(view.eff_ads);
       const dispEffPago = fmtRatioToPercent(view.eff_pago);
       const dispEffCompra = fmtRatioToPercent(view.eff_compra);
-      console.log(
+            /* console.log(
         "[ADS] UI → Ads (clics/alcance):",
         `${dispEffAds}%`,
         "Pago iniciado (pagos/visitas):",
         `${dispEffPago}%`,
         "Compra (carnada/visitas):",
         `${dispEffCompra}%`,
-      );
+      ); */
     } catch (e) {
       console.warn("[ADS] Log error", e);
     }
@@ -865,11 +875,13 @@ export default function AdsMetricsForm({
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-muted-foreground">
-            {loading
-              ? "Cargando métricas…"
-              : saving
-                ? "Guardando…"
-                : "Cambios guardados"}
+            {isReadOnly
+              ? "Solo lectura"
+              : loading
+                ? "Cargando métricas…"
+                : saving
+                  ? "Guardando…"
+                  : "Cambios guardados"}
           </div>
           <div className="flex items-center gap-2">
             {metadataLoading ? (
@@ -884,15 +896,17 @@ export default function AdsMetricsForm({
             ) : (
               <Badge variant="outline">sin metadata</Badge>
             )}
-            <Button
-              type="button"
-              variant="default"
-              size="sm"
-              onClick={handleGuardarMetadata}
-              disabled={loading || metadataSaving}
-            >
-              Guardar
-            </Button>
+            {!isReadOnly ? (
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={handleGuardarMetadata}
+                disabled={loading || metadataSaving}
+              >
+                Guardar
+              </Button>
+            ) : null}
           </div>
         </div>
         <Card>
@@ -901,17 +915,18 @@ export default function AdsMetricsForm({
               Métricas ADS {studentName ? `— ${studentName}` : ""}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-1.5">
-                <Label>Fecha inicio</Label>
-                <Input
-                  type="date"
-                  value={data.fecha_inicio || ""}
-                  onChange={(e) => onChange("fecha_inicio", e.target.value)}
-                />
-              </div>
-              {/* Comentado: Fecha asignación y Fecha fin ocultas temporalmente
+          <CardContent>
+            <fieldset disabled={isReadOnly} className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Fecha inicio</Label>
+                  <Input
+                    type="date"
+                    value={data.fecha_inicio || ""}
+                    onChange={(e) => onChange("fecha_inicio", e.target.value)}
+                  />
+                </div>
+                {/* Comentado: Fecha asignación y Fecha fin ocultas temporalmente
               <div className="space-y-1.5">
                 <Label>Fecha asignación</Label>
                 <Input
@@ -929,368 +944,381 @@ export default function AdsMetricsForm({
                 />
               </div>
               */}
-            </div>
+              </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Rendimiento</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Inversión (USD)</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.inversion || ""}
-                      onChange={(e) => onChange("inversion", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Facturación (USD)</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.facturacion || ""}
-                      onChange={(e) => onChange("facturacion", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <Label>ROAS</Label>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>Auto</span>
-                        <Switch
-                          checked={!!data.auto_roas}
-                          onCheckedChange={(v) => onChange("auto_roas", v)}
-                        />
+              <div className="grid grid-cols-1 gap-4">
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm">Rendimiento</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Inversión (USD)</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.inversion || ""}
+                        onChange={(e) => onChange("inversion", e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Facturación (USD)</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.facturacion || ""}
+                        onChange={(e) =>
+                          onChange("facturacion", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <Label>ROAS</Label>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>Auto</span>
+                          <Switch
+                            checked={!!data.auto_roas}
+                            onCheckedChange={(v) => onChange("auto_roas", v)}
+                          />
+                        </div>
                       </div>
+                      <Input
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        disabled={data.auto_roas}
+                        value={
+                          data.auto_roas ? view.roas || "" : data.roas || ""
+                        }
+                        onChange={(e) => onChange("roas", e.target.value)}
+                      />
                     </div>
-                    <Input
-                      inputMode="decimal"
-                      placeholder="0.00"
-                      disabled={data.auto_roas}
-                      value={data.auto_roas ? view.roas || "" : data.roas || ""}
-                      onChange={(e) => onChange("roas", e.target.value)}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Embudo</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Alcance</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.alcance || ""}
-                      onChange={(e) => onChange("alcance", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Clics</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.clics || ""}
-                      onChange={(e) => onChange("clics", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Visitas</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.visitas || ""}
-                      onChange={(e) => onChange("visitas", e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Pagos iniciados</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.pagos || ""}
-                      onChange={(e) => onChange("pagos", e.target.value)}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Efectividades (%)</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-3">
-                  <div className="space-y-1">
-                    <Label>Carga de página (visitas/clics)</Label>
-                    <Input
-                      inputMode="decimal"
-                      placeholder="0%"
-                      disabled
-                      value={`${data.carga_pagina || "0"}%`}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Ads (clics/alcance)</Label>
-                    <Input
-                      inputMode="decimal"
-                      placeholder="0.0"
-                      disabled
-                      value={
-                        view.eff_ads != null
-                          ? `${(Number(view.eff_ads) * 100).toFixed(1)}%`
-                          : ""
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Pago iniciado (pagos/visitas)</Label>
-                    <Input
-                      inputMode="decimal"
-                      placeholder="0%"
-                      disabled={data.auto_eff}
-                      value={`${
-                        data.auto_eff
-                          ? fmtRatioToPercent(view.eff_pago)
-                          : fmtManualPercent(data.eff_pago)
-                      }%`}
-                      onChange={(e) =>
-                        onChange(
-                          "eff_pago",
-                          sanitizePercentInput(e.target.value),
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>Compra (carnada/visitas)</Label>
-                    <Input
-                      inputMode="decimal"
-                      placeholder="0%"
-                      disabled={data.auto_eff}
-                      value={`${
-                        data.auto_eff
-                          ? fmtRatioToPercent(view.eff_compra)
-                          : fmtManualPercent(data.eff_compra)
-                      }%`}
-                      onChange={(e) =>
-                        onChange(
-                          "eff_compra",
-                          sanitizePercentInput(e.target.value),
-                        )
-                      }
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Compras</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Carnada</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.compra_carnada || ""}
-                      onChange={(e) =>
-                        onChange("compra_carnada", e.target.value)
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Bump 1</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.compra_bump1 || ""}
-                      onChange={(e) => onChange("compra_bump1", e.target.value)}
-                    />
-                    <div className="text-[11px] text-muted-foreground">
-                      Efectividad:{" "}
-                      {pctOf(data.compra_bump1, data.compra_carnada)}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm">Embudo</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Alcance</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.alcance || ""}
+                        onChange={(e) => onChange("alcance", e.target.value)}
+                      />
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Bump 2</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.compra_bump2 || ""}
-                      onChange={(e) => onChange("compra_bump2", e.target.value)}
-                    />
-                    <div className="text-[11px] text-muted-foreground">
-                      Efectividad:{" "}
-                      {pctOf(data.compra_bump2, data.compra_carnada)}
+                    <div className="space-y-1.5">
+                      <Label>Clics</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.clics || ""}
+                        onChange={(e) => onChange("clics", e.target.value)}
+                      />
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>OTO 1</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.compra_oto1 || ""}
-                      onChange={(e) => onChange("compra_oto1", e.target.value)}
-                    />
-                    <div className="text-[11px] text-muted-foreground">
-                      Efectividad:{" "}
-                      {pctOf(data.compra_oto1, data.compra_carnada)}
+                    <div className="space-y-1.5">
+                      <Label>Visitas</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.visitas || ""}
+                        onChange={(e) => onChange("visitas", e.target.value)}
+                      />
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>OTO 2</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.compra_oto2 || ""}
-                      onChange={(e) => onChange("compra_oto2", e.target.value)}
-                    />
-                    <div className="text-[11px] text-muted-foreground">
-                      Efectividad:{" "}
-                      {pctOf(data.compra_oto2, data.compra_carnada)}
+                    <div className="space-y-1.5">
+                      <Label>Pagos iniciados</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.pagos || ""}
+                        onChange={(e) => onChange("pagos", e.target.value)}
+                      />
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Downsell</Label>
-                    <Input
-                      inputMode="numeric"
-                      placeholder="0"
-                      value={data.compra_downsell || ""}
-                      onChange={(e) =>
-                        onChange("compra_downsell", e.target.value)
-                      }
-                    />
-                    <div className="text-[11px] text-muted-foreground">
-                      Efectividad:{" "}
-                      {pctOf(data.compra_downsell, data.compra_carnada)}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm">Efectividades (%)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 gap-3">
+                    <div className="space-y-1">
+                      <Label>Carga de página (visitas/clics)</Label>
+                      <Input
+                        inputMode="decimal"
+                        placeholder="0%"
+                        disabled
+                        value={`${data.carga_pagina || "0"}%`}
+                      />
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Estado</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label>Pauta activa</Label>
-                    <Switch
-                      checked={!!data.pauta_activa}
-                      onCheckedChange={(v) => onChange("pauta_activa", v)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label>¿Requiere intervención?</Label>
-                    <Switch
-                      checked={!!data.requiere_interv}
-                      onCheckedChange={(v) => onChange("requiere_interv", v)}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Fase</Label>
-                    <select
-                      value={data.fase ? data.fase : "sin-fase"}
-                      onChange={(e) =>
-                        onChange(
-                          "fase",
-                          e.target.value === "sin-fase" ? "" : e.target.value,
-                        )
-                      }
-                      className="w-full h-9 rounded-md border px-3 text-sm"
-                    >
-                      <option value="sin-fase">Sin fase</option>
-                      <option value="Fase de testeo">Fase de testeo</option>
-                      <option value="Fase de optimización">
-                        Fase de optimización
-                      </option>
-                      <option value="Fase de Escala">Fase de Escala</option>
-                    </select>
-                    <div className="mt-2">
-                      <Label>Subfase</Label>
-                      <select
-                        value={data.subfase ? data.subfase : "sin-subfase"}
+                    <div className="space-y-1">
+                      <Label>Ads (clics/alcance)</Label>
+                      <Input
+                        inputMode="decimal"
+                        placeholder="0.0"
+                        disabled
+                        value={
+                          view.eff_ads != null
+                            ? `${(Number(view.eff_ads) * 100).toFixed(1)}%`
+                            : ""
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Pago iniciado (pagos/visitas)</Label>
+                      <Input
+                        inputMode="decimal"
+                        placeholder="0%"
+                        disabled={data.auto_eff}
+                        value={`${
+                          data.auto_eff
+                            ? fmtRatioToPercent(view.eff_pago)
+                            : fmtManualPercent(data.eff_pago)
+                        }%`}
                         onChange={(e) =>
                           onChange(
-                            "subfase",
-                            e.target.value === "sin-subfase"
-                              ? ""
-                              : e.target.value,
+                            "eff_pago",
+                            sanitizePercentInput(e.target.value),
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Compra (carnada/visitas)</Label>
+                      <Input
+                        inputMode="decimal"
+                        placeholder="0%"
+                        disabled={data.auto_eff}
+                        value={`${
+                          data.auto_eff
+                            ? fmtRatioToPercent(view.eff_compra)
+                            : fmtManualPercent(data.eff_compra)
+                        }%`}
+                        onChange={(e) =>
+                          onChange(
+                            "eff_compra",
+                            sanitizePercentInput(e.target.value),
+                          )
+                        }
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm">Compras</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Carnada</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.compra_carnada || ""}
+                        onChange={(e) =>
+                          onChange("compra_carnada", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Bump 1</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.compra_bump1 || ""}
+                        onChange={(e) =>
+                          onChange("compra_bump1", e.target.value)
+                        }
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        Efectividad:{" "}
+                        {pctOf(data.compra_bump1, data.compra_carnada)}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Bump 2</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.compra_bump2 || ""}
+                        onChange={(e) =>
+                          onChange("compra_bump2", e.target.value)
+                        }
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        Efectividad:{" "}
+                        {pctOf(data.compra_bump2, data.compra_carnada)}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>OTO 1</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.compra_oto1 || ""}
+                        onChange={(e) =>
+                          onChange("compra_oto1", e.target.value)
+                        }
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        Efectividad:{" "}
+                        {pctOf(data.compra_oto1, data.compra_carnada)}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>OTO 2</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.compra_oto2 || ""}
+                        onChange={(e) =>
+                          onChange("compra_oto2", e.target.value)
+                        }
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        Efectividad:{" "}
+                        {pctOf(data.compra_oto2, data.compra_carnada)}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Downsell</Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={data.compra_downsell || ""}
+                        onChange={(e) =>
+                          onChange("compra_downsell", e.target.value)
+                        }
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        Efectividad:{" "}
+                        {pctOf(data.compra_downsell, data.compra_carnada)}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm">Estado</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label>Pauta activa</Label>
+                      <Switch
+                        checked={!!data.pauta_activa}
+                        onCheckedChange={(v) => onChange("pauta_activa", v)}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label>¿Requiere intervención?</Label>
+                      <Switch
+                        checked={!!data.requiere_interv}
+                        onCheckedChange={(v) => onChange("requiere_interv", v)}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Fase</Label>
+                      <select
+                        value={data.fase ? data.fase : "sin-fase"}
+                        onChange={(e) =>
+                          onChange(
+                            "fase",
+                            e.target.value === "sin-fase" ? "" : e.target.value,
                           )
                         }
                         className="w-full h-9 rounded-md border px-3 text-sm"
                       >
-                        <option value="sin-subfase">Sin subfase</option>
-                        <option value="Copy/Ads">Copy/Ads</option>
-                        <option value="Copy/VSL">Copy/VSL</option>
-                        <option value="Copy/Página">Copy/Página</option>
-                        <option value="Copy/Oferta">Copy/Oferta</option>
-                        <option value="Técnica">Técnica</option>
-                        <option value="Ads">Ads</option>
+                        <option value="sin-fase">Sin fase</option>
+                        <option value="Fase de testeo">Fase de testeo</option>
+                        <option value="Fase de optimización">
+                          Fase de optimización
+                        </option>
+                        <option value="Fase de Escala">Fase de Escala</option>
                       </select>
                       <div className="mt-2">
-                        <Label>Trascendencia</Label>
+                        <Label>Subfase</Label>
                         <select
-                          value={data.subfase_color || ""}
+                          value={data.subfase ? data.subfase : "sin-subfase"}
                           onChange={(e) =>
-                            onChange("subfase_color", e.target.value)
+                            onChange(
+                              "subfase",
+                              e.target.value === "sin-subfase"
+                                ? ""
+                                : e.target.value,
+                            )
                           }
                           className="w-full h-9 rounded-md border px-3 text-sm"
                         >
-                          <option value="No aplica">No aplica</option>
-                          <option value="Por definir">Por definir</option>
-                          <option value="Realizado">Realizado</option>
+                          <option value="sin-subfase">Sin subfase</option>
+                          <option value="Copy/Ads">Copy/Ads</option>
+                          <option value="Copy/VSL">Copy/VSL</option>
+                          <option value="Copy/Página">Copy/Página</option>
+                          <option value="Copy/Oferta">Copy/Oferta</option>
+                          <option value="Técnica">Técnica</option>
+                          <option value="Ads">Ads</option>
                         </select>
+                        <div className="mt-2">
+                          <Label>Trascendencia</Label>
+                          <select
+                            value={data.subfase_color || ""}
+                            onChange={(e) =>
+                              onChange("subfase_color", e.target.value)
+                            }
+                            className="w-full h-9 rounded-md border px-3 text-sm"
+                          >
+                            <option value="No aplica">No aplica</option>
+                            <option value="Por definir">Por definir</option>
+                            <option value="Realizado">Realizado</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm">Coaches</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 gap-3">
-                  <div className="space-y-1.5">
-                    <Label>Coach de Copy</Label>
-                    <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
-                      <span className="font-medium">
-                        {coachCopyAssigned?.name || "—"}
-                      </span>
-                      {coachCopyAssigned?.area ? (
-                        <Badge variant="secondary">
-                          {String(coachCopyAssigned.area)}
-                        </Badge>
-                      ) : null}
+                <Card>
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm">Coaches</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Coach de Copy</Label>
+                      <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {coachCopyAssigned?.name || "—"}
+                        </span>
+                        {coachCopyAssigned?.area ? (
+                          <Badge variant="secondary">
+                            {String(coachCopyAssigned.area)}
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Coach Técnico</Label>
-                    <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
-                      <span className="font-medium">
-                        {coachAdsAssigned?.name || "—"}
-                      </span>
-                      {coachAdsAssigned?.area ? (
-                        <Badge variant="secondary">
-                          {String(coachAdsAssigned.area)}
-                        </Badge>
-                      ) : null}
+                    <div className="space-y-1.5">
+                      <Label>Coach Técnico</Label>
+                      <div className="min-h-9 rounded-md border border-input bg-background px-3 py-1.5 text-sm flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {coachAdsAssigned?.name || "—"}
+                        </span>
+                        {coachAdsAssigned?.area ? (
+                          <Badge variant="secondary">
+                            {String(coachAdsAssigned.area)}
+                          </Badge>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </fieldset>
           </CardContent>
         </Card>
 
@@ -1444,9 +1472,9 @@ export default function AdsMetricsForm({
             </div>
 
             <div className="text-[11px] text-muted-foreground">
-              Guardado local automáticamente. “Guardar” crea la metadata del
-              alumno si no existe; si ya existe, la actualiza (PUT
-              /metadata/:id) y luego la vuelve a consultar por id.
+              {isReadOnly
+                ? "Datos cargados desde metadata del alumno."
+                : "Guardado local automáticamente. “Guardar” crea la metadata del alumno si no existe; si ya existe, la actualiza (PUT /metadata/:id) y luego la vuelve a consultar por id."}
             </div>
           </CardContent>
         </Card>

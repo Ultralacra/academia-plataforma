@@ -40,7 +40,7 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("[Notifier] Connected to socket");
+            /* console.log("[Notifier] Connected to socket"); */
       // Suscribirse a los mensajes del alumno
       socket.emit(
         "chat.list",
@@ -51,10 +51,10 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
         (response: any) => {
           // Unirse a todos los chats existentes para recibir eventos
           if (response && response.success && Array.isArray(response.data)) {
-            console.log(
+                        /* console.log(
               "[Notifier] Joining existing chats:",
               response.data.length,
-            );
+            ); */
             response.data.forEach((chat: any) => {
               const cid = chat.id_chat || chat.id;
               if (cid) {
@@ -79,7 +79,7 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
     socket.on("chat.created", (data: any) => {
       const cid = data?.id_chat || data?.id;
       if (cid) {
-        console.log("[Notifier] New chat created, joining:", cid);
+                /* console.log("[Notifier] New chat created, joining:", cid); */
         socket.emit("chat.join", { id_chat: cid }, (joinAck: any) => {
           if (joinAck && joinAck.success && joinAck.data?.my_participante) {
             myParticipantIds.current[cid] = joinAck.data.my_participante;
@@ -106,7 +106,7 @@ export function StudentChatNotifier({ studentCode }: StudentChatNotifierProps) {
         esMio = tipoEmisor === "cliente" || tipoEmisor === "alumno";
       }
 
-      console.log("[Notifier] Message received:", { msg, esMio });
+            /* console.log("[Notifier] Message received:", { msg, esMio }); */
 
       if (!esMio) {
         const isBackground =

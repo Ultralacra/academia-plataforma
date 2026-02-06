@@ -390,13 +390,13 @@ export function CreateTicketModal({
             !type.includes("mpeg")
           ) {
             try {
-              console.log(
+                            /* console.log(
                 `[CreateTicket] Convirtiendo audio a MP3: ${fileToUpload.name}`,
-              );
+              ); */
               fileToUpload = await convertBlobToMp3(fileToUpload);
-              console.log(
+                            /* console.log(
                 `[CreateTicket] Audio convertido: ${fileToUpload.name}`,
-              );
+              ); */
             } catch (e) {
               console.error("Error converting audio to mp3 in modal", e);
               // Fallback: upload original

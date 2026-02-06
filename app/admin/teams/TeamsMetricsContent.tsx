@@ -1132,7 +1132,7 @@ export default function TeamsMetricsContent() {
       const payload = buildMetricsExport();
       const txt = JSON.stringify(payload, null, 2);
       navigator.clipboard?.writeText(txt);
-      console.log("JSON copiado al portapapeles");
+            /* console.log("JSON copiado al portapapeles"); */
     } catch (e) {
       console.error("No se pudo copiar el JSON", e);
     }

@@ -299,9 +299,9 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       const elapsedMin = Math.floor(elapsedMs / 60000);
       const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
       try {
-        console.log("[SSE] tiempo conectado", {
+                /* console.log("[SSE] tiempo conectado", {
           elapsed: `${elapsedMin}m ${elapsedSec}s`,
-        });
+        }); */
       } catch {}
     }, 60000);
   }, [stopConnectedTimer]);
@@ -354,7 +354,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         // Conexión exitosa: resetear fallos consecutivos para evitar backoff largo tras un corte aislado.
         failuresRef.current = 0;
         try {
-          console.log("[SSE] conectado", { attempt });
+                    /* console.log("[SSE] conectado", { attempt }); */
         } catch {}
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -370,7 +370,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
           setConnected(false);
           stopConnectedTimer();
           try {
-            console.log("[SSE] stream finalizado, reconectando...");
+                        /* console.log("[SSE] stream finalizado, reconectando..."); */
           } catch {}
           setTimeout(() => start(), 1500);
         }
@@ -459,7 +459,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         if (token) {
           if (!connectedRef.current) {
             try {
-              console.log("[SSE] auth: token detectado, iniciando conexión");
+                            /* console.log("[SSE] auth: token detectado, iniciando conexión"); */
             } catch {}
             start();
           }
@@ -473,7 +473,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
           stopConnectedTimer();
           startedRef.current = false;
           try {
-            console.log("[SSE] auth: sin token, conexión cerrada");
+                        /* console.log("[SSE] auth: sin token, conexión cerrada"); */
           } catch {}
         }
       } catch {}

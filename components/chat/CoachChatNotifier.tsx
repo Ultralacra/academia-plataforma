@@ -177,7 +177,7 @@ export function CoachChatNotifier() {
     socketRef.current = socket;
 
     socket.on("connect", () => {
-      console.log("[CoachChatNotifier] Connected");
+            /* console.log("[CoachChatNotifier] Connected"); */
 
       // Reset local membership caches on each fresh connection
       joinedChatIds.current = new Set();
@@ -198,13 +198,13 @@ export function CoachChatNotifier() {
       // List chats to join them
       socket.emit("chat.list", payload, (ack: any) => {
         if (ack && ack.success && Array.isArray(ack.data)) {
-          console.log("[CoachChatNotifier] Joining chats:", ack.data.length);
+                    /* console.log("[CoachChatNotifier] Joining chats:", ack.data.length); */
           // DEBUG: Ver estructura de los datos
-          console.log(
+                    /* console.log(
             "[CoachChatNotifier] 📋 Lista completa de conversaciones:",
             JSON.stringify(ack.data, null, 2),
-          );
-          console.log(
+          ); */
+                    /* console.log(
             "[CoachChatNotifier] 📋 Resumen:",
             ack.data.map((c: any) => ({
               id: c?.id_chat ?? c?.id,
@@ -212,7 +212,7 @@ export function CoachChatNotifier() {
               unread: c?.unread,
               last_msg: c?.last_message?.contenido?.substring(0, 30),
             })),
-          );
+          ); */
 
           ack.data.forEach((chat: any) => {
             const cid = toChatId(chat?.id_chat ?? chat?.id);
@@ -353,7 +353,7 @@ export function CoachChatNotifier() {
               0,
               140,
             );
-            console.log("[CoachChatNotifier] ← Mensaje de alumno", {
+                        /* console.log("[CoachChatNotifier] ← Mensaje de alumno", {
               id_chat: msg?.id_chat,
               id_mensaje: msg?.id_mensaje ?? msg?.id,
               texto_preview: preview,
@@ -363,15 +363,15 @@ export function CoachChatNotifier() {
               email_emisor: msg?.email_emisor,
               nombre_emisor: msg?.nombre_emisor,
               client_session: msg?.client_session,
-            });
+            }); */
           }
         } catch {}
-        console.log(
+                /* console.log(
           "[CoachChatNotifier] Notification triggered for message:",
           msg,
           "User:",
           user.email,
-        );
+        ); */
 
         const currentPath = pathnameRef.current;
         const isCoachChatView =
@@ -512,11 +512,11 @@ export function CoachChatNotifier() {
               }),
             );
 
-            console.log("[CoachChatNotifier] Eventos disparados:", {
+                        /* console.log("[CoachChatNotifier] Eventos disparados:", {
               unread_count_updated: true,
               list_refresh: true,
               chatId: msg.id_chat,
-            });
+            }); */
           } catch {}
         }
       }

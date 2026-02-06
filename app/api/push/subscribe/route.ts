@@ -44,9 +44,9 @@ export async function POST(request: NextRequest) {
 
     pushSubscriptions.set(subscription.endpoint, sub);
 
-    console.log(
+        /* console.log(
       `[Push] Suscripción registrada: topic=${sub.topic}, endpoint=${sub.endpoint.slice(0, 50)}...`
-    );
+    ); */
 
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -75,7 +75,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     pushSubscriptions.delete(endpoint);
-    console.log(`[Push] Suscripción eliminada: ${endpoint.slice(0, 50)}...`);
+        /* console.log(`[Push] Suscripción eliminada: ${endpoint.slice(0, 50)}...`); */
 
     return NextResponse.json({ success: true });
   } catch (error) {

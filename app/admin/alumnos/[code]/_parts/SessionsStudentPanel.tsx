@@ -632,7 +632,7 @@ export default function SessionsStudentPanel({
                       notas: notas.trim(),
                     } as const;
                     // eslint-disable-next-line no-console
-                    console.log("[sessions] request payload", payload);
+                                        /* console.log("[sessions] request payload", payload); */
                     // Consultar historial actual usando el endpoint de sesiones
                     // para detectar posibles conflictos (sesión aprobada same slot)
                     try {
