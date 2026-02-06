@@ -48,35 +48,37 @@ export function ProspectFilters({
   onClear: () => void;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200/70 bg-white/80 shadow-sm backdrop-blur p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-          <Filter className="h-4 w-4" />
+    <div className="rounded-xl border border-slate-200/70 bg-white/80 shadow-sm backdrop-blur p-2">
+      <div className="flex items-center gap-2 mb-1">
+        <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+          <Filter className="h-3.5 w-3.5" />
         </span>
         <div>
-          <p className="text-sm font-semibold text-slate-800">
+          <p className="text-xs font-semibold text-slate-800">
             Filtros rápidos
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-500 hidden sm:block">
             Encuentra leads más rápido con criterios avanzados.
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-        <div className="relative md:col-span-2">
+      <div className="flex flex-col gap-2 lg:flex-row lg:flex-nowrap lg:items-end">
+        <div className="space-y-1 w-full lg:w-72">
           <Label className="text-xs text-slate-500">Buscar</Label>
-          <Search className="absolute left-3 top-9 h-4 w-4 text-slate-400" />
-          <Input
-            className="h-10 pl-9 bg-white"
-            placeholder="Nombre, email o teléfono"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              className="h-8 pl-9 bg-white"
+              placeholder="Nombre, email o teléfono"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 w-full lg:w-40">
           <Label className="text-xs text-slate-500">Etapa</Label>
           <Select value={etapa} onValueChange={setEtapa}>
-            <SelectTrigger className="h-10 bg-white">
+            <SelectTrigger className="h-8 bg-white">
               <SelectValue placeholder="Etapa" />
             </SelectTrigger>
             <SelectContent>
@@ -89,10 +91,10 @@ export function ProspectFilters({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 w-full lg:w-40">
           <Label className="text-xs text-slate-500">Canal</Label>
           <Select value={canal} onValueChange={setCanal}>
-            <SelectTrigger className="h-10 bg-white">
+            <SelectTrigger className="h-8 bg-white">
               <SelectValue placeholder="Canal" />
             </SelectTrigger>
             <SelectContent>
@@ -106,29 +108,29 @@ export function ProspectFilters({
           </Select>
         </div>
 
-        <div className="space-y-1">
+        <div className="space-y-1 w-full lg:w-36">
           <Label className="text-xs text-slate-500">Desde</Label>
           <Input
             type="date"
-            className="h-10 bg-white"
+            className="h-8 bg-white"
             value={createdFrom}
             onChange={(e) => setCreatedFrom(e.target.value)}
           />
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 w-full lg:w-36">
           <Label className="text-xs text-slate-500">Hasta</Label>
           <Input
             type="date"
-            className="h-10 bg-white"
+            className="h-8 bg-white"
             value={createdTo}
             onChange={(e) => setCreatedTo(e.target.value)}
           />
         </div>
-        <div className="flex gap-2 items-end">
-          <div className="flex-1 space-y-1">
+        <div className="flex gap-2 items-end w-full lg:w-auto lg:ml-auto">
+          <div className="space-y-1 w-full lg:w-48">
             <Label className="text-xs text-slate-500">Owner</Label>
             <Select value={owner} onValueChange={setOwner}>
-              <SelectTrigger className="h-10 bg-white">
+              <SelectTrigger className="h-8 bg-white">
                 <SelectValue placeholder="Owner" />
               </SelectTrigger>
               <SelectContent>
@@ -144,7 +146,7 @@ export function ProspectFilters({
           <Button
             variant="outline"
             onClick={onClear}
-            className="h-10 px-3 gap-2 text-slate-600"
+            className="h-8 px-3 gap-2 text-slate-600"
           >
             Limpiar
           </Button>

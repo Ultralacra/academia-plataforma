@@ -91,19 +91,19 @@ export function ProspectKanban({
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
       {columns.map((col) => {
         const list = items.filter((p) => p.etapa === col);
         const styles = columnStyles[col];
         return (
           <div
             key={col}
-            className={`flex flex-col rounded-xl border min-h-[320px] shadow-sm ${styles.container}`}
+            className={`flex flex-col rounded-xl border min-h-[260px] shadow-sm ${styles.container}`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => onDrop(e, col)}
           >
             <div
-              className={`flex items-center justify-between border-b px-4 py-3 rounded-t-xl ${styles.header}`}
+              className={`flex items-center justify-between border-b px-3 py-2 rounded-t-xl ${styles.header}`}
             >
               <div className="flex items-center gap-2">
                 <StageBadge stage={col} />
@@ -112,7 +112,7 @@ export function ProspectKanban({
                 </span>
               </div>
             </div>
-            <div className="flex-1 space-y-2 p-3 overflow-y-auto">
+            <div className="flex-1 space-y-1.5 p-2 overflow-y-auto">
               {list.map((p) => (
                 <div
                   key={p.id}
@@ -120,11 +120,11 @@ export function ProspectKanban({
                   onDragStart={(e) =>
                     e.dataTransfer.setData("text/plain", p.id)
                   }
-                  className={`rounded-md border bg-white/90 p-3 shadow-sm hover:shadow-md cursor-move transition-colors hover:bg-indigo-50/40 ${styles.card}`}
+                  className={`rounded-md border bg-white/90 p-2 shadow-sm hover:shadow-md cursor-move transition-colors hover:bg-indigo-50/40 ${styles.card}`}
                 >
-                  <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-start justify-between gap-2 mb-1.5">
                     <h4
-                      className="flex-1 text-sm font-semibold text-slate-800 line-clamp-2"
+                      className="flex-1 text-xs font-semibold text-slate-800 line-clamp-2"
                       title={p.nombre}
                     >
                       {p.nombre}
@@ -132,26 +132,26 @@ export function ProspectKanban({
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-7 w-7 p-0"
+                      className="h-6 w-6 p-0"
                       onClick={() => onOpenDetail(p)}
                     >
-                      <Users className="h-3.5 w-3.5" />
+                      <Users className="h-3 w-3" />
                     </Button>
                   </div>
                   {p.saleStatus ? (
-                    <div className="mb-2">
+                    <div className="mb-1.5">
                       <Badge variant="secondary" className="text-[10px]">
                         {p.saleStatus}
                       </Badge>
                     </div>
                   ) : null}
-                  <div className="space-y-2 text-xs text-slate-600">
+                  <div className="space-y-1.5 text-xs text-slate-600">
                     <div className="flex items-center gap-1.5 truncate">
-                      <Mail className="h-3.5 w-3.5 text-slate-400" />
+                      <Mail className="h-3 w-3 text-slate-400" />
                       <span className="truncate">{p.email || "—"}</span>
                     </div>
                     <div className="flex items-center gap-1.5 truncate">
-                      <Phone className="h-3.5 w-3.5 text-slate-400" />
+                      <Phone className="h-3 w-3 text-slate-400" />
                       <span className="truncate">{p.telefono || "—"}</span>
                     </div>
                   </div>

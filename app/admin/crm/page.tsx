@@ -951,7 +951,7 @@ function CrmContent() {
         aria-hidden
       />
 
-      <div className="relative border-b px-6 py-6 bg-gradient-to-r from-white via-indigo-50 to-sky-50 overflow-hidden">
+      <div className="relative border-b px-6 py-4 bg-gradient-to-r from-white via-indigo-50 to-sky-50 overflow-hidden">
         <div
           className="absolute -top-24 -right-10 h-56 w-56 rounded-full bg-indigo-300/30 blur-3xl"
           aria-hidden
@@ -961,8 +961,8 @@ function CrmContent() {
           aria-hidden
         />
 
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex-1 space-y-4">
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex-1 space-y-3">
             <div className="flex items-center gap-4">
               <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 text-indigo-500 shadow-inner ring-1 ring-white/60">
                 <Sparkles className="h-5 w-5" />
@@ -1051,7 +1051,7 @@ function CrmContent() {
               ) : null}
             </div>
 
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {calendarStatus.loading ? (
                 <div className="flex items-center gap-2 text-sm text-slate-500">
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1060,7 +1060,7 @@ function CrmContent() {
               ) : calendarStatus.connected ? (
                 <>
                   <div
-                    className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-3 py-1.5 text-sm font-medium text-green-700"
+                    className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-3 py-1 text-sm font-medium text-green-700"
                     title={`Sincronizado con ${
                       calendarStatus.google_email || "Google Calendar"
                     }`}
@@ -1090,7 +1090,7 @@ function CrmContent() {
                     <CheckCircle2 className="h-4 w-4" />
                     <span>Calendar sincronizado</span>
                     {calendarStatus.google_email ? (
-                      <span className="text-xs opacity-75">
+                      <span className="text-xs opacity-75 hidden sm:inline">
                         ({calendarStatus.google_email})
                       </span>
                     ) : null}
@@ -1099,7 +1099,7 @@ function CrmContent() {
                     onClick={handleViewAvailability}
                     variant="outline"
                     size="sm"
-                    className="w-fit gap-2"
+                    className="h-8 px-3 w-fit gap-2"
                   >
                     <Calendar className="h-4 w-4" />
                     Ver mis horas disponibles
@@ -1109,7 +1109,7 @@ function CrmContent() {
                 <button
                   onClick={handleSyncCalendar}
                   disabled={syncingCalendar}
-                  className="group inline-flex items-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="group inline-flex h-9 items-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
                   title="Sincronizar con Google Calendar"
                 >
                   {syncingCalendar ? (
@@ -1159,7 +1159,7 @@ function CrmContent() {
                   value={selectedCampaignForMetrics}
                   onValueChange={setSelectedCampaignForMetrics}
                 >
-                  <SelectTrigger className="w-60 rounded-full bg-white/80">
+                  <SelectTrigger className="h-9 w-48 rounded-full bg-white/80">
                     <SelectValue placeholder="Seleccionar campaña" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1188,50 +1188,56 @@ function CrmContent() {
             ) : null}
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
-            <CreateLeadDialog
-              onCreated={() => {
-                void reload(ownerFilterRef.current || undefined);
-              }}
-            />
-          </div>
-        </div>
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex items-start gap-3">
+              <CreateLeadDialog
+                onCreated={() => {
+                  void reload(ownerFilterRef.current || undefined);
+                }}
+              />
+            </div>
 
-        <div className="relative mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {quickStats.map((stat) => {
-            const Icon = stat.icon;
-            return (
-              <div
-                key={stat.label}
-                className="group relative overflow-hidden rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur transition hover:shadow-lg"
-              >
-                <div
-                  className={`absolute -top-10 -right-6 h-24 w-24 rounded-full bg-gradient-to-br ${stat.accent} opacity-40 blur-2xl group-hover:opacity-60`}
-                  aria-hidden
-                />
-                <div
-                  className={`inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${stat.accent} text-white shadow`}
-                >
-                  <Icon className="h-4 w-4" />
-                </div>
-                <div className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {stat.label}
-                </div>
-                <div className="text-2xl font-semibold text-slate-900">
-                  {stat.value}
-                </div>
-              </div>
-            );
-          })}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto">
+              {quickStats.map((stat) => {
+                const Icon = stat.icon;
+                return (
+                  <div
+                    key={stat.label}
+                    className="relative overflow-hidden rounded-xl border border-white/60 bg-white/80 px-3 py-2 shadow-sm backdrop-blur"
+                  >
+                    <div
+                      className={`absolute -top-8 -right-6 h-16 w-16 rounded-full bg-gradient-to-br ${stat.accent} opacity-35 blur-2xl`}
+                      aria-hidden
+                    />
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className={`inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${stat.accent} text-white shadow`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 truncate">
+                          {stat.label}
+                        </div>
+                        <div className="text-sm font-semibold text-slate-900 leading-5">
+                          {stat.value}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 p-6 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/80">
+      <div className="flex-1 min-h-0 p-4 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/80">
         <CrmTabsLayout
           value={activeTab}
           onValueChange={setActiveTab}
           pipeline={
-            <div className="flex flex-col gap-4 h-full">
+            <div className="flex flex-col gap-3 h-full">
               <ProspectFilters
                 q={q}
                 setQ={setQ}
@@ -1289,7 +1295,7 @@ function CrmContent() {
 
               {view === "lista" ? (
                 <div className="rounded-xl border border-slate-200/70 bg-white/90 shadow-sm">
-                  <div className="grid grid-cols-11 gap-2 px-4 py-2 text-xs font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
+                  <div className="grid grid-cols-11 gap-2 px-4 py-1.5 text-xs font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
                     <div className="col-span-3">Prospecto</div>
                     <div className="col-span-2">Contacto</div>
                     <div className="col-span-2">Canal</div>
@@ -1310,12 +1316,12 @@ function CrmContent() {
                       filtrados.map((prospect) => (
                         <div
                           key={prospect.id}
-                          className="grid grid-cols-11 gap-2 px-4 py-3 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
+                          className="grid grid-cols-11 gap-2 px-4 py-1.5 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
                         >
                           <div className="col-span-3 min-w-0">
                             <div className="flex items-center gap-3 min-w-0">
                               <div
-                                className={`hidden sm:flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${getAvatarGradient(prospect.nombre)} text-xs font-semibold text-white shadow`}
+                                className={`hidden sm:flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${getAvatarGradient(prospect.nombre)} text-xs font-semibold text-white shadow`}
                                 aria-hidden
                               >
                                 {getInitials(prospect.nombre)}
