@@ -46,9 +46,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getStudentTickets } from "../api";
 import Link from "next/link";
-import { Eye, MessageSquare, Pencil, Plus } from "lucide-react";
+import { AlertTriangle, Eye, MessageSquare, Pencil, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -141,6 +142,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [removeMembresiaTarget, setRemoveMembresiaTarget] =
     useState<MetadataRecord<any> | null>(null);
   const [removingMembresia, setRemovingMembresia] = useState(false);
+
+  // Estado para la cuota activa (próxima a pagar)
+  const [cuotaActivaInfo, setCuotaActivaInfo] = useState<{
+    fechaVencimiento: Date | null;
+    monto: number | null;
+    moneda: string | null;
+    estaMorosa: boolean;
+    diasParaVencer: number | null;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -309,6 +319,121 @@ export default function StudentDetailContent({ code }: { code: string }) {
       alive = false;
     };
   }, [code]);
+
+  // === VERIFICAR CUOTAS DEL ALUMNO ===
+  useEffect(() => {
+    if (!student?.code) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { getPaymentPlansByClienteCodigo, getPaymentPlanByCodigo } =
+          await import("./pagos/payments-plan.api");
+
+        // 1) Listar planes por cliente_codigo
+        const list = await getPaymentPlansByClienteCodigo(student.code, {
+          page: 1,
+          pageSize: 100,
+          search: "",
+        });
+        const plans = Array.isArray(list) ? list : ((list as any)?.data ?? []);
+
+        if (cancelled) return;
+
+        // 2) Recopilar todas las cuotas de todos los planes
+        const todasLasCuotas: any[] = [];
+
+        for (const planRow of plans) {
+          const planCodigo = String(planRow?.codigo ?? "").trim();
+          if (!planCodigo) continue;
+
+          try {
+            const rawDetail = await getPaymentPlanByCodigo(planCodigo);
+            const plan = (rawDetail as any)?.data ?? rawDetail;
+            const detalles: any[] = plan?.detalles ?? plan?.details ?? [];
+
+            for (const detalle of detalles) {
+              todasLasCuotas.push({
+                ...detalle,
+                plan_codigo: planCodigo,
+                plan_estatus: plan?.estatus,
+              });
+            }
+          } catch {
+            // Ignorar errores individuales
+          }
+        }
+
+        if (cancelled) return;
+
+        // 3) Filtrar cuotas pendientes (no pagadas)
+        const isPaidStatus = (s: any) => {
+          const v = String(s ?? "").toLowerCase();
+          return ["pagado", "paid", "completed", "listo", "aprobado"].includes(
+            v,
+          );
+        };
+
+        const cuotasPendientes = todasLasCuotas.filter(
+          (c) => !isPaidStatus(c.estatus),
+        );
+
+        // 4) Ordenar por fecha de pago (más próxima primero)
+        cuotasPendientes.sort((a, b) => {
+          const fechaA = a.fecha_pago
+            ? new Date(a.fecha_pago).getTime()
+            : Infinity;
+          const fechaB = b.fecha_pago
+            ? new Date(b.fecha_pago).getTime()
+            : Infinity;
+          return fechaA - fechaB;
+        });
+
+        // 5) La primera cuota pendiente es la "cuota activa"
+        const cuotaActiva = cuotasPendientes[0] ?? null;
+
+        if (cuotaActiva) {
+          const fechaVencimiento = cuotaActiva.fecha_pago
+            ? new Date(cuotaActiva.fecha_pago)
+            : null;
+          const hoy = new Date();
+          hoy.setHours(0, 0, 0, 0);
+          const fechaVencimientoNorm = fechaVencimiento
+            ? new Date(fechaVencimiento)
+            : null;
+          if (fechaVencimientoNorm) fechaVencimientoNorm.setHours(0, 0, 0, 0);
+
+          const estaMorosa = fechaVencimientoNorm
+            ? fechaVencimientoNorm < hoy
+            : false;
+
+          let diasParaVencer: number | null = null;
+          if (fechaVencimientoNorm) {
+            diasParaVencer = Math.ceil(
+              (fechaVencimientoNorm.getTime() - hoy.getTime()) /
+                (1000 * 60 * 60 * 24),
+            );
+          }
+
+          setCuotaActivaInfo({
+            fechaVencimiento: fechaVencimientoNorm,
+            monto: cuotaActiva.monto ?? null,
+            moneda: cuotaActiva.moneda ?? null,
+            estaMorosa,
+            diasParaVencer,
+          });
+        } else {
+          setCuotaActivaInfo(null);
+        }
+      } catch {
+        setCuotaActivaInfo(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [student?.code]);
 
   // Función para guardar fecha de ingreso (preparado para backend)
   async function handleSaveIngreso() {
@@ -1162,6 +1287,41 @@ export default function StudentDetailContent({ code }: { code: string }) {
     return count;
   }
 
+  // Calcular días desde INACTIVO_POR_PAGO (para mostrar en UI)
+  const diasInactivoPorPago = useMemo(() => {
+    if (!statusHistory || statusHistory.length === 0) return null;
+
+    // Ordenar por fecha (más reciente primero)
+    const historialOrdenado = [...statusHistory].sort((a, b) => {
+      const fechaA = new Date(a.created_at).getTime();
+      const fechaB = new Date(b.created_at).getTime();
+      return fechaB - fechaA;
+    });
+
+    // El último estado es el primero del array ordenado
+    const ultimoEstado = historialOrdenado[0];
+    if (!ultimoEstado) return null;
+
+    // Verificar si el último estado es INACTIVO_POR_PAGO
+    const estadoId = String(ultimoEstado?.estado_id ?? "").toUpperCase();
+    const esInactivoPorPago =
+      estadoId.includes("INACTIVO") && estadoId.includes("PAGO");
+
+    if (!esInactivoPorPago) return null;
+
+    const fechaCambio = ultimoEstado?.created_at;
+    if (!fechaCambio) return null;
+
+    const fechaInactivo = new Date(fechaCambio);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    fechaInactivo.setHours(0, 0, 0, 0);
+
+    return Math.ceil(
+      (hoy.getTime() - fechaInactivo.getTime()) / (1000 * 60 * 60 * 24),
+    );
+  }, [statusHistory]);
+
   // Extraer pausas del historial de estatus (solo registros con PAUSADO y fechas válidas)
   const pausesFromStatusHistory = useMemo(() => {
     if (!statusHistory) return [];
@@ -1657,6 +1817,73 @@ export default function StudentDetailContent({ code }: { code: string }) {
           </div>
           {/* Columna lateral: equipo y contrato (sticky) */}
           <div className="space-y-4 lg:col-span-4 lg:sticky lg:top-24 self-start">
+            {/* Alerta de próxima cuota */}
+            {cuotaActivaInfo && cuotaActivaInfo.fechaVencimiento && (
+              <Alert
+                variant={cuotaActivaInfo.estaMorosa ? "destructive" : "default"}
+                className="py-3"
+              >
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="text-sm">
+                  {cuotaActivaInfo.estaMorosa ? (
+                    <>
+                      <strong>Cuota vencida</strong> desde el{" "}
+                      {cuotaActivaInfo.fechaVencimiento.toLocaleDateString(
+                        "es-ES",
+                        {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        },
+                      )}
+                      {cuotaActivaInfo.diasParaVencer !== null && (
+                        <>
+                          {" "}
+                          ({Math.abs(cuotaActivaInfo.diasParaVencer)} días de
+                          mora)
+                        </>
+                      )}
+                      . El acceso será cambiado a{" "}
+                      <strong>INACTIVO_POR_PAGO</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Próxima cuota:{" "}
+                      <strong>
+                        {cuotaActivaInfo.fechaVencimiento.toLocaleDateString(
+                          "es-ES",
+                          {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          },
+                        )}
+                      </strong>
+                      {cuotaActivaInfo.diasParaVencer !== null &&
+                        cuotaActivaInfo.diasParaVencer === 0 && (
+                          <> (vence hoy)</>
+                        )}
+                      {cuotaActivaInfo.diasParaVencer !== null &&
+                        cuotaActivaInfo.diasParaVencer > 0 && (
+                          <>
+                            {" "}
+                            ({cuotaActivaInfo.diasParaVencer} días restantes)
+                          </>
+                        )}
+                      . Si no paga antes del{" "}
+                      {new Date(
+                        cuotaActivaInfo.fechaVencimiento.getTime() + 86400000,
+                      ).toLocaleDateString("es-ES", {
+                        day: "numeric",
+                        month: "short",
+                      })}
+                      , su acceso cambiará a <strong>INACTIVO_POR_PAGO</strong>.
+                    </>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Cuotas de pago - compacto */}
             <PaymentSummaryCard code={student.code || code} />
 
@@ -1826,6 +2053,17 @@ export default function StudentDetailContent({ code }: { code: string }) {
                         {accessStats.pausedCalendarDaysTotal}
                       </span>
                     </div>
+                    {diasInactivoPorPago !== null &&
+                      diasInactivoPorPago > 0 && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-destructive">
+                            Días INACTIVO_POR_PAGO
+                          </span>
+                          <span className="font-medium text-destructive">
+                            {diasInactivoPorPago}
+                          </span>
+                        </div>
+                      )}
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground">
                         Días restantes
