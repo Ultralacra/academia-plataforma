@@ -117,11 +117,19 @@ export async function getTickets(opts: {
       coaches_override: null,
     }));
 
+    // Deduplicar por id para evitar keys duplicadas en React
+    const seen = new Set<number>();
+    const unique = items.filter((t) => {
+      if (seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
+
     return {
-      items,
-      total: items.length,
+      items: unique,
+      total: unique.length,
       page: 1,
-      pageSize: items.length,
+      pageSize: unique.length,
       totalPages: 1,
     };
   }
@@ -213,11 +221,19 @@ export async function getTickets(opts: {
       })(),
   }));
 
+  // Deduplicar por id para evitar keys duplicadas en React
+  const seen = new Set<number>();
+  const unique = items.filter((t) => {
+    if (seen.has(t.id)) return false;
+    seen.add(t.id);
+    return true;
+  });
+
   return {
-    items,
-    total: json.total ?? items.length,
+    items: unique,
+    total: json.total ?? unique.length,
     page: json.page ?? 1,
-    pageSize: json.pageSize ?? items.length,
+    pageSize: json.pageSize ?? unique.length,
     totalPages: json.totalPages ?? 1,
   } as const;
 }

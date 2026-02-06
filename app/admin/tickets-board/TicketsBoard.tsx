@@ -115,7 +115,25 @@ import {
   uploadTicketFiles,
   deleteTicketFile,
   deleteTicket,
+  getOpciones,
+  updateClientEtapa,
+  type OpcionItem,
 } from "@/app/admin/alumnos/api";
+import { apiFetch } from "@/lib/api-config";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { ChevronsUpDown, Check } from "lucide-react";
 import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
 import { CreateTicketModal } from "./CreateTicketModal";
 
@@ -563,6 +581,16 @@ export default function TicketsBoard({
   >(null);
   const [editingInternalNoteText, setEditingInternalNoteText] = useState("");
 
+  // Estados para etapa del alumno
+  const [etapasOptions, setEtapasOptions] = useState<OpcionItem[]>([]);
+  const [alumnoInfo, setAlumnoInfo] = useState<{
+    codigo: string;
+    etapa: string | null;
+  } | null>(null);
+  const [alumnoLoading, setAlumnoLoading] = useState(false);
+  const [openStagePopover, setOpenStagePopover] = useState(false);
+  const [updatingStage, setUpdatingStage] = useState(false);
+
   // Control para expandir lista completa de archivos en el panel de edición
   const [showAllFiles, setShowAllFiles] = useState(false);
   // Edición de descripción (pestaña Detalle)
@@ -675,6 +703,72 @@ export default function TicketsBoard({
       if (savedHasta) setFechaHasta(savedHasta);
     } catch {}
   }, []);
+
+  // Cargar opciones de etapa al montar
+  useEffect(() => {
+    (async () => {
+      try {
+        const etapas = await getOpciones("etapa");
+        setEtapasOptions(etapas);
+      } catch (e) {
+        console.error("Error cargando opciones de etapa:", e);
+      }
+    })();
+  }, []);
+
+  // Cargar información del alumno (etapa) cuando se abre el drawer y hay un ticket seleccionado
+  useEffect(() => {
+    if (!drawerOpen || !selectedTicket) {
+      setAlumnoInfo(null);
+      return;
+    }
+
+    const alumnoNombre =
+      (selectedTicket as any)?.alumno_nombre ?? ticketDetail?.alumno_nombre;
+    if (!alumnoNombre) {
+      setAlumnoInfo(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setAlumnoLoading(true);
+        // Consultar el alumno por nombre usando /client/get/clients?search=
+        const url = `/client/get/clients?search=${encodeURIComponent(String(alumnoNombre).trim())}`;
+        const json = await apiFetch<any>(url);
+        const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+
+        // Buscar match exacto o cercano por nombre
+        const targetNombre = String(alumnoNombre).trim().toLowerCase();
+        const match = rows.find((r) => {
+          const rNombre = String(r.nombre ?? r.name ?? "")
+            .trim()
+            .toLowerCase();
+          return rNombre === targetNombre || rNombre.includes(targetNombre);
+        });
+
+        if (!cancelled && match) {
+          setAlumnoInfo({
+            codigo: String(match.codigo ?? match.code ?? ""),
+            etapa: match.etapa ?? match.stage ?? null,
+          });
+        } else if (!cancelled) {
+          setAlumnoInfo(null);
+        }
+      } catch (e) {
+        console.error("Error obteniendo info del alumno:", e);
+        if (!cancelled) setAlumnoInfo(null);
+      } finally {
+        if (!cancelled) setAlumnoLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [drawerOpen, selectedTicket, ticketDetail?.alumno_nombre]);
 
   // Mantener ref con la lista actual (para handlers globales sin stale closures)
   useEffect(() => {
@@ -2368,7 +2462,7 @@ export default function TicketsBoard({
                         </div>
                         {group.items.map((t) => (
                           <div
-                            key={t.id}
+                            key={`${t.id}-${t.codigo ?? ""}`}
                             draggable={canEdit}
                             onDragStart={(e) =>
                               canEdit && handleDragStart(e, t.id)
@@ -3674,6 +3768,130 @@ export default function TicketsBoard({
                       </div>
                       <div className="min-h-[24px] flex items-center font-medium">
                         {ticketDetail?.alumno_nombre || "—"}
+                      </div>
+
+                      {/* Etapa del alumno (editable) */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <Tag className="h-4 w-4" /> <span>Etapa</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-center">
+                        {alumnoLoading ? (
+                          <div className="flex items-center gap-1 text-xs text-slate-400">
+                            <Spinner className="h-3 w-3" />
+                            Cargando...
+                          </div>
+                        ) : alumnoInfo ? (
+                          <Popover
+                            open={openStagePopover}
+                            onOpenChange={setOpenStagePopover}
+                          >
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 px-2 text-xs gap-1"
+                                disabled={updatingStage}
+                              >
+                                {updatingStage ? (
+                                  <Spinner className="h-3 w-3" />
+                                ) : (
+                                  <>
+                                    <span className="font-medium">
+                                      {alumnoInfo.etapa || "Sin etapa"}
+                                    </span>
+                                    <ChevronsUpDown className="h-3 w-3 opacity-50" />
+                                  </>
+                                )}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                              className="w-48 p-0"
+                              align="start"
+                              sideOffset={4}
+                            >
+                              <Command>
+                                <CommandInput
+                                  placeholder="Cambiar etapa..."
+                                  className="text-xs h-8"
+                                />
+                                <CommandList className="max-h-48">
+                                  <CommandEmpty>No hay opciones.</CommandEmpty>
+                                  <CommandGroup heading="Etapas">
+                                    {(etapasOptions.length
+                                      ? etapasOptions
+                                      : [
+                                          {
+                                            key: "ONBOARDING",
+                                            value: "ONBOARDING",
+                                          },
+                                          { key: "F1", value: "F1" },
+                                          { key: "F2", value: "F2" },
+                                          { key: "F3", value: "F3" },
+                                          { key: "F4", value: "F4" },
+                                          { key: "F5", value: "F5" },
+                                        ]
+                                    ).map((opt) => (
+                                      <CommandItem
+                                        key={opt.key}
+                                        value={`${opt.key} ${opt.value}`}
+                                        onSelect={async () => {
+                                          if (!alumnoInfo?.codigo) return;
+                                          const prevEtapa = alumnoInfo.etapa;
+                                          setUpdatingStage(true);
+                                          // Actualización optimista
+                                          setAlumnoInfo((prev) =>
+                                            prev
+                                              ? { ...prev, etapa: opt.key }
+                                              : prev,
+                                          );
+                                          try {
+                                            await updateClientEtapa(
+                                              alumnoInfo.codigo,
+                                              opt.key,
+                                            );
+                                            toast({
+                                              title: "Etapa actualizada",
+                                              description: `${ticketDetail?.alumno_nombre} → ${opt.value}`,
+                                            });
+                                            setOpenStagePopover(false);
+                                          } catch (e: any) {
+                                            // Rollback
+                                            setAlumnoInfo((prev) =>
+                                              prev
+                                                ? { ...prev, etapa: prevEtapa }
+                                                : prev,
+                                            );
+                                            toast({
+                                              title: "Error",
+                                              description:
+                                                e?.message ||
+                                                "No se pudo actualizar la etapa",
+                                              variant: "destructive",
+                                            });
+                                          } finally {
+                                            setUpdatingStage(false);
+                                          }
+                                        }}
+                                        className="cursor-pointer text-xs"
+                                      >
+                                        <span className="truncate">
+                                          {opt.value}
+                                        </span>
+                                        {String(
+                                          alumnoInfo.etapa || "",
+                                        ).trim() === opt.key && (
+                                          <Check className="ml-auto h-3 w-3 text-blue-600" />
+                                        )}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </CommandList>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
                       </div>
 
                       {/* Tipo (Movido desde Detalle) */}

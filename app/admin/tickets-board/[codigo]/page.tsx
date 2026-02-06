@@ -14,8 +14,12 @@ import {
   getTicketFiles,
   getTicketFile,
   type TicketFile,
+  getOpciones,
+  updateClientEtapa,
+  type OpcionItem,
 } from "@/app/admin/alumnos/api";
 import { apiFetch } from "@/lib/api-config";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -39,6 +43,8 @@ import {
   CheckCircle,
   Link as LinkIcon,
   History as HistoryIcon,
+  ChevronsUpDown,
+  Check,
 } from "lucide-react";
 import {
   Dialog,
@@ -47,9 +53,23 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import VideoPlayer from "@/components/chat/VideoPlayer";
 import ObservacionesSection from "../ObservacionesSection";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 
 // Status types y estilos (copiados de TicketsBoard)
 type StatusKey =
@@ -149,6 +169,17 @@ function TicketDetailContent() {
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
+  // Estados para etapa del alumno
+  const { toast } = useToast();
+  const [etapasOptions, setEtapasOptions] = useState<OpcionItem[]>([]);
+  const [alumnoInfo, setAlumnoInfo] = useState<{
+    codigo: string;
+    etapa: string | null;
+  } | null>(null);
+  const [alumnoLoading, setAlumnoLoading] = useState(false);
+  const [openStagePopover, setOpenStagePopover] = useState(false);
+  const [updatingStage, setUpdatingStage] = useState(false);
+
   // Cargar ticket
   useEffect(() => {
     if (!codigo) return;
@@ -222,6 +253,75 @@ function TicketDetailContent() {
       }
     })();
   }, [codigo, ticket]);
+
+  // Cargar opciones de etapa al montar
+  useEffect(() => {
+    (async () => {
+      try {
+        const etapas = await getOpciones("etapa");
+        setEtapasOptions(etapas);
+      } catch (e) {
+        console.error("Error cargando opciones de etapa:", e);
+      }
+    })();
+  }, []);
+
+  // Cargar información del alumno (etapa) cuando tengamos el ticket
+  useEffect(() => {
+    if (!ticket) return;
+
+    // Debug: ver qué campos tiene el ticket
+    console.log("Ticket cargado:", ticket);
+    console.log("Campos del ticket:", Object.keys(ticket));
+
+    const alumnoNombre =
+      ticket?.alumno_nombre ?? ticket?.alumnoNombre ?? ticket?.nombre;
+    console.log("Nombre del alumno detectado:", alumnoNombre);
+
+    if (!alumnoNombre) {
+      console.log("No se encontró nombre de alumno en el ticket");
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setAlumnoLoading(true);
+        // Consultar el alumno por nombre usando /client/get/clients?search=
+        const url = `/client/get/clients?search=${encodeURIComponent(String(alumnoNombre).trim())}`;
+        const json = await apiFetch<any>(url);
+        const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+
+        // Buscar match exacto o cercano por nombre
+        const targetNombre = String(alumnoNombre).trim().toLowerCase();
+        const match = rows.find((r) => {
+          const rNombre = String(r.nombre ?? r.name ?? "")
+            .trim()
+            .toLowerCase();
+          return rNombre === targetNombre || rNombre.includes(targetNombre);
+        });
+
+        if (!cancelled && match) {
+          setAlumnoInfo({
+            codigo: String(match.codigo ?? match.code ?? ""),
+            etapa: match.etapa ?? match.stage ?? null,
+          });
+        } else if (!cancelled) {
+          setAlumnoInfo(null);
+        }
+      } catch (e) {
+        console.error("Error obteniendo info del alumno:", e);
+        if (!cancelled) setAlumnoInfo(null);
+      } finally {
+        if (!cancelled) setAlumnoLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ticket]);
 
   // Funciones de descarga y preview
   async function downloadFile(fileId: string, fileName: string) {
@@ -453,6 +553,123 @@ function TicketDetailContent() {
                   <div className="text-slate-600">
                     {ticket?.alumno_nombre || ticket?.alumnoNombre}
                   </div>
+                  {/* Etapa del alumno (editable) */}
+                  {alumnoLoading ? (
+                    <div className="flex items-center gap-1 mt-1 text-xs text-slate-400">
+                      <Spinner className="h-3 w-3" />
+                      Cargando etapa...
+                    </div>
+                  ) : alumnoInfo ? (
+                    <div className="mt-1">
+                      <Popover
+                        open={openStagePopover}
+                        onOpenChange={setOpenStagePopover}
+                      >
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 text-xs gap-1"
+                            disabled={updatingStage}
+                          >
+                            {updatingStage ? (
+                              <Spinner className="h-3 w-3" />
+                            ) : (
+                              <>
+                                <span className="font-medium">
+                                  {alumnoInfo.etapa || "Sin etapa"}
+                                </span>
+                                <ChevronsUpDown className="h-3 w-3 opacity-50" />
+                              </>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          className="w-48 p-0"
+                          align="start"
+                          sideOffset={4}
+                        >
+                          <Command>
+                            <CommandInput
+                              placeholder="Cambiar etapa..."
+                              className="text-xs h-8"
+                            />
+                            <CommandList className="max-h-48">
+                              <CommandEmpty>No hay opciones.</CommandEmpty>
+                              <CommandGroup heading="Etapas">
+                                {(etapasOptions.length
+                                  ? etapasOptions
+                                  : [
+                                      {
+                                        key: "ONBOARDING",
+                                        value: "ONBOARDING",
+                                      },
+                                      { key: "F1", value: "F1" },
+                                      { key: "F2", value: "F2" },
+                                      { key: "F3", value: "F3" },
+                                      { key: "F4", value: "F4" },
+                                      { key: "F5", value: "F5" },
+                                    ]
+                                ).map((opt) => (
+                                  <CommandItem
+                                    key={opt.key}
+                                    value={`${opt.key} ${opt.value}`}
+                                    onSelect={async () => {
+                                      if (!alumnoInfo?.codigo) return;
+                                      const prevEtapa = alumnoInfo.etapa;
+                                      setUpdatingStage(true);
+                                      // Actualización optimista
+                                      setAlumnoInfo((prev) =>
+                                        prev
+                                          ? { ...prev, etapa: opt.key }
+                                          : prev,
+                                      );
+                                      try {
+                                        await updateClientEtapa(
+                                          alumnoInfo.codigo,
+                                          opt.key,
+                                        );
+                                        toast({
+                                          title: "Etapa actualizada",
+                                          description: `${ticket?.alumno_nombre || ticket?.alumnoNombre} → ${opt.value}`,
+                                        });
+                                        setOpenStagePopover(false);
+                                      } catch (e: any) {
+                                        // Rollback
+                                        setAlumnoInfo((prev) =>
+                                          prev
+                                            ? { ...prev, etapa: prevEtapa }
+                                            : prev,
+                                        );
+                                        toast({
+                                          title: "Error",
+                                          description:
+                                            e?.message ||
+                                            "No se pudo actualizar la etapa",
+                                          variant: "destructive",
+                                        });
+                                      } finally {
+                                        setUpdatingStage(false);
+                                      }
+                                    }}
+                                    className="cursor-pointer text-xs"
+                                  >
+                                    <span className="truncate">
+                                      {opt.value}
+                                    </span>
+                                    {String(alumnoInfo.etapa || "").trim() ===
+                                      opt.key && (
+                                      <Check className="ml-auto h-3 w-3 text-blue-600" />
+                                    )}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )}
@@ -565,9 +782,9 @@ function TicketDetailContent() {
           {/* Historial completo */}
           {estadosHistory.length > 0 ? (
             <div className="space-y-2 max-h-[300px] overflow-y-auto">
-              {estadosHistory.map((e: any) => (
+              {estadosHistory.map((e: any, idx: number) => (
                 <div
-                  key={e.id}
+                  key={`estado-${e.id ?? idx}-${idx}`}
                   className="flex items-center gap-3 text-sm border-l-2 border-slate-200 pl-3 py-1"
                 >
                   <span
@@ -735,9 +952,9 @@ function TicketDetailContent() {
             <div className="text-sm text-slate-500">Sin observaciones.</div>
           ) : (
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {comments.map((c) => (
+              {comments.map((c, idx) => (
                 <div
-                  key={c.id}
+                  key={`comment-${c.id}-${idx}`}
                   className="rounded-lg bg-slate-50 border border-slate-200 p-3"
                 >
                   <div className="flex items-center justify-between gap-2 mb-2">
@@ -777,9 +994,9 @@ function TicketDetailContent() {
             <div className="text-sm text-slate-500">Sin notas internas.</div>
           ) : (
             <div className="space-y-3 max-h-[400px] overflow-y-auto">
-              {internalNotes.map((n) => (
+              {internalNotes.map((n, idx) => (
                 <div
-                  key={n.id}
+                  key={`note-${n.id}-${idx}`}
                   className="rounded-lg bg-white border border-amber-200 p-3"
                 >
                   <div className="flex items-center justify-between gap-2 mb-2">
