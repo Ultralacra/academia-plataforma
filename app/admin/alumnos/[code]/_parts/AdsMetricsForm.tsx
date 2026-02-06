@@ -397,7 +397,7 @@ export default function AdsMetricsForm({
       setMatchedMetadata(best);
       setMatchedMetadataCount(count);
       if (best) applyMetadataToForm(best);
-            /* console.log(
+      /* console.log(
         "[ADS][metadata] list -> total:",
         items.length,
         "matches:",
@@ -485,7 +485,7 @@ export default function AdsMetricsForm({
 
       if (best?.id != null) {
         // Ya existe: actualizar (PUT) y luego consultar por id
-                /* console.log(
+        /* console.log(
           "[ADS][metadata] ya existe para este alumno, actualizando por id:",
           best.id,
         ); */
@@ -510,7 +510,7 @@ export default function AdsMetricsForm({
           payload: mergedPayload,
         };
 
-                /* console.log("[ADS][metadata] update body ->", updateBody); */
+        /* console.log("[ADS][metadata] update body ->", updateBody); */
 
         const updateRes = await fetch(
           `/api/metadata/${encodeURIComponent(String(best.id))}`,
@@ -536,13 +536,13 @@ export default function AdsMetricsForm({
         setMatchedMetadata(updatedLocal);
         setMatchedMetadataCount(count || 1);
         applyMetadataToForm(updatedLocal);
-                /* console.log("[ADS][metadata] updated local ->", updatedLocal); */
+        /* console.log("[ADS][metadata] updated local ->", updatedLocal); */
         toast({ title: "Guardado", description: "Métricas ADS actualizadas" });
         return;
       }
 
       // 2) Crear metadata SOLO para este alumno
-            /* console.log("[ADS][metadata] create body ->", body); */
+      /* console.log("[ADS][metadata] create body ->", body); */
       const createRes = await fetch("/api/metadata", {
         method: "POST",
         headers: {
@@ -568,7 +568,7 @@ export default function AdsMetricsForm({
       setMatchedMetadata(createdLocal);
       setMatchedMetadataCount(1);
       applyMetadataToForm(createdLocal);
-            /* console.log("[ADS][metadata] created local ->", createdLocal); */
+      /* console.log("[ADS][metadata] created local ->", createdLocal); */
       toast({ title: "Guardado", description: "Métricas ADS guardadas" });
     } catch (e: unknown) {
       console.error("[ADS][metadata] error guardando/consultando:", e);
@@ -787,7 +787,7 @@ export default function AdsMetricsForm({
       const clicsN = toNum(data.clics) ?? null;
       const visitasN = toNum(data.visitas) ?? null;
       const pagosN = toNum(data.pagos) ?? null;
-            /* console.log(
+      /* console.log(
         "[ADS] Embudo → Alcance:",
         alcanceN,
         "Clics:",
@@ -805,7 +805,7 @@ export default function AdsMetricsForm({
       const effAdsPct = effAdsRatio != null ? effAdsRatio * 100 : null;
       const effPagoPct = effPagoRatio != null ? effPagoRatio * 100 : null;
       const effCompraPct = effCompraRatio != null ? effCompraRatio * 100 : null;
-            /* console.log(
+      /* console.log(
         "[ADS] Efectividades (ratio) → Ads (clics/alcance):",
         effAdsRatio,
         "Pago iniciado (pagos/visitas):",
@@ -813,7 +813,7 @@ export default function AdsMetricsForm({
         "Compra (carnada/visitas):",
         effCompraRatio,
       ); */
-            /* console.log(
+      /* console.log(
         "[ADS] Efectividades (%) → Ads (clics/alcance):",
         effAdsPct != null ? `${effAdsPct.toFixed(1)}%` : null,
         "Pago iniciado (pagos/visitas):",
@@ -825,7 +825,7 @@ export default function AdsMetricsForm({
       const dispEffAds = fmtRatioToPercent(view.eff_ads);
       const dispEffPago = fmtRatioToPercent(view.eff_pago);
       const dispEffCompra = fmtRatioToPercent(view.eff_compra);
-            /* console.log(
+      /* console.log(
         "[ADS] UI → Ads (clics/alcance):",
         `${dispEffAds}%`,
         "Pago iniciado (pagos/visitas):",
