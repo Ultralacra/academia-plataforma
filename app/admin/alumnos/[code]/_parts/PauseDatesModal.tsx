@@ -71,9 +71,7 @@ export default function PauseDatesModal({
       range.from &&
       range.to &&
       !isNaN(range.from.getTime()) &&
-      !isNaN(range.to.getTime()) &&
-      isBusinessDay(range.from) &&
-      isBusinessDay(range.to)
+      !isNaN(range.to.getTime())
     ) &&
     (tipo === "CONTRACTUAL" || tipo === "EXTRAORDINARIA") &&
     motivo.trim().length > 0;
@@ -126,7 +124,6 @@ export default function PauseDatesModal({
               selected={range as any}
               onSelect={(r: any) => setRange(r)}
               locale={es}
-              disabled={(d: Date) => !isBusinessDay(d)}
             />
           </div>
         </div>
