@@ -182,7 +182,7 @@ export function CreateTicketModal({
       setPage(1);
       setHasMore((studentsData?.length ?? 0) >= PAGE_SIZE);
       setTypes(typesData);
-      if (typesData.length > 0) setType([typesData[0].key]);
+      // No pre-seleccionar ningún tipo por defecto
 
       if (defaultStudentCode) {
         const wanted = String(defaultStudentCode);
