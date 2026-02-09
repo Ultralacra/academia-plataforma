@@ -1,34 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-
-/** Entrada mínima necesaria para calcular promedios por fase */
-export type PhaseDatum = {
-  ingreso?: string | null;
-  paso_f1?: string | null;
-  paso_f2?: string | null;
-  paso_f3?: string | null;
-  paso_f4?: string | null;
-  paso_f5?: string | null;
-};
-
-/* ───────── helpers ───────── */
-function daysBetween(a?: string | null, b?: string | null) {
-  if (!a || !b) return null;
-  const d1 = new Date(a);
-  const d2 = new Date(b);
-  if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return null;
-  const diff = (d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24);
-  return diff >= 0 ? Math.round(diff) : null;
-}
-function mean(nums: Array<number | null>) {
-  const v = nums.filter((x): x is number => typeof x === "number" && !isNaN(x));
-  if (!v.length) return null;
-  return Math.round(v.reduce((a, b) => a + b, 0) / v.length);
-}
+import { fetchMetricsRetention, getDefaultRange } from "./api";
 
 /* ───────── estilos/colores (soft) ───────── */
 const PALETTE = [
@@ -37,15 +13,22 @@ const PALETTE = [
   { bg: "bg-emerald-50", ring: "ring-emerald-200", dot: "bg-emerald-500" },
   { bg: "bg-amber-50", ring: "ring-amber-200", dot: "bg-amber-500" },
   { bg: "bg-rose-50", ring: "ring-rose-200", dot: "bg-rose-500" },
+  { bg: "bg-cyan-50", ring: "ring-cyan-200", dot: "bg-cyan-500" },
+  { bg: "bg-indigo-50", ring: "ring-indigo-200", dot: "bg-indigo-500" },
+  { bg: "bg-pink-50", ring: "ring-pink-200", dot: "bg-pink-500" },
 ];
 
-type PhaseKey = "f1" | "f2" | "f3" | "f4" | "f5";
-const PHASE_LABEL: Record<PhaseKey, string> = {
-  f1: "Fase 1",
-  f2: "Fase 2",
-  f3: "Fase 3",
-  f4: "Fase 4",
-  f5: "Fase 5",
+// Labels legibles para las etapas
+const STAGE_LABELS: Record<string, string> = {
+  F1: "Fase 1",
+  F2: "Fase 2",
+  F3: "Fase 3",
+  F4: "Fase 4",
+  F5: "Fase 5",
+  F2_PAGINAS: "F2 Páginas",
+  F2_VSL: "F2 VSL",
+  F2_EMBUDO: "F2 Embudo",
+  F2_GRABACION: "F2 Grabación",
 };
 
 function MetricBar({
@@ -71,21 +54,16 @@ function MetricBar({
   );
 }
 
-/* Tarjeta KPI compacta con barra y “basado en N” */
 function PhaseCard({
   title,
   avgDays,
   samples,
-  demo,
   palette,
-  caption,
 }: {
   title: string;
   avgDays: number | null;
   samples: number;
-  demo: boolean;
   palette: { bg: string; ring: string; dot: string };
-  caption?: string;
 }) {
   return (
     <div
@@ -93,13 +71,11 @@ function PhaseCard({
         "rounded-xl border p-4 transition-shadow hover:shadow-sm",
         palette.bg,
         "ring-1",
-        palette.ring
+        palette.ring,
       )}
       title={
         avgDays != null
-          ? `${title}: ${avgDays} días — basado en ${samples} estudiante${
-              samples === 1 ? "" : "s"
-            }`
+          ? `${title}: ${avgDays} días — basado en ${samples} cliente${samples === 1 ? "" : "s"}`
           : `${title}: sin datos`
       }
     >
@@ -108,11 +84,8 @@ function PhaseCard({
           <span className={cn("h-2.5 w-2.5 rounded-full", palette.dot)} />
           <span className="text-sm font-medium">{title}</span>
         </div>
-        <Badge
-          variant={demo ? "secondary" : "outline"}
-          className="h-5 text-[11px]"
-        >
-          {demo ? "demo" : `n=${samples}`}
+        <Badge variant="outline" className="h-5 text-[11px]">
+          n={samples}
         </Badge>
       </div>
 
@@ -121,10 +94,7 @@ function PhaseCard({
           {avgDays != null ? `${avgDays} días` : "—"}
         </div>
         <div className="text-xs text-muted-foreground mt-1">
-          {demo
-            ? "Mostrando ejemplo hasta tener suficientes datos"
-            : caption ??
-              `Basado en ${samples} estudiante${samples === 1 ? "" : "s"}`}
+          Basado en {samples} cliente{samples === 1 ? "" : "s"}
         </div>
       </div>
 
@@ -133,109 +103,94 @@ function PhaseCard({
   );
 }
 
-/* ───────── componente principal ───────── */
 export default function PhaseMetrics({
-  items,
-  loading = false,
-  fallback = { f1: 7, f2: 10, f3: 8, f4: 9, f5: 5 },
-  minSamplesToShowReal = 3,
-  maxDaysCap = 30, // para escalar la barra; ajusta según tus plazos típicos
+  fechaDesde,
+  fechaHasta,
+  maxDaysCap = 30,
 }: {
-  items: PhaseDatum[];
-  loading?: boolean;
-  fallback?: { f1: number; f2: number; f3: number; f4: number; f5: number };
-  minSamplesToShowReal?: number;
+  fechaDesde?: string;
+  fechaHasta?: string;
   maxDaysCap?: number;
-}) {
-  const calc = useMemo(() => {
-    const d1 = items.map((it) => daysBetween(it.ingreso, it.paso_f1));
-    const d2 = items.map((it) => daysBetween(it.paso_f1, it.paso_f2));
-    const d3 = items.map((it) => daysBetween(it.paso_f2, it.paso_f3));
-    const d4 = items.map((it) => daysBetween(it.paso_f3, it.paso_f4));
-    const d5 = items.map((it) => daysBetween(it.paso_f4, it.paso_f5));
+} = {}) {
+  const [loading, setLoading] = useState(true);
+  const [durations, setDurations] = useState<
+    Array<{ etapa_id: string; count: number; avg_days: number }>
+  >([]);
 
-    const samples = {
-      f1: d1.filter((x) => x != null).length,
-      f2: d2.filter((x) => x != null).length,
-      f3: d3.filter((x) => x != null).length,
-      f4: d4.filter((x) => x != null).length,
-      f5: d5.filter((x) => x != null).length,
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const range = getDefaultRange();
+        const res = await fetchMetricsRetention({
+          fechaDesde: fechaDesde ?? range.fechaDesde,
+          fechaHasta: fechaHasta ?? range.fechaHasta,
+        });
+        if (!ignore) {
+          setDurations(res?.data?.clientes_etapas_durations ?? []);
+        }
+      } catch (e) {
+        console.error("[phase-metrics] error", e);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => {
+      ignore = true;
     };
-    const avg = {
-      f1: mean(d1),
-      f2: mean(d2),
-      f3: mean(d3),
-      f4: mean(d4),
-      f5: mean(d5),
-    };
+  }, [fechaDesde, fechaHasta]);
 
-    const hasEnough =
-      samples.f1 >= minSamplesToShowReal ||
-      samples.f2 >= minSamplesToShowReal ||
-      samples.f3 >= minSamplesToShowReal ||
-      samples.f4 >= minSamplesToShowReal ||
-      samples.f5 >= minSamplesToShowReal;
-
-    return { samples, avg, useDemo: !hasEnough };
-  }, [items, minSamplesToShowReal]);
-
-  const values: Record<PhaseKey, number | null> = {
-    f1: calc.useDemo ? fallback.f1 : calc.avg.f1,
-    f2: calc.useDemo ? fallback.f2 : calc.avg.f2,
-    f3: calc.useDemo ? fallback.f3 : calc.avg.f3,
-    f4: calc.useDemo ? fallback.f4 : calc.avg.f4,
-    f5: calc.useDemo ? fallback.f5 : calc.avg.f5,
-  };
+  // Ordenar: primero F1-F5 principales, luego subfases
+  const sortedDurations = [...durations].sort((a, b) => {
+    const order = ["F1", "F2", "F3", "F4", "F5"];
+    const ia = order.indexOf(a.etapa_id);
+    const ib = order.indexOf(b.etapa_id);
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.etapa_id.localeCompare(b.etapa_id);
+  });
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-0">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Tiempos promedio por fase</CardTitle>
-          {calc.useDemo && (
+          {durations.length === 0 && !loading && (
             <Badge variant="secondary" className="h-5 text-[11px]">
-              Mostrando datos de ejemplo hasta acumular suficientes muestras
+              Sin datos de duración en el rango seleccionado
             </Badge>
           )}
         </div>
       </CardHeader>
       <CardContent className="pt-3">
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {Array.from({ length: 5 }).map((_, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
                 className="h-[130px] rounded-xl border bg-muted animate-pulse"
               />
             ))}
           </div>
+        ) : sortedDurations.length === 0 ? (
+          <div className="text-sm text-muted-foreground py-4 text-center">
+            No hay datos de duración por etapa en este período
+          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            {(Object.keys(PHASE_LABEL) as PhaseKey[]).map((k, idx) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {sortedDurations.map((d, idx) => (
               <PhaseCard
-                key={k}
-                title={`Tiempo promedio en ${PHASE_LABEL[k]}`}
-                avgDays={values[k]}
-                samples={calc.samples[k]}
-                demo={calc.useDemo}
-                palette={PALETTE[idx]}
-                caption={
-                  calc.useDemo
-                    ? undefined
-                    : `Basado en ${calc.samples[k]} estudiante${
-                        calc.samples[k] === 1 ? "" : "s"
-                      }`
-                }
+                key={d.etapa_id}
+                title={STAGE_LABELS[d.etapa_id] ?? d.etapa_id}
+                avgDays={d.avg_days}
+                samples={d.count}
+                palette={PALETTE[idx % PALETTE.length]}
               />
             ))}
           </div>
         )}
-
-        {/* leyenda chica */}
-        <div className="mt-3 text-[11px] text-muted-foreground">
-          La barra indica el promedio relativo (capado a {maxDaysCap} días para
-          escala visual).
-        </div>
       </CardContent>
     </Card>
   );

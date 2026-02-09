@@ -1,14 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Trophy, DoorOpen, Target, CalendarClock } from "lucide-react";
-import type { LifecycleItem } from "./phase-faker";
-
-/* helpers */
-function mean(nums: number[]) {
-  if (!nums.length) return 0;
-  return Math.round(nums.reduce((a, b) => a + b, 0) / nums.length);
-}
+import { Trophy, DoorOpen, Target, CalendarClock, Users } from "lucide-react";
+import {
+  fetchMetricsRetention,
+  getDefaultRange,
+  type RetentionApiData,
+} from "./api";
 
 function Stat({
   icon,
@@ -16,14 +15,12 @@ function Stat({
   value,
   subtitle,
   accent,
-  children,
 }: {
   icon: React.ReactNode;
   title: string;
   value: string | number;
   subtitle?: string;
-  accent: string; // tailwind color like "emerald", "sky", "amber"
-  children?: React.ReactNode;
+  accent: string;
 }) {
   return (
     <div
@@ -44,39 +41,58 @@ function Stat({
       {subtitle ? (
         <div className="text-xs text-muted-foreground mt-1">{subtitle}</div>
       ) : null}
-      {children}
     </div>
   );
 }
 
 export default function RetentionKPIs({
-  items,
-  loading = false,
+  fechaDesde,
+  fechaHasta,
 }: {
-  items: LifecycleItem[];
-  loading?: boolean;
-}) {
-  const completed = items.filter((x) => x.status_sint === "COMPLETADO").length;
-  const abandons = items.filter((x) => x.status_sint === "ABANDONO").length;
-  const denom = completed + abandons;
-  const retention = denom ? Math.round((completed / denom) * 100) : 0;
+  fechaDesde?: string;
+  fechaHasta?: string;
+} = {}) {
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<RetentionApiData | null>(null);
 
-  const stayPool = items
-    .filter((x) => x.permanencia_d != null)
-    .map((x) => x.permanencia_d as number);
-  const avgStay = mean(stayPool);
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const range = getDefaultRange();
+        const res = await fetchMetricsRetention({
+          fechaDesde: fechaDesde ?? range.fechaDesde,
+          fechaHasta: fechaHasta ?? range.fechaHasta,
+        });
+        if (!ignore) setData(res?.data ?? null);
+      } catch (e) {
+        console.error("[retention-kpis] error", e);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [fechaDesde, fechaHasta]);
+
+  const retention = data?.retention;
+  const completed = retention?.completado ?? 0;
+  const abandons = retention?.abandonado ?? 0;
+  const retentionPct = retention?.retention ?? 0;
+  const avgStay = retention?.permanencia ?? 0;
+  const total = retention?.total ?? 0;
 
   return (
     <Card className="shadow-none border-gray-200">
       <CardHeader className="pb-1">
-        <CardTitle className="text-sm">
-          Retención y permanencia (sintético)
-        </CardTitle>
+        <CardTitle className="text-sm">Retención y permanencia</CardTitle>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            {Array.from({ length: 5 }).map((_, i) => (
               <div
                 key={i}
                 className="h-[110px] rounded-2xl border bg-muted animate-pulse"
@@ -84,7 +100,14 @@ export default function RetentionKPIs({
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <Stat
+              icon={<Users className="h-4 w-4" />}
+              title="Total clientes"
+              value={total}
+              subtitle="En el rango seleccionado"
+              accent="indigo"
+            />
             <Stat
               icon={<Trophy className="h-4 w-4" />}
               title="Completados"
@@ -102,14 +125,14 @@ export default function RetentionKPIs({
             <Stat
               icon={<Target className="h-4 w-4" />}
               title="Retención"
-              value={`${retention}%`}
+              value={`${retentionPct}%`}
               subtitle="Completados / (Comp. + Aband.)"
               accent="sky"
             />
             <Stat
               icon={<CalendarClock className="h-4 w-4" />}
               title="Permanencia prom."
-              value={`${avgStay || 0} d`}
+              value={`${avgStay.toFixed(2)} d`}
               subtitle="Días en el programa"
               accent="amber"
             />

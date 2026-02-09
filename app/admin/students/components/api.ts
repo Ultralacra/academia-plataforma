@@ -32,23 +32,137 @@ export function getDefaultRange() {
 
 export type MetricsV2Envelope = any; // Dejamos abierto mientras inspeccionamos el payload real
 
+/**
+ * @deprecated Este endpoint ya no se usa. Usar en su lugar:
+ * - fetchMetricsRetention() para datos de retención y etapas
+ * - fetchMetricsTasks() para datos de tareas
+ */
 export async function fetchMetricsV2(params?: {
 	fechaDesde?: DateLike;
 	fechaHasta?: DateLike;
 	coach?: string;
 }): Promise<MetricsV2Envelope> {
+	// eslint-disable-next-line no-console
+	console.error("[DEPRECATED] fetchMetricsV2 está deprecado. Usar fetchMetricsRetention() o fetchMetricsTasks()");
+	throw new Error("fetchMetricsV2 está deprecado. Usar fetchMetricsRetention() o fetchMetricsTasks() en su lugar.");
+}
+
+/**
+ * @deprecated Usar fetchMetricsV2 deprecado
+ */
+export async function logMetricsV2Now() {
+	return fetchMetricsV2();
+}
+
+/* ======================
+   Metrics Retention (v1)
+   ====================== */
+
+export type RetentionApiData = {
+	clientes_etapas?: {
+		total?: number;
+		byEtapa?: Array<{ etapa_id: string; count: number }>;
+		lastPerClient?: Array<{ etapa_id: string; count: number }>;
+	};
+	clientes_etapas_durations?: Array<{ etapa_id: string; count: number; avg_days: number }>;
+	clientes_etapas_durations_detail?: any[];
+	clientes_etapas_avg_permanencia?: {
+		transition?: Array<{ from_etapa: string; to_etapa: string; count: number; avg_days: number }>;
+	};
+	retention?: {
+		completado: number;
+		abandonado: number;
+		total: number;
+		retention: number;
+		permanencia: number;
+	};
+};
+
+export async function fetchMetricsRetention(params?: {
+	fechaDesde?: DateLike;
+	fechaHasta?: DateLike;
+}): Promise<{ code: number; status: string; data: RetentionApiData }> {
 	const defaults = getDefaultRange();
 	let fechaDesde = normalizeInputDate(params?.fechaDesde) ?? defaults.fechaDesde;
 	let fechaHasta = normalizeInputDate(params?.fechaHasta) ?? defaults.fechaHasta;
 
-	// Guard: evitar rangos invertidos (ej. fechaDesde=2025-12-01, fechaHasta=2025-10-26)
-	// ISO YYYY-MM-DD permite comparación lexicográfica.
 	if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
 		const tmp = fechaDesde;
 		fechaDesde = fechaHasta;
 		fechaHasta = tmp;
-		// eslint-disable-next-line no-console
-		console.warn("[metrics-v2] rango invertido; se intercambió", { fechaDesde, fechaHasta });
+	}
+
+	const qs = new URLSearchParams();
+	if (fechaDesde) qs.set("fechaDesde", fechaDesde);
+	if (fechaHasta) qs.set("fechaHasta", fechaHasta);
+
+	const url = `/metrics/get/metrics-retention${qs.toString() ? `?${qs.toString()}` : ""}`;
+
+	// Cache
+	const now = Date.now();
+	const cached = METRICS_CACHE.get(url);
+	if (cached && now - cached.ts < METRICS_TTL_MS) {
+		return cached.promise as any;
+	}
+
+	const p = apiFetch<any>(url);
+	METRICS_CACHE.set(url, { ts: now, promise: p });
+	return (await p) as any;
+}
+
+/* ======================
+   Metrics Tasks (v1)
+   ====================== */
+
+export type SlowestResponseTicket = {
+	ticket_id: number;
+	codigo_alumno: string;
+	nombre_alumno: string;
+	asunto_ticket: string;
+	tipo_ticket: string;
+	estado_ticket: string;
+	fecha_creacion: string;
+	fecha_respuesta: string;
+	minutos_respuesta: number;
+	horas_respuesta: number;
+	dias_respuesta: number;
+};
+
+export type TasksWindowSummary = {
+	window?: number;
+	avg_seconds: number | null;
+	avg_human: string | null;
+	alumnos: number;
+};
+
+export type TasksApiData = {
+	slowestResponseTickets?: SlowestResponseTicket;
+	ultimas_tareas_resumen?: Record<string, TasksWindowSummary>;
+	ultimas_tareas_detalle?: any[];
+	estados_resumen?: Record<string, TasksWindowSummary>;
+	estados_detalle?: any[];
+	// Alias para compatibilidad
+	noTasksDetail?: any[];
+	no_tasks_detail?: any[];
+	tasksLastDetail?: any[];
+	noTasksSummary?: any;
+	no_tasks_summary?: any;
+	tasksLastSummary?: any;
+};
+
+export async function fetchMetricsTasks(params?: {
+	fechaDesde?: DateLike;
+	fechaHasta?: DateLike;
+	coach?: string;
+}): Promise<{ code: number; status: string; data: TasksApiData }> {
+	const defaults = getDefaultRange();
+	let fechaDesde = normalizeInputDate(params?.fechaDesde) ?? defaults.fechaDesde;
+	let fechaHasta = normalizeInputDate(params?.fechaHasta) ?? defaults.fechaHasta;
+
+	if (fechaDesde && fechaHasta && fechaDesde > fechaHasta) {
+		const tmp = fechaDesde;
+		fechaDesde = fechaHasta;
+		fechaHasta = tmp;
 	}
 	const coach = params?.coach;
 
@@ -57,41 +171,18 @@ export async function fetchMetricsV2(params?: {
 	if (fechaHasta) qs.set("fechaHasta", fechaHasta);
 	if (coach) qs.set("coach", coach);
 
-	const url = `/metrics/get/metrics-v2${qs.toString() ? `?${qs.toString()}` : ""}`;
+	const url = `/metrics/get/metrics-tasks${qs.toString() ? `?${qs.toString()}` : ""}`;
 
-	// Cache: si existe y no expiró, reutilizar la misma Promise
+	// Cache
 	const now = Date.now();
 	const cached = METRICS_CACHE.get(url);
 	if (cached && now - cached.ts < METRICS_TTL_MS) {
-		return cached.promise;
+		return cached.promise as any;
 	}
 
 	const p = apiFetch<any>(url);
 	METRICS_CACHE.set(url, { ts: now, promise: p });
-	const json = await p;
-
-	// Log con contexto para depuración inicial
-	// Ej.: [metrics-v2] GET /metrics/get/metrics-v2?fechaDesde=YYYY-MM-01&fechaHasta=YYYY-MM-DD → { code, data, ... }
-	try {
-		// Evitar logging gigante: mostramos code y claves de data si existen
-		const preview = {
-			code: json?.code,
-			status: json?.status,
-			keys: json && typeof json === "object" && json.data ? Object.keys(json.data) : [],
-		};
-		// eslint-disable-next-line no-console
-				/* console.log("[metrics-v2] GET", url, "→", preview); */
-	} catch {
-		// eslint-disable-next-line no-console
-				/* console.log("[metrics-v2] GET", url, "(preview logging failed)"); */
-	}
-
-	return json as MetricsV2Envelope;
-}
-
-// Helper directo: hace la consulta con el rango por defecto y loguea
-export async function logMetricsV2Now() {
-	return fetchMetricsV2();
+	return (await p) as any;
 }
 
 	/* ======================
@@ -120,7 +211,8 @@ export async function logMetricsV2Now() {
 		fechaHasta?: DateLike;
 		coach?: string;
 	}): Promise<{ detail: NoTasksDetailItem[]; summary: NoTasksSummary }> {
-		const json = await fetchMetricsV2(params);
+		// Usar metrics-tasks en lugar de metrics-v2
+		const json = await fetchMetricsTasks(params);
 		const d = (json as any)?.data ?? {};
 
 		// robusta: múltiples nombres posibles desde backend
@@ -232,7 +324,8 @@ export async function fetchStageTransitionsV2(params?: {
     durationsAvg: StageDurationsAvg;
 	labels: StageLabels;
 }> {
-    const json = await fetchMetricsV2(params);
+    // Usar metrics-retention en lugar de metrics-v2
+    const json = await fetchMetricsRetention(params);
     const d = (json as any)?.data ?? {};
 
     const byEtapa: any[] = Array.isArray(d?.clientes_etapas?.byEtapa)
