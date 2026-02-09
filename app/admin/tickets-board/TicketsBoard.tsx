@@ -817,6 +817,23 @@ export default function TicketsBoard({
         }
       } catch {}
 
+      let atcAssignedToStudent = false;
+      if (isUserAtc && !createdByMe && !assignedToMe) {
+        try {
+          const alumnoCoachesArr = Array.isArray((t as any)?.alumno_coaches)
+            ? (t as any).alumno_coaches
+            : [];
+          atcAssignedToStudent = alumnoCoachesArr.some((co: any) => {
+            const code = String(
+              (co && typeof co === "object"
+                ? (co?.codigo_equipo ?? co?.codigo ?? co?.id)
+                : co) ?? "",
+            ).trim();
+            return code === myCode || (!!myId && code === myId);
+          });
+        } catch {}
+      }
+
       // Para usuarios ATC: también mostrar tickets donde algún coach sea ATC o el tipo sea ATC
       let involvesAtc = false;
       if (isUserAtc && !createdByMe && !assignedToMe) {
@@ -830,7 +847,7 @@ export default function TicketsBoard({
         } catch {}
       }
 
-      return createdByMe || assignedToMe || involvesAtc;
+      return createdByMe || assignedToMe || involvesAtc || atcAssignedToStudent;
     });
   }, [tickets, onlyMyTickets, user, isUserAtc]);
 

@@ -43,6 +43,12 @@ export type TicketBoardItem = {
     puesto?: string | null;
     area?: string | null;
   }[];
+  alumno_coaches?: {
+    codigo_equipo?: string | null;
+    nombre?: string | null;
+    puesto?: string | null;
+    area?: string | null;
+  }[];
   ultimo_estado?: {
     estatus?: string | null;
     fecha?: string | null;
@@ -193,6 +199,23 @@ export async function getTickets(opts: {
         ? (r as any).equipos
         : Array.isArray((r as any)?.coaches_asignados)
         ? (r as any).coaches_asignados
+        : [];
+      return raw.map((c: any) => ({
+        codigo_equipo:
+          (c?.codigo_equipo ?? c?.codigo ?? c?.id ?? c?.id_equipo ?? null) &&
+          String(c?.codigo_equipo ?? c?.codigo ?? c?.id ?? c?.id_equipo).trim(),
+        nombre: (c?.nombre ?? null) && String(c?.nombre).trim(),
+        puesto: (c?.puesto ?? c?.rol ?? null) && String(c?.puesto ?? c?.rol).trim(),
+        area:
+          (c?.area ?? c?.departamento ?? null) &&
+          String(c?.area ?? c?.departamento).trim(),
+      }));
+    })(),
+    alumno_coaches: (() => {
+      const raw = Array.isArray((r as any)?.alumno_coaches)
+        ? (r as any).alumno_coaches
+        : Array.isArray((r as any)?.coaches_alumno)
+        ? (r as any).coaches_alumno
         : [];
       return raw.map((c: any) => ({
         codigo_equipo:
