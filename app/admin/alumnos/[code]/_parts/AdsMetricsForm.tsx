@@ -154,6 +154,9 @@ export default function AdsMetricsForm({
   const [saving, setSaving] = useState<boolean>(false);
   const saveTimerRef = useRef<number | null>(null);
   const didInitRef = useRef<boolean>(false);
+  // Refs para evitar consultas duplicadas
+  const coachesFetchedRef = useRef<string | null>(null);
+  const studentInfoFetchedRef = useRef<string | null>(null);
 
   const [assignedCoaches, setAssignedCoaches] = useState<
     Array<{ name: string; area?: string | null; puesto?: string | null }>
@@ -197,6 +200,9 @@ export default function AdsMetricsForm({
   }, [assignedCoaches]);
 
   useEffect(() => {
+    // Evitar consulta duplicada si ya consultamos este studentCode
+    if (coachesFetchedRef.current === studentCode) return;
+
     let alive = true;
     (async () => {
       try {
@@ -205,6 +211,7 @@ export default function AdsMetricsForm({
         )}`;
         const j = await apiFetch<any>(url);
         if (!alive) return;
+        coachesFetchedRef.current = studentCode;
         const rows: any[] = Array.isArray(j?.data)
           ? j.data
           : Array.isArray(j)
@@ -233,6 +240,7 @@ export default function AdsMetricsForm({
         setAssignedCoaches(uniqByName);
       } catch {
         if (!alive) return;
+        coachesFetchedRef.current = studentCode;
         setAssignedCoaches([]);
       }
     })();
@@ -243,6 +251,9 @@ export default function AdsMetricsForm({
 
   // Resolver id/nombre del alumno para poder guardar en metadata
   useEffect(() => {
+    // Evitar consulta duplicada si ya consultamos este studentCode
+    if (studentInfoFetchedRef.current === studentCode) return;
+
     let alive = true;
     (async () => {
       try {
@@ -250,6 +261,8 @@ export default function AdsMetricsForm({
           studentCode,
         )}`;
         const json = await apiFetch<any>(url);
+        if (!alive) return;
+        studentInfoFetchedRef.current = studentCode;
         const rows: any[] = Array.isArray(json?.data)
           ? json.data
           : Array.isArray(json?.clients?.data)
@@ -269,8 +282,6 @@ export default function AdsMetricsForm({
           rows[0] ||
           null;
 
-        if (!alive) return;
-
         const id =
           found?.id ??
           found?.alumno_id ??
@@ -285,6 +296,7 @@ export default function AdsMetricsForm({
         });
       } catch {
         if (!alive) return;
+        studentInfoFetchedRef.current = studentCode;
         setStudentInfo({ id: null, code: studentCode, name: "" });
       }
     })();

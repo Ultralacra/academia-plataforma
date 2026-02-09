@@ -67,7 +67,7 @@ export function CreateTicketModal({
     stage?: string | null;
   } | null>(null);
   const [title, setTitle] = useState("");
-  const [type, setType] = useState("");
+  const [type, setType] = useState<string[]>([]);
   const [description, setDescription] = useState("");
   const [links, setLinks] = useState<string[]>([]);
   const [newLink, setNewLink] = useState("");
@@ -157,7 +157,7 @@ export function CreateTicketModal({
       setSelectedStudentId(defaultStudentCode || "");
       setSelectedStudentMeta(null);
       setTitle("");
-      setType("");
+      setType([]);
       setDescription("");
       setLinks([]);
       setNewLink("");
@@ -182,7 +182,7 @@ export function CreateTicketModal({
       setPage(1);
       setHasMore((studentsData?.length ?? 0) >= PAGE_SIZE);
       setTypes(typesData);
-      if (typesData.length > 0) setType(typesData[0].key);
+      if (typesData.length > 0) setType([typesData[0].key]);
 
       if (defaultStudentCode) {
         const wanted = String(defaultStudentCode);
@@ -348,23 +348,22 @@ export function CreateTicketModal({
   };
 
   const handleCreate = async () => {
-    if (!selectedStudentId || !title.trim() || !type) return;
+    if (!selectedStudentId || !title.trim() || type.length === 0) return;
 
     try {
       setFlowStage("creating");
 
-      // 1. Crear ticket (sin archivos pesados aún)
+      // 1. Crear ticket con todos los tipos seleccionados (separados por coma)
       const created = await createTicket({
         nombre: title,
         id_alumno: selectedStudentId,
-        tipo: type,
+        tipo: type.join(","),
         descripcion: description,
-        archivos: [], // Se subirán en paso 2
+        archivos: [],
         urls: links,
       });
 
       const payload = created?.data ?? created;
-      // Intentar obtener el código (UUID) o ID del ticket
       const ticketId = payload?.codigo ?? payload?.id;
 
       if (!ticketId) {
@@ -376,30 +375,21 @@ export function CreateTicketModal({
         setFlowStage("uploading");
         setUploadProgress({ current: 0, total: files.length });
 
-        // Subir uno por uno
         for (let i = 0; i < files.length; i++) {
           setUploadProgress({ current: i + 1, total: files.length });
 
           let fileToUpload = files[i];
-          const type = (fileToUpload.type || "").toLowerCase();
+          const fileType = (fileToUpload.type || "").toLowerCase();
 
-          // Convertir audio a MP3 si es necesario
           if (
-            type.startsWith("audio/") &&
-            !type.includes("mp3") &&
-            !type.includes("mpeg")
+            fileType.startsWith("audio/") &&
+            !fileType.includes("mp3") &&
+            !fileType.includes("mpeg")
           ) {
             try {
-                            /* console.log(
-                `[CreateTicket] Convirtiendo audio a MP3: ${fileToUpload.name}`,
-              ); */
               fileToUpload = await convertBlobToMp3(fileToUpload);
-                            /* console.log(
-                `[CreateTicket] Audio convertido: ${fileToUpload.name}`,
-              ); */
             } catch (e) {
               console.error("Error converting audio to mp3 in modal", e);
-              // Fallback: upload original
             }
           }
 
@@ -426,9 +416,9 @@ export function CreateTicketModal({
 
   const handleCreateClick = () => {
     if (!selectedStudentId || !title.trim()) return;
-    if (!type) {
+    if (type.length === 0) {
       toast({
-        title: "Selecciona el tipo de ticket",
+        title: "Selecciona al menos un tipo de ticket",
         variant: "destructive",
       });
       return;
@@ -661,21 +651,43 @@ export function CreateTicketModal({
             />
           </div>
 
-          {/* Type */}
+          {/* Type (multi-select) */}
           <div className="space-y-2">
-            <Label>Tipo de Ticket</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Seleccionar tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                {types.map((t) => (
-                  <SelectItem key={t.key} value={t.key}>
+            <Label>
+              Tipo de Ticket{" "}
+              {type.length > 1 && (
+                <span className="text-xs text-muted-foreground ml-1">
+                  ({type.length} seleccionados — se creará un ticket por cada
+                  tipo)
+                </span>
+              )}
+            </Label>
+            <div className="flex flex-wrap gap-2 rounded-md border p-2 min-h-[40px]">
+              {types.map((t) => {
+                const isSelected = type.includes(t.key);
+                return (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => {
+                      setType((prev) =>
+                        isSelected
+                          ? prev.filter((k) => k !== t.key)
+                          : [...prev, t.key],
+                      );
+                    }}
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition-colors cursor-pointer ${
+                      isSelected
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {isSelected && <CheckCircle2 className="h-3 w-3" />}
                     {t.value}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Description */}
@@ -832,7 +844,7 @@ export function CreateTicketModal({
           </Button>
           <Button
             onClick={handleCreateClick}
-            disabled={!selectedStudentId || !title.trim() || !type}
+            disabled={!selectedStudentId || !title.trim() || type.length === 0}
           >
             Crear Ticket
           </Button>

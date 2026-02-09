@@ -623,7 +623,12 @@ export async function createTicket(form: CreateTicketForm): Promise<any> {
   const fd = new FormData();
   fd.set('nombre', form.nombre);
   fd.set('id_alumno', form.id_alumno);
-  fd.set('tipo', form.tipo);
+  // Normalizar tipo: quitar tildes, reemplazar espacios por underscores, uppercase
+  const tipoNorm = form.tipo
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quitar tildes
+    .replace(/\s+/g, "_") // espacios → underscores
+    .toUpperCase();
+  fd.set('tipo', tipoNorm);
   if (form.estado) {
     try { fd.set('estado', form.estado); } catch {}
   }

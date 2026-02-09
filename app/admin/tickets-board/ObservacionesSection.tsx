@@ -91,10 +91,24 @@ export default function ObservacionesSection({
   const [adsMetadata, setAdsMetadata] = useState<any | null>(null);
   const [adsMetadataLoading, setAdsMetadataLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Refs para evitar consultas duplicadas
+  const observacionesFetchedRef = useRef<string | null>(null);
+  const adsMetadataFetchedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    loadObservaciones();
-    loadAdsMetadata();
+    const cacheKey = `${ticketCode}|${alumnoId}`;
+
+    // Cargar observaciones solo si cambiaron los parámetros
+    if (observacionesFetchedRef.current !== cacheKey) {
+      loadObservaciones();
+      observacionesFetchedRef.current = cacheKey;
+    }
+
+    // Cargar metadata ADS solo si cambió el alumnoId
+    if (adsMetadataFetchedRef.current !== alumnoId) {
+      loadAdsMetadata();
+      adsMetadataFetchedRef.current = alumnoId;
+    }
   }, [ticketCode, alumnoId]);
 
   const loadAdsMetadata = async () => {
@@ -417,7 +431,7 @@ export default function ObservacionesSection({
         updatePayload.alumno_nombre = payload.alumno_nombre;
       }
 
-            /* console.log("Actualizando observación (toggle realizada):", {
+      /* console.log("Actualizando observación (toggle realizada):", {
         id: obs.id,
         payload: updatePayload,
       }); */

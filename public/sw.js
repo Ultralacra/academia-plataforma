@@ -3,13 +3,13 @@
 const CACHE_VERSION = "v1.1.0";
 
 self.addEventListener("install", (event) => {
-  console.log("[SW] Installing service worker...", CACHE_VERSION);
+  // console.log("[SW] Installing service worker...", CACHE_VERSION);
   // Activate worker immediately
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  console.log("[SW] Activating service worker...", CACHE_VERSION);
+  // console.log("[SW] Activating service worker...", CACHE_VERSION);
   event.waitUntil(self.clients.claim());
 });
 
@@ -27,7 +27,7 @@ self.addEventListener("fetch", (event) => {
 // PUSH NOTIFICATIONS - Para mensajes de chat en móviles
 // ============================================================
 self.addEventListener("push", (event) => {
-  console.log("[SW] Push event received");
+  // console.log("[SW] Push event received");
   if (!event) return;
 
   let data = null;
@@ -64,7 +64,7 @@ self.addEventListener("push", (event) => {
     ],
   };
 
-  console.log("[SW] Showing notification:", title, body);
+  // console.log("[SW] Showing notification:", title, body);
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
@@ -72,7 +72,7 @@ self.addEventListener("push", (event) => {
 // Manejar click en notificación
 // ============================================================
 self.addEventListener("notificationclick", (event) => {
-  console.log("[SW] Notification clicked:", event.action);
+  // console.log("[SW] Notification clicked:", event.action);
   event.notification.close();
 
   // Si el usuario clickeó "descartar", no hacer nada
@@ -115,7 +115,7 @@ self.addEventListener("notificationclick", (event) => {
 // Manejar cierre de notificación (sin click)
 // ============================================================
 self.addEventListener("notificationclose", (event) => {
-  console.log("[SW] Notification closed without interaction");
+  // console.log("[SW] Notification closed without interaction");
 });
 
 // ============================================================

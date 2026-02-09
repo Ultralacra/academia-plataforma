@@ -142,12 +142,14 @@ type StatusKey =
   | "PENDIENTE"
   | "PENDIENTE_DE_ENVIO"
   | "PAUSADO"
+  | "PENDIENTE_DE_COACH"
   | "RESUELTO";
 const STATUS_LABEL: Record<StatusKey, string> = {
   EN_PROGRESO: "En progreso",
   PENDIENTE: "Pendiente",
   PENDIENTE_DE_ENVIO: "Pendiente de envío",
   PAUSADO: "Pausado",
+  PENDIENTE_DE_COACH: "Pendiente de coach",
   RESUELTO: "Resuelto",
 };
 
@@ -160,6 +162,8 @@ const STATUS_STYLE: Record<StatusKey, string> = {
     "border bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/35 dark:text-sky-200 dark:border-sky-900/60",
   PAUSADO:
     "border bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/35 dark:text-purple-200 dark:border-purple-900/60",
+  PENDIENTE_DE_COACH:
+    "border bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/35 dark:text-orange-200 dark:border-orange-900/60",
   RESUELTO:
     "border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60",
 };
@@ -180,6 +184,8 @@ function coerceStatus(raw?: string | null): StatusKey {
   const s = (raw ?? "").toUpperCase();
   if (s.includes("RESUELTO") || s.includes("COMPLETO")) return "RESUELTO";
   if (s.includes("ENVIO") || s.includes("ENVÍO")) return "PENDIENTE_DE_ENVIO";
+  if (s.includes("PENDIENTE_DE_COACH") || s === "PENDIENTE DE COACH")
+    return "PENDIENTE_DE_COACH";
   if (s.includes("PAUSA") || s.includes("PAUSADO")) return "PAUSADO";
   if (
     s.includes("EN_PROGRES") ||
@@ -292,6 +298,8 @@ export default function TicketsBoard({
   const [tickets, setTickets] = useState<TicketBoardItem[]>([]);
   const [adsMetadataMap, setAdsMetadataMap] = useState<Record<string, any>>({});
   const ticketsRef = useRef<TicketBoardItem[]>([]);
+  // Ref para evitar recargar metadata ADS múltiples veces
+  const adsMetadataLoadedRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshBump, setRefreshBump] = useState(0);
   const searchParams = useSearchParams();
@@ -446,27 +454,34 @@ export default function TicketsBoard({
       const data = (json as any)?.data ?? json ?? null;
       setHistoryDetail(data);
 
-      // Cargar archivos del ticket
-      try {
-        setHistoryFilesLoading(true);
-        const filesData = await getTicketFiles(code);
-        setHistoryFiles(Array.isArray(filesData) ? filesData : []);
-      } catch {
-        setHistoryFiles([]);
-      } finally {
-        setHistoryFilesLoading(false);
-      }
+      // Cargar archivos y comentarios en paralelo
+      setHistoryFilesLoading(true);
+      setHistoryCommentsLoading(true);
 
-      // Cargar comentarios/observaciones del ticket
-      try {
-        setHistoryCommentsLoading(true);
-        const commentsData = await getTicketComments(code);
-        setHistoryComments(Array.isArray(commentsData) ? commentsData : []);
-      } catch {
-        setHistoryComments([]);
-      } finally {
-        setHistoryCommentsLoading(false);
+      const [filesResult, commentsResult] = await Promise.allSettled([
+        getTicketFiles(code),
+        getTicketComments(code),
+      ]);
+
+      // Procesar archivos
+      if (filesResult.status === "fulfilled") {
+        setHistoryFiles(
+          Array.isArray(filesResult.value) ? filesResult.value : [],
+        );
+      } else {
+        setHistoryFiles([]);
       }
+      setHistoryFilesLoading(false);
+
+      // Procesar comentarios
+      if (commentsResult.status === "fulfilled") {
+        setHistoryComments(
+          Array.isArray(commentsResult.value) ? commentsResult.value : [],
+        );
+      } else {
+        setHistoryComments([]);
+      }
+      setHistoryCommentsLoading(false);
     } catch (e: any) {
       setHistoryDetailError(
         String(e?.message || e || "Error al cargar detalle"),
@@ -590,6 +605,8 @@ export default function TicketsBoard({
   const [alumnoLoading, setAlumnoLoading] = useState(false);
   const [openStagePopover, setOpenStagePopover] = useState(false);
   const [updatingStage, setUpdatingStage] = useState(false);
+  // Ref para evitar consultas duplicadas del alumno
+  const alumnoInfoFetchedRef = useRef<string | null>(null);
 
   // Control para expandir lista completa de archivos en el panel de edición
   const [showAllFiles, setShowAllFiles] = useState(false);
@@ -632,6 +649,72 @@ export default function TicketsBoard({
   const [fechaDesde, setFechaDesde] = useState<string>(fourDaysAgoStr);
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
 
+  // Helper: detectar si un coach del ticket tiene puesto/area de ATC
+  const ATC_KEYWORDS = [
+    "atc",
+    "atencion",
+    "atención",
+    "atencion al cliente",
+    "atención al cliente",
+    "atencion_al_cliente",
+    "atención_al_cliente",
+    "soporte",
+    "support",
+    "customer_support",
+  ];
+  const isAtcCoach = (co: any): boolean => {
+    if (!co || typeof co !== "object") return false;
+    const puesto = String(co?.puesto ?? "")
+      .toLowerCase()
+      .trim();
+    const area = String(co?.area ?? "")
+      .toLowerCase()
+      .trim();
+    return ATC_KEYWORDS.some((kw) => puesto.includes(kw) || area.includes(kw));
+  };
+
+  // Helper: detectar si un ticket tiene tipo ATC (puede ser comma-separated)
+  const isAtcTicketTipo = (tipo?: string | null): boolean => {
+    if (!tipo) return false;
+    const tipos = String(tipo)
+      .toLowerCase()
+      .split(",")
+      .map((s) => s.trim());
+    return tipos.some((t) => ATC_KEYWORDS.some((kw) => t.includes(kw)));
+  };
+
+  // Detectar si el usuario actual es ATC: buscar su código en la lista de coaches y revisar puesto/area
+  const isUserAtc = useMemo(() => {
+    // Primero: chequear role directo
+    if ((user?.role || "").toLowerCase() === "atc") return true;
+    // Segundo: buscar al usuario en la lista de coaches cargada y verificar puesto/area
+    const myCode = String((user as any)?.codigo ?? "").trim();
+    const myId = String((user as any)?.id ?? "").trim();
+    if (!myCode && !myId) return false;
+    const meInCoaches = coaches.find((c) => {
+      const code = String(c.codigo || "").trim();
+      const id = String(c.id || "").trim();
+      return (!!myCode && code === myCode) || (!!myId && id === myId);
+    });
+    console.log(
+      "[DEBUG isUserAtc] role:",
+      user?.role,
+      "| myCode:",
+      myCode,
+      "| myId:",
+      myId,
+      "| meInCoaches:",
+      meInCoaches ?? "NO ENCONTRADO",
+      "| total coaches cargados:",
+      coaches.length,
+    );
+    if (meInCoaches) {
+      const result = isAtcCoach(meInCoaches);
+      return result;
+    }
+    return false;
+  }, [user, coaches]);
+
   const visibleTickets = useMemo(() => {
     if (!onlyMyTickets) return tickets;
     if (!(user?.codigo || typeof (user as any)?.id !== "undefined"))
@@ -639,6 +722,57 @@ export default function TicketsBoard({
 
     const myCode = String((user as any)?.codigo ?? "").trim();
     const myId = String((user as any)?.id ?? "").trim();
+
+    // DEBUG: agrupar tickets por informante y contar
+    const informanteMap: Record<
+      string,
+      {
+        nombre: string;
+        count: number;
+        ticketCodigos: (string | null | undefined)[];
+      }
+    > = {};
+    tickets.forEach((t) => {
+      const inf = String((t as any).informante || "sin_informante").trim();
+      const infNombre = String((t as any).informante_nombre || "—").trim();
+      if (!informanteMap[inf]) {
+        informanteMap[inf] = { nombre: infNombre, count: 0, ticketCodigos: [] };
+      }
+      informanteMap[inf].count++;
+      informanteMap[inf].ticketCodigos.push(t.codigo);
+    });
+    console.log("[DEBUG] Tickets agrupados por informante:", informanteMap);
+    console.log(
+      "[DEBUG] Mi código:",
+      myCode,
+      "| Mi ID:",
+      myId,
+      "| isUserAtc:",
+      isUserAtc,
+      "| user.role:",
+      user?.role,
+    );
+
+    // if (isUserAtc) {
+    //   const ticketsCreadosPorOtros = tickets.filter((t) => {
+    //     const inf = String((t as any).informante || "").trim();
+    //     return inf !== myCode && (!myId || inf !== myId);
+    //   });
+    //   if (ticketsCreadosPorOtros.length > 0) {
+    //     console.log(
+    //       "[DEBUG MisTickets ATC] Tickets donde el informante NO es el ATC actual:",
+    //       ticketsCreadosPorOtros.map((t) => ({
+    //         id: t.id,
+    //         codigo: t.codigo,
+    //         nombre: t.nombre,
+    //         informante: (t as any).informante,
+    //         informante_nombre: (t as any).informante_nombre,
+    //         coaches: (t as any).coaches,
+    //         coaches_override: (t as any).coaches_override,
+    //       })),
+    //     );
+    //   }
+    // }
 
     return tickets.filter((t) => {
       const informanteStr = String((t as any).informante || "").trim();
@@ -683,9 +817,22 @@ export default function TicketsBoard({
         }
       } catch {}
 
-      return createdByMe || assignedToMe;
+      // Para usuarios ATC: también mostrar tickets donde algún coach sea ATC o el tipo sea ATC
+      let involvesAtc = false;
+      if (isUserAtc && !createdByMe && !assignedToMe) {
+        try {
+          const coachesArr = Array.isArray((t as any)?.coaches)
+            ? (t as any).coaches
+            : [];
+          involvesAtc =
+            coachesArr.some((co: any) => isAtcCoach(co)) ||
+            isAtcTicketTipo(t.tipo);
+        } catch {}
+      }
+
+      return createdByMe || assignedToMe || involvesAtc;
     });
-  }, [tickets, onlyMyTickets, user]);
+  }, [tickets, onlyMyTickets, user, isUserAtc]);
 
   // Alumno: solo ver estados En progreso, Pausado y Resuelto
   const displayTickets = useMemo(() => {
@@ -711,7 +858,7 @@ export default function TicketsBoard({
         const etapas = await getOpciones("etapa");
         setEtapasOptions(etapas);
       } catch (e) {
-        console.error("Error cargando opciones de etapa:", e);
+        /* console.error("Error cargando opciones de etapa:", e); */
       }
     })();
   }, []);
@@ -720,6 +867,7 @@ export default function TicketsBoard({
   useEffect(() => {
     if (!drawerOpen || !selectedTicket) {
       setAlumnoInfo(null);
+      alumnoInfoFetchedRef.current = null;
       return;
     }
 
@@ -727,6 +875,14 @@ export default function TicketsBoard({
       (selectedTicket as any)?.alumno_nombre ?? ticketDetail?.alumno_nombre;
     if (!alumnoNombre) {
       setAlumnoInfo(null);
+      alumnoInfoFetchedRef.current = null;
+      return;
+    }
+
+    const normalizedNombre = String(alumnoNombre).trim().toLowerCase();
+
+    // Evitar consulta duplicada si ya consultamos este alumno
+    if (alumnoInfoFetchedRef.current === normalizedNombre) {
       return;
     }
 
@@ -741,25 +897,31 @@ export default function TicketsBoard({
         const rows: any[] = Array.isArray(json?.data) ? json.data : [];
 
         // Buscar match exacto o cercano por nombre
-        const targetNombre = String(alumnoNombre).trim().toLowerCase();
         const match = rows.find((r) => {
           const rNombre = String(r.nombre ?? r.name ?? "")
             .trim()
             .toLowerCase();
-          return rNombre === targetNombre || rNombre.includes(targetNombre);
+          return (
+            rNombre === normalizedNombre || rNombre.includes(normalizedNombre)
+          );
         });
 
         if (!cancelled && match) {
+          alumnoInfoFetchedRef.current = normalizedNombre;
           setAlumnoInfo({
             codigo: String(match.codigo ?? match.code ?? ""),
             etapa: match.etapa ?? match.stage ?? null,
           });
         } else if (!cancelled) {
+          alumnoInfoFetchedRef.current = normalizedNombre;
           setAlumnoInfo(null);
         }
       } catch (e) {
-        console.error("Error obteniendo info del alumno:", e);
-        if (!cancelled) setAlumnoInfo(null);
+        /* console.error("Error obteniendo info del alumno:", e); */
+        if (!cancelled) {
+          alumnoInfoFetchedRef.current = normalizedNombre;
+          setAlumnoInfo(null);
+        }
       } finally {
         if (!cancelled) setAlumnoLoading(false);
       }
@@ -808,7 +970,7 @@ export default function TicketsBoard({
         if (!mounted) return;
         setCoaches(list);
       } catch (e) {
-        console.error(e);
+        /* console.error(e); */
         setCoaches([]);
       }
     })();
@@ -817,6 +979,87 @@ export default function TicketsBoard({
     };
   }, []);
 
+  // Cargar metadata ADS solo una vez (o cuando cambie studentCode)
+  useEffect(() => {
+    const cacheKey = studentCode || "_all_";
+    // Evitar consulta duplicada
+    if (adsMetadataLoadedRef.current === cacheKey) return;
+
+    let mounted = true;
+    (async () => {
+      try {
+        let items: any[] = [];
+        if (studentCode) {
+          const token = getAuthToken();
+          const res = await fetch(
+            `/api/alumnos/${encodeURIComponent(
+              String(studentCode),
+            )}/metadata?entity=${encodeURIComponent("ads_metrics")}`,
+            {
+              method: "GET",
+              headers: {
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              cache: "no-store",
+            },
+          );
+          if (!res.ok) {
+            const txt = await res.text().catch(() => "");
+            throw new Error(txt || `HTTP ${res.status}`);
+          }
+          const json = (await res.json().catch(() => null)) as any;
+          items = Array.isArray(json?.items) ? json.items : [];
+        } else {
+          const md = await listMetadata<any>();
+          items = Array.isArray(md?.items) ? md.items : [];
+        }
+        if (!mounted) return;
+        adsMetadataLoadedRef.current = cacheKey;
+
+        const map: Record<string, any> = {};
+        for (const m of items) {
+          try {
+            if (String(m?.entity) !== "ads_metrics") continue;
+            const p = m.payload || {};
+
+            const rawKeys: Array<string | null> = [];
+            if (m.entity_id != null) rawKeys.push(String(m.entity_id));
+            if (p?.alumno_id != null) rawKeys.push(String(p.alumno_id));
+            if (p?.alumno_codigo != null) rawKeys.push(String(p.alumno_codigo));
+            if (p?.alumno_nombre != null) rawKeys.push(String(p.alumno_nombre));
+
+            const extraKeys: string[] = [];
+            for (const k of rawKeys) {
+              if (!k) continue;
+              extraKeys.push(k);
+              const t = String(k).trim();
+              if (t && t !== k) extraKeys.push(t);
+              const lower = t.toLowerCase();
+              if (lower && lower !== t) extraKeys.push(lower);
+            }
+
+            const keys = Array.from(
+              new Set([...(rawKeys.filter(Boolean) as string[]), ...extraKeys]),
+            );
+            for (const k of keys) {
+              map[k] = m;
+            }
+          } catch (err) {
+            /* ignore */
+          }
+        }
+        setAdsMetadataMap(map);
+      } catch (e) {
+        if (mounted) adsMetadataLoadedRef.current = cacheKey;
+        /* console.error("Error cargando metadata ADS:", e); */
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [studentCode]);
+
+  // Cargar tickets (sin metadata ADS, se carga por separado)
   useEffect(() => {
     let mounted = true;
     const t = setTimeout(async () => {
@@ -842,79 +1085,8 @@ export default function TicketsBoard({
           );
         });
         setTickets(validTickets);
-        // Cargar metadata ADS y mapear por alumno
-        try {
-          let items: any[] = [];
-          if (studentCode) {
-            const token = getAuthToken();
-            const res = await fetch(
-              `/api/alumnos/${encodeURIComponent(
-                String(studentCode),
-              )}/metadata?entity=${encodeURIComponent("ads_metrics")}`,
-              {
-                method: "GET",
-                headers: {
-                  ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                cache: "no-store",
-              },
-            );
-            if (!res.ok) {
-              const txt = await res.text().catch(() => "");
-              throw new Error(txt || `HTTP ${res.status}`);
-            }
-            const json = (await res.json().catch(() => null)) as any;
-            items = Array.isArray(json?.items) ? json.items : [];
-          } else {
-            const md = await listMetadata<any>();
-            items = Array.isArray(md?.items) ? md.items : [];
-          }
-          const map: Record<string, any> = {};
-          for (const m of items) {
-            try {
-              if (String(m?.entity) !== "ads_metrics") continue;
-              const p = m.payload || {};
-
-              // Normalizar posibles claves: entity_id, payload.alumno_id, payload.alumno_codigo, payload.alumno_nombre
-              const rawKeys: Array<string | null> = [];
-              if (m.entity_id != null) rawKeys.push(String(m.entity_id));
-              if (p?.alumno_id != null) rawKeys.push(String(p.alumno_id));
-              if (p?.alumno_codigo != null)
-                rawKeys.push(String(p.alumno_codigo));
-              if (p?.alumno_nombre != null)
-                rawKeys.push(String(p.alumno_nombre));
-
-              // Also add lowercased / trimmed name variant for matching by name
-              const extraKeys: string[] = [];
-              for (const k of rawKeys) {
-                if (!k) continue;
-                extraKeys.push(k);
-                const t = String(k).trim();
-                if (t && t !== k) extraKeys.push(t);
-                const lower = t.toLowerCase();
-                if (lower && lower !== t) extraKeys.push(lower);
-              }
-
-              const keys = Array.from(
-                new Set([
-                  ...(rawKeys.filter(Boolean) as string[]),
-                  ...extraKeys,
-                ]),
-              );
-              for (const k of keys) {
-                // preferir la más reciente (sobrescribe si existe)
-                map[k] = m;
-              }
-            } catch (err) {
-              console.error("metadata map error", err);
-            }
-          }
-          setAdsMetadataMap(map);
-        } catch (e) {
-          console.error("Error cargando metadata ADS:", e);
-        }
       } catch (e) {
-        console.error(e);
+        /* console.error(e); */
         toast({ title: `Error cargando ${uiTicketsLower}` });
         setTickets([]);
       } finally {
@@ -953,6 +1125,7 @@ export default function TicketsBoard({
       "PENDIENTE",
       "EN_PROGRESO",
       "PAUSADO",
+      "PENDIENTE_DE_COACH",
       "PENDIENTE_DE_ENVIO",
       "RESUELTO",
     ] as string[];
@@ -1043,7 +1216,7 @@ export default function TicketsBoard({
       try {
         const urls = (list || []).map((f: any) => f?.url).filter(Boolean);
         // Log de URLs para verificación
-                /* console.log("Ticket files URLs:", urls); */
+        /* console.log("Ticket files URLs:", urls); */
       } catch {}
     } catch (e) {
       console.error(e);
@@ -1600,7 +1773,7 @@ export default function TicketsBoard({
     }
   }
 
-  function openTicketDetail(ticket: TicketBoardItem) {
+  function openTicketDetail(ticket: TicketBoardItem, preloadedDetail?: any) {
     if (isStudent && coerceStatus(ticket.estado) !== "RESUELTO") {
       toast({
         title: `Solo puedes ver el detalle de ${uiTicketsLower} resueltos`,
@@ -1655,11 +1828,30 @@ export default function TicketsBoard({
     setNewAudioUrl("");
     setDrawerOpen(true);
     if (ticket.codigo) {
-      loadFilesForTicket(ticket.codigo);
       setDetailTab("general");
-      loadTicketDetail(ticket.codigo);
-      loadComments(ticket.codigo);
-      if (!isStudent) loadInternalNotes(ticket.codigo);
+      // Si ya tenemos datos precargados (desde openTicketByCodigo), usarlos
+      if (preloadedDetail) {
+        setTicketDetail(preloadedDetail);
+        setNotasDraft(preloadedDetail?.notas_internas || "");
+        setEditForm((prev) => ({
+          ...prev,
+          descripcion: preloadedDetail?.descripcion || "",
+        }));
+        setTicketDetailLoading(false);
+        setTicketDetailError(null);
+      }
+      // Cargar en paralelo: archivos, comentarios, notas internas (y detalle si no está precargado)
+      const parallelLoads: Promise<void>[] = [
+        loadFilesForTicket(ticket.codigo),
+        loadComments(ticket.codigo),
+      ];
+      if (!preloadedDetail) {
+        parallelLoads.push(loadTicketDetail(ticket.codigo));
+      }
+      if (!isStudent) {
+        parallelLoads.push(loadInternalNotes(ticket.codigo));
+      }
+      Promise.all(parallelLoads).catch(() => {});
     }
     setShowAllFiles(false);
   }
@@ -1733,7 +1925,8 @@ export default function TicketsBoard({
         coaches_override: (data as any)?.coaches_override ?? null,
       };
 
-      openTicketDetail(ticket);
+      // Pasar data como preloadedDetail para evitar una segunda consulta al mismo endpoint
+      openTicketDetail(ticket, data);
     } catch (e) {
       console.error(e);
       toast({ title: `No se pudo abrir el ${uiTicketLower}` });
@@ -1791,7 +1984,7 @@ export default function TicketsBoard({
       setFiles(list);
       try {
         const urls = (list || []).map((f: any) => f?.url).filter(Boolean);
-                /* console.log("Ticket files URLs:", urls); */
+        /* console.log("Ticket files URLs:", urls); */
       } catch {}
     } catch (e) {
       console.error(e);
@@ -1859,13 +2052,13 @@ export default function TicketsBoard({
 
           if (isImage) {
             const originalSizeKb = Math.round(f.size / 1024);
-                        /* console.log(
+            /* console.log(
               `[Upload] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`,
             ); */
             try {
               const webp = await compressImageToWebp(f, 0.8);
               const webpSizeKb = Math.round(webp.size / 1024);
-                            /* console.log(
+              /* console.log(
                 `[Upload] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`,
               ); */
               processed.push(webp);
@@ -1883,9 +2076,9 @@ export default function TicketsBoard({
           ) {
             // Convertir audio a MP3 si no lo es
             try {
-                            /* console.log(`[Upload] Convirtiendo audio a MP3: ${f.name}`); */
+              /* console.log(`[Upload] Convirtiendo audio a MP3: ${f.name}`); */
               const mp3 = await convertBlobToMp3(f);
-                            /* console.log(`[Upload] Audio convertido: ${mp3.name}`); */
+              /* console.log(`[Upload] Audio convertido: ${mp3.name}`); */
               processed.push(mp3);
             } catch (e) {
               console.error("Error converting audio to mp3", e);
@@ -1893,7 +2086,7 @@ export default function TicketsBoard({
             }
           } else {
             // No imagen ni audio convertible: mantener archivo, log básico
-                        /* console.log(
+            /* console.log(
               `[Upload] Archivo: name=${f.name}, type=${
                 f.type
               }, size=${Math.round(f.size / 1024)} KB`,
@@ -2380,7 +2573,7 @@ export default function TicketsBoard({
           </Table>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
           {estados.map((estado) => {
             const itemsForCol = tickets.filter((t) => {
               const statusMatch =
@@ -2440,7 +2633,20 @@ export default function TicketsBoard({
                   }
                 } catch {}
 
-                return createdByMe || assignedToMe;
+                // Para usuarios ATC: también mostrar tickets donde algún coach sea ATC o el tipo sea ATC
+                let involvesAtc = false;
+                if (isUserAtc && !createdByMe && !assignedToMe) {
+                  try {
+                    const coachesArr = Array.isArray((t as any)?.coaches)
+                      ? (t as any).coaches
+                      : [];
+                    involvesAtc =
+                      coachesArr.some((co: any) => isAtcCoach(co)) ||
+                      isAtcTicketTipo(t.tipo);
+                  } catch {}
+                }
+
+                return createdByMe || assignedToMe || involvesAtc;
               }
               return true;
             });
@@ -4923,7 +5129,7 @@ export default function TicketsBoard({
                                     const originalSizeKb = Math.round(
                                       f.size / 1024,
                                     );
-                                                                        /* console.log(
+                                    /* console.log(
                                       `[UploadButton] Imagen original: name=${f.name}, type=${f.type}, size=${originalSizeKb} KB`,
                                     ); */
                                     try {
@@ -4934,7 +5140,7 @@ export default function TicketsBoard({
                                       const webpSizeKb = Math.round(
                                         webp.size / 1024,
                                       );
-                                                                            /* console.log(
+                                      /* console.log(
                                         `[UploadButton] Imagen convertida: name=${webp.name}, type=${webp.type}, size=${webpSizeKb} KB`,
                                       ); */
                                       processed.push(webp);
@@ -4946,7 +5152,7 @@ export default function TicketsBoard({
                                       processed.push(f);
                                     }
                                   } else {
-                                                                        /* console.log(
+                                    /* console.log(
                                       `[UploadButton] Archivo no imagen: name=${
                                         f.name
                                       }, type=${f.type}, size=${Math.round(
