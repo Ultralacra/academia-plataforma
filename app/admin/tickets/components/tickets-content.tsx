@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { dataService, type Ticket, type Team } from "@/lib/data-service";
+import { getCoaches, type CoachItem } from "@/app/admin/teamsv2/api";
 import {
   Dialog,
   DialogContent,
@@ -198,6 +199,8 @@ export default function TicketsContent() {
   const [search, setSearch] = useState("");
   const [estado, setEstado] = useState<string>("all");
   const [tipo, setTipo] = useState<string>("all");
+  const [coachFiltro, setCoachFiltro] = useState<string>("all");
+  const [coaches, setCoaches] = useState<CoachItem[]>([]);
   // Por defecto: desde el primer día del mes actual hasta hoy
   const [fechaDesde, setFechaDesde] = useState<string>(
     firstDayOfMonthYMDLocal(),
@@ -245,6 +248,22 @@ export default function TicketsContent() {
     return () => clearTimeout(t);
   }, [search, fechaDesde, fechaHasta]);
 
+  // Cargar lista de coaches
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const list = await getCoaches({ page: 1, pageSize: 10000 });
+        if (mounted) setCoaches(list);
+      } catch {
+        if (mounted) setCoaches([]);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   // Filtros cliente
   const filtered: Ticket[] = useMemo(() => {
     const base = allTickets ?? [];
@@ -273,8 +292,16 @@ export default function TicketsContent() {
           .includes(q),
       );
     }
+    if (coachFiltro !== "all") {
+      items = items.filter((i) => {
+        const coachesArr = Array.isArray(i.coaches) ? i.coaches : [];
+        return coachesArr.some(
+          (c) => String(c.codigo_equipo ?? "").trim() === coachFiltro,
+        );
+      });
+    }
     return items;
-  }, [allTickets, estado, tipo, search]);
+  }, [allTickets, estado, tipo, search, coachFiltro]);
 
   // Opciones dinámicas
   const estadoOpts = useMemo(() => {
@@ -373,7 +400,7 @@ export default function TicketsContent() {
         />
         <CardBody>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
-            <div className="md:col-span-5">
+            <div className="md:col-span-4">
               <Input
                 placeholder="Buscar por asunto o alumno..."
                 value={search}
@@ -408,6 +435,22 @@ export default function TicketsContent() {
                   value: t,
                   label: t === "all" ? "Todos los tipos" : t.toUpperCase(),
                 }))}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Select
+                value={coachFiltro}
+                onChange={(v) => {
+                  setPage(1);
+                  setCoachFiltro(v);
+                }}
+                options={[
+                  { value: "all", label: "Todos los coaches" },
+                  ...coaches.map((c) => ({
+                    value: c.codigo,
+                    label: `${c.nombre}${c.area ? ` (${c.area})` : ""}`,
+                  })),
+                ]}
               />
             </div>
             <div className="md:col-span-1">
