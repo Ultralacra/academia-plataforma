@@ -57,7 +57,7 @@ function AdminDashboard() {
         <h1 className="text-2xl font-bold">Panel principal</h1>
         <p className="text-muted-foreground">
           Selecciona un módulo para comenzar o utiliza los enlaces rápidos para
-          acceder a las secciones más importantes.
+          acceder a las secciones más importantes
         </p>
       </div>
 
