@@ -39,25 +39,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { crmAutomations } from "@/lib/crm-service";
 import { apiFetch } from "@/lib/api-config";
 
-import {
-  type Lead,
-  type LeadOrigin,
-  listLeadOrigins,
-  listLeads,
-  updateLead,
-} from "./api";
+import { type Lead, type LeadOrigin, listLeadOrigins, listLeads } from "./api";
 import { CrmTabsLayout, CrmTabsList } from "./components/TabsLayout";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { DeleteLeadConfirmDialog } from "./components/DeleteLeadConfirmDialog";
@@ -272,8 +259,6 @@ function CrmContent() {
 
   const [rows, setRows] = useState<Prospect[]>([]);
   const [loadingLeads, setLoadingLeads] = useState<boolean>(false);
-  const [stageUpdatingId, setStageUpdatingId] = useState<string | null>(null);
-
   const [leadOrigins, setLeadOrigins] = useState<LeadOrigin[]>([]);
   const [selectedCampaignForMetrics, setSelectedCampaignForMetrics] =
     useState<string>("all");
@@ -1248,65 +1233,7 @@ function CrmContent() {
                           </div>
 
                           <div className="col-span-2">
-                            <div className="flex flex-col gap-0.5">
-                              <StageBadge stage={prospect.etapa} size="sm" />
-                              <Select
-                                value={prospect.etapa}
-                                onValueChange={async (nextStage) => {
-                                  const originalStage = prospect.etapa;
-                                  setStageUpdatingId(prospect.id);
-                                  setRows((prev) =>
-                                    prev.map((row) =>
-                                      row.id === prospect.id
-                                        ? {
-                                            ...row,
-                                            etapa: nextStage as ProspectStage,
-                                          }
-                                        : row,
-                                    ),
-                                  );
-                                  try {
-                                    await updateLead(prospect.id, {
-                                      status: mapEtapaToLeadStatus(
-                                        nextStage as ProspectStage,
-                                      ),
-                                    });
-                                    toast({
-                                      title: "Etapa actualizada",
-                                      description: nextStage,
-                                    });
-                                  } catch {
-                                    setRows((prev) =>
-                                      prev.map((row) =>
-                                        row.id === prospect.id
-                                          ? { ...row, etapa: originalStage }
-                                          : row,
-                                      ),
-                                    );
-                                    toast({
-                                      title: "Error",
-                                      description:
-                                        "No se pudo actualizar la etapa",
-                                      variant: "destructive",
-                                    });
-                                  } finally {
-                                    setStageUpdatingId(null);
-                                  }
-                                }}
-                                disabled={stageUpdatingId === prospect.id}
-                              >
-                                <SelectTrigger className="h-6 w-full rounded-md border border-indigo-200 bg-white/80 text-[10px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
-                                  <SelectValue placeholder="Etapa" />
-                                </SelectTrigger>
-                                <SelectContent align="end">
-                                  {PIPELINE_STAGES.map((stage) => (
-                                    <SelectItem key={stage} value={stage}>
-                                      {stage}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            <StageBadge stage={prospect.etapa} size="sm" />
                           </div>
 
                           <div className="col-span-2 flex items-center justify-end">
@@ -1373,32 +1300,7 @@ function CrmContent() {
                       `/admin/crm/booking/${encodeURIComponent(p.id)}`,
                     )
                   }
-                  onMoved={() => reload(ownerFilterRef.current || undefined)}
-                  onStageChange={async (id, newStage) => {
-                    const statusMap: Record<string, string> = {
-                      nuevo: "new",
-                      contactado: "contacted",
-                      calificado: "qualified",
-                      ganado: "won",
-                      perdido: "lost",
-                    };
-                    const newStatus = statusMap[newStage] || "new";
-                    try {
-                      const row = rows.find((r) => r.id === id);
-                      await updateLead(id, { status: newStatus });
-                      toast({
-                        title: "Etapa actualizada",
-                        description: `${row?.nombre || id} → ${newStage}`,
-                      });
-                      reload(ownerFilterRef.current || undefined);
-                    } catch {
-                      toast({
-                        title: "Error",
-                        description: "No se pudo actualizar la etapa",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
+                  allowStageChange={false}
                 />
               )}
             </div>

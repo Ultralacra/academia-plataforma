@@ -20,12 +20,15 @@ export function ProspectKanban({
   onOpenDetail,
   onMoved,
   onStageChange,
+  allowStageChange = true,
 }: {
   items: KanbanProspect[];
   onOpenDetail: (p: KanbanProspect) => void;
   onMoved?: (id: string, newStage: PipelineStageId) => void;
   onStageChange?: (id: string, newStage: PipelineStageId) => void;
+  allowStageChange?: boolean;
 }) {
+  const canMove = allowStageChange;
   const columns = [
     "Nuevo",
     "Contactado",
@@ -71,6 +74,7 @@ export function ProspectKanban({
     e: React.DragEvent<HTMLDivElement>,
     stage: (typeof columns)[number],
   ) => {
+    if (!canMove) return;
     const id = e.dataTransfer.getData("text/plain");
     if (!id) return;
     const stageMap: Record<(typeof columns)[number], PipelineStageId> = {
@@ -99,8 +103,8 @@ export function ProspectKanban({
           <div
             key={col}
             className={`flex flex-col rounded-xl border min-h-[260px] shadow-sm ${styles.container}`}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => onDrop(e, col)}
+            onDragOver={canMove ? (e) => e.preventDefault() : undefined}
+            onDrop={canMove ? (e) => onDrop(e, col) : undefined}
           >
             <div
               className={`flex items-center justify-between border-b px-3 py-2 rounded-t-xl ${styles.header}`}
@@ -116,11 +120,15 @@ export function ProspectKanban({
               {list.map((p) => (
                 <div
                   key={p.id}
-                  draggable
-                  onDragStart={(e) =>
-                    e.dataTransfer.setData("text/plain", p.id)
+                  draggable={canMove}
+                  onDragStart={
+                    canMove
+                      ? (e) => e.dataTransfer.setData("text/plain", p.id)
+                      : undefined
                   }
-                  className={`rounded-md border bg-white/90 p-2 shadow-sm hover:shadow-md cursor-move transition-colors hover:bg-indigo-50/40 ${styles.card}`}
+                  className={`rounded-md border bg-white/90 p-2 shadow-sm hover:shadow-md transition-colors hover:bg-indigo-50/40 ${styles.card} ${
+                    canMove ? "cursor-move" : "cursor-default"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2 mb-1.5">
                     <h4
