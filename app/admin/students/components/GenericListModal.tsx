@@ -27,11 +27,15 @@ export default function GenericListModal({
   onOpenChange,
   title,
   rows,
+  hideCode = false,
+  hideDetail = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   title: string;
   rows: ListRow[];
+  hideCode?: boolean;
+  hideDetail?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,13 +47,17 @@ export default function GenericListModal({
           </p>
         </DialogHeader>
 
-        <ScrollArea className="max-h-[60vh] pr-3">
+        <ScrollArea className="max-h-[70vh] pr-3">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="min-w-[90px]">Código</TableHead>
+                {!hideCode && (
+                  <TableHead className="min-w-[90px]">Código</TableHead>
+                )}
                 <TableHead className="min-w-[220px]">Nombre</TableHead>
-                <TableHead className="min-w-[220px]">Detalle</TableHead>
+                {!hideDetail && (
+                  <TableHead className="min-w-[220px]">Detalle</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -58,19 +66,25 @@ export default function GenericListModal({
                   key={`${r.code}-${i}`}
                   className={i % 2 ? "bg-muted/30" : ""}
                 >
-                  <TableCell className="font-mono text-xs">
-                    {r.code ?? "—"}
+                  {!hideCode && (
+                    <TableCell className="font-mono text-xs">
+                      {r.code ?? "—"}
+                    </TableCell>
+                  )}
+                  <TableCell className="whitespace-normal break-words">
+                    {r.name ?? "—"}
                   </TableCell>
-                  <TableCell>{r.name ?? "—"}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {r.subtitle ?? "—"}
-                  </TableCell>
+                  {!hideDetail && (
+                    <TableCell className="text-muted-foreground whitespace-normal break-words">
+                      {r.subtitle ?? "—"}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell
-                    colSpan={3}
+                    colSpan={(hideCode ? 0 : 1) + 1 + (hideDetail ? 0 : 1)}
                     className="py-8 text-center text-muted-foreground"
                   >
                     No hay registros para mostrar.

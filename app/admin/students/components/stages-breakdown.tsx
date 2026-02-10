@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Users, UserCheck } from "lucide-react";
+import GenericListModal, { type ListRow } from "./GenericListModal";
 import {
   fetchMetricsRetention,
   getDefaultRange,
@@ -53,6 +54,11 @@ export default function StagesBreakdown({
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<RetentionApiData | null>(null);
 
+  const [listOpen, setListOpen] = useState(false);
+  const [listTitle, setListTitle] = useState("");
+  const [listRows, setListRows] = useState<ListRow[]>([]);
+  const [listHideDetail, setListHideDetail] = useState(false);
+
   useEffect(() => {
     let ignore = false;
     (async () => {
@@ -87,8 +93,23 @@ export default function StagesBreakdown({
   );
   const sortedTransitions = [...transitions].sort((a, b) => b.count - a.count);
 
+  const openNames = (
+    title: string,
+    names?: string[],
+    opts?: { hideDetail?: boolean }
+  ) => {
+    const rows: ListRow[] = (Array.isArray(names) ? names : [])
+      .filter(Boolean)
+      .map((n) => ({ name: String(n) }));
+    setListTitle(title);
+    setListRows(rows);
+    setListHideDetail(Boolean(opts?.hideDetail));
+    setListOpen(true);
+  };
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Clientes por etapa (byEtapa) */}
       <Card className="shadow-none border-gray-200">
         <CardHeader className="pb-2">
@@ -114,9 +135,18 @@ export default function StagesBreakdown({
           ) : (
             <div className="space-y-2">
               {sortedByEtapa.map((item) => (
-                <div
+                <button
                   key={item.etapa_id}
-                  className="flex items-center justify-between p-2 rounded-lg bg-muted/30"
+                  type="button"
+                  onClick={() =>
+                    openNames(
+                      `Registros por etapa — ${getLabel(item.etapa_id)} (${item.count})`,
+                      (item as any)?.nombres,
+                      { hideDetail: false }
+                    )
+                  }
+                  className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                  title="Ver alumnos"
                 >
                   <Badge
                     variant="secondary"
@@ -127,7 +157,7 @@ export default function StagesBreakdown({
                   <span className="font-semibold tabular-nums">
                     {item.count}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -159,9 +189,18 @@ export default function StagesBreakdown({
           ) : (
             <div className="space-y-2">
               {sortedLastPerClient.map((item) => (
-                <div
+                <button
                   key={item.etapa_id}
-                  className="flex items-center justify-between p-2 rounded-lg bg-muted/30"
+                  type="button"
+                  onClick={() =>
+                    openNames(
+                      `Última etapa por cliente — ${getLabel(item.etapa_id)} (${item.count})`,
+                      (item as any)?.nombres,
+                      { hideDetail: false }
+                    )
+                  }
+                  className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                  title="Ver alumnos"
                 >
                   <Badge
                     variant="secondary"
@@ -172,7 +211,7 @@ export default function StagesBreakdown({
                   <span className="font-semibold tabular-nums">
                     {item.count} clientes
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}
@@ -204,9 +243,18 @@ export default function StagesBreakdown({
           ) : (
             <div className="space-y-2">
               {sortedTransitions.map((t, idx) => (
-                <div
+                <button
                   key={`${t.from_etapa}-${t.to_etapa}-${idx}`}
-                  className="flex items-center justify-between p-2 rounded-lg bg-muted/30"
+                  type="button"
+                  onClick={() =>
+                    openNames(
+                      `Transiciones — ${getLabel(t.from_etapa)} → ${getLabel(t.to_etapa)} (${t.count})`,
+                      (t as any)?.nombres,
+                      { hideDetail: true }
+                    )
+                  }
+                  className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                  title="Ver alumnos"
                 >
                   <div className="flex items-center gap-1 text-xs">
                     <Badge
@@ -228,12 +276,22 @@ export default function StagesBreakdown({
                       ({t.avg_days}d)
                     </span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           )}
         </CardContent>
       </Card>
-    </div>
+      </div>
+
+      <GenericListModal
+        open={listOpen}
+        onOpenChange={setListOpen}
+        title={listTitle}
+        rows={listRows}
+        hideCode
+        hideDetail={listHideDetail}
+      />
+    </>
   );
 }

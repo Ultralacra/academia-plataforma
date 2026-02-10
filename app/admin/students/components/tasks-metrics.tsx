@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Timer } from "lucide-react";
+import GenericListModal, { type ListRow } from "./GenericListModal";
 import {
   fetchMetricsTasks,
   getDefaultRange,
@@ -63,13 +64,19 @@ function WindowSummaryRow({
   window,
   data,
   label,
+  onClick,
 }: {
   window: string;
   data: TasksWindowSummary;
   label: string;
 }) {
   return (
-    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+      title="Ver alumnos"
+    >
       <div className="flex items-center gap-2">
         <Badge variant="secondary" className="bg-blue-100 text-blue-700">
           {window} días
@@ -87,7 +94,7 @@ function WindowSummaryRow({
           {formatDuration(data.avg_human)}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -100,6 +107,10 @@ export default function TasksMetrics({
 } = {}) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<TasksApiData | null>(null);
+
+  const [listOpen, setListOpen] = useState(false);
+  const [listTitle, setListTitle] = useState("");
+  const [listRows, setListRows] = useState<ListRow[]>([]);
 
   useEffect(() => {
     let ignore = false;
@@ -126,7 +137,62 @@ export default function TasksMetrics({
   const tareasResumen = data?.ultimas_tareas_resumen ?? {};
   const estadosResumen = data?.estados_resumen ?? {};
 
+  const tareasDetalle: any[] = Array.isArray(data?.ultimas_tareas_detalle)
+    ? (data?.ultimas_tareas_detalle as any[])
+    : [];
+  const estadosDetalle: any[] = Array.isArray(data?.estados_detalle)
+    ? (data?.estados_detalle as any[])
+    : [];
+
   const windowKeys = ["7", "15", "30"];
+
+  const toRowsFromNames = (names: any[]): ListRow[] => {
+    return (Array.isArray(names) ? names : [])
+      .filter(Boolean)
+      .map((n) => ({ name: String(n) }));
+  };
+
+  const toRowsFromDetail = (arr: any[]): ListRow[] => {
+    return (Array.isArray(arr) ? arr : []).map((r) => {
+      const code = r.codigo ?? r.code ?? r.id_alumno ?? r.alumno ?? null;
+      const name = r.nombre ?? r.name ?? r.alumno_nombre ?? null;
+      const extras: string[] = [];
+      if (r.avg_human) extras.push(String(r.avg_human));
+      if (r.status_count != null) extras.push(`${Number(r.status_count)} estados`);
+      if (r.task_count != null) extras.push(`${Number(r.task_count)} tareas`);
+      return {
+        code: code != null ? String(code) : null,
+        name: name != null ? String(name) : null,
+        subtitle: extras.length ? extras.join(" · ") : undefined,
+      };
+    });
+  };
+
+  const openWindowList = (
+    kind: "tareas" | "estados",
+    w: string,
+    summary: any,
+    detail: any[]
+  ) => {
+    const windowN = Number(w);
+    const detailForWindow = Array.isArray(detail)
+      ? detail.filter((x) => x && (x.window == null || Number(x.window) === windowN))
+      : [];
+
+    const titleBase =
+      kind === "tareas"
+        ? "Alumnos sin entregar tareas"
+        : "Tiempo en estado actual";
+
+    const rows =
+      detailForWindow.length > 0
+        ? toRowsFromDetail(detailForWindow)
+        : toRowsFromNames(summary?.nombres ?? []);
+
+    setListTitle(`${titleBase} — últimos ${w} días`);
+    setListRows(rows);
+    setListOpen(true);
+  };
 
   return (
     <div className="space-y-4">
@@ -169,6 +235,7 @@ export default function TasksMetrics({
                       window={w}
                       data={item}
                       label="sin entregar"
+                      onClick={() => openWindowList("tareas", w, item, tareasDetalle)}
                     />
                   );
                 })}
@@ -213,6 +280,7 @@ export default function TasksMetrics({
                       window={w}
                       data={item}
                       label="en estado"
+                      onClick={() => openWindowList("estados", w, item, estadosDetalle)}
                     />
                   );
                 })}
@@ -221,6 +289,14 @@ export default function TasksMetrics({
           </CardContent>
         </Card>
       </div>
+
+      <GenericListModal
+        open={listOpen}
+        onOpenChange={setListOpen}
+        title={listTitle}
+        rows={listRows}
+        hideCode
+      />
     </div>
   );
 }

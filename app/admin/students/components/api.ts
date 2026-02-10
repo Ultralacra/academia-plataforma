@@ -61,13 +61,19 @@ export async function logMetricsV2Now() {
 export type RetentionApiData = {
 	clientes_etapas?: {
 		total?: number;
-		byEtapa?: Array<{ etapa_id: string; count: number }>;
-		lastPerClient?: Array<{ etapa_id: string; count: number }>;
+		byEtapa?: Array<{ etapa_id: string; count: number; nombres?: string[] }>;
+		lastPerClient?: Array<{ etapa_id: string; count: number; nombres?: string[] }>;
 	};
 	clientes_etapas_durations?: Array<{ etapa_id: string; count: number; avg_days: number }>;
 	clientes_etapas_durations_detail?: any[];
 	clientes_etapas_avg_permanencia?: {
-		transition?: Array<{ from_etapa: string; to_etapa: string; count: number; avg_days: number }>;
+		transition?: Array<{
+			from_etapa: string;
+			to_etapa: string;
+			count: number;
+			avg_days: number;
+			nombres?: string[];
+		}>;
 	};
 	retention?: {
 		completado: number;
@@ -75,6 +81,17 @@ export type RetentionApiData = {
 		total: number;
 		retention: number;
 		permanencia: number;
+		nombres?: {
+			total?: string[];
+			completado?: string[];
+			abandonado?: string[];
+		};
+	};
+	clientesRetentionDetail?: Array<{ codigo?: string; nombre?: string }>;
+	retention_names?: {
+		total?: string[];
+		completado?: string[];
+		abandonado?: string[];
 	};
 };
 
@@ -95,6 +112,7 @@ export async function fetchMetricsRetention(params?: {
 	const qs = new URLSearchParams();
 	if (fechaDesde) qs.set("fechaDesde", fechaDesde);
 	if (fechaHasta) qs.set("fechaHasta", fechaHasta);
+	qs.set("includeDetails", "true");
 
 	const url = `/metrics/get/metrics-retention${qs.toString() ? `?${qs.toString()}` : ""}`;
 
@@ -133,6 +151,7 @@ export type TasksWindowSummary = {
 	avg_seconds: number | null;
 	avg_human: string | null;
 	alumnos: number;
+	nombres?: string[];
 };
 
 export type TasksApiData = {
@@ -170,6 +189,7 @@ export async function fetchMetricsTasks(params?: {
 	if (fechaDesde) qs.set("fechaDesde", fechaDesde);
 	if (fechaHasta) qs.set("fechaHasta", fechaHasta);
 	if (coach) qs.set("coach", coach);
+	qs.set("includeDetails", "true");
 
 	const url = `/metrics/get/metrics-tasks${qs.toString() ? `?${qs.toString()}` : ""}`;
 
