@@ -202,7 +202,7 @@ export default function StagesBreakdown({
               Sin transiciones registradas
             </p>
           ) : (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto">
+            <div className="space-y-2">
               {sortedTransitions.map((t, idx) => (
                 <div
                   key={`${t.from_etapa}-${t.to_etapa}-${idx}`}
