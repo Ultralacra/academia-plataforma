@@ -52,25 +52,37 @@ const STAGE_STYLES: Record<string, { base: string; ring: string }> = {
 
 export function StageBadge({
   stage,
+  size = "md",
   className,
 }: {
   stage: string;
+  size?: "sm" | "md";
   className?: string;
 }) {
   const style = STAGE_STYLES[stage] || {
     base: "bg-slate-100 text-slate-700 border border-slate-200",
     ring: "focus:ring-slate-300",
   };
+  const sizeClasses =
+    size === "sm"
+      ? "px-1.5 py-0.5 text-[9px] gap-0.5"
+      : "px-2 py-1 text-[11px] gap-1";
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium shadow-sm",
+        "inline-flex items-center rounded-full font-medium shadow-sm",
+        sizeClasses,
         style.base,
         style.ring,
         className,
       )}
     >
-      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+      <span
+        className={cn(
+          "rounded-full bg-current opacity-70",
+          size === "sm" ? "w-1 h-1" : "w-1.5 h-1.5",
+        )}
+      />
       {stage}
     </span>
   );

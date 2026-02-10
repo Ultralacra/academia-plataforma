@@ -58,7 +58,7 @@ import {
   listLeads,
   updateLead,
 } from "./api";
-import { CrmTabsLayout } from "./components/TabsLayout";
+import { CrmTabsLayout, CrmTabsList } from "./components/TabsLayout";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { DeleteLeadConfirmDialog } from "./components/DeleteLeadConfirmDialog";
 import { EventsOriginsManager } from "./components/EventsOriginsManager";
@@ -951,293 +951,28 @@ function CrmContent() {
         aria-hidden
       />
 
-      <div className="relative border-b px-6 py-4 bg-gradient-to-r from-white via-indigo-50 to-sky-50 overflow-hidden">
-        <div
-          className="absolute -top-24 -right-10 h-56 w-56 rounded-full bg-indigo-300/30 blur-3xl"
-          aria-hidden
-        />
-        <div
-          className="absolute -bottom-20 left-10 h-48 w-48 rounded-full bg-sky-200/30 blur-3xl"
-          aria-hidden
-        />
-
-        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="flex-1 space-y-3">
-            <div className="flex items-center gap-4">
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 text-indigo-500 shadow-inner ring-1 ring-white/60">
-                <Sparkles className="h-5 w-5" />
-              </span>
-              <div>
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-                  CRM Comercial
-                </h1>
-                <p className="text-sm text-slate-600">
-                  Gestiona tus leads, agenda y métricas en un tablero vibrante.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              {isAdmin ? (
-                <div className="flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1.5 shadow-sm">
-                  <select
-                    className="h-8 rounded-full border-0 bg-transparent px-1 text-sm text-slate-700 focus:outline-none"
-                    value={selectedSalesUserFilter}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setSelectedSalesUserFilter(value);
-                      ownerFilterRef.current = value;
-                      void reload(value || undefined);
-                    }}
-                    disabled={salesUsersLoading}
-                  >
-                    <option value="">
-                      {salesUsersLoading ? "Cargando..." : "Todos los Leads"}
-                    </option>
-                    {salesUsers.map((user) => (
-                      <option key={user.codigo} value={user.codigo}>
-                        {user.name} ({user.email})
-                      </option>
-                    ))}
-                  </select>
-                  {selectedSalesUserFilter ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedSalesUserFilter("");
-                        ownerFilterRef.current = "";
-                        void reload("");
-                      }}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200"
-                      aria-label="Limpiar filtro de usuarios"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {isSalesUser && userCodigo ? (
-                <div className="flex items-center gap-2 rounded-full border border-indigo-200/70 bg-indigo-50/60 px-3 py-1.5 text-sm text-indigo-700 shadow-sm">
-                  <span className="font-medium">
-                    {showingMyLeads ? "Mis leads" : "Todos los leads"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (showingMyLeads) {
-                        ownerFilterRef.current = "";
-                        void reload("");
-                      } else {
-                        ownerFilterRef.current = userCodigo;
-                        void reload(userCodigo);
-                      }
-                    }}
-                    className="inline-flex items-center gap-1 rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white shadow hover:bg-indigo-500"
-                  >
-                    {showingMyLeads ? (
-                      <>
-                        <List className="h-3.5 w-3.5" />
-                        Ver todos
-                      </>
-                    ) : (
-                      <>
-                        <User className="h-3.5 w-3.5" />
-                        Ver mis leads
-                      </>
-                    )}
-                  </button>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {calendarStatus.loading ? (
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Verificando calendario...</span>
-                </div>
-              ) : calendarStatus.connected ? (
-                <>
-                  <div
-                    className="flex items-center gap-2 rounded-full border border-green-200 bg-green-50 px-3 py-1 text-sm font-medium text-green-700"
-                    title={`Sincronizado con ${
-                      calendarStatus.google_email || "Google Calendar"
-                    }`}
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      viewBox="0 0 24 24"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        fill="#4285F4"
-                      />
-                      <path
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        fill="#34A853"
-                      />
-                      <path
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        fill="#FBBC05"
-                      />
-                      <path
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        fill="#EA4335"
-                      />
-                    </svg>
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Calendar sincronizado</span>
-                    {calendarStatus.google_email ? (
-                      <span className="text-xs opacity-75 hidden sm:inline">
-                        ({calendarStatus.google_email})
-                      </span>
-                    ) : null}
-                  </div>
-                  <Button
-                    onClick={handleViewAvailability}
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-3 w-fit gap-2"
-                  >
-                    <Calendar className="h-4 w-4" />
-                    Ver mis horas disponibles
-                  </Button>
-                </>
-              ) : (
-                <button
-                  onClick={handleSyncCalendar}
-                  disabled={syncingCalendar}
-                  className="group inline-flex h-9 items-center gap-2 rounded-xl border-2 border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-500 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  title="Sincronizar con Google Calendar"
-                >
-                  {syncingCalendar ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Conectando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg
-                        className="h-5 w-5 transition-transform group-hover:scale-110"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                          fill="#4285F4"
-                        />
-                        <path
-                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                          fill="#34A853"
-                        />
-                        <path
-                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                          fill="#FBBC05"
-                        />
-                        <path
-                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                          fill="#EA4335"
-                        />
-                      </svg>
-                      <span className="font-semibold">
-                        Sincronizar Calendar
-                      </span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
-
-            {leadOrigins.length > 0 ? (
-              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Métricas por campaña
-                </span>
-                <Select
-                  value={selectedCampaignForMetrics}
-                  onValueChange={setSelectedCampaignForMetrics}
-                >
-                  <SelectTrigger className="h-9 w-48 rounded-full bg-white/80">
-                    <SelectValue placeholder="Seleccionar campaña" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {leadOrigins.map((origin) => (
-                      <SelectItem key={origin.codigo} value={origin.codigo}>
-                        {origin.name || origin.codigo}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-700">
-                    {campaignSummary.label}:
-                  </span>
-                  <span>Total {campaignSummary.total}</span>
-                  {Object.entries(campaignSummary.byStage).map(
-                    ([key, value]) => (
-                      <span key={key}>
-                        {key}: <span className="font-semibold">{value}</span>
-                      </span>
-                    ),
-                  )}
-                </div>
-              </div>
-            ) : null}
+      <div className="relative border-b px-2 sm:px-4 py-1 sm:py-2 bg-gradient-to-r from-white via-indigo-50/50 to-sky-50/50 overflow-hidden">
+        <div className="relative flex flex-wrap items-center gap-1.5 sm:gap-3">
+          {/* Título */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            <span className="inline-flex h-6 w-6 sm:h-8 sm:w-8 items-center justify-center rounded-lg bg-white/70 text-indigo-500 shadow-inner ring-1 ring-white/60">
+              <Sparkles className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+            </span>
+            <h1 className="text-sm sm:text-base font-semibold tracking-tight text-slate-900">
+              CRM
+            </h1>
           </div>
 
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-            <div className="flex items-start gap-3">
-              <CreateLeadDialog
-                onCreated={() => {
-                  void reload(ownerFilterRef.current || undefined);
-                }}
-              />
-            </div>
+          {/* Tabs */}
+          <CrmTabsList
+            value={activeTab}
+            onValueChange={setActiveTab}
+            hasCampanas={true}
+          />
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 w-full lg:w-auto">
-              {quickStats.map((stat) => {
-                const Icon = stat.icon;
-                return (
-                  <div
-                    key={stat.label}
-                    className="relative overflow-hidden rounded-xl border border-white/60 bg-white/80 px-3 py-2 shadow-sm backdrop-blur"
-                  >
-                    <div
-                      className={`absolute -top-8 -right-6 h-16 w-16 rounded-full bg-gradient-to-br ${stat.accent} opacity-35 blur-2xl`}
-                      aria-hidden
-                    />
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        className={`inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${stat.accent} text-white shadow`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 truncate">
-                          {stat.label}
-                        </div>
-                        <div className="text-sm font-semibold text-slate-900 leading-5">
-                          {stat.value}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 min-h-0 p-4 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/80">
-        <CrmTabsLayout
-          value={activeTab}
-          onValueChange={setActiveTab}
-          pipeline={
-            <div className="flex flex-col gap-3 h-full">
+          {/* Filtros (solo visible en Pipeline) */}
+          {activeTab === "pipeline" && (
+            <div className="flex-1 min-w-0">
               <ProspectFilters
                 q={q}
                 setQ={setQ}
@@ -1263,73 +998,208 @@ function CrmContent() {
                   setCreatedTo("");
                 }}
               />
+            </div>
+          )}
 
-              <div className="flex items-center justify-end -mt-2">
+          {/* Acciones */}
+          <div className="flex items-center gap-1 sm:gap-2 ml-auto">
+            {isAdmin && (
+              <select
+                className="h-5 sm:h-6 rounded-md border border-slate-200 bg-white px-1 sm:px-1.5 text-[9px] sm:text-[11px] text-slate-700 focus:outline-none"
+                value={selectedSalesUserFilter}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setSelectedSalesUserFilter(value);
+                  ownerFilterRef.current = value;
+                  void reload(value || undefined);
+                }}
+                disabled={salesUsersLoading}
+              >
+                <option value="">{salesUsersLoading ? "..." : "Todos"}</option>
+                {salesUsers.map((user) => (
+                  <option key={user.codigo} value={user.codigo}>
+                    {user.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <CreateLeadDialog
+              onCreated={() => {
+                void reload(ownerFilterRef.current || undefined);
+              }}
+            />
+
+            {/* Google Calendar Status */}
+            {calendarStatus.connected ? (
+              <div className="flex items-center gap-0.5 sm:gap-1">
+                <span
+                  className="inline-flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-green-100 text-green-600"
+                  title={`Sincronizado: ${calendarStatus.google_email || "Google Calendar"}`}
+                >
+                  <svg
+                    className="h-2.5 w-2.5 sm:h-3 sm:w-3"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                </span>
+                <Button
+                  onClick={handleViewAvailability}
+                  variant="outline"
+                  size="sm"
+                  className="h-5 sm:h-6 px-1.5 sm:px-2 text-[9px] sm:text-[11px]"
+                >
+                  <span className="hidden sm:inline">Horarios</span>
+                  <Calendar className="h-3 w-3 sm:hidden" />
+                </Button>
+              </div>
+            ) : (
+              !calendarStatus.loading && (
+                <button
+                  onClick={handleSyncCalendar}
+                  disabled={syncingCalendar}
+                  className="inline-flex h-5 sm:h-6 items-center gap-0.5 sm:gap-1 rounded-md border border-slate-200 bg-white px-1.5 sm:px-2 text-[9px] sm:text-[11px] text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                  title="Conectar Google Calendar"
+                >
+                  {syncingCalendar ? (
+                    <Loader2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 animate-spin" />
+                  ) : (
+                    <svg
+                      className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-slate-400"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                    </svg>
+                  )}
+                  <span className="hidden sm:inline">Sync</span>
+                </button>
+              )
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Stats Cards */}
+      <div className="px-2 sm:px-4 py-1 sm:py-2 border-b bg-white/50">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
+          {quickStats.map((stat) => (
+            <div
+              key={stat.label}
+              className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-white border border-slate-200/70 shadow-sm"
+            >
+              <div
+                className={`p-1 sm:p-1.5 rounded-md bg-gradient-to-br ${stat.accent}`}
+              >
+                <stat.icon className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-white" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[8px] sm:text-[10px] text-slate-500 uppercase tracking-wide">
+                  {stat.label}
+                </p>
+                <p className="text-xs sm:text-sm font-semibold text-slate-800">
+                  {stat.value}
+                </p>
+              </div>
+            </div>
+          ))}
+          {calendarStatus.connected && calendarStatus.google_email && (
+            <div className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-green-50 border border-green-200/70 shadow-sm ml-auto">
+              <Calendar className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 text-green-600" />
+              <div className="min-w-0">
+                <p className="text-[8px] sm:text-[10px] text-green-600 uppercase tracking-wide">
+                  Calendario
+                </p>
+                <p className="text-[9px] sm:text-xs font-medium text-green-700 truncate max-w-[100px] sm:max-w-[150px]">
+                  {calendarStatus.google_email}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 p-2 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-100/80">
+        <CrmTabsLayout
+          value={activeTab}
+          onValueChange={setActiveTab}
+          externalTabs
+          pipeline={
+            <div className="flex flex-col gap-2 h-full">
+              <div className="flex items-center justify-end">
                 <div className="inline-flex overflow-hidden rounded-md border border-slate-200 bg-white">
                   <button
                     type="button"
                     onClick={() => setView("lista")}
-                    className={`px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 ${
+                    className={`px-2 py-1 text-slate-600 hover:bg-slate-50 ${
                       view === "lista"
                         ? "bg-blue-600 text-white hover:bg-blue-600"
                         : ""
                     }`}
                     title="Vista de lista"
                   >
-                    <List className="h-4 w-4" />
+                    <List className="h-3.5 w-3.5" />
                   </button>
                   <button
                     type="button"
                     onClick={() => setView("kanban")}
-                    className={`px-2.5 py-1.5 text-slate-600 hover:bg-slate-50 border-l border-slate-200 ${
+                    className={`px-2 py-1 text-slate-600 hover:bg-slate-50 border-l border-slate-200 ${
                       view === "kanban"
                         ? "bg-blue-600 text-white hover:bg-blue-600"
                         : ""
                     }`}
                     title="Vista Kanban"
                   >
-                    <LayoutGrid className="h-4 w-4" />
+                    <LayoutGrid className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
 
               {view === "lista" ? (
-                <div className="rounded-xl border border-slate-200/70 bg-white/90 shadow-sm">
-                  <div className="grid grid-cols-11 gap-2 px-4 py-1.5 text-xs font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
+                <div className="rounded-xl border border-slate-200/70 bg-white/90 shadow-sm flex-1 overflow-hidden">
+                  <div className="grid grid-cols-11 gap-1 px-3 py-1 text-[10px] font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
                     <div className="col-span-3">Prospecto</div>
                     <div className="col-span-2">Contacto</div>
                     <div className="col-span-2">Canal</div>
                     <div className="col-span-2">Etapa</div>
                     <div className="col-span-2 text-right">Acción</div>
                   </div>
-                  <div>
+                  <div className="overflow-y-auto max-h-[calc(100vh-240px)]">
                     {loadingLeads ? (
-                      <div className="flex items-center justify-center py-8 text-sm text-slate-500">
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <div className="flex items-center justify-center py-6 text-xs text-slate-500">
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
                         Cargando leads...
                       </div>
                     ) : filtrados.length === 0 ? (
-                      <div className="p-8 text-center text-sm text-slate-500">
+                      <div className="p-6 text-center text-xs text-slate-500">
                         No hay leads para mostrar
                       </div>
                     ) : (
                       filtrados.map((prospect) => (
                         <div
                           key={prospect.id}
-                          className="grid grid-cols-11 gap-2 px-4 py-1.5 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
+                          className="grid grid-cols-11 gap-1 px-3 py-1 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
                         >
                           <div className="col-span-3 min-w-0">
-                            <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
                               <div
-                                className={`hidden sm:flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${getAvatarGradient(prospect.nombre)} text-xs font-semibold text-white shadow`}
+                                className={`hidden sm:flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${getAvatarGradient(prospect.nombre)} text-[10px] font-semibold text-white shadow`}
                                 aria-hidden
                               >
                                 {getInitials(prospect.nombre)}
                               </div>
                               <div className="min-w-0">
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1">
                                   <span
-                                    className="font-semibold truncate text-slate-800"
+                                    className="text-xs font-medium truncate text-slate-800"
                                     title={prospect.nombre}
                                   >
                                     {prospect.nombre}
@@ -1337,13 +1207,13 @@ function CrmContent() {
                                   {prospect.remote ? (
                                     <Badge
                                       variant="secondary"
-                                      className="bg-indigo-50 text-indigo-600 border-indigo-200"
+                                      className="text-[9px] px-1 py-0 bg-indigo-50 text-indigo-600 border-indigo-200"
                                     >
                                       Sync
                                     </Badge>
                                   ) : null}
                                 </div>
-                                <div className="text-xs text-slate-500 truncate">
+                                <div className="text-[10px] text-slate-500 truncate">
                                   {[prospect.pais, prospect.ciudad]
                                     .filter(Boolean)
                                     .join(" · ")}
@@ -1352,25 +1222,25 @@ function CrmContent() {
                             </div>
                           </div>
 
-                          <div className="col-span-2 min-w-0 text-xs space-y-1.5">
-                            <div className="flex items-center gap-1.5 truncate text-slate-600">
-                              <Mail className="h-3.5 w-3.5 text-indigo-400" />
+                          <div className="col-span-2 min-w-0 text-[10px] space-y-0.5">
+                            <div className="flex items-center gap-1 truncate text-slate-600">
+                              <Mail className="h-3 w-3 text-indigo-400" />
                               <span className="truncate">
                                 {prospect.email || "—"}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1.5 truncate text-slate-600">
-                              <Phone className="h-3.5 w-3.5 text-emerald-400" />
+                            <div className="flex items-center gap-1 truncate text-slate-600">
+                              <Phone className="h-3 w-3 text-emerald-400" />
                               <span className="truncate">
                                 {prospect.telefono || "—"}
                               </span>
                             </div>
                           </div>
 
-                          <div className="col-span-2 text-xs flex items-center">
+                          <div className="col-span-2 text-[10px] flex items-center">
                             <Badge
                               variant="outline"
-                              className="max-w-full truncate bg-sky-50 text-sky-700 border-sky-200"
+                              className="max-w-full truncate text-[10px] px-1.5 py-0 bg-sky-50 text-sky-700 border-sky-200"
                               title={getOriginName(prospect.canal)}
                             >
                               {getOriginName(prospect.canal)}
@@ -1378,8 +1248,8 @@ function CrmContent() {
                           </div>
 
                           <div className="col-span-2">
-                            <div className="flex flex-col gap-1.5">
-                              <StageBadge stage={prospect.etapa} />
+                            <div className="flex flex-col gap-0.5">
+                              <StageBadge stage={prospect.etapa} size="sm" />
                               <Select
                                 value={prospect.etapa}
                                 onValueChange={async (nextStage) => {
@@ -1425,7 +1295,7 @@ function CrmContent() {
                                 }}
                                 disabled={stageUpdatingId === prospect.id}
                               >
-                                <SelectTrigger className="h-8 w-full rounded-md border border-indigo-200 bg-white/80 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
+                                <SelectTrigger className="h-6 w-full rounded-md border border-indigo-200 bg-white/80 text-[10px] text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1">
                                   <SelectValue placeholder="Etapa" />
                                 </SelectTrigger>
                                 <SelectContent align="end">
@@ -1440,7 +1310,7 @@ function CrmContent() {
                           </div>
 
                           <div className="col-span-2 flex items-center justify-end">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 aria-label={`Asignar lead ${prospect.nombre}`}
@@ -1453,17 +1323,17 @@ function CrmContent() {
                                   setAssignModalOpen(true);
                                   void loadAllUsers();
                                 }}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-700"
                               >
-                                <UserPlus className="h-4 w-4" />
+                                <UserPlus className="h-3.5 w-3.5" />
                               </button>
                               <Link
                                 href={`/admin/crm/booking/${encodeURIComponent(prospect.id)}`}
                                 aria-label={`Ver detalle de ${prospect.nombre}`}
                                 title="Ver detalle"
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                               >
-                                <Eye className="h-4 w-4" />
+                                <Eye className="h-3.5 w-3.5" />
                               </Link>
                               <button
                                 type="button"
@@ -1475,9 +1345,9 @@ function CrmContent() {
                                     nombre: prospect.nombre,
                                   })
                                 }
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 hover:bg-red-50 hover:text-red-700"
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-red-600 hover:bg-red-50 hover:text-red-700"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           </div>
