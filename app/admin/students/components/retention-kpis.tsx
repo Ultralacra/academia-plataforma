@@ -57,9 +57,18 @@ function Stat({
 export default function RetentionKPIs({
   fechaDesde,
   fechaHasta,
+  coach,
+  abandonosPorInactividad,
 }: {
   fechaDesde?: string;
   fechaHasta?: string;
+  coach?: string;
+  abandonosPorInactividad?: {
+    thresholdDays: number;
+    count: number;
+    names: string[];
+    rows?: ListRow[];
+  };
 } = {}) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<RetentionApiData | null>(null);
@@ -77,6 +86,7 @@ export default function RetentionKPIs({
         const res = await fetchMetricsRetention({
           fechaDesde: fechaDesde ?? range.fechaDesde,
           fechaHasta: fechaHasta ?? range.fechaHasta,
+          coach,
         });
         if (!ignore) setData(res?.data ?? null);
       } catch (e) {
@@ -88,11 +98,11 @@ export default function RetentionKPIs({
     return () => {
       ignore = true;
     };
-  }, [fechaDesde, fechaHasta]);
+  }, [fechaDesde, fechaHasta, coach]);
 
   const retention = data?.retention;
   const completed = retention?.completado ?? 0;
-  const abandons = retention?.abandonado ?? 0;
+  const abandonsApi = retention?.abandonado ?? 0;
   const retentionPct = retention?.retention ?? 0;
   const avgStay = retention?.permanencia ?? 0;
   const total = retention?.total ?? 0;
@@ -103,6 +113,12 @@ export default function RetentionKPIs({
       .map((n) => ({ name: String(n) }));
     setListTitle(title);
     setListRows(rows);
+    setListOpen(true);
+  };
+
+  const openRows = (title: string, rows?: ListRow[]) => {
+    setListTitle(title);
+    setListRows(Array.isArray(rows) ? rows : []);
     setListOpen(true);
   };
 
@@ -120,10 +136,20 @@ export default function RetentionKPIs({
     (data as any)?.retention_names?.completado ||
     [];
 
-  const abandonedNames: string[] =
+  const abandonedNamesApi: string[] =
     (retention as any)?.nombres?.abandonado ||
     (data as any)?.retention_names?.abandonado ||
     [];
+
+  const abandonedNames: string[] = abandonosPorInactividad?.names?.length
+    ? abandonosPorInactividad.names
+    : abandonedNamesApi;
+
+  const abandons = abandonosPorInactividad?.count ?? abandonsApi;
+
+  const abandonedRows: ListRow[] = abandonosPorInactividad?.rows?.length
+    ? abandonosPorInactividad.rows
+    : abandonedNames.map((n) => ({ name: String(n) }));
 
   return (
     <Card className="shadow-none border-gray-200">
@@ -178,14 +204,18 @@ export default function RetentionKPIs({
               icon={<DoorOpen className="h-4 w-4" />}
               title="Abandonos"
               value={abandons}
-              subtitle="Salidas antes de completar"
+              subtitle={
+                abandonosPorInactividad
+                  ? `Inactividad ≥ ${abandonosPorInactividad.thresholdDays} días`
+                  : "Salidas antes de completar"
+              }
               accent="rose"
               onClick={
-                abandonedNames.length
+                abandonedRows.length
                   ? () =>
-                      openNames(
-                        `Retención — Abandonos (${abandonedNames.length})`,
-                        abandonedNames,
+                      openRows(
+                        `Retención — Abandonos (${abandonedRows.length})`,
+                        abandonedRows,
                       )
                   : undefined
               }

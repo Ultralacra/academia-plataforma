@@ -106,10 +106,12 @@ function PhaseCard({
 export default function PhaseMetrics({
   fechaDesde,
   fechaHasta,
+  coach,
   maxDaysCap = 30,
 }: {
   fechaDesde?: string;
   fechaHasta?: string;
+  coach?: string;
   maxDaysCap?: number;
 } = {}) {
   const [loading, setLoading] = useState(true);
@@ -126,6 +128,7 @@ export default function PhaseMetrics({
         const res = await fetchMetricsRetention({
           fechaDesde: fechaDesde ?? range.fechaDesde,
           fechaHasta: fechaHasta ?? range.fechaHasta,
+          coach,
         });
         if (!ignore) {
           setDurations(res?.data?.clientes_etapas_durations ?? []);
@@ -139,7 +142,7 @@ export default function PhaseMetrics({
     return () => {
       ignore = true;
     };
-  }, [fechaDesde, fechaHasta]);
+  }, [fechaDesde, fechaHasta, coach]);
 
   // Ordenar: primero F1-F5 principales, luego subfases
   const sortedDurations = [...durations].sort((a, b) => {

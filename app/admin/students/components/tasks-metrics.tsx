@@ -101,9 +101,11 @@ function WindowSummaryRow({
 export default function TasksMetrics({
   fechaDesde,
   fechaHasta,
+  coach,
 }: {
   fechaDesde?: string;
   fechaHasta?: string;
+  coach?: string;
 } = {}) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<TasksApiData | null>(null);
@@ -121,6 +123,7 @@ export default function TasksMetrics({
         const res = await fetchMetricsTasks({
           fechaDesde: fechaDesde ?? range.fechaDesde,
           fechaHasta: fechaHasta ?? range.fechaHasta,
+          coach,
         });
         if (!ignore) setData(res?.data ?? null);
       } catch (e) {
@@ -132,7 +135,7 @@ export default function TasksMetrics({
     return () => {
       ignore = true;
     };
-  }, [fechaDesde, fechaHasta]);
+  }, [fechaDesde, fechaHasta, coach]);
 
   const tareasResumen = data?.ultimas_tareas_resumen ?? {};
   const estadosResumen = data?.estados_resumen ?? {};

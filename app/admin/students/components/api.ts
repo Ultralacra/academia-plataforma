@@ -8,6 +8,12 @@ import { apiFetch } from "@/lib/api-config";
 const METRICS_CACHE = new Map<string, { ts: number; promise: Promise<MetricsV2Envelope> }>();
 const METRICS_TTL_MS = 30_000; // 30s de TTL (ajustable)
 
+const COACHES_CACHE: { ts: number; promise: Promise<CoachOpt[]> | null } = {
+	ts: 0,
+	promise: null,
+};
+const COACHES_TTL_MS = 60_000;
+
 type DateLike = string | Date | undefined;
 
 function pad(n: number) {
@@ -31,6 +37,35 @@ export function getDefaultRange() {
 }
 
 export type MetricsV2Envelope = any; // Dejamos abierto mientras inspeccionamos el payload real
+
+export type CoachOpt = {
+	codigo: string;
+	nombre: string;
+	area?: string | null;
+};
+
+export async function fetchCoaches(): Promise<CoachOpt[]> {
+	const now = Date.now();
+	if (COACHES_CACHE.promise && now - COACHES_CACHE.ts < COACHES_TTL_MS) {
+		return COACHES_CACHE.promise;
+	}
+
+	const p = (async () => {
+		const json = await apiFetch<any>("/team/get/team?page=1&pageSize=200");
+		const arr = Array.isArray(json?.data) ? (json.data as any[]) : [];
+		return arr
+			.map((c) => ({
+				codigo: String(c.codigo ?? ""),
+				nombre: String(c.nombre ?? ""),
+				area: c.area ?? null,
+			}))
+			.filter((c) => Boolean(c.codigo) && Boolean(c.nombre));
+	})();
+
+	COACHES_CACHE.ts = now;
+	COACHES_CACHE.promise = p;
+	return p;
+}
 
 /**
  * @deprecated Este endpoint ya no se usa. Usar en su lugar:
@@ -98,6 +133,7 @@ export type RetentionApiData = {
 export async function fetchMetricsRetention(params?: {
 	fechaDesde?: DateLike;
 	fechaHasta?: DateLike;
+	coach?: string;
 }): Promise<{ code: number; status: string; data: RetentionApiData }> {
 	const defaults = getDefaultRange();
 	let fechaDesde = normalizeInputDate(params?.fechaDesde) ?? defaults.fechaDesde;
@@ -112,6 +148,7 @@ export async function fetchMetricsRetention(params?: {
 	const qs = new URLSearchParams();
 	if (fechaDesde) qs.set("fechaDesde", fechaDesde);
 	if (fechaHasta) qs.set("fechaHasta", fechaHasta);
+	if (params?.coach) qs.set("coach", params.coach);
 	qs.set("includeDetails", "true");
 
 	const url = `/metrics/get/metrics-retention${qs.toString() ? `?${qs.toString()}` : ""}`;

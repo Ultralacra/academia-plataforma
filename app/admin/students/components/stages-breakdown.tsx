@@ -47,9 +47,11 @@ function getColor(id: string) {
 export default function StagesBreakdown({
   fechaDesde,
   fechaHasta,
+  coach,
 }: {
   fechaDesde?: string;
   fechaHasta?: string;
+  coach?: string;
 } = {}) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<RetentionApiData | null>(null);
@@ -68,6 +70,7 @@ export default function StagesBreakdown({
         const res = await fetchMetricsRetention({
           fechaDesde: fechaDesde ?? range.fechaDesde,
           fechaHasta: fechaHasta ?? range.fechaHasta,
+          coach,
         });
         if (!ignore) setData(res?.data ?? null);
       } catch (e) {
@@ -79,7 +82,7 @@ export default function StagesBreakdown({
     return () => {
       ignore = true;
     };
-  }, [fechaDesde, fechaHasta]);
+  }, [fechaDesde, fechaHasta, coach]);
 
   const byEtapa = data?.clientes_etapas?.byEtapa ?? [];
   const lastPerClient = data?.clientes_etapas?.lastPerClient ?? [];

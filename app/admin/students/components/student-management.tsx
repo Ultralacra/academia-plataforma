@@ -14,7 +14,7 @@ import {
   buildLifecycleItems,
   type LifecycleItem,
 } from "./phase-faker";
-import { getDefaultRange } from "./api";
+import { fetchCoaches, getDefaultRange, type CoachOpt } from "./api";
 
 export default function StudentManagement() {
   // ============================ Server filters + fetch
@@ -24,7 +24,29 @@ export default function StudentManagement() {
   const defaultRange = useMemo(() => getDefaultRange(), []);
   const [metricsFrom, setMetricsFrom] = useState(defaultRange.fechaDesde);
   const [metricsTo, setMetricsTo] = useState(defaultRange.fechaHasta);
+  const [metricsCoach, setMetricsCoach] = useState("");
+  const [coaches, setCoaches] = useState<CoachOpt[]>([]);
+  const [loadingMetricsCoaches, setLoadingMetricsCoaches] = useState(false);
   // notas: filtros por mes/fechas eliminados de la UI; solo busqueda por texto
+
+  useEffect(() => {
+    let ignore = false;
+    (async () => {
+      setLoadingMetricsCoaches(true);
+      try {
+        const res = await fetchCoaches();
+        if (!ignore) setCoaches(res);
+      } catch (e) {
+        console.error("[students] fetchCoaches error", e);
+        if (!ignore) setCoaches([]);
+      } finally {
+        if (!ignore) setLoadingMetricsCoaches(false);
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -110,6 +132,24 @@ export default function StudentManagement() {
     inactFrom,
     inactTo,
   ]);
+
+  const abandonosPorInactividad = useMemo(() => {
+    const thresholdDays = 29;
+    const rows = (filtered ?? [])
+      .map((i) => ({
+        name: i.name,
+        days: Number(i.inactivityDays ?? 0),
+      }))
+      .filter((r) => Boolean(r.name) && r.days >= thresholdDays)
+      .sort((a, b) => a.days - b.days)
+      .map((r) => ({
+        name: r.name,
+        subtitle: `${r.days} día${r.days === 1 ? "" : "s"}`,
+      }));
+
+    const names = rows.map((r) => r.name).filter(Boolean);
+    return { thresholdDays, count: rows.length, names, rows };
+  }, [filtered]);
 
   // ============================ Paginación local
   const pageSizeUI = 25;
@@ -262,6 +302,10 @@ export default function StudentManagement() {
         fechaHasta={metricsTo}
         setFechaDesde={setMetricsFrom}
         setFechaHasta={setMetricsTo}
+        coaches={coaches}
+        coach={metricsCoach}
+        setCoach={setMetricsCoach}
+        loadingCoaches={loadingMetricsCoaches}
       />
 
       {/* >>> IMPORTANTE: pasamos students={filtered} <<< */}
@@ -272,6 +316,8 @@ export default function StudentManagement() {
         byJoinDate={byJoinDate}
         fechaDesde={metricsFrom}
         fechaHasta={metricsTo}
+        coach={metricsCoach}
+        abandonosPorInactividad={abandonosPorInactividad}
       />
 
       <ResultsTable
