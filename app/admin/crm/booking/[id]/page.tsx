@@ -20,7 +20,7 @@ import { TabNotas } from "./components/TabNotas";
 
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   return (
-    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "sales"]}>
       <DashboardLayout>
         <Content id={params.id} />
       </DashboardLayout>
