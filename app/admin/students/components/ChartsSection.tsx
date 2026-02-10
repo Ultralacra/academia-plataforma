@@ -11,11 +11,15 @@ export default function ChartsSection({
   distByState,
   distByStage,
   byJoinDate,
+  fechaDesde,
+  fechaHasta,
 }: {
   loading: boolean;
   distByState: Array<{ name: string; value: number }>;
   distByStage: Array<{ name: string; value: number }>;
   byJoinDate: Array<{ date: string; count: number }>;
+  fechaDesde?: string;
+  fechaHasta?: string;
 }) {
   return (
     <>
@@ -35,22 +39,22 @@ export default function ChartsSection({
 
       {/* Promedios por fase (desde API metrics-retention) */}
       <div className="mt-2">
-        <PhaseMetrics />
+        <PhaseMetrics fechaDesde={fechaDesde} fechaHasta={fechaHasta} />
       </div>
 
       {/* Retención / permanencia (desde API metrics-retention) */}
       <div className="mt-2">
-        <RetentionKPIs />
+        <RetentionKPIs fechaDesde={fechaDesde} fechaHasta={fechaHasta} />
       </div>
 
       {/* Desglose por etapas: byEtapa, lastPerClient, transiciones */}
       <div className="mt-2">
-        <StagesBreakdown />
+        <StagesBreakdown fechaDesde={fechaDesde} fechaHasta={fechaHasta} />
       </div>
 
       {/* Métricas de tareas: ticket más lento, ultimas_tareas_resumen, estados_resumen */}
       <div className="mt-2">
-        <TasksMetrics />
+        <TasksMetrics fechaDesde={fechaDesde} fechaHasta={fechaHasta} />
       </div>
     </>
   );

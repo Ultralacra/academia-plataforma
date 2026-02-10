@@ -20,6 +20,10 @@ export default function ApiFilters({
   setStatesFilter,
   stagesFilter,
   setStagesFilter,
+  fechaDesde,
+  fechaHasta,
+  setFechaDesde,
+  setFechaHasta,
 }: {
   search: string;
   setSearch: (v: string) => void;
@@ -29,11 +33,15 @@ export default function ApiFilters({
   setStatesFilter: (v: string[]) => void;
   stagesFilter: string[];
   setStagesFilter: (v: string[]) => void;
+  fechaDesde: string;
+  fechaHasta: string;
+  setFechaDesde: (v: string) => void;
+  setFechaHasta: (v: string) => void;
 }) {
   return (
     <Card className="bg-gradient-to-br from-primary/5 via-transparent to-transparent">
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           <div className="md:col-span-1">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -61,6 +69,22 @@ export default function ApiFilters({
               value={stagesFilter}
               onChange={setStagesFilter}
               placeholder="Seleccionar etapas"
+            />
+          </div>
+          <div className="md:col-span-1">
+            <label className="text-xs text-muted-foreground">Desde</label>
+            <Input
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => setFechaDesde(e.target.value)}
+            />
+          </div>
+          <div className="md:col-span-1">
+            <label className="text-xs text-muted-foreground">Hasta</label>
+            <Input
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => setFechaHasta(e.target.value)}
             />
           </div>
         </div>

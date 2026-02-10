@@ -14,12 +14,16 @@ import {
   buildLifecycleItems,
   type LifecycleItem,
 } from "./phase-faker";
+import { getDefaultRange } from "./api";
 
 export default function StudentManagement() {
   // ============================ Server filters + fetch
   const [loading, setLoading] = useState(true);
   const [allItems, setAllItems] = useState<ClientItem[]>([]);
   const [search, setSearch] = useState("");
+  const defaultRange = useMemo(() => getDefaultRange(), []);
+  const [metricsFrom, setMetricsFrom] = useState(defaultRange.fechaDesde);
+  const [metricsTo, setMetricsTo] = useState(defaultRange.fechaHasta);
   // notas: filtros por mes/fechas eliminados de la UI; solo busqueda por texto
 
   useEffect(() => {
@@ -51,11 +55,11 @@ export default function StudentManagement() {
 
   const stateOptions = useMemo(
     () => uniq(allItems.map((i) => i.state)).sort(),
-    [allItems]
+    [allItems],
   );
   const stageOptions = useMemo(
     () => uniq(allItems.map((i) => i.stage)).sort(),
-    [allItems]
+    [allItems],
   );
 
   // debug: print sample data when items or filters change
@@ -123,8 +127,8 @@ export default function StudentManagement() {
     filtered.forEach((i) =>
       map.set(
         i.state || "SIN ESTADO",
-        (map.get(i.state || "SIN ESTADO") ?? 0) + 1
-      )
+        (map.get(i.state || "SIN ESTADO") ?? 0) + 1,
+      ),
     );
     return Array.from(map, ([name, value]) => ({ name, value }));
   }, [filtered]);
@@ -134,8 +138,8 @@ export default function StudentManagement() {
     filtered.forEach((i) =>
       map.set(
         i.stage || "SIN ETAPA",
-        (map.get(i.stage || "SIN ETAPA") ?? 0) + 1
-      )
+        (map.get(i.stage || "SIN ETAPA") ?? 0) + 1,
+      ),
     );
     return Array.from(map, ([name, value]) => ({ name, value }));
   }, [filtered]);
@@ -147,7 +151,7 @@ export default function StudentManagement() {
       map.set(key, (map.get(key) ?? 0) + 1);
     });
     return Array.from(map, ([date, count]) => ({ date, count })).sort((a, b) =>
-      a.date.localeCompare(b.date)
+      a.date.localeCompare(b.date),
     );
   }, [filtered]);
 
@@ -155,7 +159,7 @@ export default function StudentManagement() {
   const phaseItems = useMemo(() => buildPhaseItems(filtered), [filtered]);
   const lifecycleItems = useMemo(
     () => buildLifecycleItems(filtered),
-    [filtered]
+    [filtered],
   );
   const lifecycleByCode = useMemo(() => {
     const m: Record<string, LifecycleItem> = {};
@@ -210,7 +214,7 @@ export default function StudentManagement() {
       code?: string | null;
       name?: string | null;
       subtitle?: string;
-    }>
+    }>,
   ) => {
     setListTitle(title);
     setListRows(rows);
@@ -254,6 +258,10 @@ export default function StudentManagement() {
           setStagesFilter(v);
           setPage(1);
         }}
+        fechaDesde={metricsFrom}
+        fechaHasta={metricsTo}
+        setFechaDesde={setMetricsFrom}
+        setFechaHasta={setMetricsTo}
       />
 
       {/* >>> IMPORTANTE: pasamos students={filtered} <<< */}
@@ -262,10 +270,8 @@ export default function StudentManagement() {
         distByState={distByState}
         distByStage={distByStage}
         byJoinDate={byJoinDate}
-        phaseItems={phaseItems}
-        lifecycleItems={lifecycleItems}
-        students={filtered}
-        onOpenList={openList}
+        fechaDesde={metricsFrom}
+        fechaHasta={metricsTo}
       />
 
       <ResultsTable
