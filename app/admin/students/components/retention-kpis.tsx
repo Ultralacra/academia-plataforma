@@ -110,7 +110,9 @@ export default function RetentionKPIs({
     (retention as any)?.nombres?.total ||
     (data as any)?.retention_names?.total ||
     (Array.isArray((data as any)?.clientesRetentionDetail)
-      ? (data as any).clientesRetentionDetail.map((x: any) => x?.nombre).filter(Boolean)
+      ? (data as any).clientesRetentionDetail
+          .map((x: any) => x?.nombre)
+          .filter(Boolean)
       : []);
 
   const completedNames: string[] =
@@ -146,7 +148,15 @@ export default function RetentionKPIs({
               value={total}
               subtitle="En el rango seleccionado"
               accent="indigo"
-              onClick={totalNames.length ? () => openNames(`Retención — Total clientes (${totalNames.length})`, totalNames) : undefined}
+              onClick={
+                totalNames.length
+                  ? () =>
+                      openNames(
+                        `Retención — Total clientes (${totalNames.length})`,
+                        totalNames,
+                      )
+                  : undefined
+              }
             />
             <Stat
               icon={<Trophy className="h-4 w-4" />}
@@ -154,7 +164,15 @@ export default function RetentionKPIs({
               value={completed}
               subtitle="Casos de éxito"
               accent="emerald"
-              onClick={completedNames.length ? () => openNames(`Retención — Completados (${completedNames.length})`, completedNames) : undefined}
+              onClick={
+                completedNames.length
+                  ? () =>
+                      openNames(
+                        `Retención — Completados (${completedNames.length})`,
+                        completedNames,
+                      )
+                  : undefined
+              }
             />
             <Stat
               icon={<DoorOpen className="h-4 w-4" />}
@@ -162,7 +180,15 @@ export default function RetentionKPIs({
               value={abandons}
               subtitle="Salidas antes de completar"
               accent="rose"
-              onClick={abandonedNames.length ? () => openNames(`Retención — Abandonos (${abandonedNames.length})`, abandonedNames) : undefined}
+              onClick={
+                abandonedNames.length
+                  ? () =>
+                      openNames(
+                        `Retención — Abandonos (${abandonedNames.length})`,
+                        abandonedNames,
+                      )
+                  : undefined
+              }
             />
             <Stat
               icon={<Target className="h-4 w-4" />}

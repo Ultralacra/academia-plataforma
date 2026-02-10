@@ -96,7 +96,7 @@ export default function StagesBreakdown({
   const openNames = (
     title: string,
     names?: string[],
-    opts?: { hideDetail?: boolean }
+    opts?: { hideDetail?: boolean },
   ) => {
     const rows: ListRow[] = (Array.isArray(names) ? names : [])
       .filter(Boolean)
@@ -110,178 +110,188 @@ export default function StagesBreakdown({
   return (
     <>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      {/* Clientes por etapa (byEtapa) */}
-      <Card className="shadow-none border-gray-200">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm">Registros por etapa</CardTitle>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Total de registros: {totalClients}
-          </p>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-8 rounded bg-muted animate-pulse" />
-              ))}
+        {/* Clientes por etapa (byEtapa) */}
+        <Card className="shadow-none border-gray-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm">Registros por etapa</CardTitle>
             </div>
-          ) : sortedByEtapa.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Sin datos
+            <p className="text-xs text-muted-foreground">
+              Total de registros: {totalClients}
             </p>
-          ) : (
-            <div className="space-y-2">
-              {sortedByEtapa.map((item) => (
-                <button
-                  key={item.etapa_id}
-                  type="button"
-                  onClick={() =>
-                    openNames(
-                      `Registros por etapa — ${getLabel(item.etapa_id)} (${item.count})`,
-                      (item as any)?.nombres,
-                      { hideDetail: false }
-                    )
-                  }
-                  className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
-                  title="Ver alumnos"
-                >
-                  <Badge
-                    variant="secondary"
-                    className={getColor(item.etapa_id)}
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-8 rounded bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : sortedByEtapa.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Sin datos
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {sortedByEtapa.map((item) => (
+                  <button
+                    key={item.etapa_id}
+                    type="button"
+                    onClick={() =>
+                      openNames(
+                        `Registros por etapa — ${getLabel(item.etapa_id)} (${item.count})`,
+                        (item as any)?.nombres,
+                        { hideDetail: false },
+                      )
+                    }
+                    className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                    title="Ver alumnos"
                   >
-                    {getLabel(item.etapa_id)}
-                  </Badge>
-                  <span className="font-semibold tabular-nums">
-                    {item.count}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Última etapa por cliente (lastPerClient) */}
-      <Card className="shadow-none border-gray-200">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm">Última etapa por cliente</CardTitle>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Etapa actual de cada cliente
-          </p>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-8 rounded bg-muted animate-pulse" />
-              ))}
-            </div>
-          ) : sortedLastPerClient.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Sin datos
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {sortedLastPerClient.map((item) => (
-                <button
-                  key={item.etapa_id}
-                  type="button"
-                  onClick={() =>
-                    openNames(
-                      `Última etapa por cliente — ${getLabel(item.etapa_id)} (${item.count})`,
-                      (item as any)?.nombres,
-                      { hideDetail: false }
-                    )
-                  }
-                  className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
-                  title="Ver alumnos"
-                >
-                  <Badge
-                    variant="secondary"
-                    className={getColor(item.etapa_id)}
-                  >
-                    {getLabel(item.etapa_id)}
-                  </Badge>
-                  <span className="font-semibold tabular-nums">
-                    {item.count} clientes
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Transiciones de etapa */}
-      <Card className="shadow-none border-gray-200">
-        <CardHeader className="pb-2">
-          <div className="flex items-center gap-2">
-            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-sm">Transiciones entre etapas</CardTitle>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Flujo de clientes entre fases
-          </p>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-10 rounded bg-muted animate-pulse" />
-              ))}
-            </div>
-          ) : sortedTransitions.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">
-              Sin transiciones registradas
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {sortedTransitions.map((t, idx) => (
-                <button
-                  key={`${t.from_etapa}-${t.to_etapa}-${idx}`}
-                  type="button"
-                  onClick={() =>
-                    openNames(
-                      `Transiciones — ${getLabel(t.from_etapa)} → ${getLabel(t.to_etapa)} (${t.count})`,
-                      (t as any)?.nombres,
-                      { hideDetail: true }
-                    )
-                  }
-                  className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
-                  title="Ver alumnos"
-                >
-                  <div className="flex items-center gap-1 text-xs">
                     <Badge
                       variant="secondary"
-                      className={getColor(t.from_etapa)}
+                      className={getColor(item.etapa_id)}
                     >
-                      {getLabel(t.from_etapa)}
+                      {getLabel(item.etapa_id)}
                     </Badge>
-                    <ArrowRight className="h-3 w-3 text-muted-foreground" />
-                    <Badge variant="secondary" className={getColor(t.to_etapa)}>
-                      {getLabel(t.to_etapa)}
-                    </Badge>
-                  </div>
-                  <div className="text-right">
                     <span className="font-semibold tabular-nums">
-                      {t.count}
+                      {item.count}
                     </span>
-                    <span className="text-xs text-muted-foreground ml-1">
-                      ({t.avg_days}d)
-                    </span>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Última etapa por cliente (lastPerClient) */}
+        <Card className="shadow-none border-gray-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <UserCheck className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm">
+                Última etapa por cliente
+              </CardTitle>
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <p className="text-xs text-muted-foreground">
+              Etapa actual de cada cliente
+            </p>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-8 rounded bg-muted animate-pulse" />
+                ))}
+              </div>
+            ) : sortedLastPerClient.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Sin datos
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {sortedLastPerClient.map((item) => (
+                  <button
+                    key={item.etapa_id}
+                    type="button"
+                    onClick={() =>
+                      openNames(
+                        `Última etapa por cliente — ${getLabel(item.etapa_id)} (${item.count})`,
+                        (item as any)?.nombres,
+                        { hideDetail: false },
+                      )
+                    }
+                    className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                    title="Ver alumnos"
+                  >
+                    <Badge
+                      variant="secondary"
+                      className={getColor(item.etapa_id)}
+                    >
+                      {getLabel(item.etapa_id)}
+                    </Badge>
+                    <span className="font-semibold tabular-nums">
+                      {item.count} clientes
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Transiciones de etapa */}
+        <Card className="shadow-none border-gray-200">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm">
+                Transiciones entre etapas
+              </CardTitle>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Flujo de clientes entre fases
+            </p>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-10 rounded bg-muted animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : sortedTransitions.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Sin transiciones registradas
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {sortedTransitions.map((t, idx) => (
+                  <button
+                    key={`${t.from_etapa}-${t.to_etapa}-${idx}`}
+                    type="button"
+                    onClick={() =>
+                      openNames(
+                        `Transiciones — ${getLabel(t.from_etapa)} → ${getLabel(t.to_etapa)} (${t.count})`,
+                        (t as any)?.nombres,
+                        { hideDetail: true },
+                      )
+                    }
+                    className="w-full flex items-center justify-between p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+                    title="Ver alumnos"
+                  >
+                    <div className="flex items-center gap-1 text-xs">
+                      <Badge
+                        variant="secondary"
+                        className={getColor(t.from_etapa)}
+                      >
+                        {getLabel(t.from_etapa)}
+                      </Badge>
+                      <ArrowRight className="h-3 w-3 text-muted-foreground" />
+                      <Badge
+                        variant="secondary"
+                        className={getColor(t.to_etapa)}
+                      >
+                        {getLabel(t.to_etapa)}
+                      </Badge>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-semibold tabular-nums">
+                        {t.count}
+                      </span>
+                      <span className="text-xs text-muted-foreground ml-1">
+                        ({t.avg_days}d)
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <GenericListModal

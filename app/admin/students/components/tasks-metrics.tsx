@@ -158,7 +158,8 @@ export default function TasksMetrics({
       const name = r.nombre ?? r.name ?? r.alumno_nombre ?? null;
       const extras: string[] = [];
       if (r.avg_human) extras.push(String(r.avg_human));
-      if (r.status_count != null) extras.push(`${Number(r.status_count)} estados`);
+      if (r.status_count != null)
+        extras.push(`${Number(r.status_count)} estados`);
       if (r.task_count != null) extras.push(`${Number(r.task_count)} tareas`);
       return {
         code: code != null ? String(code) : null,
@@ -172,11 +173,13 @@ export default function TasksMetrics({
     kind: "tareas" | "estados",
     w: string,
     summary: any,
-    detail: any[]
+    detail: any[],
   ) => {
     const windowN = Number(w);
     const detailForWindow = Array.isArray(detail)
-      ? detail.filter((x) => x && (x.window == null || Number(x.window) === windowN))
+      ? detail.filter(
+          (x) => x && (x.window == null || Number(x.window) === windowN),
+        )
       : [];
 
     const titleBase =
@@ -235,7 +238,9 @@ export default function TasksMetrics({
                       window={w}
                       data={item}
                       label="sin entregar"
-                      onClick={() => openWindowList("tareas", w, item, tareasDetalle)}
+                      onClick={() =>
+                        openWindowList("tareas", w, item, tareasDetalle)
+                      }
                     />
                   );
                 })}
@@ -280,7 +285,9 @@ export default function TasksMetrics({
                       window={w}
                       data={item}
                       label="en estado"
-                      onClick={() => openWindowList("estados", w, item, estadosDetalle)}
+                      onClick={() =>
+                        openWindowList("estados", w, item, estadosDetalle)
+                      }
                     />
                   );
                 })}
