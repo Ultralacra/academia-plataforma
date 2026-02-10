@@ -513,10 +513,105 @@ function Content({ id }: { id: string }) {
     // y además registra el snapshot.
     const capturedAt = new Date().toISOString();
     const patch = draftToLeadPatch(draft);
+    const draftNotes = (draft as any)?.notes;
+    const snapshotSaleBase =
+      saleDraftPayload && typeof saleDraftPayload === "object"
+        ? saleDraftPayload
+        : ((leadForUi as any)?.sale ?? (record as any)?.sale ?? undefined);
+    const snapshotSale = snapshotSaleBase
+      ? {
+          ...snapshotSaleBase,
+          ...(draftNotes !== undefined ? { notes: draftNotes } : {}),
+        }
+      : draftNotes !== undefined
+        ? { notes: draftNotes }
+        : undefined;
+    const draftPaymentPaidAmount = (draft as any)?.paymentPaidAmount;
+    const draftPaymentPlanType = (draft as any)?.paymentPlanType;
+    const draftPaymentAttachments = (draft as any)?.paymentAttachments;
+    const draftPaymentProof = (draft as any)?.paymentProof;
+    const draftPaymentPlans = (draft as any)?.paymentPlans;
+    const pickValue = (...vals: Array<any>) => {
+      for (const v of vals) {
+        if (v === undefined || v === null) continue;
+        if (typeof v === "string" && v.trim() === "") continue;
+        return v;
+      }
+      return null;
+    };
+    const paymentPaidAmount = pickValue(
+      draftPaymentPaidAmount,
+      snapshotSale?.payment?.paid_amount,
+      (leadForUi as any)?.payment_paid_amount,
+      (record as any)?.payment_paid_amount,
+    );
+    const paymentPlanType = pickValue(
+      draftPaymentPlanType,
+      snapshotSale?.payment?.plan_type,
+      (leadForUi as any)?.payment_plan_type,
+      (record as any)?.payment_plan_type,
+    );
+    const paymentAttachments = pickValue(
+      draftPaymentAttachments,
+      snapshotSale?.payment?.attachments,
+      (leadForUi as any)?.payment_attachments,
+      (record as any)?.payment_attachments,
+    );
+    const paymentProof = pickValue(
+      draftPaymentProof,
+      snapshotSale?.payment?.proof,
+      (leadForUi as any)?.payment_proof,
+      (record as any)?.payment_proof,
+    );
+    const paymentPlans = pickValue(
+      draftPaymentPlans,
+      snapshotSale?.payment?.plans,
+      (leadForUi as any)?.payment_plans_json,
+      (record as any)?.payment_plans_json,
+    );
+    const contractPartyAddress = pickValue(
+      (draft as any)?.contractPartyAddress,
+      snapshotSale?.contract?.party?.address,
+      (leadForUi as any)?.contract_party_address,
+      (record as any)?.contract_party_address,
+    );
+    const contractPartyCity = pickValue(
+      (draft as any)?.contractPartyCity,
+      snapshotSale?.contract?.party?.city,
+      (leadForUi as any)?.contract_party_city,
+      (record as any)?.contract_party_city,
+    );
+    const contractPartyCountry = pickValue(
+      (draft as any)?.contractPartyCountry,
+      snapshotSale?.contract?.party?.country,
+      (leadForUi as any)?.contract_party_country,
+      (record as any)?.contract_party_country,
+    );
     const snapshotPayloadCurrent = {
       ...(leadForUi || record),
       ...(patch || {}),
-      ...(saleDraftPayload ? { sale: saleDraftPayload } : {}),
+      ...(snapshotSale ? { sale: snapshotSale } : {}),
+      ...(draftNotes !== undefined ? { sale_notes: draftNotes } : {}),
+      ...(paymentPaidAmount !== null
+        ? { payment_paid_amount: paymentPaidAmount }
+        : {}),
+      ...(paymentPlanType !== null
+        ? { payment_plan_type: paymentPlanType }
+        : {}),
+      ...(paymentAttachments !== null
+        ? { payment_attachments: paymentAttachments }
+        : {}),
+      ...(paymentProof !== null ? { payment_proof: paymentProof } : {}),
+      ...(paymentPlans !== null ? { payment_plans_json: paymentPlans } : {}),
+      ...(contractPartyAddress !== null
+        ? { contract_party_address: contractPartyAddress }
+        : {}),
+      ...(contractPartyCity !== null
+        ? { contract_party_city: contractPartyCity }
+        : {}),
+      ...(contractPartyCountry !== null
+        ? { contract_party_country: contractPartyCountry }
+        : {}),
     };
 
     setSnapshotSaving(true);
@@ -677,7 +772,29 @@ function Content({ id }: { id: string }) {
       return [];
     };
 
+    const pickValue = (...vals: Array<any>) => {
+      for (const v of vals) {
+        if (v === undefined || v === null) continue;
+        if (typeof v === "string" && v.trim() === "") continue;
+        return v;
+      }
+      return undefined;
+    };
     const pay: any = salePayload?.payment ?? {};
+    const leadPayment = {
+      mode: (p as any)?.payment_mode,
+      amount: (p as any)?.payment_amount,
+      paid_amount: (p as any)?.payment_paid_amount,
+      plan_type: (p as any)?.payment_plan_type,
+      platform: (p as any)?.payment_platform,
+      nextChargeDate: (p as any)?.next_charge_date,
+      hasReserve: (p as any)?.payment_has_reserve,
+      reserveAmount: (p as any)?.payment_reserve_amount,
+      attachments: (p as any)?.payment_attachments,
+      proof: (p as any)?.payment_proof,
+      plans: (p as any)?.payment_plans_json,
+    };
+    const payMerged = Object.keys(pay || {}).length ? pay : leadPayment;
     const plan0: any = Array.isArray(pay?.plans) ? pay.plans[0] : null;
     const ex: any =
       pay?.exception_2_installments ?? pay?.exception2Installments ?? null;
@@ -728,12 +845,13 @@ function Content({ id }: { id: string }) {
       phone: p.phone || salePayload?.phone || "",
       program: salePayload?.program ?? "",
       bonuses: toBonusesArray(salePayload?.bonuses),
-      paymentMode: pay?.mode ?? "",
-      paymentAmount: pay?.amount ?? "",
-      paymentPaidAmount: pay?.paid_amount ?? "",
-      paymentPlanType: pay?.plan_type ?? undefined,
-      paymentInstallmentsCount: pay?.installments?.count ?? undefined,
-      paymentInstallmentAmount: pay?.installments?.amount ?? undefined,
+      paymentMode: pickValue(payMerged?.mode, leadPayment.mode) ?? "",
+      paymentAmount: pickValue(payMerged?.amount, leadPayment.amount) ?? "",
+      paymentPaidAmount:
+        pickValue(payMerged?.paid_amount, leadPayment.paid_amount) ?? "",
+      paymentPlanType: pickValue(payMerged?.plan_type, leadPayment.plan_type),
+      paymentInstallmentsCount: payMerged?.installments?.count ?? undefined,
+      paymentInstallmentAmount: payMerged?.installments?.amount ?? undefined,
       paymentInstallmentsSchedule,
       paymentFirstInstallmentAmount: ex?.first_amount ?? undefined,
       paymentSecondInstallmentAmount: ex?.second_amount ?? undefined,
@@ -741,30 +859,58 @@ function Content({ id }: { id: string }) {
       paymentCustomInstallments,
       paymentExceptionNotes: ex?.notes ?? plan0?.notes ?? "",
       paymentHasReserve: !!(
-        pay?.hasReserve ||
-        pay?.reserveAmount ||
-        pay?.reservationAmount ||
-        pay?.reserva ||
-        pay?.deposit ||
-        pay?.downPayment ||
-        pay?.anticipo ||
+        payMerged?.hasReserve ||
+        payMerged?.reserveAmount ||
+        payMerged?.reservationAmount ||
+        payMerged?.reserva ||
+        payMerged?.deposit ||
+        payMerged?.downPayment ||
+        payMerged?.anticipo ||
         /reserva|apartado|señ?a|anticipo/i.test(
-          String(pay?.mode || "").toLowerCase(),
+          String(payMerged?.mode || "").toLowerCase(),
         )
       ),
-      paymentReserveAmount: (pay?.reserveAmount ??
-        pay?.reservationAmount ??
-        pay?.reserva ??
-        pay?.deposit ??
-        pay?.downPayment ??
-        pay?.anticipo ??
+      paymentReserveAmount: (payMerged?.reserveAmount ??
+        payMerged?.reservationAmount ??
+        payMerged?.reserva ??
+        payMerged?.deposit ??
+        payMerged?.downPayment ??
+        payMerged?.anticipo ??
         "") as any,
-      paymentPlatform: pay?.platform ?? "hotmart",
-      nextChargeDate: pay?.nextChargeDate ?? "",
-      contractThirdParty: !!salePayload?.contract?.thirdParty,
-      contractPartyName: salePayload?.contract?.party?.name || p.name || "",
-      contractPartyEmail: salePayload?.contract?.party?.email || p.email || "",
-      contractPartyPhone: salePayload?.contract?.party?.phone || p.phone || "",
+      paymentPlatform:
+        pickValue(payMerged?.platform, leadPayment.platform) ?? "hotmart",
+      nextChargeDate:
+        pickValue(payMerged?.nextChargeDate, leadPayment.nextChargeDate) ?? "",
+      contractThirdParty: !!(
+        salePayload?.contract?.thirdParty ?? (p as any)?.contract_third_party
+      ),
+      contractPartyName:
+        salePayload?.contract?.party?.name ||
+        (p as any)?.contract_party_name ||
+        p.name ||
+        "",
+      contractPartyEmail:
+        salePayload?.contract?.party?.email ||
+        (p as any)?.contract_party_email ||
+        p.email ||
+        "",
+      contractPartyPhone:
+        salePayload?.contract?.party?.phone ||
+        (p as any)?.contract_party_phone ||
+        p.phone ||
+        "",
+      contractPartyAddress:
+        salePayload?.contract?.party?.address ||
+        (p as any)?.contract_party_address ||
+        "",
+      contractPartyCity:
+        salePayload?.contract?.party?.city ||
+        (p as any)?.contract_party_city ||
+        "",
+      contractPartyCountry:
+        salePayload?.contract?.party?.country ||
+        (p as any)?.contract_party_country ||
+        "",
       notes: salePayload?.notes ?? "",
       status: salePayload?.status ?? undefined,
     } as any;

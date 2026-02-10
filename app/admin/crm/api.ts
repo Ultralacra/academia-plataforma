@@ -602,9 +602,16 @@ export async function createLeadSnapshot(input: CreateLeadSnapshotInput) {
   // Nuevo endpoint: /v1/leads/snapshot (apiFetch ya apunta a /v1)
   // Body esperado (tal cual): { entity, entity_id, payload }
   // Nota: algunos backends también aceptan/requieren `codigo` (lead).
-  const body: Record<string, any> = { entity, entity_id: entityId, payload };
-  const leadCodigo = String((input as any)?.codigo ?? "").trim();
-  if (leadCodigo) body.codigo = leadCodigo;
+  const leadCodigo = String(
+    (input as any)?.codigo ??
+      (input as any)?.snapshot?.payload_current?.codigo ??
+      (input as any)?.snapshot?.payload_current?.source_entity_id ??
+      (input as any)?.snapshot?.record?.entity_id ??
+      "",
+  ).trim();
+  const body: Record<string, any> = leadCodigo
+    ? { entity, codigo: leadCodigo, entity_id: entityId, payload }
+    : { entity, entity_id: entityId, payload };
   const raw = await apiFetch<any>(`/leads/snapshot`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
