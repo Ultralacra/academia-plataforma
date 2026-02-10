@@ -99,9 +99,10 @@ export function ProspectFilters({
         </span>
         <Input
           type="date"
-          className="h-5 sm:h-6 w-[90px] sm:w-[100px] text-[9px] sm:text-[10px] bg-white px-0.5 sm:px-1"
+          className="h-5 sm:h-6 w-[90px] sm:w-[100px] text-[9px] sm:text-[10px] bg-white px-0.5 sm:px-1 cursor-pointer"
           value={createdFrom}
           onChange={(e) => setCreatedFrom(e.target.value)}
+          onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
         />
       </div>
       <div className="flex items-center gap-0.5 flex-shrink-0">
@@ -110,9 +111,10 @@ export function ProspectFilters({
         </span>
         <Input
           type="date"
-          className="h-5 sm:h-6 w-[90px] sm:w-[100px] text-[9px] sm:text-[10px] bg-white px-0.5 sm:px-1"
+          className="h-5 sm:h-6 w-[90px] sm:w-[100px] text-[9px] sm:text-[10px] bg-white px-0.5 sm:px-1 cursor-pointer"
           value={createdTo}
           onChange={(e) => setCreatedTo(e.target.value)}
+          onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
         />
       </div>
       <div className="flex items-center gap-0.5 flex-shrink-0">
