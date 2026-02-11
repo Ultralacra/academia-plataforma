@@ -105,7 +105,8 @@ function fmtDateSmart(value?: string | null) {
   // Si es YYYY-MM-DD puro
   const m = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) {
-    const fake = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const [, y, mm, dd] = m;
+    const fake = new Date(Number(y), Number(mm) - 1, Number(dd));
     return clean(dtDateOnly.format(fake));
   }
   // Fallback: parsear como Date normal
@@ -129,6 +130,7 @@ function parseAmount(value: unknown): number | null {
 
   let normalized = cleaned;
   if (lastDot !== -1 && lastComma !== -1) {
+    // usa como separador decimal el último que aparezca
     if (lastDot > lastComma) {
       normalized = cleaned.replace(/,/g, "");
     } else {
@@ -829,9 +831,96 @@ export default function StudentsContent() {
     adsSummaryRef.current = adsSummaryByAlumnoId;
   }, [adsSummaryByAlumnoId]);
 
+  // Debug pedido: forzar consulta de metadata (entity=ads_metrics) e imprimirla en consola del servidor,
+  // sin depender de match con la tabla.
+  const adsDebugMetadataOnceRef = useRef(false);
+  useEffect(() => {
+    if (adsDebugMetadataOnceRef.current) return;
+    adsDebugMetadataOnceRef.current = true;
+
+    (async () => {
+      try {
+        const token = getAuthToken();
+        const res = await fetch("/api/ads-metrics/summary", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ debugEntityOnly: true }),
+        });
+
+        const json = await res.json().catch(() => null);
+        const items =
+          json && typeof json === "object" ? (json as any).items : null;
+        console.log("[DEBUG metadata ads_metrics] response:", json);
+        if (Array.isArray(items)) {
+          console.log(
+            "[DEBUG metadata ads_metrics] items (array completo):",
+            items,
+          );
+          console.log("[DEBUG metadata ads_metrics] count:", items.length);
+        }
+      } catch {
+        // solo debug
+      }
+    })();
+  }, []);
+
+  // Debug solicitado: imprimir (en un array) los alumnos de la tabla que hacen match
+  // con lo que llega de metadata/summary, incluyendo facturación e inversión.
+  const adsDebugSigRef = useRef<string>("");
+  useEffect(() => {
+    if (adsSummaryLoading) return;
+    if (!all || all.length === 0) return;
+
+    const keys = Object.keys(adsSummaryByAlumnoId || {});
+    if (keys.length === 0) return;
+
+    const sig = `${all.length}:${keys.length}`;
+    if (adsDebugSigRef.current === sig) return;
+    adsDebugSigRef.current = sig;
+
+    const matched = (all || [])
+      .map((s) => {
+        const key =
+          s?.code != null
+            ? String(s.code).trim()
+            : s?.id != null
+              ? String(s.id).trim()
+              : "";
+        const summary = key ? adsSummaryByAlumnoId[key] : undefined;
+        if (!key || !summary) return null;
+        return {
+          id: s.id,
+          code: s.code ?? null,
+          name: s.name,
+          key,
+          inversion: summary.inversion ?? null,
+          facturacion: summary.facturacion ?? null,
+          savedAt: summary.savedAt ?? null,
+          metaId: summary.metaId ?? null,
+        };
+      })
+      .filter(Boolean)
+      .filter((r: any) => r.inversion != null || r.facturacion != null);
+
+    console.log("[ADS MATCH] alumnos tabla + metadata (array):", matched);
+    console.log("[ADS MATCH] counts:", {
+      totalTabla: all.length,
+      totalSummaryKeys: keys.length,
+      matchedConValores: matched.length,
+    });
+  }, [all, adsSummaryByAlumnoId, adsSummaryLoading]);
+
   useEffect(() => {
     const ids = (all || [])
-      .map((s) => (s?.id != null ? String(s.id).trim() : ""))
+      .map((s) => {
+        // metadata ads_metrics usa alumno_codigo; preferimos code.
+        const code = s?.code != null ? String(s.code).trim() : "";
+        if (code) return code;
+        return s?.id != null ? String(s.id).trim() : "";
+      })
       .filter(Boolean);
     if (ids.length === 0) return;
 
@@ -842,27 +931,37 @@ export default function StudentsContent() {
     (async () => {
       setAdsSummaryLoading(true);
       try {
-        // evitar payloads gigantes: pedir un chunk y el resto se completará
-        const alumnoIds = chunk(missing, 250);
-        const token = getAuthToken();
-        const res = await fetch("/api/ads-metrics/summary", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ alumnoIds }),
-        });
-        if (!res.ok) return;
-        const json = await res.json().catch(() => null);
-        const byAlumnoId =
-          json && typeof json === "object" ? (json as any).byAlumnoId : null;
-        if (!alive || !byAlumnoId || typeof byAlumnoId !== "object") return;
+        // Completar todos los faltantes en batches para no quedarnos en 250.
+        const batches = missing.length > 900 ? chunk(missing, 250) : [missing];
+        for (const batch of batches) {
+          if (!alive) break;
+          const token = getAuthToken();
+          const res = await fetch("/api/ads-metrics/summary", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ alumnoIds: batch }),
+          });
+          if (!res.ok) break;
+          const json = await res.json().catch(() => null);
+          const byAlumnoId =
+            json && typeof json === "object" ? (json as any).byAlumnoId : null;
+          if (!alive || !byAlumnoId || typeof byAlumnoId !== "object") break;
 
-        setAdsSummaryByAlumnoId((prev) => ({
-          ...prev,
-          ...(byAlumnoId as Record<string, AdsMetricsSummary>),
-        }));
+          setAdsSummaryByAlumnoId((prev) => {
+            const next = {
+              ...prev,
+              ...(byAlumnoId as Record<string, AdsMetricsSummary>),
+            };
+            adsSummaryRef.current = next;
+            return next;
+          });
+
+          // micro-pausa para mantener la UI fluida
+          await new Promise((r) => setTimeout(r, 0));
+        }
       } finally {
         if (alive) setAdsSummaryLoading(false);
       }
@@ -905,8 +1004,18 @@ export default function StudentsContent() {
 
     if (adsInversionSort) {
       copy.sort((a, b) => {
-        const aid = a.id != null ? String(a.id).trim() : "";
-        const bid = b.id != null ? String(b.id).trim() : "";
+        const aid =
+          a.code != null
+            ? String(a.code).trim()
+            : a.id != null
+              ? String(a.id).trim()
+              : "";
+        const bid =
+          b.code != null
+            ? String(b.code).trim()
+            : b.id != null
+              ? String(b.id).trim()
+              : "";
         const av = aid ? adsSummaryByAlumnoId[aid]?.inversion : null;
         const bv = bid ? adsSummaryByAlumnoId[bid]?.inversion : null;
         const aValid = av != null && Number.isFinite(Number(av));
@@ -924,8 +1033,18 @@ export default function StudentsContent() {
 
     if (adsFacturacionSort) {
       copy.sort((a, b) => {
-        const aid = a.id != null ? String(a.id).trim() : "";
-        const bid = b.id != null ? String(b.id).trim() : "";
+        const aid =
+          a.code != null
+            ? String(a.code).trim()
+            : a.id != null
+              ? String(a.id).trim()
+              : "";
+        const bid =
+          b.code != null
+            ? String(b.code).trim()
+            : b.id != null
+              ? String(b.id).trim()
+              : "";
         const av = aid ? adsSummaryByAlumnoId[aid]?.facturacion : null;
         const bv = bid ? adsSummaryByAlumnoId[bid]?.facturacion : null;
         const aValid = av != null && Number.isFinite(Number(av));
@@ -2007,8 +2126,11 @@ export default function StudentsContent() {
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {(() => {
-                        const id =
-                          student.id != null ? String(student.id).trim() : "";
+                        const id = student.code
+                          ? String(student.code).trim()
+                          : student.id != null
+                            ? String(student.id).trim()
+                            : "";
                         const v = id
                           ? adsSummaryByAlumnoId[id]?.inversion
                           : null;
@@ -2018,8 +2140,11 @@ export default function StudentsContent() {
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {(() => {
-                        const id =
-                          student.id != null ? String(student.id).trim() : "";
+                        const id = student.code
+                          ? String(student.code).trim()
+                          : student.id != null
+                            ? String(student.id).trim()
+                            : "";
                         const v = id
                           ? adsSummaryByAlumnoId[id]?.facturacion
                           : null;

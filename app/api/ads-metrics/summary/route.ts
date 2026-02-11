@@ -153,7 +153,12 @@ function pickBest(prev: Summary | undefined, cand: Summary): Summary {
 
 async function fetchAdsMetricsByAlumnoId(authorization: string, alumnoId: string) {
   const qs = new URLSearchParams();
-  qs.set("alumno_id", alumnoId);
+  // Soportar tanto id interno numérico como alumno_codigo.
+  if (/^[0-9]+$/.test(String(alumnoId))) {
+    qs.set("alumno_id", alumnoId);
+  } else {
+    qs.set("alumno_codigo", alumnoId);
+  }
   qs.set("entity", "ads_metrics");
   const res = await fetch(buildUrl(`/metadata?${qs.toString()}`), {
     method: "GET",
@@ -169,19 +174,52 @@ async function fetchAdsMetricsByAlumnoId(authorization: string, alumnoId: string
 }
 
 async function fetchAllAdsMetrics(authorization: string) {
-  const qs = new URLSearchParams();
-  qs.set("entity", "ads_metrics");
-  const res = await fetch(buildUrl(`/metadata?${qs.toString()}`), {
-    method: "GET",
-    headers: {
-      Authorization: authorization,
-      Accept: "application/json",
-    },
-    cache: "no-store",
-  });
-  if (!res.ok) return [];
-  const json = await res.json().catch(() => null);
-  return coerceList(json);
+  // IMPORTANTE: /metadata suele venir paginado. Si no paginamos, solo llega la 1ra página.
+  const pageSize = 1000;
+  const items: any[] = [];
+  let page = 1;
+  let safety = 0;
+
+  while (true) {
+    safety += 1;
+    if (safety > 100) break;
+
+    const qs = new URLSearchParams();
+    qs.set("entity", "ads_metrics");
+    qs.set("page", String(page));
+    qs.set("pageSize", String(pageSize));
+
+    const res = await fetch(buildUrl(`/metadata?${qs.toString()}`), {
+      method: "GET",
+      headers: {
+        Authorization: authorization,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) break;
+
+    const json = await res.json().catch(() => null);
+    const pageItems = coerceList(json);
+    if (pageItems.length === 0) break;
+    items.push(...pageItems);
+
+    // si el backend soporta totalPages, salir cuando se alcance
+    const totalPages =
+      json && typeof json === "object"
+        ? ((json as any).totalPages ?? (json as any)?.data?.totalPages)
+        : null;
+    if (typeof totalPages === "number" && Number.isFinite(totalPages)) {
+      if (page >= totalPages) break;
+    } else {
+      // heurística: si vino menos que pageSize, ya no hay más páginas
+      if (pageItems.length < pageSize) break;
+    }
+
+    page += 1;
+  }
+
+  return items;
 }
 
 function normalizeIds(raw: unknown): string[] {
@@ -191,10 +229,23 @@ function normalizeIds(raw: unknown): string[] {
       arr
         .map((v) => String(v ?? "").trim())
         .filter(Boolean)
-        // defensivo: este endpoint es para ids, no códigos.
-        .filter((s) => /^[0-9]+$/.test(s)),
     ),
   );
+}
+
+function extractKeysFromMeta(meta: any): { alumnoId: string | null; alumnoCodigo: string | null } {
+  const p = meta?.payload && typeof meta.payload === "object" ? meta.payload : null;
+  const idRaw = (p as any)?.alumno_id ?? meta?.alumno_id ?? null;
+  const codigoRaw =
+    (p as any)?.alumno_codigo ??
+    (p as any)?.alumno_code ??
+    meta?.alumno_codigo ??
+    meta?.alumno_code ??
+    null;
+
+  const alumnoId = idRaw == null ? null : String(idRaw).trim() || null;
+  const alumnoCodigo = codigoRaw == null ? null : String(codigoRaw).trim() || null;
+  return { alumnoId, alumnoCodigo };
 }
 
 export async function POST(req: NextRequest) {
@@ -212,6 +263,39 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => null);
+  const debugMetadata = Boolean(body?.debugMetadata);
+  const debugEntityOnly = Boolean(body?.debugEntityOnly);
+
+  // Debug pedido: consultar metadata por entity y loguearla completa, sin depender de match.
+  if (debugEntityOnly) {
+    const all = await fetchAllAdsMetrics(auth);
+    const debugRows = all.map((m: any) => {
+      const p = m?.payload && typeof m.payload === "object" ? m.payload : {};
+      return {
+        id: m?.id ?? null,
+        entity: m?.entity ?? null,
+        created_at: m?.created_at ?? null,
+        updated_at: m?.updated_at ?? null,
+        alumno_id: p?.alumno_id ?? null,
+        alumno_codigo: p?.alumno_codigo ?? p?.alumno_code ?? null,
+        alumno_nombre: p?.alumno_nombre ?? p?.alumno_name ?? null,
+        inversion: p?.inversion ?? null,
+        facturacion: p?.facturacion ?? null,
+        _saved_at: p?._saved_at ?? null,
+        payload: p,
+      };
+    });
+
+    // Nota: esto puede ser MUY grande; lo imprimimos igual para debug.
+    console.log("[DEBUG metadata ads_metrics] rows (FULL):", debugRows);
+    console.log("[DEBUG metadata ads_metrics] count:", debugRows.length);
+
+    return NextResponse.json(
+      { ok: true, entity: "ads_metrics", count: debugRows.length, items: debugRows },
+      { status: 200 },
+    );
+  }
+
   const alumnoIds = normalizeIds(body?.alumnoIds);
   if (alumnoIds.length === 0) {
     return NextResponse.json({ byAlumnoId: {} }, { status: 200 });
@@ -221,28 +305,55 @@ export async function POST(req: NextRequest) {
   // - Para listas pequeñas: 1 request por alumno_id.
   // - Para listas grandes: 1 request global entity=ads_metrics y filtrado server-side.
   const byAlumnoId: Record<string, Summary> = {};
-  const useGlobal = alumnoIds.length > 80;
+  const useGlobal = alumnoIds.length > 80 || alumnoIds.some((k) => !/^[0-9]+$/.test(k));
 
   if (useGlobal) {
     const all = await fetchAllAdsMetrics(auth);
+
+    if (debugMetadata) {
+      // Debug pedido: imprimir TODOS los registros ads_metrics recibidos (sin filtrar por match).
+      // Lo hacemos “simplificado” para que sea legible pero completo en cantidad.
+      const debugRows = all.map((m: any) => {
+        const p = m?.payload && typeof m.payload === "object" ? m.payload : {};
+        return {
+          id: m?.id ?? null,
+          entity: m?.entity ?? null,
+          created_at: m?.created_at ?? null,
+          updated_at: m?.updated_at ?? null,
+          alumno_id: p?.alumno_id ?? null,
+          alumno_codigo: p?.alumno_codigo ?? p?.alumno_code ?? null,
+          alumno_nombre: p?.alumno_nombre ?? p?.alumno_name ?? null,
+          inversion: p?.inversion ?? null,
+          facturacion: p?.facturacion ?? null,
+          _saved_at: p?._saved_at ?? null,
+        };
+      });
+      console.log("[DEBUG metadata ads_metrics] rows:", debugRows);
+      console.log("[DEBUG metadata ads_metrics] count:", debugRows.length);
+    }
+
     const wanted = new Set(alumnoIds);
 
     for (const m of all) {
       const payload = (m as any)?.payload;
       if (!payload || typeof payload !== "object") continue;
-      const aid = payload?.alumno_id;
-      if (aid == null) continue;
-      const alumnoId = String(aid).trim();
-      if (!wanted.has(alumnoId)) continue;
+      const keys = extractKeysFromMeta(m);
+
+      // Elegir el key que el caller pidió (prioriza alumno_codigo si está en el set).
+      const matchKey =
+        (keys.alumnoCodigo && wanted.has(keys.alumnoCodigo) && keys.alumnoCodigo) ||
+        (keys.alumnoId && wanted.has(keys.alumnoId) && keys.alumnoId) ||
+        null;
+      if (!matchKey) continue;
 
       const summary: Summary = {
-        alumnoId,
+        alumnoId: matchKey,
         metaId: (m as any)?.id ?? null,
         savedAt: getSavedAt(m),
         inversion: parseAmount(payload?.inversion),
         facturacion: parseAmount(payload?.facturacion),
       };
-      byAlumnoId[alumnoId] = pickBest(byAlumnoId[alumnoId], summary);
+      byAlumnoId[matchKey] = pickBest(byAlumnoId[matchKey], summary);
     }
 
     // asegurar keys solicitadas aunque no haya metadata
@@ -269,8 +380,14 @@ export async function POST(req: NextRequest) {
       for (const m of items) {
         const payload = (m as any)?.payload;
         if (!payload || typeof payload !== "object") continue;
-        const aid = payload?.alumno_id;
-        if (aid == null || String(aid).trim() !== alumnoId) continue;
+        const keys = extractKeysFromMeta(m);
+        if (keys.alumnoCodigo && keys.alumnoCodigo === alumnoId) {
+          // ok
+        } else if (keys.alumnoId && keys.alumnoId === alumnoId) {
+          // ok
+        } else {
+          continue;
+        }
 
         const summary: Summary = {
           alumnoId,
