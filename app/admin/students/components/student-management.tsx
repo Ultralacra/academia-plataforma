@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { dataService, type ClientItem } from "@/lib/data-service";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { apiFetch } from "@/lib/api-config";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import GenericListModal, { type ListRow } from "./GenericListModal";
+import { Megaphone, AlertTriangle, Layers, ListChecks } from "lucide-react";
 import ApiFilters from "./ApiFilters";
 import ChartsSection from "./ChartsSection";
 import ResultsTable from "./ResultsTable";
@@ -274,6 +280,251 @@ export default function StudentManagement() {
     setPage(1);
   };
 
+  // ============================ ADS Metrics (metadata)
+  type AdsMetadataRecord = {
+    id: number | string;
+    entity: string;
+    entity_id: string;
+    payload: any;
+    created_at?: string;
+    updated_at?: string;
+  };
+
+  const coerceMetadataList = (res: any): AdsMetadataRecord[] => {
+    if (Array.isArray(res)) return res as AdsMetadataRecord[];
+    if (res && typeof res === "object") {
+      if (Array.isArray((res as any).items)) return (res as any).items;
+      if (Array.isArray((res as any).data)) return (res as any).data;
+      const data = (res as any).data;
+      if (data && typeof data === "object") {
+        if (Array.isArray((data as any).items)) return (data as any).items;
+        if (Array.isArray((data as any).data)) return (data as any).data;
+        if (Array.isArray((data as any).rows)) return (data as any).rows;
+      }
+    }
+    return [];
+  };
+
+  const [tab, setTab] = useState<"metrics" | "ads">("metrics");
+  const [adsItems, setAdsItems] = useState<AdsMetadataRecord[]>([]);
+  const [adsLoading, setAdsLoading] = useState(false);
+  const [adsError, setAdsError] = useState<string | null>(null);
+  const [adsLoadedOnce, setAdsLoadedOnce] = useState(false);
+
+  const [adsListOpen, setAdsListOpen] = useState(false);
+  const [adsListTitle, setAdsListTitle] = useState("");
+  const [adsListRows, setAdsListRows] = useState<ListRow[]>([]);
+
+  const openAdsList = (title: string, rows: ListRow[]) => {
+    setAdsListTitle(title);
+    setAdsListRows(rows);
+    setAdsListOpen(true);
+  };
+
+  type AdsUiRow = {
+    id: string;
+    alumnoCodigo: string | null;
+    alumnoNombre: string | null;
+    fase: string;
+    subfase: string;
+    pautaActiva: boolean;
+    requiereInterv: boolean;
+    createdAt: string | null;
+  };
+
+  const adsUiRows: AdsUiRow[] = useMemo(() => {
+    return (adsItems ?? []).map((m) => {
+      const payload = (m as any)?.payload ?? {};
+      const alumnoCodigoRaw =
+        payload?.alumno_codigo ?? payload?.alumno_code ?? null;
+      const alumnoNombreRaw =
+        payload?.alumno_nombre ?? payload?.alumno_name ?? null;
+
+      const faseRaw = payload?.fase ?? "";
+      const subfaseRaw = payload?.subfase ?? "";
+
+      const pautaActiva = Boolean(payload?.pauta_activa);
+      const requiereInterv = Boolean(payload?.requiere_interv);
+
+      const createdAt = (() => {
+        const raw =
+          payload?._saved_at ??
+          (m as any)?.updated_at ??
+          (m as any)?.created_at;
+        if (!raw) return null;
+        const t = Date.parse(String(raw));
+        if (Number.isNaN(t)) return String(raw);
+        return new Date(t).toISOString();
+      })();
+
+      return {
+        id: String((m as any)?.id ?? ""),
+        alumnoCodigo: alumnoCodigoRaw ? String(alumnoCodigoRaw) : null,
+        alumnoNombre: alumnoNombreRaw ? String(alumnoNombreRaw) : null,
+        fase: String(faseRaw || "Sin fase").trim() || "Sin fase",
+        subfase: String(subfaseRaw || "Sin subfase").trim() || "Sin subfase",
+        pautaActiva,
+        requiereInterv,
+        createdAt,
+      };
+    });
+  }, [adsItems]);
+
+  const adsStats = useMemo(() => {
+    const total = adsUiRows.length;
+    const pautaActiva = adsUiRows.filter((r) => r.pautaActiva);
+    const requiereInterv = adsUiRows.filter((r) => r.requiereInterv);
+
+    const pautaActivaRequiere = pautaActiva.filter((r) => r.requiereInterv);
+    const pautaActivaOk = pautaActiva.filter((r) => !r.requiereInterv);
+
+    const byFase = new Map<
+      string,
+      {
+        fase: string;
+        rows: AdsUiRow[];
+        bySubfase: Map<
+          string,
+          {
+            subfase: string;
+            rows: AdsUiRow[];
+            requiere: AdsUiRow[];
+            ok: AdsUiRow[];
+          }
+        >;
+      }
+    >();
+
+    for (const r of adsUiRows) {
+      const key = r.fase;
+      if (!byFase.has(key)) {
+        byFase.set(key, { fase: key, rows: [], bySubfase: new Map() });
+      }
+      const bucket = byFase.get(key)!;
+      bucket.rows.push(r);
+
+      const sfKey = r.subfase;
+      if (!bucket.bySubfase.has(sfKey)) {
+        bucket.bySubfase.set(sfKey, {
+          subfase: sfKey,
+          rows: [],
+          requiere: [],
+          ok: [],
+        });
+      }
+      const sf = bucket.bySubfase.get(sfKey)!;
+      sf.rows.push(r);
+      if (r.requiereInterv) sf.requiere.push(r);
+      else sf.ok.push(r);
+    }
+
+    const fases = Array.from(byFase.values())
+      .map((f) => {
+        const subfases = Array.from(f.bySubfase.values()).sort((a, b) =>
+          a.subfase.localeCompare(b.subfase),
+        );
+        const pautaActivaCount = f.rows.filter((r) => r.pautaActiva).length;
+        const requiereCount = f.rows.filter((r) => r.requiereInterv).length;
+        return {
+          fase: f.fase,
+          rows: f.rows,
+          pautaActivaCount,
+          requiereCount,
+          subfases,
+        };
+      })
+      .sort((a, b) => b.rows.length - a.rows.length);
+
+    return {
+      total,
+      pautaActiva,
+      requiereInterv,
+      pautaActivaRequiere,
+      pautaActivaOk,
+      fases,
+    };
+  }, [adsUiRows]);
+
+  const asListRows = (rows: AdsUiRow[]): ListRow[] =>
+    rows.map((r) => ({
+      name: r.alumnoNombre,
+      subtitle: `${r.fase} · ${r.subfase} · ${r.requiereInterv ? "Requiere intervención" : "Sin intervención"}`,
+    }));
+
+  const StatCard = ({
+    icon,
+    title,
+    value,
+    dotClass,
+    onClick,
+  }: {
+    icon: React.ReactNode;
+    title: string;
+    value: number;
+    dotClass: string;
+    onClick?: () => void;
+  }) => {
+    const Wrapper: any = onClick ? "button" : "div";
+    return (
+      <Wrapper
+        type={onClick ? "button" : undefined}
+        onClick={onClick}
+        className={
+          "rounded-2xl border border-border bg-background p-4 text-left " +
+          (onClick ? "hover:bg-muted/30 transition-colors" : "")
+        }
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full grid place-items-center bg-muted text-foreground">
+              {icon}
+            </div>
+            <span className="text-sm text-muted-foreground">{title}</span>
+          </div>
+          <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+        </div>
+        <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
+      </Wrapper>
+    );
+  };
+
+  useEffect(() => {
+    if (tab !== "ads") return;
+    if (adsLoadedOnce) return;
+
+    let ignore = false;
+    (async () => {
+      setAdsLoading(true);
+      setAdsError(null);
+      try {
+        const qs = new URLSearchParams();
+        qs.set("entity", "ads_metrics");
+        const json = await apiFetch<any>(`/metadata?${qs.toString()}`, {
+          method: "GET",
+        });
+        const items = coerceMetadataList(json).filter(
+          (m) => String((m as any)?.entity ?? "") === "ads_metrics",
+        );
+        if (!ignore) {
+          setAdsItems(items);
+          setAdsLoadedOnce(true);
+        }
+      } catch (e) {
+        if (!ignore) {
+          setAdsError(e instanceof Error ? e.message : String(e));
+          setAdsItems([]);
+          setAdsLoadedOnce(true);
+        }
+      } finally {
+        if (!ignore) setAdsLoading(false);
+      }
+    })();
+
+    return () => {
+      ignore = true;
+    };
+  }, [tab, adsLoadedOnce]);
+
   // ============================ Render
   return (
     <div className="space-y-6">
@@ -283,75 +534,333 @@ export default function StudentManagement() {
         </div>
       </div>
 
-      <ApiFilters
-        search={search}
-        setSearch={setSearch}
-        stateOptions={stateOptions}
-        stageOptions={stageOptions}
-        statesFilter={statesFilter}
-        setStatesFilter={(v: string[]) => {
-          setStatesFilter(v);
-          setPage(1);
-        }}
-        stagesFilter={stagesFilter}
-        setStagesFilter={(v: string[]) => {
-          setStagesFilter(v);
-          setPage(1);
-        }}
-        fechaDesde={metricsFrom}
-        fechaHasta={metricsTo}
-        setFechaDesde={setMetricsFrom}
-        setFechaHasta={setMetricsTo}
-        coaches={coaches}
-        coach={metricsCoach}
-        setCoach={setMetricsCoach}
-        loadingCoaches={loadingMetricsCoaches}
-      />
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setTab(v as any)}
+        className="space-y-6"
+      >
+        <TabsList>
+          <TabsTrigger value="metrics">Métricas</TabsTrigger>
+          <TabsTrigger value="ads">Métricas ADS</TabsTrigger>
+        </TabsList>
 
-      {/* >>> IMPORTANTE: pasamos students={filtered} <<< */}
-      <ChartsSection
-        loading={loading}
-        distByState={distByState}
-        distByStage={distByStage}
-        byJoinDate={byJoinDate}
-        fechaDesde={metricsFrom}
-        fechaHasta={metricsTo}
-        coach={metricsCoach}
-        abandonosPorInactividad={abandonosPorInactividad}
-      />
+        <TabsContent value="metrics" className="space-y-6">
+          <ApiFilters
+            search={search}
+            setSearch={setSearch}
+            stateOptions={stateOptions}
+            stageOptions={stageOptions}
+            statesFilter={statesFilter}
+            setStatesFilter={(v: string[]) => {
+              setStatesFilter(v);
+              setPage(1);
+            }}
+            stagesFilter={stagesFilter}
+            setStagesFilter={(v: string[]) => {
+              setStagesFilter(v);
+              setPage(1);
+            }}
+            fechaDesde={metricsFrom}
+            fechaHasta={metricsTo}
+            setFechaDesde={setMetricsFrom}
+            setFechaHasta={setMetricsTo}
+            coaches={coaches}
+            coach={metricsCoach}
+            setCoach={setMetricsCoach}
+            loadingCoaches={loadingMetricsCoaches}
+          />
 
-      <ResultsTable
-        loading={loading}
-        pageItems={pageItems}
-        totalFiltered={totalFiltered}
-        page={page}
-        totalPages={totalPages}
-        onPrev={() => setPage((p) => Math.max(1, p - 1))}
-        onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-        onOpenTeam={openTeamForStudent}
-      />
+          <ChartsSection
+            loading={loading}
+            distByState={distByState}
+            distByStage={distByStage}
+            byJoinDate={byJoinDate}
+            fechaDesde={metricsFrom}
+            fechaHasta={metricsTo}
+            coach={metricsCoach}
+            abandonosPorInactividad={abandonosPorInactividad}
+          />
 
-      <TeamModal
-        open={teamOpen}
-        onOpenChange={setTeamOpen}
-        studentName={modalStudentName}
-        studentCode={modalStudentCode}
-        members={modalMembers}
-        loading={loadingCoaches}
-      />
+          <ResultsTable
+            loading={loading}
+            pageItems={pageItems}
+            totalFiltered={totalFiltered}
+            page={page}
+            totalPages={totalPages}
+            onPrev={() => setPage((p) => Math.max(1, p - 1))}
+            onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+            onOpenTeam={openTeamForStudent}
+          />
 
-      <StudentsListModal
-        open={listOpen}
-        onOpenChange={setListOpen}
-        title={listTitle}
-        rows={listRows}
-      />
+          <TeamModal
+            open={teamOpen}
+            onOpenChange={setTeamOpen}
+            studentName={modalStudentName}
+            studentCode={modalStudentCode}
+            members={modalMembers}
+            loading={loadingCoaches}
+          />
 
-      <Separator />
-      <p className="text-xs text-muted-foreground">
-        * Esta vista pagina localmente: si necesitas más de 1000, subimos el
-        límite del backend o implementamos paginación real con “cursor/offset”.
-      </p>
+          <StudentsListModal
+            open={listOpen}
+            onOpenChange={setListOpen}
+            title={listTitle}
+            rows={listRows}
+          />
+
+          <Separator />
+          <p className="text-xs text-muted-foreground">
+            * Esta vista pagina localmente: si necesitas más de 1000, subimos el
+            límite del backend o implementamos paginación real con
+            “cursor/offset”.
+          </p>
+        </TabsContent>
+
+        <TabsContent value="ads" className="space-y-6">
+          {adsLoading ? (
+            <div className="rounded-xl border border-border bg-background p-6 text-sm text-muted-foreground">
+              Cargando metadata ADS...
+            </div>
+          ) : adsError ? (
+            <div className="rounded-xl border border-border bg-background p-6 text-sm text-muted-foreground">
+              Error cargando metadata ADS: {adsError}
+            </div>
+          ) : adsItems.length === 0 ? (
+            <div className="rounded-xl border border-border bg-background p-6 text-sm text-muted-foreground">
+              Sin registros de metadata para entity=ads_metrics.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              <Card className="shadow-none">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">
+                    Métricas ADS (metadata)
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Basado en registros de metadata con{" "}
+                    <strong>entity=ads_metrics</strong>.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <StatCard
+                      icon={<Layers className="h-4 w-4" />}
+                      title="Registros"
+                      value={adsStats.total}
+                      dotClass="bg-slate-400"
+                      onClick={
+                        adsUiRows.length
+                          ? () =>
+                              openAdsList(
+                                `ADS — Todos los registros (${adsUiRows.length})`,
+                                asListRows(adsUiRows),
+                              )
+                          : undefined
+                      }
+                    />
+                    <StatCard
+                      icon={<Megaphone className="h-4 w-4" />}
+                      title="Pauta activa"
+                      value={adsStats.pautaActiva.length}
+                      dotClass="bg-emerald-500"
+                      onClick={
+                        adsStats.pautaActiva.length
+                          ? () =>
+                              openAdsList(
+                                `ADS — Pauta activa (${adsStats.pautaActiva.length})`,
+                                asListRows(adsStats.pautaActiva),
+                              )
+                          : undefined
+                      }
+                    />
+                    <StatCard
+                      icon={<AlertTriangle className="h-4 w-4" />}
+                      title="Requiere intervención"
+                      value={adsStats.requiereInterv.length}
+                      dotClass="bg-rose-500"
+                      onClick={
+                        adsStats.requiereInterv.length
+                          ? () =>
+                              openAdsList(
+                                `ADS — Requiere intervención (${adsStats.requiereInterv.length})`,
+                                asListRows(adsStats.requiereInterv),
+                              )
+                          : undefined
+                      }
+                    />
+                    <StatCard
+                      icon={<ListChecks className="h-4 w-4" />}
+                      title="Pauta activa sin intervención"
+                      value={adsStats.pautaActivaOk.length}
+                      dotClass="bg-sky-500"
+                      onClick={
+                        adsStats.pautaActivaOk.length
+                          ? () =>
+                              openAdsList(
+                                `ADS — Pauta activa sin intervención (${adsStats.pautaActivaOk.length})`,
+                                asListRows(adsStats.pautaActivaOk),
+                              )
+                          : undefined
+                      }
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <Card className="shadow-none border border-border">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Por fase</CardTitle>
+                        <p className="text-xs text-muted-foreground">
+                          Quién está en cada fase y subfase.
+                        </p>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {adsStats.fases.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">
+                            Sin fases para mostrar.
+                          </div>
+                        ) : (
+                          adsStats.fases.map((f) => (
+                            <div
+                              key={f.fase}
+                              className="rounded-xl border border-border bg-background p-3"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium">
+                                    {f.fase}
+                                  </span>
+                                  <Badge variant="secondary">
+                                    {f.rows.length} registro
+                                    {f.rows.length === 1 ? "" : "s"}
+                                  </Badge>
+                                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 dark:bg-emerald-500/15">
+                                    Pauta: {f.pautaActivaCount}
+                                  </Badge>
+                                  <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-300 dark:bg-rose-500/15">
+                                    Interv: {f.requiereCount}
+                                  </Badge>
+                                </div>
+                                <button
+                                  type="button"
+                                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                                  onClick={() =>
+                                    openAdsList(
+                                      `ADS — Fase: ${f.fase} (${f.rows.length})`,
+                                      asListRows(f.rows),
+                                    )
+                                  }
+                                >
+                                  Ver lista
+                                </button>
+                              </div>
+
+                              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {f.subfases.map((sf) => (
+                                  <button
+                                    key={`${f.fase}::${sf.subfase}`}
+                                    type="button"
+                                    onClick={() =>
+                                      openAdsList(
+                                        `ADS — ${f.fase} · ${sf.subfase} (${sf.rows.length})`,
+                                        asListRows(sf.rows),
+                                      )
+                                    }
+                                    className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="text-sm font-medium truncate">
+                                        {sf.subfase}
+                                      </div>
+                                      <div className="text-xs tabular-nums text-muted-foreground shrink-0">
+                                        {sf.rows.length}
+                                      </div>
+                                    </div>
+                                    <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                                      <span>
+                                        <span className="inline-block h-2 w-2 rounded-full bg-rose-500 mr-1" />
+                                        Interv:{" "}
+                                        <strong>{sf.requiere.length}</strong>
+                                      </span>
+                                      <span>
+                                        <span className="inline-block h-2 w-2 rounded-full bg-sky-500 mr-1" />
+                                        OK: <strong>{sf.ok.length}</strong>
+                                      </span>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="shadow-none border border-border">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Registros</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {adsUiRows.map((r) => (
+                          <div
+                            key={r.id}
+                            className="rounded-xl border border-border bg-background p-3"
+                          >
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <div className="text-sm font-medium">
+                                  {r.alumnoNombre ?? "—"}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {r.createdAt
+                                    ? new Date(r.createdAt).toLocaleString(
+                                        "es-ES",
+                                      )
+                                    : ""}
+                                </div>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant="secondary">{r.fase}</Badge>
+                                <Badge variant="outline">{r.subfase}</Badge>
+                                {r.pautaActiva ? (
+                                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 dark:bg-emerald-500/15">
+                                    Pauta activa
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-slate-500/10 text-slate-700 dark:text-slate-300 dark:bg-slate-500/15">
+                                    Sin pauta
+                                  </Badge>
+                                )}
+                                {r.requiereInterv ? (
+                                  <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-300 dark:bg-rose-500/15">
+                                    Requiere intervención
+                                  </Badge>
+                                ) : (
+                                  <Badge className="bg-sky-500/10 text-sky-700 dark:text-sky-300 dark:bg-sky-500/15">
+                                    Sin intervención
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <GenericListModal
+                open={adsListOpen}
+                onOpenChange={setAdsListOpen}
+                title={adsListTitle}
+                rows={adsListRows}
+                hideCode
+              />
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
