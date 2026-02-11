@@ -59,6 +59,7 @@ import {
   Plus,
   Maximize,
   Tag,
+  Gift,
 } from "lucide-react";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import {
@@ -608,6 +609,22 @@ export default function TicketsBoard({
   // Ref para evitar consultas duplicadas del alumno
   const alumnoInfoFetchedRef = useRef<string | null>(null);
 
+  // Estados para bonos del alumno
+  type AlumnoBono = {
+    id: number;
+    codigo: string;
+    nombre: string;
+    descripcion?: string;
+    usado: number;
+    fecha_vencimiento?: string;
+  };
+  const [alumnoBonos, setAlumnoBonos] = useState<AlumnoBono[]>([]);
+  const [bonosLoading, setBonosLoading] = useState(false);
+
+  // Alumnos asignados al usuario ATC (para filtro "Mis tickets")
+  // Nota: anteriormente se usó un set de alumnos asignados al ATC; ya no es necesario
+  // porque el filtro "Mis tickets" para ATC se resuelve con `alumno_coaches` del ticket.
+
   // Control para expandir lista completa de archivos en el panel de edición
   const [showAllFiles, setShowAllFiles] = useState(false);
   // Edición de descripción (pestaña Detalle)
@@ -696,18 +713,6 @@ export default function TicketsBoard({
       const id = String(c.id || "").trim();
       return (!!myCode && code === myCode) || (!!myId && id === myId);
     });
-    console.log(
-      "[DEBUG isUserAtc] role:",
-      user?.role,
-      "| myCode:",
-      myCode,
-      "| myId:",
-      myId,
-      "| meInCoaches:",
-      meInCoaches ?? "NO ENCONTRADO",
-      "| total coaches cargados:",
-      coaches.length,
-    );
     if (meInCoaches) {
       const result = isAtcCoach(meInCoaches);
       return result;
@@ -722,57 +727,6 @@ export default function TicketsBoard({
 
     const myCode = String((user as any)?.codigo ?? "").trim();
     const myId = String((user as any)?.id ?? "").trim();
-
-    // DEBUG: agrupar tickets por informante y contar
-    const informanteMap: Record<
-      string,
-      {
-        nombre: string;
-        count: number;
-        ticketCodigos: (string | null | undefined)[];
-      }
-    > = {};
-    tickets.forEach((t) => {
-      const inf = String((t as any).informante || "sin_informante").trim();
-      const infNombre = String((t as any).informante_nombre || "—").trim();
-      if (!informanteMap[inf]) {
-        informanteMap[inf] = { nombre: infNombre, count: 0, ticketCodigos: [] };
-      }
-      informanteMap[inf].count++;
-      informanteMap[inf].ticketCodigos.push(t.codigo);
-    });
-    console.log("[DEBUG] Tickets agrupados por informante:", informanteMap);
-    console.log(
-      "[DEBUG] Mi código:",
-      myCode,
-      "| Mi ID:",
-      myId,
-      "| isUserAtc:",
-      isUserAtc,
-      "| user.role:",
-      user?.role,
-    );
-
-    // if (isUserAtc) {
-    //   const ticketsCreadosPorOtros = tickets.filter((t) => {
-    //     const inf = String((t as any).informante || "").trim();
-    //     return inf !== myCode && (!myId || inf !== myId);
-    //   });
-    //   if (ticketsCreadosPorOtros.length > 0) {
-    //     console.log(
-    //       "[DEBUG MisTickets ATC] Tickets donde el informante NO es el ATC actual:",
-    //       ticketsCreadosPorOtros.map((t) => ({
-    //         id: t.id,
-    //         codigo: t.codigo,
-    //         nombre: t.nombre,
-    //         informante: (t as any).informante,
-    //         informante_nombre: (t as any).informante_nombre,
-    //         coaches: (t as any).coaches,
-    //         coaches_override: (t as any).coaches_override,
-    //       })),
-    //     );
-    //   }
-    // }
 
     return tickets.filter((t) => {
       const informanteStr = String((t as any).informante || "").trim();
@@ -794,7 +748,8 @@ export default function TicketsBoard({
               ? (co?.codigo_equipo ?? co?.codigo ?? co?.id)
               : co) ?? "",
           ).trim();
-          return code === myCode || (!!myId && code === myId);
+          const match = code === myCode || (!!myId && code === myId);
+          return match;
         });
 
         if (!assignedToMe && overrides.length > 0) {
@@ -817,6 +772,8 @@ export default function TicketsBoard({
         }
       } catch {}
 
+      // Para usuarios ATC: verificar si aparecen en alumno_coaches del ticket
+      // (todos los coaches del alumno, no solo el responsable del ticket)
       let atcAssignedToStudent = false;
       if (isUserAtc && !createdByMe && !assignedToMe) {
         try {
@@ -824,11 +781,11 @@ export default function TicketsBoard({
             ? (t as any).alumno_coaches
             : [];
           atcAssignedToStudent = alumnoCoachesArr.some((co: any) => {
+            if (!co || typeof co !== "object") return false;
             const code = String(
-              (co && typeof co === "object"
-                ? (co?.codigo_equipo ?? co?.codigo ?? co?.id)
-                : co) ?? "",
+              co?.codigo_equipo ?? co?.codigo ?? co?.id ?? "",
             ).trim();
+            // Si el usuario ATC aparece en alumno_coaches, mostrar el ticket
             return code === myCode || (!!myId && code === myId);
           });
         } catch {}
@@ -948,6 +905,38 @@ export default function TicketsBoard({
       cancelled = true;
     };
   }, [drawerOpen, selectedTicket, ticketDetail?.alumno_nombre]);
+
+  // Cargar bonos del alumno cuando tenemos su código
+  useEffect(() => {
+    if (!alumnoInfo?.codigo) {
+      setAlumnoBonos([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setBonosLoading(true);
+        const url = `/bonos/get/assignments/${encodeURIComponent(alumnoInfo.codigo)}`;
+        const json = await apiFetch<any>(url);
+        const data: AlumnoBono[] = Array.isArray(json?.data) ? json.data : [];
+        if (!cancelled) {
+          setAlumnoBonos(data);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setAlumnoBonos([]);
+        }
+      } finally {
+        if (!cancelled) setBonosLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [alumnoInfo?.codigo]);
 
   // Mantener ref con la lista actual (para handlers globales sin stale closures)
   useEffect(() => {
@@ -2592,81 +2581,11 @@ export default function TicketsBoard({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6">
           {estados.map((estado) => {
-            const itemsForCol = tickets.filter((t) => {
-              const statusMatch =
-                coerceStatus(t.estado) === (estado as StatusKey);
-              if (!statusMatch) return false;
-              if (
-                onlyMyTickets &&
-                (user?.codigo || typeof user?.id !== "undefined")
-              ) {
-                const myCode = String(user?.codigo ?? "").trim();
-                const myId = String(user?.id ?? "").trim();
-                // Creados por mí
-                const informanteStr = String(t.informante || "").trim();
-                const createdByMe =
-                  informanteStr === myCode ||
-                  (!!myId && informanteStr === myId);
-
-                // Asignados a mí: revisar coaches del ticket y overrides.
-                // Importante: NO hacer fallback por "ser técnico" porque eso muestra tickets de otros técnicos.
-                let assignedToMe = false;
-                try {
-                  const coachesArr = Array.isArray((t as any)?.coaches)
-                    ? (t as any).coaches
-                    : [];
-                  const overrides = Array.isArray((t as any)?.coaches_override)
-                    ? (t as any).coaches_override
-                    : [];
-
-                  // a) coaches del ticket
-                  assignedToMe = coachesArr.some((co: any) => {
-                    const code = String(
-                      (co && typeof co === "object"
-                        ? (co?.codigo_equipo ?? co?.codigo ?? co?.id)
-                        : co) ?? "",
-                    ).trim();
-                    return code === myCode || (!!myId && code === myId);
-                  });
-
-                  // b) overrides como objetos o ids
-                  if (!assignedToMe && overrides.length > 0) {
-                    const overrideObjects = overrides.filter(
-                      (o: any) => o && typeof o === "object",
-                    );
-                    if (overrideObjects.length > 0) {
-                      assignedToMe = overrideObjects.some((o: any) => {
-                        const code = String(
-                          o?.codigo_equipo || o?.codigo || o?.id || "",
-                        ).trim();
-                        return code === myCode || (!!myId && code === myId);
-                      });
-                    } else {
-                      assignedToMe = overrides.some((o: any) => {
-                        const code = String(o || "").trim();
-                        return code === myCode || (!!myId && code === myId);
-                      });
-                    }
-                  }
-                } catch {}
-
-                // Para usuarios ATC: también mostrar tickets donde algún coach sea ATC o el tipo sea ATC
-                let involvesAtc = false;
-                if (isUserAtc && !createdByMe && !assignedToMe) {
-                  try {
-                    const coachesArr = Array.isArray((t as any)?.coaches)
-                      ? (t as any).coaches
-                      : [];
-                    involvesAtc =
-                      coachesArr.some((co: any) => isAtcCoach(co)) ||
-                      isAtcTicketTipo(t.tipo);
-                  } catch {}
-                }
-
-                return createdByMe || assignedToMe || involvesAtc;
-              }
-              return true;
-            });
+            // Importante: el Kanban debe usar la MISMA lista filtrada que la tabla.
+            // `displayTickets` ya incorpora el filtro de "Mis tickets" (incluyendo ATC via `alumno_coaches`).
+            const itemsForCol = displayTickets.filter(
+              (t) => coerceStatus(t.estado) === (estado as StatusKey),
+            );
             return (
               <div
                 key={estado}
@@ -4135,6 +4054,42 @@ export default function TicketsBoard({
                               </Command>
                             </PopoverContent>
                           </Popover>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </div>
+
+                      {/* Bonos del alumno */}
+                      <div className="flex items-center gap-2 text-slate-500 h-6">
+                        <Gift className="h-4 w-4" /> <span>Bonos</span>
+                      </div>
+                      <div className="min-h-[24px] flex items-start">
+                        {bonosLoading ? (
+                          <div className="flex items-center gap-1 text-xs text-slate-400">
+                            <Spinner className="h-3 w-3" />
+                            Cargando...
+                          </div>
+                        ) : alumnoBonos.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {alumnoBonos.map((bono) => (
+                              <span
+                                key={bono.id}
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                                  bono.usado
+                                    ? "bg-slate-100 text-slate-500 line-through"
+                                    : "bg-purple-100 text-purple-700"
+                                }`}
+                                title={bono.descripcion || bono.nombre}
+                              >
+                                <Gift className="h-3 w-3" />
+                                {bono.nombre}
+                              </span>
+                            ))}
+                          </div>
+                        ) : alumnoInfo?.codigo ? (
+                          <span className="text-slate-400 text-xs">
+                            Sin bonos asignados
+                          </span>
                         ) : (
                           <span className="text-slate-400 text-xs">—</span>
                         )}
