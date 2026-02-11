@@ -5,6 +5,7 @@ import PhaseMetrics from "./phase-metrics";
 import RetentionKPIs from "./retention-kpis";
 import StagesBreakdown from "./stages-breakdown";
 import TasksMetrics from "./tasks-metrics";
+import type { ListRow } from "./GenericListModal";
 
 export default function ChartsSection({
   loading,
@@ -15,6 +16,7 @@ export default function ChartsSection({
   fechaHasta,
   coach,
   abandonosPorInactividad,
+  adsSuccessCases,
 }: {
   loading: boolean;
   distByState: Array<{ name: string; value: number }>;
@@ -28,6 +30,11 @@ export default function ChartsSection({
     count: number;
     names: string[];
     rows?: Array<{ name?: string | null; subtitle?: string }>;
+  };
+  adsSuccessCases?: {
+    threshold: number;
+    loading: boolean;
+    rows: ListRow[];
   };
 }) {
   return (
@@ -62,6 +69,7 @@ export default function ChartsSection({
           fechaHasta={fechaHasta}
           coach={coach}
           abandonosPorInactividad={abandonosPorInactividad}
+          adsSuccessCases={adsSuccessCases}
         />
       </div>
 

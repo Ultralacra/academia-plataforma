@@ -329,7 +329,45 @@ export default function StudentManagement() {
     subfase: string;
     pautaActiva: boolean;
     requiereInterv: boolean;
+    facturacion: number | null;
     createdAt: string | null;
+  };
+
+  const parseAmount = (value: unknown): number | null => {
+    if (value == null) return null;
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    if (typeof value !== "string") return null;
+    const s = value.trim();
+    if (!s) return null;
+
+    const cleaned = s.replace(/[^\d.,-]/g, "");
+    if (!cleaned) return null;
+
+    const lastDot = cleaned.lastIndexOf(".");
+    const lastComma = cleaned.lastIndexOf(",");
+
+    let normalized = cleaned;
+    if (lastDot !== -1 && lastComma !== -1) {
+      // usa como separador decimal el último que aparezca
+      if (lastDot > lastComma) {
+        normalized = cleaned.replace(/,/g, "");
+      } else {
+        normalized = cleaned.replace(/\./g, "").replace(/,/g, ".");
+      }
+    } else if (lastComma !== -1) {
+      const parts = cleaned.split(",");
+      const decimals = parts[parts.length - 1] ?? "";
+      if (decimals.length > 0 && decimals.length <= 2) {
+        normalized = cleaned.replace(/\./g, "").replace(/,/g, ".");
+      } else {
+        normalized = cleaned.replace(/,/g, "");
+      }
+    } else {
+      normalized = cleaned.replace(/,/g, "");
+    }
+
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
   };
 
   const adsUiRows: AdsUiRow[] = useMemo(() => {
@@ -345,6 +383,7 @@ export default function StudentManagement() {
 
       const pautaActiva = Boolean(payload?.pauta_activa);
       const requiereInterv = Boolean(payload?.requiere_interv);
+      const facturacion = parseAmount(payload?.facturacion);
 
       const createdAt = (() => {
         const raw =
@@ -365,10 +404,58 @@ export default function StudentManagement() {
         subfase: String(subfaseRaw || "Sin subfase").trim() || "Sin subfase",
         pautaActiva,
         requiereInterv,
+        facturacion,
         createdAt,
       };
     });
   }, [adsItems]);
+
+  const adsSuccessCases = useMemo(() => {
+    const threshold = 5000;
+    const loading = !adsLoadedOnce;
+    if (!adsLoadedOnce) {
+      return { threshold, loading: true, rows: [] as ListRow[] };
+    }
+
+    // Queremos cantidad de USUARIOS (dedupe), no cantidad de registros
+    const byStudent = new Map<
+      string,
+      {
+        name: string;
+        facturacion: number;
+        fase: string;
+        subfase: string;
+      }
+    >();
+
+    for (const r of adsUiRows) {
+      const f = r.facturacion;
+      if (f == null || !(f > threshold)) continue;
+      const key = String(r.alumnoCodigo ?? r.id).trim();
+      if (!key) continue;
+
+      const name = String(r.alumnoNombre ?? "—").trim() || "—";
+      const prev = byStudent.get(key);
+      if (!prev || f > prev.facturacion) {
+        byStudent.set(key, {
+          name,
+          facturacion: f,
+          fase: r.fase,
+          subfase: r.subfase,
+        });
+      }
+    }
+
+    const nf = new Intl.NumberFormat("es-ES");
+    const rows: ListRow[] = Array.from(byStudent.values())
+      .sort((a, b) => b.facturacion - a.facturacion)
+      .map((x) => ({
+        name: x.name,
+        subtitle: `Facturación: ${nf.format(x.facturacion)} · ${x.fase} · ${x.subfase}`,
+      }));
+
+    return { threshold, loading, rows };
+  }, [adsUiRows, adsLoadedOnce]);
 
   const adsStats = useMemo(() => {
     const total = adsUiRows.length;
@@ -489,7 +576,6 @@ export default function StudentManagement() {
   };
 
   useEffect(() => {
-    if (tab !== "ads") return;
     if (adsLoadedOnce) return;
 
     let ignore = false;
@@ -523,7 +609,7 @@ export default function StudentManagement() {
     return () => {
       ignore = true;
     };
-  }, [tab, adsLoadedOnce]);
+  }, [adsLoadedOnce]);
 
   // ============================ Render
   return (
@@ -579,6 +665,7 @@ export default function StudentManagement() {
             fechaHasta={metricsTo}
             coach={metricsCoach}
             abandonosPorInactividad={abandonosPorInactividad}
+            adsSuccessCases={adsSuccessCases}
           />
 
           <ResultsTable

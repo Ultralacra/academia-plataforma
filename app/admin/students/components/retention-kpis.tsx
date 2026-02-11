@@ -59,6 +59,7 @@ export default function RetentionKPIs({
   fechaHasta,
   coach,
   abandonosPorInactividad,
+  adsSuccessCases,
 }: {
   fechaDesde?: string;
   fechaHasta?: string;
@@ -68,6 +69,11 @@ export default function RetentionKPIs({
     count: number;
     names: string[];
     rows?: ListRow[];
+  };
+  adsSuccessCases?: {
+    threshold: number;
+    loading: boolean;
+    rows: ListRow[];
   };
 } = {}) {
   const [loading, setLoading] = useState(true);
@@ -136,6 +142,15 @@ export default function RetentionKPIs({
     (data as any)?.retention_names?.completado ||
     [];
 
+  const successThreshold = adsSuccessCases?.threshold ?? 5000;
+  const successLoading = Boolean(adsSuccessCases?.loading);
+  const successRows = adsSuccessCases?.rows ?? [];
+  const successCount = successLoading
+    ? "—"
+    : successRows.length
+      ? successRows.length
+      : completed;
+
   const abandonedNamesApi: string[] =
     (retention as any)?.nombres?.abandonado ||
     (data as any)?.retention_names?.abandonado ||
@@ -186,18 +201,28 @@ export default function RetentionKPIs({
             />
             <Stat
               icon={<Trophy className="h-4 w-4" />}
-              title="Completados"
-              value={completed}
-              subtitle="Casos de éxito"
+              title="Completados / Casos de éxito"
+              value={successCount}
+              subtitle={
+                successRows.length
+                  ? `Facturación > ${successThreshold} (ads_metrics)`
+                  : "Casos de éxito"
+              }
               accent="emerald"
               onClick={
-                completedNames.length
+                successRows.length
                   ? () =>
-                      openNames(
-                        `Retención — Completados (${completedNames.length})`,
-                        completedNames,
+                      openRows(
+                        `Casos de éxito — Facturación > ${successThreshold} (${successRows.length})`,
+                        successRows,
                       )
-                  : undefined
+                  : completedNames.length
+                    ? () =>
+                        openNames(
+                          `Retención — Completados (${completedNames.length})`,
+                          completedNames,
+                        )
+                    : undefined
               }
             />
             <Stat
