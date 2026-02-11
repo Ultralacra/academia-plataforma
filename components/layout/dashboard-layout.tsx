@@ -5,7 +5,15 @@ import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "./app-sidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, Menu, Bell, Plus, RefreshCw } from "lucide-react";
+import {
+  LogOut,
+  User,
+  Menu,
+  Bell,
+  Plus,
+  RefreshCw,
+  BadgeDollarSign,
+} from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
   Popover,
@@ -14,7 +22,8 @@ import {
 } from "@/components/ui/popover";
 import { useTicketNotifications } from "@/components/hooks/useTicketNotifications";
 import { useSseNotifications } from "@/components/hooks/useSseNotifications";
-import { useMemo, useState } from "react";
+import { usePaymentDueNotifications } from "@/components/hooks/usePaymentDueNotifications";
+import { useCallback, useMemo, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -292,6 +301,128 @@ function NotificationsBadge() {
   );
 }
 
+function PaymentsDueBadge() {
+  const { user } = useAuth();
+  const enabled = user?.role === "coach" || user?.role === "equipo";
+  const {
+    dueCount,
+    loading,
+    error,
+    refresh,
+    items,
+  } = usePaymentDueNotifications({ enabled, daysWindow: 5 });
+
+  const [open, setOpen] = useState(false);
+
+  const fmtDateShort = useCallback((raw: string | null) => {
+    if (!raw) return "";
+    const s = String(raw).trim();
+    if (!s) return "";
+    // Preferir YYYY-MM-DD sin timezone
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const [, y, mm, dd] = m;
+      return `${dd}/${mm}/${y}`;
+    }
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      try {
+        return d.toLocaleDateString("es-ES", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        });
+      } catch {
+        return d.toISOString().slice(0, 10);
+      }
+    }
+    return s;
+  }, []);
+
+  if (!enabled) return null;
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={async (v) => {
+        setOpen(v);
+        if (v) await refresh();
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          className="relative p-2 rounded-full hover:bg-muted/10"
+          title={
+            error
+              ? "No se pudieron cargar cuotas"
+              : loading
+                ? "Cargando cuotas..."
+                : dueCount > 0
+                  ? `Cuotas por vencer: ${dueCount}`
+                  : "No hay cuotas por vencer"
+          }
+          type="button"
+        >
+          <BadgeDollarSign
+            className={`h-4 w-4 ${loading ? "opacity-60" : ""}`}
+          />
+          {dueCount > 0 && (
+            <span
+              className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+              title="Cuotas por vencer"
+            >
+              {dueCount > 99 ? "99+" : dueCount}
+            </span>
+          )}
+          {dueCount === 0 && !!error && (
+            <span
+              className="absolute -top-1 -right-1 bg-muted text-muted-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+              title="Error al cargar cuotas"
+            >
+              !
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-96 p-3">
+        <div className="text-base font-semibold px-2 py-1">
+          Pagos por vencer (≤5 días)
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {loading ? (
+            <div className="p-3 text-xs text-muted-foreground">Cargando…</div>
+          ) : items.length === 0 ? (
+            <div className="p-3 text-xs text-muted-foreground">
+              {error ? "No se pudieron cargar las cuotas" : "No hay cuotas por vencer"}
+            </div>
+          ) : (
+            items.slice(0, 30).map((it) => {
+              const who =
+                String(it.cliente_nombre ?? "").trim() ||
+                String(it.cliente_codigo ?? "").trim() ||
+                "Usuario";
+              const when = it.daysLeft === 0 ? "Vence hoy" : `Vence en ${it.daysLeft} día(s)`;
+              return (
+                <div
+                  key={it.key}
+                  className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
+                >
+                  <div className="text-sm font-medium leading-snug truncate" title={who}>
+                    {who}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {when}{it.fecha_pago ? ` (${fmtDateShort(it.fecha_pago)})` : ""}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function DashboardLayout({
   children,
   contentClassName,
@@ -324,6 +455,7 @@ export function DashboardLayout({
             </div>
             <div className="flex items-center gap-2 sm:gap-4 ml-auto">
               <ThemeToggle />
+              <PaymentsDueBadge />
               <NotificationsBadge />
               <div className="flex items-center gap-2 text-sm min-w-0">
                 <User className="h-4 w-4" />

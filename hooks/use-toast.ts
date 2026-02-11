@@ -5,10 +5,12 @@ import * as React from 'react'
 
 import type { ToastActionElement, ToastProps } from '@/components/ui/toast'
 
-const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 4000
+const TOAST_LIMIT = 5
+// Este delay solo controla cuándo se elimina del estado tras cerrarse (para permitir animación).
+// La duración visible la controla Radix Toast (provider/root). Si este número es alto, parece que “no se quita”.
+const TOAST_REMOVE_DELAY = 1200
 
-type ToasterToast = ToastProps & {
+type ToasterToast = Omit<ToastProps, 'title'> & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
