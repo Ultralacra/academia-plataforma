@@ -304,13 +304,8 @@ function NotificationsBadge() {
 function PaymentsDueBadge() {
   const { user } = useAuth();
   const enabled = user?.role === "coach" || user?.role === "equipo";
-  const {
-    dueCount,
-    loading,
-    error,
-    refresh,
-    items,
-  } = usePaymentDueNotifications({ enabled, daysWindow: 5 });
+  const { dueCount, loading, error, refresh, items } =
+    usePaymentDueNotifications({ enabled, daysWindow: 5 });
 
   const [open, setOpen] = useState(false);
 
@@ -393,7 +388,9 @@ function PaymentsDueBadge() {
             <div className="p-3 text-xs text-muted-foreground">Cargando…</div>
           ) : items.length === 0 ? (
             <div className="p-3 text-xs text-muted-foreground">
-              {error ? "No se pudieron cargar las cuotas" : "No hay cuotas por vencer"}
+              {error
+                ? "No se pudieron cargar las cuotas"
+                : "No hay cuotas por vencer"}
             </div>
           ) : (
             items.slice(0, 30).map((it) => {
@@ -401,17 +398,24 @@ function PaymentsDueBadge() {
                 String(it.cliente_nombre ?? "").trim() ||
                 String(it.cliente_codigo ?? "").trim() ||
                 "Usuario";
-              const when = it.daysLeft === 0 ? "Vence hoy" : `Vence en ${it.daysLeft} día(s)`;
+              const when =
+                it.daysLeft === 0
+                  ? "Vence hoy"
+                  : `Vence en ${it.daysLeft} día(s)`;
               return (
                 <div
                   key={it.key}
                   className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
                 >
-                  <div className="text-sm font-medium leading-snug truncate" title={who}>
+                  <div
+                    className="text-sm font-medium leading-snug truncate"
+                    title={who}
+                  >
                     {who}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {when}{it.fecha_pago ? ` (${fmtDateShort(it.fecha_pago)})` : ""}
+                    {when}
+                    {it.fecha_pago ? ` (${fmtDateShort(it.fecha_pago)})` : ""}
                   </div>
                 </div>
               );

@@ -2,7 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { getPaymentCuotas, type PaymentCuotaRow } from "@/app/admin/payments/api";
+import {
+  getPaymentCuotas,
+  type PaymentCuotaRow,
+} from "@/app/admin/payments/api";
 import { AlertTriangle } from "lucide-react";
 
 export type PaymentDueItem = {
@@ -109,7 +112,7 @@ function saveShownSet(todayIso: string, set: Set<string>) {
   try {
     window.localStorage.setItem(
       storageKeyForToday(todayIso),
-      JSON.stringify(Array.from(set))
+      JSON.stringify(Array.from(set)),
     );
   } catch {
     // ignore
@@ -182,9 +185,11 @@ export function usePaymentDueNotifications(opts: {
         if (!prev || cand.daysLeft < prev.daysLeft) byClient.set(key, cand);
       }
 
-      return Array.from(byClient.values()).sort((a, b) => a.daysLeft - b.daysLeft);
+      return Array.from(byClient.values()).sort(
+        (a, b) => a.daysLeft - b.daysLeft,
+      );
     },
-    [daysWindow]
+    [daysWindow],
   );
 
   const fetchDue = useCallback(async () => {
@@ -207,7 +212,9 @@ export function usePaymentDueNotifications(opts: {
         pageSize,
       });
 
-      const all: PaymentCuotaRow[] = Array.isArray(first?.data) ? [...first.data] : [];
+      const all: PaymentCuotaRow[] = Array.isArray(first?.data)
+        ? [...first.data]
+        : [];
       const totalPages = Number(first?.totalPages ?? 1) || 1;
 
       // safety: evitar loops infinitos
@@ -261,7 +268,9 @@ export function usePaymentDueNotifications(opts: {
         const who = nombre || codigo || "Usuario";
 
         const when = it.daysLeft === 0 ? "hoy" : `en ${it.daysLeft} día(s)`;
-        const fecha = it.fecha_pago ? formatDateShort(String(it.fecha_pago)) : "";
+        const fecha = it.fecha_pago
+          ? formatDateShort(String(it.fecha_pago))
+          : "";
 
         toast({
           description: (
@@ -305,7 +314,8 @@ export function usePaymentDueNotifications(opts: {
                   Más cuotas por vencer
                 </div>
                 <div className="text-sm text-foreground/80">
-                  Hay {remaining} usuario(s) más con cuota por vencer en ≤{daysWindow} días.
+                  Hay {remaining} usuario(s) más con cuota por vencer en ≤
+                  {daysWindow} días.
                 </div>
               </div>
             </div>
@@ -315,7 +325,7 @@ export function usePaymentDueNotifications(opts: {
         });
       }
     },
-    [daysWindow, opts.enabled, toast]
+    [daysWindow, opts.enabled, toast],
   );
 
   // Auto-load + auto-snackbars (solo una vez por sesión/día gracias al storage)
@@ -357,7 +367,10 @@ export function usePaymentDueNotifications(opts: {
   const unreadCount = useMemo(() => {
     if (!opts.enabled) return 0;
     const todayIso = toIsoDate(new Date());
-    const shown = typeof window !== "undefined" ? loadShownSet(todayIso) : new Set<string>();
+    const shown =
+      typeof window !== "undefined"
+        ? loadShownSet(todayIso)
+        : new Set<string>();
     return items.filter((it) => !shown.has(it.key)).length;
   }, [items, opts.enabled]);
 
