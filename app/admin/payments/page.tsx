@@ -2056,7 +2056,10 @@ function PaymentsContent() {
                             {formatMoney(r.monto, r.moneda)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={getStatusVariant(r.estatus)}>
+                            <Badge
+                              variant="outline"
+                              className={getStatusChipClass(r.estatus)}
+                            >
                               {formatPaymentStatusLabel(r.estatus)}
                             </Badge>
                           </TableCell>
@@ -2069,7 +2072,7 @@ function PaymentsContent() {
                                 openDetail(String(r.payment_codigo))
                               }
                             >
-                              Ver
+                              Ver plan de pagos
                             </Button>
                           </TableCell>
                         </TableRow>
