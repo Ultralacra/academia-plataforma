@@ -297,35 +297,39 @@ export default function CampanaDetailPage() {
       )
       .sort((a, b) => a.start.getTime() - b.start.getTime());
 
-    // Generar franjas horarias de 6 AM a 10 PM (16 horas)
-    const hours = [];
-    for (let h = 6; h <= 22; h++) {
-      hours.push(h);
-    }
+    const hours = [] as number[];
+    for (let h = 6; h <= 22; h++) hours.push(h);
 
-    // Verificar si una hora está ocupada
-    const isHourBusy = (hour: number) => {
-      const hourStart = new Date(selectedDay);
-      hourStart.setHours(hour, 0, 0, 0);
-      const hourEnd = new Date(selectedDay);
-      hourEnd.setHours(hour, 59, 59, 999);
+    const rowHeightPx = 48;
+    const timelineHeightPx = rowHeightPx * hours.length;
+    const visibleStart = new Date(selectedDay);
+    visibleStart.setHours(hours[0], 0, 0, 0);
+    const visibleEnd = new Date(selectedDay);
+    visibleEnd.setHours(hours[hours.length - 1] + 1, 0, 0, 0);
 
-      return busyForDay.some(
-        (slot) => slot.start < hourEnd && slot.end > hourStart
-      );
+    const splitIntoHourlySegments = (start: Date, end: Date) => {
+      const segments: { start: Date; end: Date }[] = [];
+      let cursor = new Date(start);
+      for (let i = 0; i < 48 && cursor.getTime() < end.getTime(); i++) {
+        const nextHour = new Date(cursor);
+        nextHour.setMinutes(0, 0, 0);
+        nextHour.setHours(nextHour.getHours() + 1);
+        const segEnd = nextHour.getTime() < end.getTime() ? nextHour : end;
+        segments.push({ start: new Date(cursor), end: new Date(segEnd) });
+        cursor = new Date(segEnd);
+      }
+      return segments;
     };
 
-    // Obtener eventos ocupados para una hora específica
-    const getBusyEventsForHour = (hour: number) => {
-      const hourStart = new Date(selectedDay);
-      hourStart.setHours(hour, 0, 0, 0);
-      const hourEnd = new Date(selectedDay);
-      hourEnd.setHours(hour + 1, 0, 0, 0);
-
-      return busyForDay.filter(
-        (slot) => slot.start < hourEnd && slot.end > hourStart
-      );
-    };
+    const visibleBusy = busyForDay
+      .map((slot) => {
+        const start = slot.start > visibleStart ? slot.start : visibleStart;
+        const end = slot.end < visibleEnd ? slot.end : visibleEnd;
+        return { start, end };
+      })
+      .filter((slot) => slot.end.getTime() > slot.start.getTime())
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+      .flatMap((slot) => splitIntoHourlySegments(slot.start, slot.end));
 
     return (
       <div className="flex flex-col h-full">
@@ -384,86 +388,121 @@ export default function CampanaDetailPage() {
           </div>
         </div>
 
-        {/* Vista de día con horas */}
+        {/* Vista de día con horas (línea de tiempo) */}
         <div className="flex-1 overflow-y-auto max-h-[400px] border rounded-lg">
-          <div className="relative">
-            {hours.map((hour) => {
-              const busy = isHourBusy(hour);
-              const busyEvents = getBusyEventsForHour(hour);
-              const hourLabel = hour.toString().padStart(2, "0") + ":00";
-
-              return (
+          <div className="grid grid-cols-[64px_1fr]">
+            <div className="border-r bg-slate-50">
+              {hours.map((hour) => (
                 <div
                   key={hour}
-                  className="flex border-b last:border-b-0 min-h-[48px]"
+                  className="h-12 px-2 text-xs text-slate-500 flex items-center justify-end border-b last:border-b-0"
                 >
-                  {/* Columna de hora */}
-                  <div className="w-16 flex-shrink-0 px-2 py-1 text-xs text-slate-500 border-r bg-slate-50 flex items-start justify-end">
-                    {hourLabel}
-                  </div>
-                  {/* Contenido de la hora */}
-                  <div
-                    className={`flex-1 relative ${
-                      busy ? "bg-blue-50" : "bg-white hover:bg-slate-50"
-                    }`}
-                  >
-                    {busyEvents.map((event, idx) => {
-                      const startTime = event.start.toLocaleTimeString(
-                        "es-ES",
-                        { hour: "2-digit", minute: "2-digit" }
-                      );
-                      const endTime = event.end.toLocaleTimeString("es-ES", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      });
-                      return (
-                        <div
-                          key={idx}
-                          className="absolute inset-x-1 top-1 bg-blue-500 text-white text-xs px-2 py-1 rounded shadow-sm"
-                          style={{
-                            minHeight: "38px",
-                          }}
-                        >
-                          <div className="font-medium">Ocupado</div>
-                          <div className="opacity-80">
-                            {startTime} - {endTime}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  {hour.toString().padStart(2, "0")}:00
                 </div>
-              );
-            })}
+              ))}
+            </div>
+            <div className="relative" style={{ height: `${timelineHeightPx}px` }}>
+              {hours.map((_, idx) => (
+                <div
+                  key={idx}
+                  className="absolute left-0 right-0 border-b"
+                  style={{ top: `${(idx + 1) * rowHeightPx}px` }}
+                />
+              ))}
+
+              {visibleBusy.map((slot, idx) => {
+                const minutesFromStart =
+                  (slot.start.getTime() - visibleStart.getTime()) / 60000;
+                const minutesDuration =
+                  (slot.end.getTime() - slot.start.getTime()) / 60000;
+                const pxPerMinute = rowHeightPx / 60;
+                const topPxRaw = Math.max(0, minutesFromStart * pxPerMinute);
+                const heightPxRaw = Math.max(12, minutesDuration * pxPerMinute);
+                const topPx = topPxRaw + 1;
+                const heightPx = Math.max(10, heightPxRaw - 2);
+
+                const showFull = heightPx >= 36;
+                const showCompact = heightPx >= 22;
+
+                const startLabel = slot.start.toLocaleTimeString("es-ES", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+                const endLabel = slot.end.toLocaleTimeString("es-ES", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+
+                return (
+                  <div
+                    key={`${slot.start.toISOString()}-${idx}`}
+                    className="absolute left-2 right-2 bg-blue-500/80 text-white rounded-md shadow overflow-hidden"
+                    style={{ top: `${topPx}px`, height: `${heightPx}px` }}
+                  >
+                    {showFull ? (
+                      <div className="px-2 py-1">
+                        <div className="text-[11px] font-medium leading-none">
+                          Ocupado
+                        </div>
+                        <div className="text-[10px] text-white/90 leading-none mt-1">
+                          {startLabel}–{endLabel}
+                        </div>
+                      </div>
+                    ) : showCompact ? (
+                      <div className="h-full px-2 flex items-center">
+                        <div className="text-[10px] font-medium leading-none truncate">
+                          {startLabel}–{endLabel}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-full px-1 flex items-center">
+                        <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 
         {/* Resumen del día */}
         <div className="mt-4 pt-3 border-t">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-600">
-              Horas bloqueadas:{" "}
-              <span className="font-semibold">{busyForDay.length}</span>
-            </span>
-            {busyForDay.length > 0 && (
-              <div className="text-xs text-slate-500">
-                {busyForDay.map((slot, idx) => (
-                  <span key={idx}>
-                    {idx > 0 && ", "}
-                    {slot.start.toLocaleTimeString("es-ES", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    -
-                    {slot.end.toLocaleTimeString("es-ES", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                ))}
-              </div>
-            )}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-900">
+                Bloqueos del día
+              </p>
+              <p className="text-xs text-slate-500">
+                {busyForDay.length > 0
+                  ? "Tramos ocupados en el calendario."
+                  : "No hay horas ocupadas para este día."}
+              </p>
+            </div>
+            <Badge variant={busyForDay.length > 0 ? "muted" : "outline"}>
+              {busyForDay.length} {busyForDay.length === 1 ? "bloqueo" : "bloqueos"}
+            </Badge>
           </div>
+
+          {busyForDay.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {busyForDay.map((slot, idx) => {
+                const startLabel = slot.start.toLocaleTimeString("es-ES", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+                const endLabel = slot.end.toLocaleTimeString("es-ES", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                });
+                return (
+                  <Badge key={idx} variant="muted" className="font-mono">
+                    {startLabel}–{endLabel}
+                  </Badge>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
     );
