@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { dataService, type ClientItem } from "@/lib/data-service";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,7 +8,13 @@ import { apiFetch } from "@/lib/api-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import GenericListModal, { type ListRow } from "./GenericListModal";
-import { Megaphone, AlertTriangle, Layers, ListChecks } from "lucide-react";
+import {
+  Megaphone,
+  AlertTriangle,
+  Eye,
+  Layers,
+  ListChecks,
+} from "lucide-react";
 import ApiFilters from "./ApiFilters";
 import ChartsSection from "./ChartsSection";
 import ResultsTable from "./ResultsTable";
@@ -314,6 +320,7 @@ export default function StudentManagement() {
   const [adsListOpen, setAdsListOpen] = useState(false);
   const [adsListTitle, setAdsListTitle] = useState("");
   const [adsListRows, setAdsListRows] = useState<ListRow[]>([]);
+  const adsConsoleLoggedRef = useRef(false);
 
   const openAdsList = (title: string, rows: ListRow[]) => {
     setAdsListTitle(title);
@@ -327,6 +334,7 @@ export default function StudentManagement() {
     alumnoNombre: string | null;
     fase: string;
     subfase: string;
+    trascendencia: string | null;
     pautaActiva: boolean;
     requiereInterv: boolean;
     facturacion: number | null;
@@ -380,6 +388,7 @@ export default function StudentManagement() {
 
       const faseRaw = payload?.fase ?? "";
       const subfaseRaw = payload?.subfase ?? "";
+      const trascendenciaRaw = payload?.subfase_color ?? null;
 
       const pautaActiva = Boolean(payload?.pauta_activa);
       const requiereInterv = Boolean(payload?.requiere_interv);
@@ -402,6 +411,10 @@ export default function StudentManagement() {
         alumnoNombre: alumnoNombreRaw ? String(alumnoNombreRaw) : null,
         fase: String(faseRaw || "Sin fase").trim() || "Sin fase",
         subfase: String(subfaseRaw || "Sin subfase").trim() || "Sin subfase",
+        trascendencia:
+          trascendenciaRaw == null
+            ? null
+            : String(trascendenciaRaw).trim() || null,
         pautaActiva,
         requiereInterv,
         facturacion,
@@ -409,6 +422,16 @@ export default function StudentManagement() {
       };
     });
   }, [adsItems]);
+
+  useEffect(() => {
+    if (!adsLoadedOnce) return;
+    if (adsConsoleLoggedRef.current) return;
+    if (typeof window === "undefined") return;
+
+    adsConsoleLoggedRef.current = true;
+    console.log("[students][ads_metrics] metadata items (shown)", adsItems);
+    console.log("[students][ads_metrics] derived rows (shown)", adsUiRows);
+  }, [adsLoadedOnce, adsItems, adsUiRows]);
 
   const adsSuccessCases = useMemo(() => {
     const threshold = 5000;
@@ -461,6 +484,7 @@ export default function StudentManagement() {
     const total = adsUiRows.length;
     const pautaActiva = adsUiRows.filter((r) => r.pautaActiva);
     const requiereInterv = adsUiRows.filter((r) => r.requiereInterv);
+    const trascendencia = adsUiRows.filter((r) => Boolean(r.trascendencia));
 
     const pautaActivaRequiere = pautaActiva.filter((r) => r.requiereInterv);
     const pautaActivaOk = pautaActiva.filter((r) => !r.requiereInterv);
@@ -528,14 +552,64 @@ export default function StudentManagement() {
       requiereInterv,
       pautaActivaRequiere,
       pautaActivaOk,
+      trascendencia,
       fases,
     };
+  }, [adsUiRows]);
+
+  const adsTrascendencias = useMemo(() => {
+    const pickKey = (r: AdsUiRow) => {
+      const k = String(r.alumnoCodigo ?? "").trim();
+      return k || r.id;
+    };
+
+    const parseTime = (iso: string | null) => {
+      if (!iso) return NaN;
+      const t = Date.parse(iso);
+      return Number.isNaN(t) ? NaN : t;
+    };
+
+    const byTrasc = new Map<
+      string,
+      {
+        key: string;
+        byUser: Map<string, AdsUiRow>;
+      }
+    >();
+
+    for (const r of adsUiRows) {
+      const key =
+        String(r.trascendencia ?? "Por definir").trim() || "Por definir";
+      if (!byTrasc.has(key)) byTrasc.set(key, { key, byUser: new Map() });
+      const bucket = byTrasc.get(key)!;
+
+      const userKey = pickKey(r);
+      const prev = bucket.byUser.get(userKey);
+      if (!prev) {
+        bucket.byUser.set(userKey, r);
+        continue;
+      }
+
+      const ta = parseTime(prev.createdAt);
+      const tb = parseTime(r.createdAt);
+      if (!Number.isNaN(tb) && (Number.isNaN(ta) || tb >= ta)) {
+        bucket.byUser.set(userKey, r);
+      }
+    }
+
+    const buckets = Array.from(byTrasc.values()).map((b) => ({
+      key: b.key,
+      rows: Array.from(b.byUser.values()),
+    }));
+
+    buckets.sort((a, b) => b.rows.length - a.rows.length);
+    return buckets;
   }, [adsUiRows]);
 
   const asListRows = (rows: AdsUiRow[]): ListRow[] =>
     rows.map((r) => ({
       name: r.alumnoNombre,
-      subtitle: `${r.fase} · ${r.subfase} · ${r.requiereInterv ? "Requiere intervención" : "Sin intervención"}`,
+      subtitle: `${r.fase} · ${r.subfase} · Trascendencia: ${r.trascendencia ?? "Por definir"} · ${r.requiereInterv ? "Requiere intervención" : "Sin intervención"}`,
     }));
 
   const StatCard = ({
@@ -568,7 +642,10 @@ export default function StudentManagement() {
             </div>
             <span className="text-sm text-muted-foreground">{title}</span>
           </div>
-          <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+          <div className="flex items-center gap-2">
+            {onClick ? <Eye className="h-4 w-4 text-muted-foreground" /> : null}
+            <span className={`h-2 w-2 rounded-full ${dotClass}`} />
+          </div>
         </div>
         <div className="mt-2 text-3xl font-semibold tabular-nums">{value}</div>
       </Wrapper>
@@ -777,20 +854,71 @@ export default function StudentManagement() {
                     />
                     <StatCard
                       icon={<ListChecks className="h-4 w-4" />}
-                      title="Pauta activa sin intervención"
-                      value={adsStats.pautaActivaOk.length}
-                      dotClass="bg-sky-500"
+                      title="Trascendencia"
+                      value={adsStats.trascendencia.length}
+                      dotClass="bg-indigo-500"
                       onClick={
-                        adsStats.pautaActivaOk.length
+                        adsStats.trascendencia.length
                           ? () =>
                               openAdsList(
-                                `ADS — Pauta activa sin intervención (${adsStats.pautaActivaOk.length})`,
-                                asListRows(adsStats.pautaActivaOk),
+                                `ADS — Trascendencia (${adsStats.trascendencia.length})`,
+                                asListRows(adsStats.trascendencia),
                               )
                           : undefined
                       }
                     />
                   </div>
+
+                  <Card className="shadow-none border border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm">
+                        Por trascendencia
+                      </CardTitle>
+                      <p className="text-xs text-muted-foreground">
+                        Usuarios agrupados por trascendencia.
+                      </p>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {adsTrascendencias.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">
+                          Sin trascendencias para mostrar.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {adsTrascendencias.map((b) => (
+                            <button
+                              key={b.key}
+                              type="button"
+                              onClick={() =>
+                                openAdsList(
+                                  `ADS — Trascendencia: ${b.key} (${b.rows.length})`,
+                                  asListRows(b.rows),
+                                )
+                              }
+                              className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="text-sm font-medium truncate">
+                                  {b.key}
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <div className="text-xs tabular-nums text-muted-foreground">
+                                    {b.rows.length}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    <span className="inline-flex items-center justify-end gap-1">
+                                      <Eye className="h-3.5 w-3.5" />
+                                      Ver lista
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                     <Card className="shadow-none border border-border">
@@ -837,7 +965,10 @@ export default function StudentManagement() {
                                     )
                                   }
                                 >
-                                  Ver lista
+                                  <span className="inline-flex items-center gap-1">
+                                    <Eye className="h-3.5 w-3.5" />
+                                    Ver lista
+                                  </span>
                                 </button>
                               </div>
 
@@ -858,7 +989,8 @@ export default function StudentManagement() {
                                       <div className="text-sm font-medium truncate">
                                         {sf.subfase}
                                       </div>
-                                      <div className="text-xs tabular-nums text-muted-foreground shrink-0">
+                                      <div className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground shrink-0">
+                                        <Eye className="h-3.5 w-3.5" />
                                         {sf.rows.length}
                                       </div>
                                     </div>
@@ -909,6 +1041,11 @@ export default function StudentManagement() {
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant="secondary">{r.fase}</Badge>
                                 <Badge variant="outline">{r.subfase}</Badge>
+                                {r.trascendencia ? (
+                                  <Badge className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 dark:bg-indigo-500/15">
+                                    Trascendencia: {r.trascendencia}
+                                  </Badge>
+                                ) : null}
                                 {r.pautaActiva ? (
                                   <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 dark:bg-emerald-500/15">
                                     Pauta activa
