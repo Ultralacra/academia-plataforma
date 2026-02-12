@@ -510,6 +510,60 @@ export default function TicketsBoard({
       ? str
       : `https://${str}`;
   };
+
+  const parseAdsAmount = (value: unknown): number | null => {
+    if (value == null) return null;
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    if (typeof value !== "string") return null;
+
+    const raw = value.trim();
+    if (!raw) return null;
+
+    // Parsear valores comunes tipo "$1,234.56" / "1.234,56".
+    const cleaned = raw.replace(/[^\d.,-]/g, "");
+    if (!cleaned) return null;
+
+    const lastDot = cleaned.lastIndexOf(".");
+    const lastComma = cleaned.lastIndexOf(",");
+
+    let normalized = cleaned;
+    if (lastDot !== -1 && lastComma !== -1) {
+      normalized =
+        lastDot > lastComma
+          ? cleaned.replace(/,/g, "")
+          : cleaned.replace(/\./g, "").replace(/,/g, ".");
+    } else if (lastComma !== -1) {
+      const parts = cleaned.split(",");
+      const decimals = parts[parts.length - 1] ?? "";
+      normalized =
+        decimals.length > 0 && decimals.length <= 2
+          ? cleaned.replace(/\./g, "").replace(/,/g, ".")
+          : cleaned.replace(/,/g, "");
+    } else {
+      normalized = cleaned.replace(/,/g, "");
+    }
+
+    const n = Number(normalized);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const formatAdsAmount = (value: unknown): string => {
+    if (value == null) return "—";
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return new Intl.NumberFormat("es-ES", {
+        maximumFractionDigits: 2,
+      }).format(value);
+    }
+
+    const raw = String(value).trim();
+    if (!raw) return "—";
+
+    const n = parseAdsAmount(value);
+    if (n == null) return raw;
+    return new Intl.NumberFormat("es-ES", {
+      maximumFractionDigits: 2,
+    }).format(n);
+  };
   const extractUrlsFromDescription = (desc?: string | null) => {
     const text = String(desc || "");
     if (!text) return [] as string[];
@@ -2928,6 +2982,24 @@ export default function TicketsBoard({
                                     {admPayload ? (
                                       // Mostrar todas las badges: permitir wrap para que no se corten
                                       <div className="flex flex-col items-start gap-1.5">
+                                        {(() => {
+                                          const fact = parseAdsAmount(
+                                            admPayload?.facturacion,
+                                          );
+                                          if (fact == null) return null;
+                                          if (fact <= 5000) return null;
+                                          return (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-xs inline-flex items-center gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60"
+                                            >
+                                              <CheckCircle2 className="h-3.5 w-3.5" />
+                                              Este es un usuario de caso de
+                                              éxito
+                                            </Badge>
+                                          );
+                                        })()}
+
                                         <Badge
                                           variant="outline"
                                           className="text-xs"
@@ -2940,6 +3012,15 @@ export default function TicketsBoard({
                                         >
                                           {`Subfase: ${admPayload?.subfase ?? "Por definir"}`}
                                         </Badge>
+
+                                        {/*  <Badge
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
+                                          {`Facturación: ${formatAdsAmount(
+                                            admPayload?.facturacion,
+                                          )}`}
+                                        </Badge> */}
 
                                         <Badge
                                           variant="outline"
@@ -3535,6 +3616,27 @@ export default function TicketsBoard({
                               <Badge variant="outline" className="text-sm">
                                 Subfase: {admPayload?.subfase ?? "—"}
                               </Badge>
+                              <Badge variant="outline" className="text-sm">
+                                Facturación:{" "}
+                                {formatAdsAmount(admPayload?.facturacion)}
+                              </Badge>
+
+                              {(() => {
+                                const fact = parseAdsAmount(
+                                  admPayload?.facturacion,
+                                );
+                                if (fact == null) return null;
+                                if (fact <= 5000) return null;
+                                return (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-sm inline-flex items-center gap-1 border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60"
+                                  >
+                                    <CheckCircle2 className="h-4 w-4" />
+                                    Este es un usuario de caso de éxito
+                                  </Badge>
+                                );
+                              })()}
                               <Badge variant="outline" className="text-sm">
                                 Trascendencia:{" "}
                                 {admPayload?.subfase_color ?? "Por definir"}
