@@ -60,6 +60,7 @@ import {
   Maximize,
   Tag,
   Gift,
+  Pencil,
 } from "lucide-react";
 import { convertBlobToMp3 } from "@/lib/audio-converter";
 import {
@@ -620,6 +621,44 @@ export default function TicketsBoard({
   };
   const [alumnoBonos, setAlumnoBonos] = useState<AlumnoBono[]>([]);
   const [bonosLoading, setBonosLoading] = useState(false);
+  const [updatingBonoId, setUpdatingBonoId] = useState<number | null>(null);
+
+  const updateAlumnoBonoUsado = async (bono: AlumnoBono, targetUsado: 0 | 1) => {
+    if (!bono?.id) return;
+
+    const prevUsado = Number(bono.usado) ? 1 : 0;
+    if (prevUsado === targetUsado) return;
+
+    setUpdatingBonoId(bono.id);
+    setAlumnoBonos((prev) =>
+      prev.map((b) => (b.id === bono.id ? { ...b, usado: targetUsado } : b)),
+    );
+
+    try {
+      await apiFetch<any>(
+        `/bonos/update/assignment/${encodeURIComponent(String(bono.id))}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ usado: targetUsado }),
+        },
+      );
+      toast({
+        title: "Bono actualizado",
+        description: `${bono.nombre} → ${targetUsado ? "Usado" : "No usado"}`,
+      });
+    } catch (e: any) {
+      setAlumnoBonos((prev) =>
+        prev.map((b) => (b.id === bono.id ? { ...b, usado: prevUsado } : b)),
+      );
+      toast({
+        title: "Error",
+        description: e?.message || "No se pudo actualizar el bono",
+        variant: "destructive",
+      });
+    } finally {
+      setUpdatingBonoId((cur) => (cur === bono.id ? null : cur));
+    }
+  };
 
   // Alumnos asignados al usuario ATC (para filtro "Mis tickets")
   // Nota: anteriormente se usó un set de alumnos asignados al ATC; ya no es necesario
@@ -4076,13 +4115,56 @@ export default function TicketsBoard({
                                 key={bono.id}
                                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
                                   bono.usado
-                                    ? "bg-slate-100 text-slate-500 line-through"
+                                    ? "bg-slate-100 text-slate-500"
                                     : "bg-purple-100 text-purple-700"
                                 }`}
                                 title={bono.descripcion || bono.nombre}
                               >
                                 <Gift className="h-3 w-3" />
-                                {bono.nombre}
+                                <span className={bono.usado ? "line-through" : ""}>
+                                  {bono.nombre}
+                                </span>
+                                <span className="mx-0.5 opacity-60">·</span>
+                                <span className={bono.usado ? "opacity-70" : ""}>
+                                  {Number(bono.usado) ? "Usado" : "No usado"}
+                                </span>
+
+                                {canEdit && (
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10"
+                                        aria-label="Editar estado de bono"
+                                        disabled={updatingBonoId === bono.id}
+                                      >
+                                        {updatingBonoId === bono.id ? (
+                                          <Spinner className="h-3 w-3" />
+                                        ) : (
+                                          <Pencil className="h-3 w-3" />
+                                        )}
+                                      </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        disabled={updatingBonoId === bono.id}
+                                        onClick={() =>
+                                          updateAlumnoBonoUsado(bono, 0)
+                                        }
+                                      >
+                                        Marcar como no usado
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        disabled={updatingBonoId === bono.id}
+                                        onClick={() =>
+                                          updateAlumnoBonoUsado(bono, 1)
+                                        }
+                                      >
+                                        Marcar como usado
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                )}
                               </span>
                             ))}
                           </div>
