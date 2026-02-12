@@ -623,7 +623,10 @@ export default function TicketsBoard({
   const [bonosLoading, setBonosLoading] = useState(false);
   const [updatingBonoId, setUpdatingBonoId] = useState<number | null>(null);
 
-  const updateAlumnoBonoUsado = async (bono: AlumnoBono, targetUsado: 0 | 1) => {
+  const updateAlumnoBonoUsado = async (
+    bono: AlumnoBono,
+    targetUsado: 0 | 1,
+  ) => {
     if (!bono?.id) return;
 
     const prevUsado = Number(bono.usado) ? 1 : 0;
@@ -4121,11 +4124,15 @@ export default function TicketsBoard({
                                 title={bono.descripcion || bono.nombre}
                               >
                                 <Gift className="h-3 w-3" />
-                                <span className={bono.usado ? "line-through" : ""}>
+                                <span
+                                  className={bono.usado ? "line-through" : ""}
+                                >
                                   {bono.nombre}
                                 </span>
                                 <span className="mx-0.5 opacity-60">·</span>
-                                <span className={bono.usado ? "opacity-70" : ""}>
+                                <span
+                                  className={bono.usado ? "opacity-70" : ""}
+                                >
                                   {Number(bono.usado) ? "Usado" : "No usado"}
                                 </span>
 
