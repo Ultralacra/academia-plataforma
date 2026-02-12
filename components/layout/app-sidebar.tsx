@@ -127,7 +127,7 @@ export function AppSidebar() {
     const userRole = (user?.role || "").toLowerCase();
 
     // Debug: verificar el rol del usuario
-        /* console.log("User role:", user?.role, "Normalized:", userRole); */
+    /* console.log("User role:", user?.role, "Normalized:", userRole); */
 
     switch (userRole) {
       case "sales":
@@ -249,7 +249,11 @@ export function AppSidebar() {
                   },
                   { title: "Bonos", url: "/admin/bonos", icon: Users },
                   { title: "Pagos", url: "/admin/payments", icon: CreditCard },
-                  { title: "Usuarios sistema", url: "/admin/users", icon: Users },
+                  {
+                    title: "Usuarios sistema",
+                    url: "/admin/users",
+                    icon: Users,
+                  },
                 ] as MenuItem[];
               })()
         ) as MenuItem[];
