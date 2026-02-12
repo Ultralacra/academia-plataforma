@@ -249,6 +249,7 @@ export function AppSidebar() {
                   },
                   { title: "Bonos", url: "/admin/bonos", icon: Users },
                   { title: "Pagos", url: "/admin/payments", icon: CreditCard },
+                  { title: "Usuarios sistema", url: "/admin/users", icon: Users },
                 ] as MenuItem[];
               })()
         ) as MenuItem[];
@@ -306,6 +307,7 @@ export function AppSidebar() {
               },
               { title: "Pagos", url: "/admin/payments", icon: CreditCard },
               { title: "CRM", url: "/admin/crm", icon: Users },
+              { title: "Usuarios sistema", url: "/admin/users", icon: Users },
             ]
           : [
               {
@@ -348,6 +350,7 @@ export function AppSidebar() {
               },
               { title: "Pagos", url: "/admin/payments", icon: CreditCard },
               { title: "CRM", url: "/admin/crm", icon: Users },
+              { title: "Usuarios sistema", url: "/admin/users", icon: Users },
             ];
         // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
         return (

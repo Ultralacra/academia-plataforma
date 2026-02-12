@@ -117,6 +117,8 @@ export function ProtectedRoute({
       segments[0] === "admin" &&
       segments[1] === "students" &&
       segments.length === 2;
+    // Permitir gestión de usuarios del sistema
+    const isUsersPath = segments[0] === "admin" && segments[1] === "users";
     // Esperamos /admin/teamsv2/[code] como vista principal
     const isTeamDetail =
       segments[0] === "admin" &&
@@ -137,7 +139,8 @@ export function ProtectedRoute({
       !isSolicitudBonos &&
       !isCrm &&
       !isTeamsMetrics &&
-      !isStudentsMetrics
+      !isStudentsMetrics &&
+      !isUsersPath
     ) {
       if (pathname !== target) {
         router.replace(target);

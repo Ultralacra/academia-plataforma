@@ -5,7 +5,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, Clock, Globe, Sun, Sunset, Moon } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Globe,
+  Sun,
+  Sunset,
+  Moon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import {
@@ -63,7 +71,7 @@ export function BookingForm({
 
   const [campaignName, setCampaignName] = useState<string | null>(null);
   const [campaignDescription, setCampaignDescription] = useState<string | null>(
-    null
+    null,
   );
   const [campaignOrigenCodigo, setCampaignOrigenCodigo] = useState<
     string | null
@@ -113,7 +121,7 @@ export function BookingForm({
       try {
         const origin = Array.isArray(origins)
           ? origins.find(
-              (o: any) => String(o?.event_codigo || "").trim() === eventCodigo
+              (o: any) => String(o?.event_codigo || "").trim() === eventCodigo,
             )
           : null;
         if (!alive) return;
@@ -121,10 +129,10 @@ export function BookingForm({
         setCampaignDescription(
           (origin as any)?.description
             ? String((origin as any).description)
-            : null
+            : null,
         );
         setCampaignOrigenCodigo(
-          (origin as any)?.codigo ? String((origin as any).codigo) : null
+          (origin as any)?.codigo ? String((origin as any).codigo) : null,
         );
       } catch {
         if (!alive) return;
@@ -254,7 +262,11 @@ export function BookingForm({
       const key = toDateKeyLocal(day);
       const slots: string[] = [];
 
-      for (let hour = timeWindow.startHour; hour <= timeWindow.endHour; hour++) {
+      for (
+        let hour = timeWindow.startHour;
+        hour <= timeWindow.endHour;
+        hour++
+      ) {
         for (const minute of [0, 15, 30, 45]) {
           const start = new Date(day);
           start.setHours(hour, minute, 0, 0);
@@ -272,7 +284,9 @@ export function BookingForm({
 
           // Disponible si existe al menos 1 usuario sin solape con sus eventos
           const available = eventsByUser.some(({ events }) => {
-            const conflict = events.some((ev) => isOverlapping(start, end, ev.start, ev.end));
+            const conflict = events.some((ev) =>
+              isOverlapping(start, end, ev.start, ev.end),
+            );
             return !conflict;
           });
           if (!available) continue;
@@ -288,7 +302,12 @@ export function BookingForm({
     }
 
     return map;
-  }, [calendarAvailability, eventDuration, timeWindow.endHour, timeWindow.startHour]);
+  }, [
+    calendarAvailability,
+    eventDuration,
+    timeWindow.endHour,
+    timeWindow.startHour,
+  ]);
 
   const getSlotsForDate = (d: Date | null) => {
     if (!d) return [] as string[];
@@ -303,12 +322,12 @@ export function BookingForm({
 
   const goToPreviousMonth = () => {
     setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1)
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1),
     );
   };
   const goToNextMonth = () => {
     setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1)
+      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1),
     );
   };
 
@@ -342,7 +361,7 @@ export function BookingForm({
     const date = new Date(
       currentMonth.getFullYear(),
       currentMonth.getMonth(),
-      day
+      day,
     );
     setSelectedDate(date);
     setSelectedTime(null);
@@ -611,7 +630,7 @@ export function BookingForm({
                       const date = new Date(
                         currentMonth.getFullYear(),
                         currentMonth.getMonth(),
-                        day
+                        day,
                       );
                       const isSelected =
                         selectedDate?.toDateString() === date.toDateString();
@@ -635,7 +654,8 @@ export function BookingForm({
                             !disabled &&
                               !isSelected &&
                               "text-blue-600 hover:bg-blue-50",
-                            isSelected && "bg-blue-600 text-white font-semibold"
+                            isSelected &&
+                              "bg-blue-600 text-white font-semibold",
                           )}
                         >
                           {day}
@@ -671,59 +691,78 @@ export function BookingForm({
                         <div className="text-sm text-gray-500 text-center py-10">
                           No hay horarios disponibles para este día.
                         </div>
-                      ) : (() => {
-                        const morning = slotsForSelectedDate.filter((t) => {
-                          const h = Number(t.split(":")[0]);
-                          return h >= 6 && h < 12;
-                        });
-                        const afternoon = slotsForSelectedDate.filter((t) => {
-                          const h = Number(t.split(":")[0]);
-                          return h >= 12 && h < 18;
-                        });
-                        const evening = slotsForSelectedDate.filter((t) => {
-                          const h = Number(t.split(":")[0]);
-                          return h >= 18;
-                        });
-                        const groups = [
-                          { label: "Mañana", icon: <Sun className="w-4 h-4" />, slots: morning, color: "amber" },
-                          { label: "Tarde", icon: <Sunset className="w-4 h-4" />, slots: afternoon, color: "orange" },
-                          { label: "Noche", icon: <Moon className="w-4 h-4" />, slots: evening, color: "indigo" },
-                        ].filter((g) => g.slots.length > 0);
+                      ) : (
+                        (() => {
+                          const morning = slotsForSelectedDate.filter((t) => {
+                            const h = Number(t.split(":")[0]);
+                            return h >= 6 && h < 12;
+                          });
+                          const afternoon = slotsForSelectedDate.filter((t) => {
+                            const h = Number(t.split(":")[0]);
+                            return h >= 12 && h < 18;
+                          });
+                          const evening = slotsForSelectedDate.filter((t) => {
+                            const h = Number(t.split(":")[0]);
+                            return h >= 18;
+                          });
+                          const groups = [
+                            {
+                              label: "Mañana",
+                              icon: <Sun className="w-4 h-4" />,
+                              slots: morning,
+                              color: "amber",
+                            },
+                            {
+                              label: "Tarde",
+                              icon: <Sunset className="w-4 h-4" />,
+                              slots: afternoon,
+                              color: "orange",
+                            },
+                            {
+                              label: "Noche",
+                              icon: <Moon className="w-4 h-4" />,
+                              slots: evening,
+                              color: "indigo",
+                            },
+                          ].filter((g) => g.slots.length > 0);
 
-                        return (
-                          <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
-                            {groups.map((group) => (
-                              <div key={group.label}>
-                                <div className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-600">
-                                  {group.icon}
-                                  <span>{group.label}</span>
-                                  <span className="text-xs text-gray-400">({group.slots.length})</span>
+                          return (
+                            <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                              {groups.map((group) => (
+                                <div key={group.label}>
+                                  <div className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-600">
+                                    {group.icon}
+                                    <span>{group.label}</span>
+                                    <span className="text-xs text-gray-400">
+                                      ({group.slots.length})
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                    {group.slots.map((time) => (
+                                      <button
+                                        key={time}
+                                        onClick={() => {
+                                          setSelectedTime(time);
+                                          setStep("details");
+                                        }}
+                                        className={cn(
+                                          "py-2.5 px-2 text-center rounded-lg text-sm font-medium transition-all duration-150",
+                                          "border hover:shadow-md hover:scale-[1.03] active:scale-95",
+                                          selectedTime === time
+                                            ? "bg-blue-600 text-white border-blue-600 shadow-md"
+                                            : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-400",
+                                        )}
+                                      >
+                                        {time}
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
-                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                  {group.slots.map((time) => (
-                                    <button
-                                      key={time}
-                                      onClick={() => {
-                                        setSelectedTime(time);
-                                        setStep("details");
-                                      }}
-                                      className={cn(
-                                        "py-2.5 px-2 text-center rounded-lg text-sm font-medium transition-all duration-150",
-                                        "border hover:shadow-md hover:scale-[1.03] active:scale-95",
-                                        selectedTime === time
-                                          ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                                          : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-400"
-                                      )}
-                                    >
-                                      {time}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
+                              ))}
+                            </div>
+                          );
+                        })()
+                      )}
                     </>
                   ) : (
                     <div className="text-sm text-gray-500 text-center py-12">

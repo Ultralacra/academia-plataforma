@@ -95,3 +95,17 @@ export async function updateUser(
   });
   return res;
 }
+
+export async function changePassword(
+  codigo: string,
+  password: string
+): Promise<UserEnvelope> {
+  const res = await apiFetch<UserEnvelope>(
+    `/users/${encodeURIComponent(codigo)}/password`,
+    {
+      method: "POST",
+      body: JSON.stringify({ newPassword: password }),
+    }
+  );
+  return res;
+}

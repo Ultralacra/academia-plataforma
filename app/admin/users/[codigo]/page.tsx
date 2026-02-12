@@ -25,9 +25,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
-import { ArrowLeft, Save } from "lucide-react";
-import { fetchUser, updateUser, type SysUser } from "../api";
+import { ArrowLeft, Save, RefreshCw, Copy, Check } from "lucide-react";
+import { fetchUser, updateUser, changePassword, type SysUser } from "../api";
 import { fetchRoles, type Role } from "../../access/roles/api";
 
 function Field({
@@ -172,20 +179,77 @@ function ProfileForm({
   );
 }
 
+function generatePassword(length = 12): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let result = "";
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 function PasswordForm({ user }: { user: SysUser }) {
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [successOpen, setSuccessOpen] = useState(false);
+  const [successData, setSuccessData] = useState<SysUser | null>(null);
+  const [usedPassword, setUsedPassword] = useState("");
+
+  function handleGenerate() {
+    const generated = generatePassword();
+    setPassword(generated);
+    setShowPassword(true);
+  }
+
+  async function handleCopy() {
+    if (!password) return;
+    try {
+      await navigator.clipboard.writeText(password);
+      toast({
+        title: "Copiado",
+        description: "Contraseña copiada al portapapeles",
+      });
+    } catch {
+      toast({
+        title: "Error",
+        description: "No se pudo copiar",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleCopyFromModal() {
+    if (!usedPassword) return;
+    try {
+      await navigator.clipboard.writeText(usedPassword);
+      toast({
+        title: "Copiado",
+        description: "Contraseña copiada al portapapeles",
+      });
+    } catch {
+      toast({
+        title: "Error",
+        description: "No se pudo copiar",
+        variant: "destructive",
+      });
+    }
+  }
 
   async function handleConfirm() {
     try {
       setSaving(true);
-      await updateUser(user.codigo || String(user.id), { password });
-      toast({
-        title: "Contraseña actualizada",
-        description: `La clave fue actualizada correctamente.`,
-      });
+      const res = await changePassword(
+        user.codigo || String(user.id),
+        password,
+      );
+      const data = (res as any)?.data ?? null;
+      setUsedPassword(password);
+      setSuccessData(data);
+      setSuccessOpen(true);
       setPassword("");
+      setShowPassword(false);
     } catch (e: any) {
       toast({
         title: "Error",
@@ -201,44 +265,127 @@ function PasswordForm({ user }: { user: SysUser }) {
   const disabled = !password || password.length < 8;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">Cambiar contraseña</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <Field label="Nueva clave">
-          <Input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="ContraseñaSegura123!"
-          />
-        </Field>
-        <div className="flex justify-end">
-          <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-            <AlertDialogTrigger asChild>
-              <Button disabled={disabled || saving} variant="outline">
-                <Save className="h-4 w-4 mr-2" /> Actualizar clave
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Cambiar contraseña</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Field label="Nueva clave">
+            <div className="flex gap-2">
+              <Input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="ContraseñaSegura123!"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleGenerate}
+                title="Generar contraseña"
+              >
+                <RefreshCw className="h-4 w-4" />
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Confirmar actualización</AlertDialogTitle>
-                <AlertDialogDescription>
-                  ¿Seguro que deseas actualizar la contraseña de este usuario?
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={handleConfirm} disabled={saving}>
-                  Confirmar
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </CardContent>
-    </Card>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={handleCopy}
+                disabled={!password}
+                title="Copiar contraseña"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </Field>
+          <div className="flex justify-end">
+            <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+              <AlertDialogTrigger asChild>
+                <Button disabled={disabled || saving} variant="outline">
+                  <Save className="h-4 w-4 mr-2" /> Actualizar clave
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Confirmar actualización</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    ¿Seguro que deseas actualizar la contraseña de este usuario?
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleConfirm} disabled={saving}>
+                    Confirmar
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Modal de éxito con datos del usuario */}
+      <Dialog open={successOpen} onOpenChange={setSuccessOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-500" />
+              Contraseña actualizada
+            </DialogTitle>
+          </DialogHeader>
+          {successData && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Nombre</span>
+                <span className="col-span-2 font-medium">
+                  {successData.name}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Email</span>
+                <span className="col-span-2 font-medium">
+                  {successData.email}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Código</span>
+                <span className="col-span-2 font-medium">
+                  {successData.codigo}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Rol</span>
+                <span className="col-span-2 font-medium">
+                  {successData.role}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <span className="text-muted-foreground">Nueva clave</span>
+                <span className="col-span-2 font-mono font-bold tracking-wider bg-muted px-2 py-1 rounded flex items-center justify-between">
+                  {usedPassword}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={handleCopyFromModal}
+                    title="Copiar contraseña"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button onClick={() => setSuccessOpen(false)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -246,8 +393,23 @@ function UserDetailInner() {
   const params = useParams();
   const router = useRouter();
   const codigo = String(params?.codigo || "");
+  const isRestricted = codigo.trim().toUpperCase().startsWith("CXA");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<SysUser | null>(null);
+
+  if (isRestricted) {
+    return (
+      <div className="space-y-3">
+        <div className="text-sm font-semibold">Usuario restringido</div>
+        <div className="text-sm text-muted-foreground">
+          Comunícate con TI para verificar este usuario.
+        </div>
+        <Button variant="outline" onClick={() => router.push("/admin/users")}>
+          Volver
+        </Button>
+      </div>
+    );
+  }
 
   useEffect(() => {
     let alive = true;
@@ -317,7 +479,7 @@ function UserDetailInner() {
 
 export default function UserDetailPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "coach"]}>
       <DashboardLayout>
         <UserDetailInner />
       </DashboardLayout>

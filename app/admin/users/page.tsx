@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import UsersTable from "./components/UsersTable";
 import { fetchUsers, type SysUser } from "./api";
@@ -16,7 +15,6 @@ function UsersContent() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<"all" | "admin" | "equipo" | "alumno">("all");
   const [rows, setRows] = useState<SysUser[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -46,20 +44,10 @@ function UsersContent() {
     };
   }, [page, pageSize, debouncedQ, refreshKey]);
 
-  // Filtrado por rol (cliente)
-  const filteredRows = useMemo(() => {
-    const normalizeRole = (value: unknown) =>
-      String(value ?? "")
-        .trim()
-        .toLowerCase();
-    if (tab === "all") return rows;
-    return rows.filter((r) => normalizeRole(r.role) === tab);
-  }, [rows, tab]);
-
-  // Resetear a página 1 al cambiar búsqueda o tab
+  // Resetear a página 1 al cambiar búsqueda
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, tab]);
+  }, [debouncedQ]);
 
   return (
     <div className="space-y-4">
@@ -71,14 +59,6 @@ function UsersContent() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-          <TabsList>
-            <TabsTrigger value="all">Todos</TabsTrigger>
-            <TabsTrigger value="admin">Admins</TabsTrigger>
-            <TabsTrigger value="equipo">Equipo</TabsTrigger>
-            <TabsTrigger value="alumno">Alumnos</TabsTrigger>
-          </TabsList>
-        </Tabs>
         <Input
           placeholder="Buscar por nombre, email o código…"
           className="max-w-sm"
@@ -127,10 +107,10 @@ function UsersContent() {
         </div>
       </div>
 
-      <UsersTable rows={filteredRows} loading={loading} />
+      <UsersTable rows={rows} loading={loading} />
 
       <div className="text-xs text-muted-foreground">
-        Resultados: {filteredRows.length} de {total} (servidor)
+        Resultados: {rows.length} de {total} (servidor)
       </div>
     </div>
   );
@@ -138,7 +118,7 @@ function UsersContent() {
 
 export default function UsersPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo", "coach"]}>
       <DashboardLayout>
         <UsersContent />
       </DashboardLayout>

@@ -102,7 +102,7 @@ export function useAuth() {
     isLoading,
     login,
     logout,
-    hasRole: authService.hasRole.bind(authService),
-    hasAnyRole: authService.hasAnyRole.bind(authService),
+    hasRole: (role: string) => authState.user?.role === role,
+    hasAnyRole: (roles: string[]) => !!authState.user?.role && roles.includes(authState.user.role),
   }
 }

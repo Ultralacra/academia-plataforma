@@ -50,9 +50,19 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getStudentTickets } from "../api";
 import Link from "next/link";
-import { AlertTriangle, Eye, MessageSquare, Pencil, Plus } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  Eye,
+  MessageSquare,
+  Pencil,
+  Plus,
+  RefreshCw,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
+import { changePassword as changeSystemUserPassword } from "@/app/admin/users/api";
 import {
   uploadClientContract,
   downloadClientContractBlob,
@@ -92,6 +102,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [pIngreso, setPIngreso] = useState<string>("");
   const [editNameOpen, setEditNameOpen] = useState(false);
   const [tempName, setTempName] = useState<string>("");
+
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordSuccessOpen, setPasswordSuccessOpen] = useState(false);
+  const [usedPassword, setUsedPassword] = useState("");
   const [salida, setSalida] = useState<string>("");
   const [lastActivity, setLastActivity] = useState<string>("");
   const [lastTaskAt, setLastTaskAt] = useState<string>("");
@@ -103,6 +121,71 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [ticketsCount, setTicketsCount] = useState<number | undefined>(
     undefined,
   );
+
+  const normalizedRole = String((user as any)?.role ?? "").toLowerCase();
+  const canChangeStudentPassword = ["admin", "coach", "equipo"].includes(
+    normalizedRole,
+  );
+
+  const studentCodeForPassword = String(student?.code || code || "");
+  const changePasswordDisabled = studentCodeForPassword
+    .trim()
+    .toUpperCase()
+    .startsWith("CXA");
+
+  function generatePassword(length = 12): string {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    let result = "";
+    for (let i = 0; i < length; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  function handleGeneratePassword() {
+    const generated = generatePassword();
+    setNewPassword(generated);
+    setShowNewPassword(true);
+  }
+
+  async function handleCopyPassword(value: string) {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({
+        title: "Copiado",
+        description: "Contraseña copiada al portapapeles",
+      });
+    } catch {
+      toast({
+        title: "Error",
+        description: "No se pudo copiar",
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleConfirmChangePassword() {
+    try {
+      setSavingPassword(true);
+      const targetCode = studentCodeForPassword;
+      await changeSystemUserPassword(targetCode, newPassword);
+      setUsedPassword(newPassword);
+      setNewPassword("");
+      setShowNewPassword(false);
+      setPasswordSuccessOpen(true);
+    } catch (e: any) {
+      toast({
+        title: "Error",
+        description: e?.message || "No se pudo actualizar la clave",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingPassword(false);
+      setConfirmPasswordOpen(false);
+      setChangePasswordOpen(false);
+    }
+  }
 
   // Estado para editar fecha de ingreso
   const [editIngresoOpen, setEditIngresoOpen] = useState(false);
@@ -1077,12 +1160,12 @@ export default function StudentDetailContent({ code }: { code: string }) {
         codigo_cliente: student.code,
         codigo_equipo: coachId,
       };
-            /* console.log("Removing coach - request:", body); */
+      /* console.log("Removing coach - request:", body); */
       const json = await apiFetch<any>("/team/associate/team-client", {
         method: "DELETE",
         body: JSON.stringify(body),
       });
-            /* console.log("removeCoach response", json); */
+      /* console.log("removeCoach response", json); */
       // refresh coaches
       await loadCoaches(student.code);
     } catch (e) {
@@ -1553,7 +1636,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     if (lastAccessLogKeyRef.current === logKey) return;
     lastAccessLogKeyRef.current = logKey;
 
-        /* console.log("[admin/alumnos] vencimiento acceso (UI)", {
+    /* console.log("[admin/alumnos] vencimiento acceso (UI)", {
       student: {
         id: student.id,
         code: student.code,
@@ -1656,6 +1739,13 @@ export default function StudentDetailContent({ code }: { code: string }) {
           setTempName(currentName);
           setEditNameOpen(true);
         }}
+        canChangePassword={canChangeStudentPassword}
+        changePasswordDisabled={changePasswordDisabled}
+        onChangePassword={() => {
+          if (!canChangeStudentPassword) return;
+          if (changePasswordDisabled) return;
+          setChangePasswordOpen(true);
+        }}
       />
 
       <Dialog open={editNameOpen} onOpenChange={setEditNameOpen}>
@@ -1713,6 +1803,138 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 Guardar
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cambiar contraseña</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Nueva clave
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="ContraseñaSegura123!"
+                  className="flex-1"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={handleGeneratePassword}
+                  title="Generar contraseña"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => handleCopyPassword(newPassword)}
+                  disabled={!newPassword}
+                  title="Copiar contraseña"
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setChangePasswordOpen(false)}
+              >
+                Cancelar
+              </Button>
+
+              <AlertDialog
+                open={confirmPasswordOpen}
+                onOpenChange={setConfirmPasswordOpen}
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    !newPassword || newPassword.length < 8 || savingPassword
+                  }
+                  onClick={() => setConfirmPasswordOpen(true)}
+                >
+                  Actualizar clave
+                </Button>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Confirmar actualización</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      ¿Seguro que deseas actualizar la contraseña de este
+                      alumno?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleConfirmChangePassword}
+                      disabled={savingPassword}
+                    >
+                      Confirmar
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={passwordSuccessOpen} onOpenChange={setPasswordSuccessOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-500" />
+              Contraseña actualizada
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <div className="grid grid-cols-3 gap-2">
+              <span className="text-muted-foreground">Alumno</span>
+              <span className="col-span-2 font-medium">{student?.name}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <span className="text-muted-foreground">Código</span>
+              <span className="col-span-2 font-medium">
+                {studentCodeForPassword}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <span className="text-muted-foreground">Nueva clave</span>
+              <span className="col-span-2 font-mono font-bold tracking-wider bg-muted px-2 py-1 rounded flex items-center justify-between">
+                {usedPassword}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => handleCopyPassword(usedPassword)}
+                  title="Copiar contraseña"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </span>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => setPasswordSuccessOpen(false)}>
+              Cerrar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

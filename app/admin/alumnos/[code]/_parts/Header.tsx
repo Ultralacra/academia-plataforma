@@ -1,6 +1,6 @@
 "use client";
 
-import { Pencil, TicketIcon, Trash2, User } from "lucide-react";
+import { Key, Pencil, TicketIcon, Trash2, User } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -37,6 +37,9 @@ export default function Header({
   hideCodeAndTickets,
   canEditName,
   onEditName,
+  canChangePassword,
+  changePasswordDisabled,
+  onChangePassword,
 }: {
   name: string;
   code: string;
@@ -49,6 +52,9 @@ export default function Header({
   hideCodeAndTickets?: boolean;
   canEditName?: boolean;
   onEditName?: () => void;
+  canChangePassword?: boolean;
+  changePasswordDisabled?: boolean;
+  onChangePassword?: () => void;
 }) {
   // Nota: el conteo real de tickets se muestra desde el padre para evitar fetch doble.
   return (
@@ -62,17 +68,49 @@ export default function Header({
             <h1 className="text-balance text-2xl font-semibold tracking-tight text-foreground">
               {name}
             </h1>
-            {canEditName ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                title="Editar nombre"
-                onClick={() => onEditName?.()}
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
+
+            {canEditName || canChangePassword ? (
+              <TooltipProvider>
+                <div className="flex items-center">
+                  {canEditName ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Editar nombre"
+                      onClick={() => onEditName?.()}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+
+                  {canChangePassword ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={!!changePasswordDisabled}
+                            title="Cambiar contraseña"
+                            onClick={() => onChangePassword?.()}
+                          >
+                            <Key className="h-4 w-4" />
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        {changePasswordDisabled
+                          ? "Comunícate con TI para verificar este usuario."
+                          : "Cambiar contraseña"}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : null}
+                </div>
+              </TooltipProvider>
             ) : null}
           </div>
           {code && !hideCodeAndTickets && (
