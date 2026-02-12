@@ -172,6 +172,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
     try {
       setSavingPassword(true);
       const targetCode = studentCodeForPassword;
+      const passwordToSend = newPassword;
       const res = await changeSystemUserPassword(targetCode, newPassword);
       const data = (res as any)?.data ?? null;
       setPasswordSuccessData(data);
@@ -179,6 +180,32 @@ export default function StudentDetailContent({ code }: { code: string }) {
       setNewPassword("");
       setShowNewPassword(false);
       setPasswordSuccessOpen(true);
+
+      const recipientEmail = String(data?.email ?? "").trim();
+      if (recipientEmail) {
+        const token = getAuthToken();
+        void fetch("/api/brevo/password-changed", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            email: recipientEmail,
+            name: String(data?.name ?? student?.name ?? "").trim(),
+            username: String(data?.email ?? "").trim(),
+            newPassword: passwordToSend,
+          }),
+        }).then(async (r) => {
+          if (r.ok) return;
+          const j: any = await r.json().catch(() => null);
+          toast({
+            title: "Aviso",
+            description: j?.message || "No se pudo enviar el correo por Brevo",
+            variant: "destructive",
+          });
+        });
+      }
     } catch (e: any) {
       toast({
         title: "Error",

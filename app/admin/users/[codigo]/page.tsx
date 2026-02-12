@@ -36,6 +36,7 @@ import { toast } from "@/components/ui/use-toast";
 import { ArrowLeft, Save, RefreshCw, Copy, Check } from "lucide-react";
 import { fetchUser, updateUser, changePassword, type SysUser } from "../api";
 import { fetchRoles, type Role } from "../../access/roles/api";
+import { getAuthToken } from "@/lib/auth";
 
 function Field({
   label,
@@ -197,6 +198,46 @@ function PasswordForm({ user }: { user: SysUser }) {
   const [successData, setSuccessData] = useState<SysUser | null>(null);
   const [usedPassword, setUsedPassword] = useState("");
 
+  async function sendPasswordChangedEmail(params: {
+    email: string;
+    name?: string | null;
+    username?: string | null;
+    newPassword: string;
+  }) {
+    try {
+      const token = getAuthToken();
+      const res = await fetch("/api/brevo/password-changed", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          email: params.email,
+          name: params.name ?? "",
+          username: params.username ?? "",
+          newPassword: params.newPassword,
+        }),
+      });
+
+      if (!res.ok) {
+        // No bloqueamos el flujo de cambio de clave, solo avisamos.
+        const j: any = await res.json().catch(() => null);
+        toast({
+          title: "Aviso",
+          description: j?.message || "No se pudo enviar el correo por Brevo",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Aviso",
+        description: "No se pudo enviar el correo por Brevo",
+        variant: "destructive",
+      });
+    }
+  }
+
   function handleGenerate() {
     const generated = generatePassword();
     setPassword(generated);
@@ -240,6 +281,7 @@ function PasswordForm({ user }: { user: SysUser }) {
   async function handleConfirm() {
     try {
       setSaving(true);
+      const passwordToSend = password;
       const res = await changePassword(
         user.codigo || String(user.id),
         password,
@@ -250,6 +292,16 @@ function PasswordForm({ user }: { user: SysUser }) {
       setSuccessOpen(true);
       setPassword("");
       setShowPassword(false);
+
+      const recipientEmail = String(data?.email ?? user?.email ?? "").trim();
+      if (recipientEmail) {
+        void sendPasswordChangedEmail({
+          email: recipientEmail,
+          name: (data?.name ?? user?.name ?? null) as any,
+          username: (data?.email ?? user?.email ?? null) as any,
+          newPassword: passwordToSend,
+        });
+      }
     } catch (e: any) {
       toast({
         title: "Error",
