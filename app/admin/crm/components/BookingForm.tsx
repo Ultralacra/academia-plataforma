@@ -5,10 +5,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { ChevronLeft, ChevronRight, Clock, Globe } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock, Globe, Sun, Sunset, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
-import { createLeadFromForm, listLeadOrigins } from "@/app/admin/crm/api";
+import {
+  createLeadFromForm,
+  getCalendarAllAvailability,
+  listLeadOrigins,
+  type CalendarAllAvailabilityResponse,
+  type LeadOrigin,
+} from "@/app/admin/crm/api";
 
 export interface BookingFormProps {
   eventTitle?: string;
@@ -63,6 +69,36 @@ export function BookingForm({
     string | null
   >(null);
 
+  const [origins, setOrigins] = useState<LeadOrigin[] | null>(null);
+  const [originsLoading, setOriginsLoading] = useState(false);
+
+  const [calendarAvailability, setCalendarAvailability] =
+    useState<CalendarAllAvailabilityResponse | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
+  const timeWindow = useState(() => ({ startHour: 6, endHour: 22 }))[0];
+
+  useEffect(() => {
+    let alive = true;
+    setOriginsLoading(true);
+    (async () => {
+      try {
+        const data = await listLeadOrigins();
+        if (!alive) return;
+        setOrigins(data);
+      } catch {
+        if (!alive) return;
+        setOrigins([]);
+      } finally {
+        if (!alive) return;
+        setOriginsLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   useEffect(() => {
     let alive = true;
     const eventCodigo = String(campaignEventCodigo || "").trim();
@@ -102,7 +138,33 @@ export function BookingForm({
     return () => {
       alive = false;
     };
-  }, [campaignEventCodigo]);
+  }, [campaignEventCodigo, origins]);
+
+  useEffect(() => {
+    let alive = true;
+    const oc = String(campaignOrigenCodigo || "").trim();
+    if (!oc) {
+      setCalendarAvailability(null);
+      return;
+    }
+    setAvailabilityLoading(true);
+    (async () => {
+      try {
+        const data = await getCalendarAllAvailability(oc);
+        if (!alive) return;
+        setCalendarAvailability(data);
+      } catch {
+        if (!alive) return;
+        setCalendarAvailability(null);
+      } finally {
+        if (!alive) return;
+        setAvailabilityLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [campaignOrigenCodigo]);
 
   useEffect(() => {
     const detectedTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -132,12 +194,112 @@ export function BookingForm({
     setCountryCode(countryData.code);
   }, []);
 
-  const availableDates = Array.from({ length: 30 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() + i);
-    return date;
-  });
-  const timeSlots = ["09:00", "10:00", "11:00", "12:00"];
+  const defaultTimeSlots = ["09:00", "10:00", "11:00", "12:00"];
+
+  const toDateKeyLocal = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const parseHm = (hm: string) => {
+    const [h, m] = String(hm).split(":");
+    return {
+      h: Math.max(0, Math.min(23, Number(h))),
+      m: Math.max(0, Math.min(59, Number(m))),
+    };
+  };
+
+  const isOverlapping = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
+    aStart < bEnd && aEnd > bStart;
+
+  const availabilityByDate = React.useMemo(() => {
+    // Si no hay data usable, devolvemos null y el UI hace fallback
+    // Manejamos ambos casos: objeto {success,data} o array directo (por unwrapData)
+    const users = Array.isArray(calendarAvailability)
+      ? (calendarAvailability as any)
+      : calendarAvailability?.data;
+    const usableUsers = Array.isArray(users)
+      ? users.filter((u: any) => Array.isArray(u.events))
+      : [];
+    if (!usableUsers.length) return null;
+
+    const eventsByUser = usableUsers.map((u) => {
+      const events = (u.events || [])
+        .map((ev) => ({
+          start: new Date(ev.start),
+          end: new Date(ev.end),
+        }))
+        .filter(
+          (x) =>
+            x.start instanceof Date &&
+            x.end instanceof Date &&
+            !Number.isNaN(x.start.getTime()) &&
+            !Number.isNaN(x.end.getTime()) &&
+            x.end.getTime() > x.start.getTime(),
+        );
+      return { events };
+    });
+
+    const map = new Map<string, string[]>();
+    const now = new Date();
+
+    // Generamos próximos 30 días como antes
+    for (let i = 0; i < 30; i++) {
+      const day = new Date();
+      day.setHours(0, 0, 0, 0);
+      day.setDate(day.getDate() + i);
+
+      const key = toDateKeyLocal(day);
+      const slots: string[] = [];
+
+      for (let hour = timeWindow.startHour; hour <= timeWindow.endHour; hour++) {
+        for (const minute of [0, 15, 30, 45]) {
+          const start = new Date(day);
+          start.setHours(hour, minute, 0, 0);
+          const end = new Date(start);
+          end.setMinutes(end.getMinutes() + eventDuration);
+
+          // No permitir slots que terminan fuera de ventana
+          const windowEnd = new Date(day);
+          windowEnd.setHours(timeWindow.endHour + 1, 0, 0, 0);
+          if (end > windowEnd) continue;
+
+          // No mostrar horas pasadas (si es hoy)
+          if (toDateKeyLocal(start) === toDateKeyLocal(now) && start <= now)
+            continue;
+
+          // Disponible si existe al menos 1 usuario sin solape con sus eventos
+          const available = eventsByUser.some(({ events }) => {
+            const conflict = events.some((ev) => isOverlapping(start, end, ev.start, ev.end));
+            return !conflict;
+          });
+          if (!available) continue;
+
+          const hm = `${String(start.getHours()).padStart(2, "0")}:${String(
+            start.getMinutes(),
+          ).padStart(2, "0")}`;
+          slots.push(hm);
+        }
+      }
+
+      map.set(key, slots);
+    }
+
+    return map;
+  }, [calendarAvailability, eventDuration, timeWindow.endHour, timeWindow.startHour]);
+
+  const getSlotsForDate = (d: Date | null) => {
+    if (!d) return [] as string[];
+    const key = toDateKeyLocal(d);
+    const fromMap = availabilityByDate?.get(key);
+    if (Array.isArray(fromMap)) return fromMap;
+    // Fallback al comportamiento viejo
+    return defaultTimeSlots;
+  };
+
+  const slotsForSelectedDate = getSlotsForDate(selectedDate);
 
   const goToPreviousMonth = () => {
     setCurrentMonth(
@@ -183,6 +345,7 @@ export function BookingForm({
       day
     );
     setSelectedDate(date);
+    setSelectedTime(null);
   };
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -454,15 +617,22 @@ export function BookingForm({
                         selectedDate?.toDateString() === date.toDateString();
                       const isPast =
                         date < new Date(new Date().setHours(0, 0, 0, 0));
+                      const isDayAvailable = (() => {
+                        if (!availabilityByDate) return true;
+                        const key = toDateKeyLocal(date);
+                        const slots = availabilityByDate.get(key) || [];
+                        return Array.isArray(slots) && slots.length > 0;
+                      })();
+                      const disabled = isPast || !isDayAvailable;
                       return (
                         <button
                           key={day}
-                          onClick={() => !isPast && handleDateSelect(day)}
-                          disabled={isPast}
+                          onClick={() => !disabled && handleDateSelect(day)}
+                          disabled={disabled}
                           className={cn(
                             "aspect-square flex items-center justify-center rounded text-sm transition-colors font-normal",
-                            isPast && "text-gray-300 cursor-not-allowed",
-                            !isPast &&
+                            disabled && "text-gray-300 cursor-not-allowed",
+                            !disabled &&
                               !isSelected &&
                               "text-blue-600 hover:bg-blue-50",
                             isSelected && "bg-blue-600 text-white font-semibold"
@@ -483,7 +653,7 @@ export function BookingForm({
                     </button>
                   </div>
                 </div>
-                <div className="flex-1 md:max-w-xs w-full">
+                <div className="flex-1 w-full">
                   {selectedDate ? (
                     <>
                       <h3 className="font-semibold mb-4 text-base capitalize">
@@ -493,20 +663,67 @@ export function BookingForm({
                           month: "long",
                         })}
                       </h3>
-                      <div className="space-y-3">
-                        {timeSlots.map((time) => (
-                          <button
-                            key={time}
-                            onClick={() => {
-                              setSelectedTime(time);
-                              setStep("details");
-                            }}
-                            className="w-full py-3 px-4 text-center border border-blue-600 text-blue-600 rounded hover:bg-blue-50 transition-colors font-medium text-base"
-                          >
-                            {time}
-                          </button>
-                        ))}
-                      </div>
+                      {availabilityLoading ? (
+                        <div className="text-sm text-gray-500 text-center py-10">
+                          Cargando horarios disponibles...
+                        </div>
+                      ) : slotsForSelectedDate.length === 0 ? (
+                        <div className="text-sm text-gray-500 text-center py-10">
+                          No hay horarios disponibles para este día.
+                        </div>
+                      ) : (() => {
+                        const morning = slotsForSelectedDate.filter((t) => {
+                          const h = Number(t.split(":")[0]);
+                          return h >= 6 && h < 12;
+                        });
+                        const afternoon = slotsForSelectedDate.filter((t) => {
+                          const h = Number(t.split(":")[0]);
+                          return h >= 12 && h < 18;
+                        });
+                        const evening = slotsForSelectedDate.filter((t) => {
+                          const h = Number(t.split(":")[0]);
+                          return h >= 18;
+                        });
+                        const groups = [
+                          { label: "Mañana", icon: <Sun className="w-4 h-4" />, slots: morning, color: "amber" },
+                          { label: "Tarde", icon: <Sunset className="w-4 h-4" />, slots: afternoon, color: "orange" },
+                          { label: "Noche", icon: <Moon className="w-4 h-4" />, slots: evening, color: "indigo" },
+                        ].filter((g) => g.slots.length > 0);
+
+                        return (
+                          <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
+                            {groups.map((group) => (
+                              <div key={group.label}>
+                                <div className="flex items-center gap-2 mb-2 text-sm font-medium text-gray-600">
+                                  {group.icon}
+                                  <span>{group.label}</span>
+                                  <span className="text-xs text-gray-400">({group.slots.length})</span>
+                                </div>
+                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                  {group.slots.map((time) => (
+                                    <button
+                                      key={time}
+                                      onClick={() => {
+                                        setSelectedTime(time);
+                                        setStep("details");
+                                      }}
+                                      className={cn(
+                                        "py-2.5 px-2 text-center rounded-lg text-sm font-medium transition-all duration-150",
+                                        "border hover:shadow-md hover:scale-[1.03] active:scale-95",
+                                        selectedTime === time
+                                          ? "bg-blue-600 text-white border-blue-600 shadow-md"
+                                          : "bg-white text-blue-600 border-blue-200 hover:bg-blue-50 hover:border-blue-400"
+                                      )}
+                                    >
+                                      {time}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </>
                   ) : (
                     <div className="text-sm text-gray-500 text-center py-12">

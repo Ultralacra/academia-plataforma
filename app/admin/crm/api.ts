@@ -697,6 +697,51 @@ export async function listLeadOrigins() {
   return items as LeadOrigin[];
 }
 
+// ===================== Calendario (Booking) =====================
+
+export interface CalendarAvailabilityEvent {
+  id?: string;
+  summary?: string | null;
+  start: string;
+  end: string;
+  link?: string | null;
+  description?: string | null;
+}
+
+export interface CalendarAvailabilityUser {
+  codigo: string;
+  name?: string | null;
+  email?: string | null;
+  google_email?: string | null;
+  error?: string | null;
+  events?: CalendarAvailabilityEvent[];
+}
+
+export interface CalendarAllAvailabilityResponse {
+  success: boolean;
+  data: CalendarAvailabilityUser[];
+}
+
+export async function getCalendarAllAvailability(origenCodigo: string) {
+  const oc = String(origenCodigo || "").trim();
+  if (!oc) throw new Error("origenCodigo requerido");
+  const qs = new URLSearchParams({ origenCodigo: oc });
+  const raw = await apiFetch<any>(`/calendar/all-availability?${qs.toString()}`, {
+    method: "GET",
+  });
+  // No usamos unwrapData aquí porque CalendarAllAvailabilityResponse ya
+  // modela la forma {success, data}. unwrapData extraería .data y luego
+  // el consumidor haría .data de nuevo, resultando undefined.
+  if (raw && typeof raw === "object" && Array.isArray((raw as any).data)) {
+    return raw as CalendarAllAvailabilityResponse;
+  }
+  // Fallback: si el backend ya devuelve el array plano (sin wrapper)
+  if (Array.isArray(raw)) {
+    return { success: true, data: raw } as CalendarAllAvailabilityResponse;
+  }
+  return unwrapData<CalendarAllAvailabilityResponse>(raw);
+}
+
 export async function getLeadOrigin(codigo: string) {
   if (!codigo) throw new Error("codigo requerido");
   const raw = await apiFetch<any>(`/leads/origins/${encodeURIComponent(codigo)}`, {

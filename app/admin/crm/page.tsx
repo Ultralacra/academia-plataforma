@@ -666,7 +666,10 @@ function CrmContent() {
               ))}
             </div>
 
-            <div className="relative" style={{ height: `${timelineHeightPx}px` }}>
+            <div
+              className="relative"
+              style={{ height: `${timelineHeightPx}px` }}
+            >
               {HOURS.map((_, idx) => (
                 <div
                   key={idx}
@@ -738,7 +741,8 @@ function CrmContent() {
               </p>
             </div>
             <Badge variant={busyForDay.length > 0 ? "muted" : "outline"}>
-              {busyForDay.length} {busyForDay.length === 1 ? "bloqueo" : "bloqueos"}
+              {busyForDay.length}{" "}
+              {busyForDay.length === 1 ? "bloqueo" : "bloqueos"}
             </Badge>
           </div>
 

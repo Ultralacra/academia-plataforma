@@ -81,13 +81,13 @@ export default function CampanaDetailPage() {
   const [usersLoading, setUsersLoading] = React.useState(false);
   const [users, setUsers] = React.useState<any[]>([]);
   const [selectedUsers, setSelectedUsers] = React.useState<Set<string>>(
-    new Set()
+    new Set(),
   );
   const [assigningUsers, setAssigningUsers] = React.useState(false);
   const [availabilityOpen, setAvailabilityOpen] = React.useState(false);
   const [availabilityLoading, setAvailabilityLoading] = React.useState(false);
   const [availabilityDay, setAvailabilityDay] = React.useState<Date>(
-    () => new Date()
+    () => new Date(),
   );
   const [availability, setAvailability] = React.useState<{
     google_email: string;
@@ -226,7 +226,7 @@ export default function CampanaDetailPage() {
       0,
       0,
       0,
-      0
+      0,
     );
     const end = new Date(
       d.getFullYear(),
@@ -235,7 +235,7 @@ export default function CampanaDetailPage() {
       23,
       59,
       59,
-      999
+      999,
     );
     return { start, end };
   };
@@ -251,7 +251,7 @@ export default function CampanaDetailPage() {
       const current = new Date(
         start.getFullYear(),
         start.getMonth(),
-        start.getDate()
+        start.getDate(),
       );
       const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
 
@@ -293,7 +293,7 @@ export default function CampanaDetailPage() {
           !Number.isNaN(slot.start.getTime()) &&
           !Number.isNaN(slot.end.getTime()) &&
           slot.end >= dayStart &&
-          slot.start <= dayEnd
+          slot.start <= dayEnd,
       )
       .sort((a, b) => a.start.getTime() - b.start.getTime());
 
@@ -401,7 +401,10 @@ export default function CampanaDetailPage() {
                 </div>
               ))}
             </div>
-            <div className="relative" style={{ height: `${timelineHeightPx}px` }}>
+            <div
+              className="relative"
+              style={{ height: `${timelineHeightPx}px` }}
+            >
               {hours.map((_, idx) => (
                 <div
                   key={idx}
@@ -480,7 +483,8 @@ export default function CampanaDetailPage() {
               </p>
             </div>
             <Badge variant={busyForDay.length > 0 ? "muted" : "outline"}>
-              {busyForDay.length} {busyForDay.length === 1 ? "bloqueo" : "bloqueos"}
+              {busyForDay.length}{" "}
+              {busyForDay.length === 1 ? "bloqueo" : "bloqueos"}
             </Badge>
           </div>
 
