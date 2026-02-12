@@ -109,6 +109,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwordSuccessOpen, setPasswordSuccessOpen] = useState(false);
+  const [passwordSuccessData, setPasswordSuccessData] = useState<any | null>(
+    null,
+  );
   const [usedPassword, setUsedPassword] = useState("");
   const [salida, setSalida] = useState<string>("");
   const [lastActivity, setLastActivity] = useState<string>("");
@@ -169,7 +172,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
     try {
       setSavingPassword(true);
       const targetCode = studentCodeForPassword;
-      await changeSystemUserPassword(targetCode, newPassword);
+      const res = await changeSystemUserPassword(targetCode, newPassword);
+      const data = (res as any)?.data ?? null;
+      setPasswordSuccessData(data);
       setUsedPassword(newPassword);
       setNewPassword("");
       setShowNewPassword(false);
@@ -1906,12 +1911,26 @@ export default function StudentDetailContent({ code }: { code: string }) {
           <div className="space-y-3 text-sm">
             <div className="grid grid-cols-3 gap-2">
               <span className="text-muted-foreground">Alumno</span>
-              <span className="col-span-2 font-medium">{student?.name}</span>
+              <span className="col-span-2 font-medium">
+                {passwordSuccessData?.name ?? student?.name ?? "—"}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <span className="text-muted-foreground">Email</span>
+              <span className="col-span-2 font-medium">
+                {passwordSuccessData?.email ?? student?.raw?.email ?? "—"}
+              </span>
             </div>
             <div className="grid grid-cols-3 gap-2">
               <span className="text-muted-foreground">Código</span>
               <span className="col-span-2 font-medium">
-                {studentCodeForPassword}
+                {passwordSuccessData?.codigo ?? studentCodeForPassword}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <span className="text-muted-foreground">Rol</span>
+              <span className="col-span-2 font-medium">
+                {passwordSuccessData?.role ?? "—"}
               </span>
             </div>
             <div className="grid grid-cols-3 gap-2">
