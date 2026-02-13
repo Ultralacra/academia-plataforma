@@ -453,6 +453,8 @@ export async function getTickets(opts: {
       alumno_id: string;
       alumno_nombre?: string;
       ticket_codigo: string;
+      ads_metadata_id?: string | number | null;
+      ads_metadata_snapshot?: any;
       deleted?: boolean; // SOLO para eliminar del modal (soft delete)
     };
     created_at: string;
@@ -463,18 +465,19 @@ export async function getTickets(opts: {
    * Endpoint: GET /v1/metadata?ticket_codigo=:ticketCode&alumno_id=:alumnoId
    * NOTA: Solo filtra por 'deleted', las observaciones 'realizadas' se siguen mostrando
    */
-  export async function getObservaciones(ticketCode: string, alumnoId?: string): Promise<Observacion[]> {
-    if (!ticketCode) return [];
+  export async function getObservaciones(
+    ticketCode: string | undefined,
+    alumnoId?: string,
+  ): Promise<Observacion[]> {
     // En UI de alumno, si no tenemos alumnoId, NO consultamos (evita traer demasiado)
     if (!alumnoId) return [];
 
+    const qs = new URLSearchParams();
+    if (ticketCode) qs.set("ticket_codigo", ticketCode);
+    const url = `/api/alumnos/${encodeURIComponent(String(alumnoId))}/metadata${qs.toString() ? `?${qs.toString()}` : ""}`;
+
     // Proxy interno: evita exponer /metadata real en Network.
-    const json = await internalFetchJson<{ items: any[] }>(
-      `/api/alumnos/${encodeURIComponent(
-        String(alumnoId),
-      )}/metadata?ticket_codigo=${encodeURIComponent(ticketCode)}`,
-      { method: "GET" },
-    );
+    const json = await internalFetchJson<{ items: any[] }>(url, { method: "GET" });
     const list = Array.isArray(json?.items) ? json.items : [];
     
     // Filtrar SOLO las eliminadas con 'deleted: true'
@@ -489,6 +492,9 @@ export async function getTickets(opts: {
       
       // Filtrar por alumno_id si está disponible
       if (alumnoId && obs.payload?.alumno_id !== alumnoId) return false;
+
+      // Si vino ticketCode, filtrar; si no, devolvemos todas las tareas del alumno
+      if (ticketCode && obs.payload?.ticket_codigo !== ticketCode) return false;
       
       return true;
     }) as Observacion[];

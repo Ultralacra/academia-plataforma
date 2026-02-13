@@ -58,7 +58,8 @@ const AREAS = [
 ] as const;
 
 type ObservacionesSectionProps = {
-  ticketCode: string;
+  ticketCode?: string;
+  ticketCodeForCreate?: string;
   alumnoId: string;
   coachId: string; // ID del coach actual (quien crea la observación)
   canEdit?: boolean; // Si el usuario puede editar (solo coaches/equipo)
@@ -66,6 +67,7 @@ type ObservacionesSectionProps = {
 
 export default function ObservacionesSection({
   ticketCode,
+  ticketCodeForCreate,
   alumnoId,
   coachId,
   canEdit = true,
@@ -96,7 +98,7 @@ export default function ObservacionesSection({
   const adsMetadataFetchedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const cacheKey = `${ticketCode}|${alumnoId}`;
+    const cacheKey = `${ticketCode ?? ""}|${alumnoId}`;
 
     // Cargar observaciones solo si cambiaron los parámetros
     if (observacionesFetchedRef.current !== cacheKey) {
@@ -172,7 +174,7 @@ export default function ObservacionesSection({
   };
 
   const loadObservaciones = async () => {
-    if (!ticketCode) return;
+    if (!alumnoId) return;
     setLoading(true);
     try {
       const data = await getObservaciones(ticketCode, alumnoId);
@@ -318,15 +320,28 @@ export default function ObservacionesSection({
           ticket_codigo: originalPayload.ticket_codigo,
           deleted: false, // Explícitamente mantener como no eliminado
           ads_metadata_id:
-            adsSnapshot?.id ?? originalPayload?.ads_metadata_id ?? null,
+            adsSnapshot?.id ??
+            (originalPayload as any)?.ads_metadata_id ??
+            null,
           ads_metadata_snapshot:
-            adsSnapshot ?? originalPayload?.ads_metadata_snapshot ?? null,
+            adsSnapshot ??
+            (originalPayload as any)?.ads_metadata_snapshot ??
+            null,
         });
         toast({
           title: "Actualizado",
           description: "Observación actualizada correctamente",
         });
       } else {
+        const effectiveTicketCode = ticketCodeForCreate ?? ticketCode ?? "";
+        if (!effectiveTicketCode.trim()) {
+          toast({
+            title: "Error",
+            description: "No se pudo crear la tarea (código no disponible)",
+            variant: "destructive",
+          });
+          return;
+        }
         // Crear
         await createObservacion({
           fecha: fecha ? `${fecha}T12:00:00` : new Date().toISOString(),
@@ -337,7 +352,7 @@ export default function ObservacionesSection({
           constancia_texto: constanciaTexto,
           creado_por_id: coachId,
           alumno_id: alumnoId,
-          ticket_codigo: ticketCode,
+          ticket_codigo: effectiveTicketCode,
           ads_metadata_id: adsSnapshot?.id ?? null,
           ads_metadata_snapshot: adsSnapshot ?? null,
         });
