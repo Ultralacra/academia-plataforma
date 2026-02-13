@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { listMetadata } from "@/lib/metadata";
@@ -305,6 +305,14 @@ export default function TicketsBoard({
   const [loading, setLoading] = useState(true);
   const [refreshBump, setRefreshBump] = useState(0);
   const searchParams = useSearchParams();
+  const debugCoachFilter = useMemo(() => {
+    try {
+      const v = (searchParams?.get("debugCoach") || "").toLowerCase();
+      return v === "1" || v === "true";
+    } catch {
+      return false;
+    }
+  }, [searchParams]);
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
   const [coachFiltro, setCoachFiltro] = useState<string>("");
   const [openFiles, setOpenFiles] = useState<null | string>(null);
@@ -816,20 +824,34 @@ export default function TicketsBoard({
     return false;
   }, [user, coaches]);
 
-  const visibleTickets = useMemo(() => {
-    if (!onlyMyTickets) return tickets;
-    if (!(user?.codigo || typeof (user as any)?.id !== "undefined"))
-      return tickets;
+  const selectedCoachUser = useMemo(() => {
+    if (!coachFiltro) return null;
+    const coach = coaches.find(
+      (c) => String(c.codigo || "").trim() === coachFiltro,
+    );
+    if (!coach) return null;
+    const code = String(coach.codigo || "").trim();
+    const id = String((coach as any)?.id ?? "").trim();
+    const atc = isAtcCoach(coach);
+    return { code, id, atc };
+  }, [coachFiltro, coaches]);
 
-    const myCode = String((user as any)?.codigo ?? "").trim();
-    const myId = String((user as any)?.id ?? "").trim();
+  const filterTicketsForViewer = (
+    list: TicketBoardItem[],
+    viewer: { code: string; id: string; atc: boolean } | null,
+  ): TicketBoardItem[] => {
+    if (!viewer) return list;
+    const viewerCode = String(viewer.code ?? "").trim();
+    const viewerId = String(viewer.id ?? "").trim();
+    if (!viewerCode && !viewerId) return list;
 
-    return tickets.filter((t) => {
+    return list.filter((t: TicketBoardItem) => {
       const informanteStr = String((t as any).informante || "").trim();
-      const createdByMe =
-        informanteStr === myCode || (!!myId && informanteStr === myId);
+      const createdByViewer =
+        informanteStr === viewerCode ||
+        (!!viewerId && informanteStr === viewerId);
 
-      let assignedToMe = false;
+      let assignedToViewer = false;
       try {
         const coachesArr = Array.isArray((t as any)?.coaches)
           ? (t as any).coaches
@@ -838,40 +860,40 @@ export default function TicketsBoard({
           ? (t as any).coaches_override
           : [];
 
-        assignedToMe = coachesArr.some((co: any) => {
+        assignedToViewer = coachesArr.some((co: any) => {
           const code = String(
             (co && typeof co === "object"
               ? (co?.codigo_equipo ?? co?.codigo ?? co?.id)
               : co) ?? "",
           ).trim();
-          const match = code === myCode || (!!myId && code === myId);
-          return match;
+          return code === viewerCode || (!!viewerId && code === viewerId);
         });
 
-        if (!assignedToMe && overrides.length > 0) {
+        if (!assignedToViewer && overrides.length > 0) {
           const overrideObjects = overrides.filter(
             (o: any) => o && typeof o === "object",
           );
           if (overrideObjects.length > 0) {
-            assignedToMe = overrideObjects.some((o: any) => {
+            assignedToViewer = overrideObjects.some((o: any) => {
               const code = String(
                 o?.codigo_equipo || o?.codigo || o?.id || "",
               ).trim();
-              return code === myCode || (!!myId && code === myId);
+              return code === viewerCode || (!!viewerId && code === viewerId);
             });
           } else {
-            assignedToMe = overrides.some((o: any) => {
+            assignedToViewer = overrides.some((o: any) => {
               const code = String(o || "").trim();
-              return code === myCode || (!!myId && code === myId);
+              return code === viewerCode || (!!viewerId && code === viewerId);
             });
           }
         }
       } catch {}
 
-      // Para usuarios ATC: verificar si aparecen en alumno_coaches del ticket
-      // (todos los coaches del alumno, no solo el responsable del ticket)
+      // Solo para coaches ATC: verificar además alumno_coaches y tickets ATC
       let atcAssignedToStudent = false;
-      if (isUserAtc && !createdByMe && !assignedToMe) {
+      let involvesAtc = false;
+      if (viewer.atc && !createdByViewer && !assignedToViewer) {
+        // Verificar si aparece en alumno_coaches del ticket
         try {
           const alumnoCoachesArr = Array.isArray((t as any)?.alumno_coaches)
             ? (t as any).alumno_coaches
@@ -881,15 +903,11 @@ export default function TicketsBoard({
             const code = String(
               co?.codigo_equipo ?? co?.codigo ?? co?.id ?? "",
             ).trim();
-            // Si el usuario ATC aparece en alumno_coaches, mostrar el ticket
-            return code === myCode || (!!myId && code === myId);
+            return code === viewerCode || (!!viewerId && code === viewerId);
           });
         } catch {}
-      }
 
-      // Para usuarios ATC: también mostrar tickets donde algún coach sea ATC o el tipo sea ATC
-      let involvesAtc = false;
-      if (isUserAtc && !createdByMe && !assignedToMe) {
+        // También mostrar tickets donde algún coach sea ATC o el tipo sea ATC
         try {
           const coachesArr = Array.isArray((t as any)?.coaches)
             ? (t as any).coaches
@@ -900,15 +918,96 @@ export default function TicketsBoard({
         } catch {}
       }
 
-      return createdByMe || assignedToMe || involvesAtc || atcAssignedToStudent;
+      // Coach NO ATC: solo tickets directamente asignados o creados por él
+      // Coach ATC: además tickets de alumno_coaches + tickets que involucran ATC
+      return (
+        createdByViewer ||
+        assignedToViewer ||
+        atcAssignedToStudent ||
+        involvesAtc
+      );
     });
-  }, [tickets, onlyMyTickets, user, isUserAtc]);
+  };
+
+  const visibleTickets = useMemo(() => {
+    if (onlyMyTickets) {
+      const my = {
+        code: String((user as any)?.codigo ?? "").trim(),
+        id: String((user as any)?.id ?? "").trim(),
+        atc: isUserAtc,
+      };
+      return filterTicketsForViewer(tickets, my);
+    }
+
+    if (coachFiltro) {
+      return filterTicketsForViewer(tickets, selectedCoachUser);
+    }
+
+    return tickets;
+  }, [tickets, onlyMyTickets, user, isUserAtc, coachFiltro, selectedCoachUser]);
+
+  // Debug: imprimir en consola el coach seleccionado y los tickets "de ese coach"
+  // Activar con ?debugCoach=1
+  useEffect(() => {
+    if (!debugCoachFilter) return;
+    if (!coachFiltro) return;
+
+    const viewer = selectedCoachUser;
+    const matched = filterTicketsForViewer(tickets, viewer);
+
+    try {
+      const coachObj = coaches.find(
+        (c) => String(c.codigo || "").trim() === coachFiltro,
+      );
+      // Evitar logs enormes: mostramos conteo y un resumen de los primeros 50
+      const preview = matched.slice(0, 50).map((t: TicketBoardItem) => {
+        const codigo = (t as any)?.codigo ?? null;
+        const nombre = (t as any)?.nombre ?? null;
+        const estado = (t as any)?.estado ?? null;
+        const informante = (t as any)?.informante ?? null;
+        const coachesArr = Array.isArray((t as any)?.coaches)
+          ? (t as any).coaches
+          : [];
+        const coachesOverride = Array.isArray((t as any)?.coaches_override)
+          ? (t as any).coaches_override
+          : [];
+        return {
+          codigo,
+          nombre,
+          estado,
+          informante,
+          coaches: coachesArr,
+          coaches_override: coachesOverride,
+        };
+      });
+
+      console.groupCollapsed(
+        `[tickets-board] Coach seleccionado: ${coachFiltro} · matches: ${matched.length}/${tickets.length}`,
+      );
+      console.log("coachFiltro", coachFiltro);
+      console.log("coachSeleccionado", coachObj || null);
+      console.log("viewer", viewer);
+      console.log("matchedCount", matched.length);
+      console.log("matchedPreview(50)", preview);
+      if (matched.length > 50) {
+        console.log(
+          `Hay ${matched.length} tickets. Preview limitado a 50 para no saturar la consola.`,
+        );
+      }
+      console.groupEnd();
+    } catch (err) {
+      // Si falla el log por cualquier razón, no romper la UI
+      console.log("[tickets-board] debugCoachFilter error", err);
+    }
+  }, [debugCoachFilter, coachFiltro, selectedCoachUser, tickets, coaches]);
 
   // Alumno: solo ver estados En progreso, Pausado y Resuelto
   const displayTickets = useMemo(() => {
     if (!isStudent) return visibleTickets;
     const allowed = new Set<StatusKey>(["EN_PROGRESO", "PAUSADO", "RESUELTO"]);
-    return visibleTickets.filter((t) => allowed.has(coerceStatus(t.estado)));
+    return visibleTickets.filter((t: TicketBoardItem) =>
+      allowed.has(coerceStatus(t.estado)),
+    );
   }, [visibleTickets, isStudent]);
 
   // Cargar filtros de fecha desde localStorage al montar
@@ -1173,7 +1272,6 @@ export default function TicketsBoard({
           search,
           fechaDesde,
           fechaHasta,
-          coach: coachFiltro || undefined,
           studentCode,
         });
         if (!mounted) return;
@@ -1299,7 +1397,6 @@ export default function TicketsBoard({
             search,
             fechaDesde,
             fechaHasta,
-            coach: coachFiltro || undefined,
             studentCode,
           });
           setTickets(res.items ?? []);
@@ -2484,7 +2581,55 @@ export default function TicketsBoard({
             <select
               className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20 transition-all sm:w-auto sm:min-w-[180px]"
               value={coachFiltro}
-              onChange={(e) => setCoachFiltro(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setCoachFiltro(v);
+                // Si se selecciona un coach, mostramos sus tickets (no combinar con "Mis tickets")
+                if (v && onlyMyTickets) setOnlyMyTickets(false);
+
+                if (debugCoachFilter) {
+                  try {
+                    const coachObj = coaches.find(
+                      (c) => String(c.codigo || "").trim() === v,
+                    );
+                    const viewer = coachObj
+                      ? {
+                          code: String(coachObj.codigo || "").trim(),
+                          id: String((coachObj as any)?.id ?? "").trim(),
+                          atc: isAtcCoach(coachObj),
+                        }
+                      : null;
+                    const matched = v
+                      ? filterTicketsForViewer(tickets, viewer)
+                      : tickets;
+
+                    console.groupCollapsed(
+                      `[tickets-board] onChange coachFiltro=${v || "(todos)"} · matches: ${matched.length}/${tickets.length}`,
+                    );
+                    console.log("debugCoachFilter", debugCoachFilter);
+                    console.log("coachSeleccionado", coachObj || null);
+                    console.log("viewer", viewer);
+                    console.log("matchedCount", matched.length);
+                    console.log(
+                      "matched(50)",
+                      matched.slice(0, 50).map((t: TicketBoardItem) => ({
+                        codigo: (t as any)?.codigo ?? null,
+                        nombre: (t as any)?.nombre ?? null,
+                        estado: (t as any)?.estado ?? null,
+                        informante: (t as any)?.informante ?? null,
+                        coaches: (t as any)?.coaches ?? null,
+                        coaches_override: (t as any)?.coaches_override ?? null,
+                      })),
+                    );
+                    console.groupEnd();
+                  } catch (err) {
+                    console.log(
+                      "[tickets-board] debugCoachFilter onChange error",
+                      err,
+                    );
+                  }
+                }
+              }}
               title="Filtrar por coach/equipo"
             >
               <option value="">Todos los coaches</option>
@@ -2512,7 +2657,12 @@ export default function TicketsBoard({
               <Button
                 variant={onlyMyTickets ? "default" : "outline"}
                 size="sm"
-                onClick={() => setOnlyMyTickets(!onlyMyTickets)}
+                onClick={() => {
+                  // "Mis tickets" debe seguir funcionando: si hay un coach seleccionado,
+                  // lo limpiamos para evitar intersección confusa.
+                  if (coachFiltro) setCoachFiltro("");
+                  setOnlyMyTickets((prev) => !prev);
+                }}
                 className="h-9 w-full gap-2 sm:w-auto dark:bg-primary dark:text-primary-foreground dark:border-primary/50 dark:hover:bg-primary/90"
                 title={`Mostrar solo mis ${uiTicketsLower} creados`}
               >
@@ -2553,7 +2703,6 @@ export default function TicketsBoard({
                   search,
                   fechaDesde,
                   fechaHasta,
-                  coach: coachFiltro || undefined,
                   studentCode,
                 });
                 setTickets(res.items ?? []);
@@ -2604,7 +2753,7 @@ export default function TicketsBoard({
                   </TableCell>
                 </TableRow>
               ) : (
-                displayTickets.map((t) => {
+                displayTickets.map((t: TicketBoardItem) => {
                   const estado = coerceStatus(t.estado);
                   const canOpen = !isStudent || estado === "RESUELTO";
                   const subjectLabel = (() => {
@@ -2680,7 +2829,8 @@ export default function TicketsBoard({
             // Importante: el Kanban debe usar la MISMA lista filtrada que la tabla.
             // `displayTickets` ya incorpora el filtro de "Mis tickets" (incluyendo ATC via `alumno_coaches`).
             const itemsForCol = displayTickets.filter(
-              (t) => coerceStatus(t.estado) === (estado as StatusKey),
+              (t: TicketBoardItem) =>
+                coerceStatus(t.estado) === (estado as StatusKey),
             );
             return (
               <div
@@ -5879,7 +6029,7 @@ export default function TicketsBoard({
                         )}
                         studentName={String(
                           selectedTicket?.alumno_nombre ||
-                            selectedTicket?.alumno_name ||
+                            (selectedTicket as any)?.alumno_name ||
                             "",
                         )}
                         readOnly={!canEdit}
@@ -5900,7 +6050,9 @@ export default function TicketsBoard({
                     <ObservacionesSection
                       ticketCode={selectedTicket?.codigo || ""}
                       alumnoId={selectedTicket?.id_alumno || studentCode || ""}
-                      coachId={user?.codigo || user?.id || ""}
+                      coachId={String(
+                        (user as any)?.codigo ?? (user as any)?.id ?? "",
+                      )}
                       canEdit={canEdit}
                     />
                   </div>
@@ -6014,7 +6166,6 @@ export default function TicketsBoard({
                       search,
                       fechaDesde,
                       fechaHasta,
-                      coach: coachFiltro || undefined,
                       studentCode,
                     });
                     setTickets(res.items ?? []);
@@ -6117,7 +6268,6 @@ export default function TicketsBoard({
             search,
             fechaDesde,
             fechaHasta,
-            coach: coachFiltro || undefined,
             studentCode,
           })
             .then((res) => setTickets(res.items ?? []))
