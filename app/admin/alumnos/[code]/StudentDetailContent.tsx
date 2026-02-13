@@ -4271,7 +4271,7 @@ function AdsMetricsForm({
                       <SelectValue placeholder="Selecciona fase" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sin-fase">Sin fase</SelectItem>
+                      <SelectItem value="sin-fase">—</SelectItem>
                       <SelectItem value="Fase de testeo">
                         Fase de testeo
                       </SelectItem>
@@ -4455,7 +4455,7 @@ function AdsMetricsForm({
                     ? "Requiere intervención"
                     : "Sin intervención"}
                 </Badge>
-                <Badge variant="outline">{data.fase || "Sin fase"}</Badge>
+                <Badge variant="outline">{data.fase || "—"}</Badge>
               </div>
             </div>
             <div>

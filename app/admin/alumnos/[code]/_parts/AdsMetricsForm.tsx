@@ -444,8 +444,17 @@ export default function AdsMetricsForm({
       (user as any)?.email ??
       null;
 
+    const sanitizedData: any = { ...data };
+    // Importante: al EDITAR, no queremos sobrescribir con vacío.
+    // Si vienen vacíos, omitimos estas keys del payload.
+    for (const k of ["fase", "subfase", "subfase_color"]) {
+      const raw = sanitizedData?.[k];
+      if (raw == null) continue;
+      if (typeof raw === "string" && raw.trim() === "") delete sanitizedData[k];
+    }
+
     const payload = {
-      ...data,
+      ...sanitizedData,
       alumno_id: alumnoId,
       alumno_codigo: studentCode,
       alumno_nombre: alumnoNombre,
@@ -1248,7 +1257,7 @@ export default function AdsMetricsForm({
                         }
                         className="w-full h-9 rounded-md border px-3 text-sm"
                       >
-                        <option value="sin-fase">Sin fase</option>
+                        <option value="sin-fase">—</option>
                         <option value="Fase de testeo">Fase de testeo</option>
                         <option value="Fase de optimización">
                           Fase de optimización
@@ -1269,7 +1278,7 @@ export default function AdsMetricsForm({
                           }
                           className="w-full h-9 rounded-md border px-3 text-sm"
                         >
-                          <option value="sin-subfase">Sin subfase</option>
+                          <option value="sin-subfase">—</option>
                           <option value="Copy/Ads">Copy/Ads</option>
                           <option value="Copy/VSL">Copy/VSL</option>
                           <option value="Copy/Página">Copy/Página</option>
@@ -1286,6 +1295,7 @@ export default function AdsMetricsForm({
                             }
                             className="w-full h-9 rounded-md border px-3 text-sm"
                           >
+                            <option value="">—</option>
                             <option value="No aplica">No aplica</option>
                             <option value="Por definir">Por definir</option>
                             <option value="Realizado">Realizado</option>
@@ -1459,7 +1469,7 @@ export default function AdsMetricsForm({
                       : "Sin intervención"}
                   </span>
                   <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs border-border">
-                    {data.fase || "Sin fase"}
+                    {data.fase || "—"}
                   </span>
                   {data.subfase ? (
                     <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs text-background">

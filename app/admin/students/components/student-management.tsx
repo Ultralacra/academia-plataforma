@@ -409,8 +409,8 @@ export default function StudentManagement() {
         id: String((m as any)?.id ?? ""),
         alumnoCodigo: alumnoCodigoRaw ? String(alumnoCodigoRaw) : null,
         alumnoNombre: alumnoNombreRaw ? String(alumnoNombreRaw) : null,
-        fase: String(faseRaw || "Sin fase").trim() || "Sin fase",
-        subfase: String(subfaseRaw || "Sin subfase").trim() || "Sin subfase",
+        fase: String(faseRaw ?? "").trim(),
+        subfase: String(subfaseRaw ?? "").trim(),
         trascendencia:
           trascendenciaRaw == null
             ? null
@@ -507,14 +507,14 @@ export default function StudentManagement() {
     >();
 
     for (const r of adsUiRows) {
-      const key = r.fase;
+      const key = r.fase || "—";
       if (!byFase.has(key)) {
         byFase.set(key, { fase: key, rows: [], bySubfase: new Map() });
       }
       const bucket = byFase.get(key)!;
       bucket.rows.push(r);
 
-      const sfKey = r.subfase;
+      const sfKey = r.subfase || "—";
       if (!bucket.bySubfase.has(sfKey)) {
         bucket.bySubfase.set(sfKey, {
           subfase: sfKey,
@@ -578,8 +578,7 @@ export default function StudentManagement() {
     >();
 
     for (const r of adsUiRows) {
-      const key =
-        String(r.trascendencia ?? "Por definir").trim() || "Por definir";
+      const key = String(r.trascendencia ?? "").trim() || "—";
       if (!byTrasc.has(key)) byTrasc.set(key, { key, byUser: new Map() });
       const bucket = byTrasc.get(key)!;
 
@@ -609,7 +608,7 @@ export default function StudentManagement() {
   const asListRows = (rows: AdsUiRow[]): ListRow[] =>
     rows.map((r) => ({
       name: r.alumnoNombre,
-      subtitle: `${r.fase} · ${r.subfase} · Trascendencia: ${r.trascendencia ?? "Por definir"} · ${r.requiereInterv ? "Requiere intervención" : "Sin intervención"}`,
+      subtitle: `${r.fase || "—"} · ${r.subfase || "—"} · Trascendencia: ${r.trascendencia ?? "—"} · ${r.requiereInterv ? "Requiere intervención" : "Sin intervención"}`,
     }));
 
   const StatCard = ({
