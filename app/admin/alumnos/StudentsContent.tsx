@@ -234,6 +234,9 @@ export default function StudentsContent() {
   const [coachAllProgress, setCoachAllProgress] = useState<number>(0);
   const [filterStage, setFilterStage] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<string | null>(null);
+  const [specialFilter, setSpecialFilter] = useState<"casos_exito" | null>(
+    null,
+  );
   const [openCoach, setOpenCoach] = useState(false);
 
   // Cache local: dataset "todos" para volver sin refetch.
@@ -770,6 +773,23 @@ export default function StudentsContent() {
     return hasNoState ? [NO_STATE, ...base] : base;
   }, [all]);
 
+  const [adsInversionSort, setAdsInversionSort] = useState<
+    "asc" | "desc" | null
+  >(null);
+  const [adsFacturacionSort, setAdsFacturacionSort] = useState<
+    "asc" | "desc" | null
+  >(null);
+
+  const [adsSummaryByAlumnoId, setAdsSummaryByAlumnoId] = useState<
+    Record<string, AdsMetricsSummary>
+  >({});
+  const adsSummaryRef = useRef<Record<string, AdsMetricsSummary>>({});
+  const [adsSummaryLoading, setAdsSummaryLoading] = useState(false);
+
+  useEffect(() => {
+    adsSummaryRef.current = adsSummaryByAlumnoId;
+  }, [adsSummaryByAlumnoId]);
+
   // aplicar filtro por fase adicional
   const finalRows = useMemo(() => {
     const NO_STAGE = "Sin fase";
@@ -790,8 +810,24 @@ export default function StudentsContent() {
       return true;
     });
 
+    const withSpecial = (() => {
+      if (!specialFilter) return base;
+      if (specialFilter === "casos_exito") {
+        return base.filter((student) => {
+          const id = student.code
+            ? String(student.code).trim()
+            : student.id != null
+              ? String(student.id).trim()
+              : "";
+          const facturacion = id ? adsSummaryByAlumnoId[id]?.facturacion : null;
+          return facturacion != null && facturacion > 5000;
+        });
+      }
+      return base;
+    })();
+
     // Orden por fase (y por nombre dentro de cada fase)
-    return [...base].sort((a, b) => {
+    return [...withSpecial].sort((a, b) => {
       const ra = stageRank(a.stage);
       const rb = stageRank(b.stage);
       if (ra !== rb) return ra - rb;
@@ -804,7 +840,7 @@ export default function StudentsContent() {
         sensitivity: "base",
       });
     });
-  }, [filtered, filterStage, filterState]);
+  }, [filtered, filterStage, filterState, specialFilter, adsSummaryByAlumnoId]);
 
   // Ordenamiento local por columnas: Última actividad / Días inactividad
   const [lastActivitySort, setLastActivitySort] = useState<
@@ -813,23 +849,6 @@ export default function StudentsContent() {
   const [inactivitySort, setInactivitySort] = useState<"asc" | "desc" | null>(
     null,
   );
-
-  const [adsInversionSort, setAdsInversionSort] = useState<
-    "asc" | "desc" | null
-  >(null);
-  const [adsFacturacionSort, setAdsFacturacionSort] = useState<
-    "asc" | "desc" | null
-  >(null);
-
-  const [adsSummaryByAlumnoId, setAdsSummaryByAlumnoId] = useState<
-    Record<string, AdsMetricsSummary>
-  >({});
-  const adsSummaryRef = useRef<Record<string, AdsMetricsSummary>>({});
-  const [adsSummaryLoading, setAdsSummaryLoading] = useState(false);
-
-  useEffect(() => {
-    adsSummaryRef.current = adsSummaryByAlumnoId;
-  }, [adsSummaryByAlumnoId]);
 
   // Debug pedido: forzar consulta de metadata (entity=ads_metrics) e imprimirla en consola del servidor,
   // sin depender de match con la tabla.
@@ -1111,11 +1130,12 @@ export default function StudentsContent() {
     setCoach("todos");
     setFilterState(null);
     setFilterStage(null);
+    setSpecialFilter(null);
     setPage(1);
   };
 
   const hasFilters = Boolean(
-    search || coach !== "todos" || filterStage || filterState,
+    search || coach !== "todos" || filterStage || filterState || specialFilter,
   );
 
   async function handleCreateStudent() {
@@ -1608,6 +1628,60 @@ export default function StudentsContent() {
           </div>
         </div>
       )}
+
+      {/* Filtros especiales */}
+      <div className="mb-3">
+        <div className="flex items-center gap-2 w-full">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Filtros especiales
+          </span>
+          <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+            <button
+              type="button"
+              onClick={() => {
+                setSpecialFilter((prev) =>
+                  prev === "casos_exito" ? null : "casos_exito",
+                );
+                setPage(1);
+              }}
+              className={cn(
+                "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                specialFilter === "casos_exito"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-card text-foreground border-border hover:bg-accent",
+              )}
+              title="Muestra alumnos con facturación > 5000"
+            >
+              Casos de éxito
+            </button>
+
+            <button
+              type="button"
+              disabled
+              className={cn(
+                "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                "bg-muted text-muted-foreground border-border opacity-70 cursor-not-allowed",
+              )}
+              title="Próximamente"
+            >
+              Bonos
+            </button>
+
+            {specialFilter && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSpecialFilter(null);
+                  setPage(1);
+                }}
+                className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
+              >
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
