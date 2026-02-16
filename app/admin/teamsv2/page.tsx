@@ -160,9 +160,9 @@ export default function TeamsPage() {
   // Query state (URL)
   const [q, setQ] = useState<string>(searchParams.get("q") ?? "");
   const [page, setPage] = useState<number>(
-    Number(searchParams.get("page") ?? 1)
+    Number(searchParams.get("page") ?? 1),
   );
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [pageSize, setPageSize] = useState<number>(50);
 
   // Data
   const [loading, setLoading] = useState<boolean>(true);
@@ -326,6 +326,12 @@ export default function TeamsPage() {
       return okSearch && okPuesto && okArea;
     });
     const sorted = [...base].sort((a, b) => {
+      // Sin puesto NI área → al final siempre
+      const aEmpty = !(a.puesto ?? "").trim() && !(a.area ?? "").trim();
+      const bEmpty = !(b.puesto ?? "").trim() && !(b.area ?? "").trim();
+      if (aEmpty && !bEmpty) return 1;
+      if (!aEmpty && bEmpty) return -1;
+
       const A = a[sortKey] as any;
       const B = b[sortKey] as any;
 
@@ -349,12 +355,12 @@ export default function TeamsPage() {
 
   const effectiveTotal = useMemo(
     () => (normalizedQ ? filteredSorted.length : total),
-    [normalizedQ, filteredSorted.length, total]
+    [normalizedQ, filteredSorted.length, total],
   );
 
   const effectiveTotalPages = useMemo(
     () => Math.max(1, Math.ceil(effectiveTotal / pageSize)),
-    [effectiveTotal, pageSize]
+    [effectiveTotal, pageSize],
   );
 
   const visibleRows = useMemo(() => {
@@ -395,14 +401,14 @@ export default function TeamsPage() {
   return (
     <ProtectedRoute allowedRoles={["admin", "equipo", "coach"]}>
       <DashboardLayout>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 grid place-items-center rounded-lg bg-neutral-100">
-              <Users className="h-5 w-5 text-neutral-700" />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 grid place-items-center rounded-xl bg-muted/50 border border-border/30 shadow-sm">
+              <Users className="h-5 w-5 text-foreground/70" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold tracking-tight">Equipo</h1>
-              <p className="text-xs text-neutral-500">
+              <h1 className="text-xl font-bold tracking-tight">Equipo</h1>
+              <p className="text-sm text-muted-foreground/80">
                 Coachs, soporte y áreas
               </p>
             </div>
@@ -410,28 +416,34 @@ export default function TeamsPage() {
 
           <div className="flex items-center gap-2">
             <Button
-              variant="secondary"
+              variant="default"
               size="sm"
+              className="rounded-xl shadow-sm"
               onClick={() => setCreateOpen(true)}
             >
               Nuevo coach
             </Button>
-            <Button variant="outline" size="sm" onClick={fetchData}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              onClick={fetchData}
+            >
               <RefreshCw className="mr-2 h-4 w-4" />
               Refrescar
             </Button>
           </div>
         </div>
 
-        <Separator className="my-3" />
+        <Separator className="my-4 bg-border/30" />
 
         {/* Filtros */}
-        <Card className="border-neutral-200/70">
-          <CardContent className="pt-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+        <Card className="rounded-2xl border-border/40 shadow-sm bg-card/80 backdrop-blur-sm">
+          <CardContent className="pt-5 pb-4 px-4 sm:px-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
               {/* Búsqueda */}
-              <div className="relative md:max-w-md w-full">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
+              <div className="relative lg:max-w-sm w-full">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                 <Input
                   value={q}
                   onChange={(e) => {
@@ -439,12 +451,12 @@ export default function TeamsPage() {
                     setPage(1);
                   }}
                   placeholder="Buscar por nombre o código…"
-                  className="pl-8"
+                  className="pl-9 rounded-xl border-border/60 bg-background/80 backdrop-blur-sm shadow-sm"
                 />
               </div>
 
               <div className="flex items-center gap-2 flex-1 flex-wrap">
-                {/* Select Puesto (sin value="") */}
+                {/* Select Puesto */}
                 <Select
                   value={puestoSelectValue}
                   onValueChange={(val) => {
@@ -453,10 +465,10 @@ export default function TeamsPage() {
                   }}
                   disabled={optLoading}
                 >
-                  <SelectTrigger className="w-[220px]">
+                  <SelectTrigger className="w-full sm:w-[200px] rounded-xl border-border/60 bg-background/80 shadow-sm">
                     <SelectValue placeholder="Filtrar por puesto" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-xl">
                     <SelectItem value={ALL_PUESTO}>
                       Todos los puestos
                     </SelectItem>
@@ -468,7 +480,7 @@ export default function TeamsPage() {
                   </SelectContent>
                 </Select>
 
-                {/* Select Área (sin value="") */}
+                {/* Select Área */}
                 <Select
                   value={areaSelectValue}
                   onValueChange={(val) => {
@@ -477,10 +489,10 @@ export default function TeamsPage() {
                   }}
                   disabled={optLoading}
                 >
-                  <SelectTrigger className="w-[220px]">
+                  <SelectTrigger className="w-full sm:w-[200px] rounded-xl border-border/60 bg-background/80 shadow-sm">
                     <SelectValue placeholder="Filtrar por área" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="rounded-xl">
                     <SelectItem value={ALL_AREA}>Todas las áreas</SelectItem>
                     {areaOptions.map((a) => (
                       <SelectItem key={a} value={a}>
@@ -490,83 +502,64 @@ export default function TeamsPage() {
                   </SelectContent>
                 </Select>
 
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl text-muted-foreground hover:text-foreground"
+                  onClick={clearFilters}
+                >
                   Limpiar
                 </Button>
               </div>
-
-              <div className="flex items-center gap-2">
-                <select
-                  className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.target.value));
-                    setPage(1);
-                  }}
-                >
-                  {[10, 20, 50, 100].map((n) => (
-                    <option key={n} value={n}>
-                      {n}/pág
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-3 flex items-center justify-end">
-              <Button size="sm" onClick={exportCsv}>
-                <Download className="mr-2 h-4 w-4" />
-                Descargar CSV
-              </Button>
             </div>
           </CardContent>
         </Card>
 
         {/* Tabla */}
-        <div className="mt-4 rounded-sm border border-border bg-card">
+        <div className="mt-4 rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden">
           <div className="max-h-[60vh] overflow-y-auto">
             <Table>
               <TableHeader>
-                <TableRow className="hover:bg-transparent">
+                <TableRow className="hover:bg-transparent bg-muted/30 border-b border-border/30">
                   <TableHead className="w-[40%]">
                     <button
-                      className="inline-flex items-center gap-1 text-left font-medium"
+                      className="inline-flex items-center gap-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground/70"
                       onClick={() => toggleSort("nombre")}
                     >
-                      Nombre / Código{" "}
-                      <ArrowUpDown className="h-4 w-4 opacity-60" />
+                      Nombre / Código
+                      <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
                     </button>
                   </TableHead>
-                  <TableHead className="w-[18%]">
+                  <TableHead className="w-[18%] hidden md:table-cell">
                     <button
-                      className="inline-flex items-center gap-1 font-medium"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70"
                       onClick={() => toggleSort("puesto")}
                     >
-                      Puesto <ArrowUpDown className="h-4 w-4 opacity-60" />
+                      Puesto <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
                     </button>
                   </TableHead>
-                  <TableHead className="w-[18%]">
+                  <TableHead className="w-[18%] hidden lg:table-cell">
                     <button
-                      className="inline-flex items-center gap-1 font-medium"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70"
                       onClick={() => toggleSort("area")}
                     >
-                      Área <ArrowUpDown className="h-4 w-4 opacity-60" />
+                      Área <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
                     </button>
                   </TableHead>
                   <TableHead className="w-[12%]">
                     <button
-                      className="inline-flex items-center gap-1 font-medium"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70"
                       onClick={() => toggleSort("nAlumnos")}
                     >
-                      Alumnos <ArrowUpDown className="h-4 w-4 opacity-60" />
+                      Alumnos <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
                     </button>
                   </TableHead>
-                  <TableHead className="min-w-[120px]">
+                  <TableHead className="min-w-[120px] hidden sm:table-cell">
                     <button
-                      className="inline-flex items-center gap-1 font-medium"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70"
                       onClick={() => toggleSort("created_at")}
                     >
-                      Creado <ArrowUpDown className="h-4 w-4 opacity-60" />
+                      Creado <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
                     </button>
                   </TableHead>
                 </TableRow>
@@ -577,45 +570,53 @@ export default function TeamsPage() {
                   Array.from({ length: 6 }).map((_, i) => (
                     <TableRow key={`sk-${i}`}>
                       <TableCell colSpan={5}>
-                        <div className="h-6 animate-pulse rounded bg-neutral-100" />
+                        <div className="h-6 animate-pulse rounded-lg bg-muted/40" />
                       </TableCell>
                     </TableRow>
                   ))
                 ) : error ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-sm text-red-600">
+                    <TableCell colSpan={5} className="text-sm text-destructive">
                       {error}
                     </TableCell>
                   </TableRow>
                 ) : filteredSorted.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-sm text-neutral-500">
+                    <TableCell
+                      colSpan={5}
+                      className="text-sm text-muted-foreground"
+                    >
                       Sin resultados.
                     </TableCell>
                   </TableRow>
                 ) : (
                   visibleRows.map((t) => (
-                    <TableRow key={t.id} className="hover:bg-neutral-50/60">
+                    <TableRow
+                      key={t.id}
+                      className="hover:bg-muted/30 transition-colors duration-100 border-b border-border/20"
+                    >
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 grid place-items-center rounded-md bg-neutral-100">
-                            <Users className="h-4 w-4 text-neutral-700" />
+                          <div className="h-9 w-9 grid place-items-center rounded-xl bg-muted/50 border border-border/30 shrink-0">
+                            <span className="text-sm font-semibold text-foreground/70">
+                              {(t.nombre ?? "?").slice(0, 1).toUpperCase()}
+                            </span>
                           </div>
                           <div className="min-w-0">
-                            <div className="truncate font-medium text-neutral-900">
+                            <div className="truncate font-medium text-foreground">
                               <Link
                                 href={`/admin/teamsv2/${encodeURIComponent(
-                                  String(t.codigo ?? "")
+                                  String(t.codigo ?? ""),
                                 )}`}
                                 className="hover:underline"
                               >
                                 {t.nombre || "—"}
                               </Link>
                             </div>
-                            <div className="truncate text-xs text-neutral-500 flex items-center gap-2">
+                            <div className="truncate text-xs text-muted-foreground flex items-center gap-2">
                               <Link
                                 href={`/admin/teamsv2/${encodeURIComponent(
-                                  String(t.codigo ?? "")
+                                  String(t.codigo ?? ""),
                                 )}`}
                                 className="font-mono hover:underline"
                               >
@@ -627,50 +628,67 @@ export default function TeamsPage() {
                                 onClick={async () => {
                                   try {
                                     await navigator.clipboard.writeText(
-                                      String(t.codigo ?? "")
+                                      String(t.codigo ?? ""),
                                     );
                                     toast({ title: "Código copiado" });
                                   } catch {
                                     toast({ title: "No se pudo copiar" });
                                   }
                                 }}
-                                className="ml-2 inline-flex items-center justify-center p-1 rounded text-neutral-500 hover:text-neutral-700"
+                                className="ml-1 inline-flex items-center justify-center p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                               >
                                 <Clipboard className="w-3 h-3" />
                               </button>
                             </div>
+                            {/* Puesto & Área inline on mobile */}
+                            <div className="flex items-center gap-1.5 mt-1 md:hidden">
+                              {t.puesto && (
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-md ${getPuestoColorClass(t.puesto)}`}
+                                >
+                                  {t.puesto}
+                                </span>
+                              )}
+                              {t.area && (
+                                <span className="text-[10px] text-muted-foreground">
+                                  {t.area}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="align-middle">
+                      <TableCell className="align-middle hidden md:table-cell">
                         {t.puesto ? (
                           <span
-                            className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-md ${getPuestoColorClass(
-                              t.puesto
+                            className={`inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-lg ${getPuestoColorClass(
+                              t.puesto,
                             )}`}
                           >
                             {t.puesto}
                           </span>
                         ) : (
-                          <span className="text-neutral-400">—</span>
+                          <span className="text-muted-foreground/50">—</span>
                         )}
                       </TableCell>
-                      <TableCell className="align-middle">
+                      <TableCell className="align-middle hidden lg:table-cell">
                         {t.area ? (
-                          <span className="text-sm">{t.area}</span>
+                          <span className="text-sm text-foreground">
+                            {t.area}
+                          </span>
                         ) : (
-                          <span className="text-neutral-400">—</span>
+                          <span className="text-muted-foreground/50">—</span>
                         )}
                       </TableCell>
                       <TableCell className="align-middle">
                         <Badge
                           variant="secondary"
-                          className="bg-neutral-100 text-neutral-800"
+                          className="rounded-lg bg-muted/60 text-foreground font-semibold"
                         >
                           {t.nAlumnos ?? 0}
                         </Badge>
                       </TableCell>
-                      <TableCell className="align-middle text-sm text-neutral-600">
+                      <TableCell className="align-middle text-sm text-muted-foreground hidden sm:table-cell">
                         {formatDate(t.created_at)}
                       </TableCell>
                     </TableRow>
@@ -682,26 +700,96 @@ export default function TeamsPage() {
         </div>
 
         {/* Paginación */}
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-xs text-neutral-500">
-            Página {page} de {totalPages} — {effectiveTotal} registros
+        <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Mostrando{" "}
+            <span className="font-semibold text-foreground">
+              {Math.min((page - 1) * pageSize + 1, effectiveTotal)}
+            </span>
+            –
+            <span className="font-semibold text-foreground">
+              {Math.min(page * pageSize, effectiveTotal)}
+            </span>{" "}
+            de{" "}
+            <span className="font-semibold text-foreground">
+              {effectiveTotal}
+            </span>{" "}
+            registros
           </p>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="h-8 w-8 rounded-lg"
               disabled={page <= 1 || loading}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => setPage(1)}
+              title="Primera página"
             >
-              Anterior
+              «
             </Button>
             <Button
               variant="outline"
-              size="sm"
+              size="icon"
+              className="h-8 w-8 rounded-lg"
+              disabled={page <= 1 || loading}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              title="Anterior"
+            >
+              ‹
+            </Button>
+            {(() => {
+              const pages: (number | string)[] = [];
+              const delta = 2;
+              const left = Math.max(2, page - delta);
+              const right = Math.min(totalPages - 1, page + delta);
+              pages.push(1);
+              if (left > 2) pages.push("...");
+              for (let i = left; i <= right; i++) pages.push(i);
+              if (right < totalPages - 1) pages.push("...");
+              if (totalPages > 1) pages.push(totalPages);
+              return pages.map((p, idx) =>
+                typeof p === "string" ? (
+                  <span
+                    key={`ellipsis-${idx}`}
+                    className="px-1 text-xs text-muted-foreground select-none"
+                  >
+                    …
+                  </span>
+                ) : (
+                  <Button
+                    key={p}
+                    variant={p === page ? "default" : "outline"}
+                    size="icon"
+                    className={`h-8 w-8 rounded-lg text-xs font-medium ${
+                      p === page ? "shadow-sm" : ""
+                    }`}
+                    disabled={loading}
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </Button>
+                ),
+              );
+            })()}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-lg"
               disabled={page >= totalPages || loading}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              title="Siguiente"
             >
-              Siguiente
+              ›
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-lg"
+              disabled={page >= totalPages || loading}
+              onClick={() => setPage(totalPages)}
+              title="Última página"
+            >
+              »
             </Button>
           </div>
         </div>
@@ -713,91 +801,118 @@ export default function TeamsPage() {
         />
 
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogContent>
+          <DialogContent className="sm:max-w-md rounded-2xl">
             <DialogHeader>
-              <DialogTitle>Crear nuevo coach</DialogTitle>
+              <DialogTitle className="text-lg font-bold">
+                Crear nuevo coach
+              </DialogTitle>
             </DialogHeader>
 
-            <div className="grid gap-2 py-2">
-              <div>
-                <Label className="text-xs">Nombre</Label>
+            <div className="grid gap-3 py-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Nombre
+                </Label>
                 <Input
                   value={createNombre}
                   onChange={(e) => setCreateNombre(e.target.value)}
                   placeholder="Nombre"
+                  className="rounded-xl border-border/60 shadow-sm"
                 />
               </div>
 
-              <div>
-                <Label className="text-xs">Email</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Email
+                </Label>
                 <Input
                   type="email"
                   value={createEmail}
                   onChange={(e) => setCreateEmail(e.target.value)}
                   placeholder="user@example.com"
+                  className="rounded-xl border-border/60 shadow-sm"
                 />
               </div>
 
-              <div>
-                <Label className="text-xs">Password</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Password
+                </Label>
                 <Input
                   type="password"
                   value={createPassword}
                   onChange={(e) => setCreatePassword(e.target.value)}
                   placeholder="ContraseñaSegura123!"
+                  className="rounded-xl border-border/60 shadow-sm"
                 />
               </div>
 
-              <div>
-                <Label className="text-xs">Puesto</Label>
-                <select
-                  className="w-full h-9 rounded-md border px-3 text-sm"
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Puesto
+                </Label>
+                <Select
                   value={createPuesto}
-                  onChange={(e) => setCreatePuesto(e.target.value)}
+                  onValueChange={setCreatePuesto}
                   disabled={optsLoading}
                 >
-                  <option value={NONE}>-- Ninguno --</option>
-                  {puestoApiOptions.length > 0
-                    ? puestoApiOptions.map((o) => (
-                        <option key={o.opcion_key} value={o.opcion_key}>
-                          {o.opcion_value}
-                        </option>
-                      ))
-                    : puestoOptions.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                </select>
+                  <SelectTrigger className="w-full rounded-xl border-border/60 shadow-sm">
+                    <SelectValue placeholder="Seleccionar puesto" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value={NONE}>-- Ninguno --</SelectItem>
+                    {puestoApiOptions.length > 0
+                      ? puestoApiOptions.map((o) => (
+                          <SelectItem key={o.opcion_key} value={o.opcion_key}>
+                            {o.opcion_value}
+                          </SelectItem>
+                        ))
+                      : puestoOptions.map((p) => (
+                          <SelectItem key={p} value={p}>
+                            {p}
+                          </SelectItem>
+                        ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <div>
-                <Label className="text-xs">Área</Label>
-                <select
-                  className="w-full h-9 rounded-md border px-3 text-sm"
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Área
+                </Label>
+                <Select
                   value={createArea}
-                  onChange={(e) => setCreateArea(e.target.value)}
+                  onValueChange={setCreateArea}
                   disabled={optsLoading}
                 >
-                  <option value={NONE}>-- Ninguno --</option>
-                  {areaApiOptions.length > 0
-                    ? areaApiOptions.map((o) => (
-                        <option key={o.opcion_key} value={o.opcion_key}>
-                          {o.opcion_value}
-                        </option>
-                      ))
-                    : areaOptions.map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
-                </select>
+                  <SelectTrigger className="w-full rounded-xl border-border/60 shadow-sm">
+                    <SelectValue placeholder="Seleccionar área" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value={NONE}>-- Ninguno --</SelectItem>
+                    {areaApiOptions.length > 0
+                      ? areaApiOptions.map((o) => (
+                          <SelectItem key={o.opcion_key} value={o.opcion_key}>
+                            {o.opcion_value}
+                          </SelectItem>
+                        ))
+                      : areaOptions.map((a) => (
+                          <SelectItem key={a} value={a}>
+                            {a}
+                          </SelectItem>
+                        ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
             <DialogFooter>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+                <Button
+                  variant="ghost"
+                  className="rounded-xl"
+                  onClick={() => setCreateOpen(false)}
+                >
                   Cancelar
                 </Button>
                 <Button

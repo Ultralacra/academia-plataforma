@@ -6048,7 +6048,8 @@ export default function TicketsBoard({
                 >
                   <div className="p-6">
                     <ObservacionesSection
-                      ticketCode={selectedTicket?.codigo || ""}
+                      ticketCode={undefined}
+                      ticketCodeForCreate={selectedTicket?.codigo || ""}
                       alumnoId={selectedTicket?.id_alumno || studentCode || ""}
                       coachId={String(
                         (user as any)?.codigo ?? (user as any)?.id ?? "",

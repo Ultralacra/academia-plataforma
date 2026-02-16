@@ -536,50 +536,52 @@ export function AppSidebar() {
   }, [menuItems, pathname]);
 
   return (
-    <Sidebar className="border-r bg-sidebar backdrop-blur supports-[backdrop-filter]:bg-sidebar/70">
+    <Sidebar className="border-r border-sidebar-border/40 bg-sidebar backdrop-blur-sm supports-[backdrop-filter]:bg-sidebar/80">
       <SidebarContent className="flex h-full flex-col overflow-x-hidden">
-        {/* Header — estilo Notion */}
-        <div className="p-3">
-          <div className="flex items-center gap-3 rounded-lg px-2 py-2">
-            <img
-              src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
-              alt="Logo"
-              className="h-8 w-8 rounded-md object-cover ring-1 ring-sidebar-border"
-              loading="eager"
-            />
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-sidebar-foreground">
+        {/* Header — perfil de usuario */}
+        <div className="p-4">
+          <div className="flex items-center gap-3 rounded-xl bg-sidebar-accent/30 px-3 py-3 backdrop-blur-sm border border-sidebar-border/20">
+            <div className="relative shrink-0">
+              <img
+                src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
+                alt="Logo"
+                className="h-10 w-10 rounded-xl object-cover ring-2 ring-sidebar-border/50 shadow-md"
+                loading="eager"
+              />
+              {/* Indicador en línea sobre el avatar */}
+              {mounted && (
+                <span className="absolute -bottom-0.5 -right-0.5 flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500 ring-2 ring-sidebar"></span>
+                </span>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-sidebar-foreground leading-tight">
                 {user?.name ?? user?.email ?? "Usuario"}
               </p>
-              <Badge
-                variant="outline"
-                className="mt-0.5 h-5 px-1.5 text-[10px] border-sidebar-border text-muted-foreground"
-              >
-                {roleLabel}
-              </Badge>
+              <div className="mt-1 flex items-center gap-1.5">
+                <Badge
+                  variant="outline"
+                  className="h-5 px-2 text-[10px] font-medium rounded-md border-sidebar-border/50 text-muted-foreground bg-sidebar-accent/40"
+                >
+                  {roleLabel}
+                </Badge>
+              </div>
               {mounted && (
-                <div className="mt-2 flex flex-col gap-0.5">
-                  <span className="text-[10px] text-muted-foreground capitalize">
-                    {new Date().toLocaleDateString("es-ES", {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-1.5">
-                    <span className="relative flex h-1.5 w-1.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
-                    </span>
-                    En línea
-                  </span>
-                </div>
+                <p className="mt-1.5 text-[10px] text-muted-foreground/70 capitalize">
+                  {new Date().toLocaleDateString("es-ES", {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                  })}
+                </p>
               )}
               {(user?.role === "student" || user?.role === "equipo") &&
                 (user as any)?.codigo && (
-                  <div className="mt-1 text-[10px] text-muted-foreground truncate">
+                  <div className="mt-1 text-[10px] text-muted-foreground/70 truncate">
                     Código:{" "}
-                    <code className="text-sidebar-foreground">
+                    <code className="text-sidebar-foreground font-mono text-[10px]">
                       {(user as any).codigo}
                     </code>
                   </div>
@@ -588,27 +590,27 @@ export function AppSidebar() {
           </div>
         </div>
 
-        <Separator className="mx-3" />
+        <Separator className="mx-4 bg-sidebar-border/30" />
 
-        {/* Navegación — Notion-like */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        {/* Navegación */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-1">
           <SidebarGroup>
-            <SidebarGroupLabel className="px-3 text-[11px] uppercase tracking-wide text-muted-foreground">
+            <SidebarGroupLabel className="px-4 pt-2 pb-1 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground/50">
               Navegación
             </SidebarGroupLabel>
             <SidebarGroupContent>
-              <SidebarMenu>
+              <SidebarMenu className="space-y-0.5 px-2">
                 <TooltipProvider delayDuration={300}>
                   {menuItems.map((item, index) => {
                     if (item.isSeparator) {
                       return (
-                        <div key={`sep-${index}`} className="mt-4 mb-2 px-2">
-                          <div className="flex items-center gap-2">
-                            <Separator className="flex-1 bg-sidebar-border" />
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold whitespace-nowrap">
+                        <div key={`sep-${index}`} className="mt-5 mb-2 px-1">
+                          <div className="flex items-center gap-2.5">
+                            <Separator className="flex-1 bg-sidebar-border/30" />
+                            <span className="text-[10px] uppercase tracking-widest text-muted-foreground/60 font-semibold whitespace-nowrap">
                               {item.title}
                             </span>
-                            <Separator className="flex-1 bg-sidebar-border" />
+                            <Separator className="flex-1 bg-sidebar-border/30" />
                           </div>
                         </div>
                       );
@@ -627,39 +629,50 @@ export function AppSidebar() {
                               <SidebarMenuButton
                                 asChild
                                 className={cn(
-                                  "group relative overflow-hidden rounded-md px-2.5 py-1.5 text-sm",
+                                  "group relative overflow-hidden rounded-lg px-3 py-2 text-sm transition-all duration-150",
                                   active
-                                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                    : "hover:bg-sidebar-accent/50 text-sidebar-foreground",
+                                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                                    : "hover:bg-sidebar-accent/40 text-sidebar-foreground",
                                 )}
                               >
                                 <Link
                                   href={item.url ?? "#"}
-                                  className="flex items-center gap-2.5"
+                                  className="flex items-center gap-3"
                                 >
-                                  {/* Dot activo al estilo Notion */}
+                                  {/* Barra lateral activa */}
                                   <span
                                     className={cn(
-                                      "absolute left-2 top-1/2 -translate-y-1/2 h-[6px] w-[6px] rounded-full bg-amber-500 transition-opacity",
-                                      active ? "opacity-100" : "opacity-0",
-                                    )}
-                                  />
-                                  <Icon
-                                    className={cn(
-                                      "h-4 w-4",
+                                      "absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-foreground transition-all duration-200",
                                       active
-                                        ? "text-sidebar-accent-foreground"
-                                        : "text-muted-foreground",
+                                        ? "opacity-100 scale-y-100"
+                                        : "opacity-0 scale-y-0",
                                     )}
                                   />
-                                  <span className="truncate flex items-center gap-2">
+                                  <span
+                                    className={cn(
+                                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
+                                      active
+                                        ? "bg-foreground/10"
+                                        : "bg-transparent group-hover:bg-sidebar-accent/60",
+                                    )}
+                                  >
+                                    <Icon
+                                      className={cn(
+                                        "h-4 w-4 transition-colors duration-150",
+                                        active
+                                          ? "text-sidebar-accent-foreground"
+                                          : "text-muted-foreground group-hover:text-sidebar-foreground",
+                                      )}
+                                    />
+                                  </span>
+                                  <span className="truncate flex items-center gap-2 font-medium">
                                     {item.title}
                                     {(item.url?.includes("/chat") ||
                                       item.title
                                         .toLowerCase()
                                         .includes("chat")) &&
                                       unreadGrandTotal > 0 && (
-                                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-600 text-white text-[10px] font-semibold">
+                                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold shadow-sm">
                                           {unreadGrandTotal > 99
                                             ? "99+"
                                             : unreadGrandTotal}
@@ -669,7 +682,10 @@ export function AppSidebar() {
                                 </Link>
                               </SidebarMenuButton>
                             </TooltipTrigger>
-                            <TooltipContent side="right" className="text-xs">
+                            <TooltipContent
+                              side="right"
+                              className="text-xs rounded-lg"
+                            >
                               {item.title}
                             </TooltipContent>
                           </Tooltip>
@@ -688,25 +704,37 @@ export function AppSidebar() {
                           type="button"
                           onClick={() => setMetricsOpen((v) => !v)}
                           className={cn(
-                            "group flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-sm",
+                            "group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150",
                             metricsOpen || isAnyChildActive
-                              ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                              : "hover:bg-sidebar-accent/50 text-sidebar-foreground",
+                              ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                              : "hover:bg-sidebar-accent/40 text-sidebar-foreground",
                           )}
                         >
-                          <span className="flex items-center gap-2.5">
-                            <Icon
+                          <span className="flex items-center gap-3">
+                            <span
                               className={cn(
-                                "h-4 w-4",
-                                (metricsOpen || isAnyChildActive) &&
-                                  "text-sidebar-accent-foreground",
+                                "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
+                                metricsOpen || isAnyChildActive
+                                  ? "bg-foreground/10"
+                                  : "bg-transparent group-hover:bg-sidebar-accent/60",
                               )}
-                            />
-                            <span className="truncate">{item.title}</span>
+                            >
+                              <Icon
+                                className={cn(
+                                  "h-4 w-4 transition-colors duration-150",
+                                  metricsOpen || isAnyChildActive
+                                    ? "text-sidebar-accent-foreground"
+                                    : "text-muted-foreground group-hover:text-sidebar-foreground",
+                                )}
+                              />
+                            </span>
+                            <span className="truncate font-medium">
+                              {item.title}
+                            </span>
                           </span>
                           <ChevronDown
                             className={cn(
-                              "h-4 w-4 transition-transform text-muted-foreground",
+                              "h-4 w-4 transition-transform duration-200 text-muted-foreground/60",
                               metricsOpen ? "rotate-180" : "rotate-0",
                             )}
                           />
@@ -715,14 +743,14 @@ export function AppSidebar() {
                         {/* Submenú colapsable */}
                         <div
                           className={cn(
-                            "mt-1 grid overflow-hidden transition-all",
+                            "mt-1 grid overflow-hidden transition-all duration-200",
                             metricsOpen
                               ? "grid-rows-[1fr] opacity-100"
                               : "grid-rows-[0fr] opacity-0",
                           )}
                         >
                           <div className="min-h-0">
-                            <ul className="my-1 ml-5 border-l border-sidebar-border pl-3 space-y-0.5">
+                            <ul className="my-1 ml-6 border-l-2 border-sidebar-border/30 pl-3 space-y-0.5">
                               {item.children?.map((child) => {
                                 const CIcon = child.icon;
                                 const active =
@@ -732,22 +760,24 @@ export function AppSidebar() {
                                     <Link
                                       href={child.url ?? "#"}
                                       className={cn(
-                                        "relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                                        "relative flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-all duration-150",
                                         active
-                                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                                          : "hover:bg-sidebar-accent/50 text-sidebar-foreground",
+                                          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                                          : "hover:bg-sidebar-accent/40 text-sidebar-foreground",
                                       )}
                                     >
                                       {/* Dot activo */}
                                       <span
                                         className={cn(
-                                          "absolute left-0 top-1/2 -translate-y-1/2 h-[6px] w-[6px] rounded-full bg-amber-500",
-                                          active ? "opacity-100" : "opacity-0",
+                                          "absolute -left-[15px] top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-foreground transition-all duration-200",
+                                          active
+                                            ? "opacity-100 scale-100"
+                                            : "opacity-0 scale-0",
                                         )}
                                       />
                                       <CIcon
                                         className={cn(
-                                          "h-4 w-4",
+                                          "h-3.5 w-3.5 transition-colors duration-150",
                                           active
                                             ? "text-sidebar-accent-foreground"
                                             : "text-muted-foreground",
@@ -772,27 +802,27 @@ export function AppSidebar() {
           </SidebarGroup>
         </div>
 
-        {/* Footer minimal — Notion-like */}
-        <Separator className="mx-3 mt-2" />
-        <div className="px-3 py-2 flex flex-col items-center gap-2">
+        {/* Footer */}
+        <Separator className="mx-4 mt-2 bg-sidebar-border/30" />
+        <div className="px-4 py-3 flex flex-col items-center gap-2.5">
           {isMobile ? (
-            <div className="w-full max-w-[260px]">
+            <div className="w-full">
               <div className="flex items-center justify-center">
                 <InstallPwaButton compact />
               </div>
             </div>
           ) : null}
           {!isMobile ? (
-            <div className="w-full max-w-[260px] rounded-md border border-sidebar-border bg-sidebar-accent/20 px-2.5 py-2 text-[11px] text-muted-foreground">
-              <div className="font-medium text-sidebar-foreground">
-                Tip: úsala desde tu teléfono
+            <div className="w-full rounded-xl border border-sidebar-border/30 bg-sidebar-accent/15 backdrop-blur-sm px-3 py-2.5 text-[11px] text-muted-foreground/80">
+              <div className="font-semibold text-sidebar-foreground text-xs">
+                📱 Úsala desde tu teléfono
               </div>
-              <div className="mt-0.5">
+              <div className="mt-1 leading-relaxed">
                 En móvil puedes instalarla (Agregar a pantalla de inicio).
               </div>
             </div>
           ) : null}
-          <p className="text-[11px] text-muted-foreground text-center">
+          <p className="text-[10px] text-muted-foreground/50 text-center tracking-wide">
             {new Date().getFullYear()} • Workspace
           </p>
           {/*  <button

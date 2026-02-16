@@ -48,11 +48,11 @@ type CoachStudent = {
 
 async function fetchCoachStudents(coachCode: string, signal?: AbortSignal) {
   const path = `/client/get/clients-coaches?coach=${encodeURIComponent(
-    coachCode
+    coachCode,
   )}`;
   const json = await apiFetch<{ code: number; status: string; data: any[] }>(
     path,
-    { signal }
+    { signal },
   );
   const rows = (json?.data ?? []) as any[];
   const items: CoachStudent[] = rows.map((r) => ({
@@ -126,7 +126,7 @@ export function CoachStudentsModal({
     return () =>
       window.removeEventListener(
         "chat:existing-students",
-        handler as EventListener
+        handler as EventListener,
       );
   }, []);
 
@@ -191,37 +191,38 @@ export function CoachStudentsModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Notion-like: ancho cómodo, alto limitado, contenido con bordes suaves y header sticky */}
+      {/* Modal de alumnos del coach */}
       <DialogContent
         className="
-          w-[95vw] sm:max-w-4xl p-0 gap-0 rounded-sm border-2 border-gray-200
-          max-h-[85vh] overflow-y-auto
+          w-[95vw] sm:max-w-4xl p-0 gap-0 rounded-2xl border border-border/40
+          max-h-[85vh] overflow-y-auto shadow-2xl
         "
       >
         {/* HEADER (sticky) */}
-        <DialogHeader className="sticky top-0 z-20 border-b bg-white/80 backdrop-blur px-5 pt-5 pb-3">
+        <DialogHeader className="sticky top-0 z-20 border-b border-border/30 bg-background/80 backdrop-blur-sm px-5 pt-5 pb-3">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 grid place-items-center rounded-lg bg-neutral-100 text-neutral-700 font-semibold">
+            <div className="h-10 w-10 grid place-items-center rounded-xl bg-muted/50 border border-border/30 text-foreground font-bold shadow-sm">
               {(coachName ?? coachCode ?? "?").slice(0, 1).toUpperCase()}
             </div>
             <div className="min-w-0">
-              <DialogTitle className="truncate">
+              <DialogTitle className="truncate text-lg font-bold">
                 {coachName ?? "Coach"}
               </DialogTitle>
-              <DialogDescription className="truncate">
-                Código: <span className="font-mono">{coachCode}</span>
+              <DialogDescription className="truncate text-sm text-muted-foreground">
+                Código: <span className="font-mono text-xs">{coachCode}</span>
               </DialogDescription>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <Badge
                 variant="secondary"
-                className="bg-neutral-100 text-neutral-800"
+                className="rounded-lg bg-muted/60 text-foreground font-semibold"
               >
                 {count} / {total}
               </Badge>
               <Button
                 variant="outline"
                 size="sm"
+                className="rounded-xl hidden sm:inline-flex"
                 onClick={() => {
                   if (!coachCode) return;
                   setQ("");
@@ -232,7 +233,7 @@ export function CoachStudentsModal({
                     .catch(
                       (e) =>
                         e?.name !== "AbortError" &&
-                        setError(e?.message ?? "Error")
+                        setError(e?.message ?? "Error"),
                     )
                     .finally(() => setLoading(false));
                 }}
@@ -240,13 +241,19 @@ export function CoachStudentsModal({
                 <RefreshCw className="mr-2 h-4 w-4" />
                 Refrescar
               </Button>
-              <Button variant="outline" size="sm" onClick={exportCsv}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl hidden sm:inline-flex"
+                onClick={exportCsv}
+              >
                 <Download className="mr-2 h-4 w-4" />
                 CSV
               </Button>
               <Button
                 variant="outline"
                 size="sm"
+                className="rounded-xl hidden sm:inline-flex"
                 onClick={copyIds}
                 title="Copiar IDs"
               >
@@ -259,26 +266,26 @@ export function CoachStudentsModal({
           {/* BUSCADOR */}
           <div className="mt-3">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="Buscar por nombre…"
-                className="pl-8 rounded-xl bg-white border border-gray-200 shadow-none"
+                className="pl-9 rounded-xl border-border/60 bg-background/80 backdrop-blur-sm shadow-sm"
               />
             </div>
-            {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+            {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
           </div>
         </DialogHeader>
 
         {/* BODY scrollable */}
         <div className="px-5 pb-4">
-          <div className="rounded-xl border border-gray-200 bg-white">
+          <div className="rounded-xl border border-border/30 bg-card/80 backdrop-blur-sm overflow-hidden">
             <div className="overflow-x-auto">
               <Table className="min-w-full text-sm">
                 <TableHeader>
-                  <TableRow className="bg-gray-50 text-gray-600 text-xs uppercase tracking-wide sticky top-0 z-10">
-                    <TableHead className="px-3 py-2 text-left font-medium">
+                  <TableRow className="bg-muted/30 border-b border-border/20">
+                    <TableHead className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
                       Nombre
                     </TableHead>
                   </TableRow>
@@ -288,18 +295,18 @@ export function CoachStudentsModal({
                     Array.from({ length: 12 }).map((_, i) => (
                       <TableRow
                         key={`sk-${i}`}
-                        className="border-t border-gray-100"
+                        className="border-b border-border/10"
                       >
-                        <TableCell colSpan={1} className="px-3 py-2">
-                          <div className="h-5 animate-pulse rounded bg-neutral-100" />
+                        <TableCell colSpan={1} className="px-4 py-2.5">
+                          <div className="h-5 animate-pulse rounded-lg bg-muted/40" />
                         </TableCell>
                       </TableRow>
                     ))
                   ) : filtered.length === 0 ? (
-                    <TableRow className="border-t border-gray-100">
+                    <TableRow className="border-b border-border/10">
                       <TableCell
                         colSpan={1}
-                        className="px-3 py-2 text-sm text-neutral-500"
+                        className="px-4 py-3 text-sm text-muted-foreground"
                       >
                         {q
                           ? "Sin resultados para tu búsqueda."
@@ -313,48 +320,60 @@ export function CoachStudentsModal({
                       return (
                         <TableRow
                           key={`${r.id}_${r.id_alumno}`}
-                          className="border-t border-gray-100 hover:bg-gray-50"
+                          className="border-b border-border/10 hover:bg-muted/20 transition-colors duration-100"
                         >
-                          <TableCell className="px-3 py-2 truncate text-gray-900 flex items-center justify-between">
-                            <div className="min-w-0">
-                              {r.id_alumno ? (
-                                <Link
-                                  href={`/admin/alumnos/${encodeURIComponent(
-                                    String(r.id_alumno)
-                                  )}`}
-                                  className="text-gray-900 hover:underline"
-                                >
-                                  {r.alumno_nombre}
-                                </Link>
-                              ) : (
-                                r.alumno_nombre
-                              )}
-                            </div>
-                            {existing ? (
-                              <div className="ml-3 flex items-center gap-2">
-                                <Badge
-                                  variant="secondary"
-                                  className="bg-yellow-100 text-yellow-800"
-                                >
-                                  Conversación existente
-                                </Badge>
-                                <Button
-                                  size="sm"
-                                  onClick={() => {
-                                    try {
-                                      window.dispatchEvent(
-                                        new CustomEvent("chat:open", {
-                                          detail: { chatId: existing },
-                                        })
-                                      );
-                                    } catch {}
-                                    onOpenChange(false);
-                                  }}
-                                >
-                                  Abrir
-                                </Button>
+                          <TableCell className="px-4 py-2.5 text-foreground">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="min-w-0 flex items-center gap-2.5">
+                                <div className="h-8 w-8 grid place-items-center rounded-lg bg-muted/40 border border-border/20 shrink-0">
+                                  <span className="text-xs font-semibold text-foreground/60">
+                                    {(r.alumno_nombre ?? "?")
+                                      .slice(0, 1)
+                                      .toUpperCase()}
+                                  </span>
+                                </div>
+                                {r.id_alumno ? (
+                                  <Link
+                                    href={`/admin/alumnos/${encodeURIComponent(
+                                      String(r.id_alumno),
+                                    )}`}
+                                    className="text-foreground hover:underline truncate font-medium"
+                                  >
+                                    {r.alumno_nombre}
+                                  </Link>
+                                ) : (
+                                  <span className="truncate">
+                                    {r.alumno_nombre}
+                                  </span>
+                                )}
                               </div>
-                            ) : null}
+                              {existing ? (
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <Badge
+                                    variant="secondary"
+                                    className="rounded-lg bg-yellow-100/80 text-yellow-800 dark:bg-yellow-500/15 dark:text-yellow-200 text-[10px] font-semibold"
+                                  >
+                                    Conversación existente
+                                  </Badge>
+                                  <Button
+                                    size="sm"
+                                    className="rounded-xl shadow-sm h-7 text-xs"
+                                    onClick={() => {
+                                      try {
+                                        window.dispatchEvent(
+                                          new CustomEvent("chat:open", {
+                                            detail: { chatId: existing },
+                                          }),
+                                        );
+                                      } catch {}
+                                      onOpenChange(false);
+                                    }}
+                                  >
+                                    Abrir
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -365,14 +384,17 @@ export function CoachStudentsModal({
             </div>
           </div>
 
-          {/* FOOTER (ligero) */}
-          <div className="mt-3 flex items-center justify-between text-xs text-neutral-500">
+          {/* FOOTER */}
+          <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              Mostrando <b>{count}</b> de <b>{total}</b>
+              Mostrando{" "}
+              <span className="font-semibold text-foreground">{count}</span> de{" "}
+              <span className="font-semibold text-foreground">{total}</span>
             </span>
             <Button
               variant="ghost"
               size="sm"
+              className="rounded-xl"
               onClick={() => onOpenChange(false)}
             >
               Cerrar

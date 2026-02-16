@@ -479,22 +479,115 @@ export async function getTickets(opts: {
     // Proxy interno: evita exponer /metadata real en Network.
     const json = await internalFetchJson<{ items: any[] }>(url, { method: "GET" });
     const list = Array.isArray(json?.items) ? json.items : [];
+    const normalized = list.map((raw: any) => {
+      const payload: any =
+        raw?.payload && typeof raw.payload === "object" ? { ...raw.payload } : {};
+
+      const recomendacion = String(
+        payload.recomendacion ??
+          payload.observacion ??
+          payload.comentario ??
+          payload.descripcion ??
+          payload.texto ??
+          "",
+      ).trim();
+
+      const area = String(
+        payload.area ?? payload.categoria ?? payload.tipo ?? "GENERAL",
+      ).trim();
+
+      const fecha = String(payload.fecha ?? raw?.created_at ?? new Date().toISOString());
+
+      let constancia = payload.constancia;
+      if (typeof constancia !== "string") {
+        if (Array.isArray(constancia)) {
+          constancia = JSON.stringify(constancia);
+        } else {
+          constancia = "[]";
+        }
+      }
+
+      const constanciaTexto = String(
+        payload.constancia_texto ??
+          payload.notas ??
+          payload.constanciaTexto ??
+          "",
+      );
+
+      return {
+        ...raw,
+        payload: {
+          ...payload,
+          recomendacion,
+          area,
+          fecha,
+          constancia,
+          constancia_texto: constanciaTexto,
+        },
+      } as Observacion;
+    });
     
     // Filtrar SOLO las eliminadas con 'deleted: true'
     // Las observaciones con 'realizada: true' se siguen mostrando (en verde)
-    return list.filter((obs: Observacion) => {
+    const alumnoNorm = String(alumnoId ?? "").trim().toLowerCase();
+
+    return normalized.filter((obs: Observacion) => {
       // No mostrar las marcadas como deleted (eliminadas del modal)
       if (obs.payload?.deleted === true) return false;
       
       // Solo mostrar observaciones que tengan los campos necesarios para ser observaciones válidas
       // (esto filtra las que quedaron solo con estado por actualizaciones parciales del backend)
-      if (!obs.payload?.recomendacion || !obs.payload?.area) return false;
-      
-      // Filtrar por alumno_id si está disponible
-      if (alumnoId && obs.payload?.alumno_id !== alumnoId) return false;
+        if (!String(obs.payload?.recomendacion ?? "").trim()) return false;
 
-      // Si vino ticketCode, filtrar; si no, devolvemos todas las tareas del alumno
-      if (ticketCode && obs.payload?.ticket_codigo !== ticketCode) return false;
+        // El endpoint /api/alumnos/:alumnoId/metadata ya devuelve registros del alumno.
+        // Aun así, validamos de forma tolerante por cualquiera de las variantes conocidas
+        // para evitar falsos negativos cuando el param viene como código y el payload trae id.
+        if (alumnoNorm) {
+          const payloadAlumnoId = String(obs.payload?.alumno_id ?? "")
+            .trim()
+            .toLowerCase();
+          const payloadAlumnoCodigo = String((obs.payload as any)?.alumno_codigo ?? "")
+            .trim()
+            .toLowerCase();
+          const entityId = String((obs as any)?.entity_id ?? "")
+            .trim()
+            .toLowerCase();
+          const hasExplicitAlumnoRef =
+            !!payloadAlumnoId || !!payloadAlumnoCodigo || !!entityId;
+          const alumnoMatches =
+            payloadAlumnoId === alumnoNorm ||
+            payloadAlumnoCodigo === alumnoNorm ||
+            entityId === alumnoNorm;
+
+          if (hasExplicitAlumnoRef && !alumnoMatches) return false;
+        }
+
+      // Si vino ticketCode, filtrar de forma tolerante (esquemas legacy)
+      if (ticketCode) {
+        const ticketNorm = String(ticketCode).trim().toLowerCase();
+        const payloadTicketCodigo = String((obs.payload as any)?.ticket_codigo ?? "")
+          .trim()
+          .toLowerCase();
+        const payloadTicketCode = String((obs.payload as any)?.ticketCode ?? "")
+          .trim()
+          .toLowerCase();
+        const payloadCodigoTicket = String((obs.payload as any)?.codigo_ticket ?? "")
+          .trim()
+          .toLowerCase();
+        const entityId = String((obs as any)?.entity_id ?? "")
+          .trim()
+          .toLowerCase();
+
+        const hasTicketRef =
+          !!payloadTicketCodigo || !!payloadTicketCode || !!payloadCodigoTicket || !!entityId;
+        const ticketMatches =
+          payloadTicketCodigo === ticketNorm ||
+          payloadTicketCode === ticketNorm ||
+          payloadCodigoTicket === ticketNorm ||
+          entityId === ticketNorm;
+
+        if (hasTicketRef && !ticketMatches) return false;
+      }
       
       return true;
     }) as Observacion[];

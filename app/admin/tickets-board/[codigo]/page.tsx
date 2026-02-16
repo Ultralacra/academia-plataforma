@@ -173,6 +173,7 @@ function TicketDetailContent() {
   const { toast } = useToast();
   const [etapasOptions, setEtapasOptions] = useState<OpcionItem[]>([]);
   const [alumnoInfo, setAlumnoInfo] = useState<{
+    id: string;
     codigo: string;
     etapa: string | null;
   } | null>(null);
@@ -271,15 +272,15 @@ function TicketDetailContent() {
     if (!ticket) return;
 
     // Debug: ver qué campos tiene el ticket
-        /* console.log("Ticket cargado:", ticket); */
-        /* console.log("Campos del ticket:", Object.keys(ticket)); */
+    /* console.log("Ticket cargado:", ticket); */
+    /* console.log("Campos del ticket:", Object.keys(ticket)); */
 
     const alumnoNombre =
       ticket?.alumno_nombre ?? ticket?.alumnoNombre ?? ticket?.nombre;
-        /* console.log("Nombre del alumno detectado:", alumnoNombre); */
+    /* console.log("Nombre del alumno detectado:", alumnoNombre); */
 
     if (!alumnoNombre) {
-            /* console.log("No se encontró nombre de alumno en el ticket"); */
+      /* console.log("No se encontró nombre de alumno en el ticket"); */
       return;
     }
 
@@ -304,6 +305,7 @@ function TicketDetailContent() {
 
         if (!cancelled && match) {
           setAlumnoInfo({
+            id: String(match.id ?? ""),
             codigo: String(match.codigo ?? match.code ?? ""),
             etapa: match.etapa ?? match.stage ?? null,
           });
@@ -1018,8 +1020,17 @@ function TicketDetailContent() {
           {/* Sección de Observaciones 2.3 */}
           <Separator className="my-4" />
           <ObservacionesSection
-            ticketCode={codigo}
-            alumnoId={ticket?.id_alumno || ticket?.alumno_id || ""}
+            ticketCode={undefined}
+            ticketCodeForCreate={codigo}
+            alumnoId={
+              ticket?.id_alumno ||
+              ticket?.alumno_id ||
+              alumnoInfo?.id ||
+              ticket?.alumno_codigo ||
+              ticket?.alumnoCodigo ||
+              alumnoInfo?.codigo ||
+              ""
+            }
             coachId={String(user?.codigo || user?.id || "")}
             canEdit={canEdit}
           />

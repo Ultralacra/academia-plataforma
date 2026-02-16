@@ -437,13 +437,13 @@ export function DashboardLayout({
     const { toggleSidebar } = useSidebar();
     return (
       <Button
-        variant="outline"
-        size="sm"
+        variant="ghost"
+        size="icon"
         onClick={toggleSidebar}
-        className="gap-2"
+        className="h-9 w-9 rounded-xl hover:bg-muted/60 transition-colors duration-150"
+        title="Menú"
       >
-        <Menu className="h-4 w-4" />
-        <span>Menú</span>
+        <Menu className="h-5 w-5" />
       </Button>
     );
   };
@@ -453,46 +453,72 @@ export function DashboardLayout({
       <div className="flex h-screen w-full overflow-hidden">
         <AppSidebar />
         <main className="flex-1 min-w-0 flex flex-col overflow-x-hidden">
-          <header className="flex flex-wrap items-center gap-3 justify-between p-3 sm:p-4 border-b bg-background">
-            <div className="flex items-center gap-3 min-w-0">
+          <header className="flex items-center gap-2 sm:gap-3 justify-between px-3 py-2 sm:px-5 sm:py-3 border-b border-border/40 bg-background/80 backdrop-blur-sm supports-[backdrop-filter]:bg-background/60">
+            {/* Left: menu toggle */}
+            <div className="flex items-center gap-2 shrink-0">
               <MenuToggleButton />
             </div>
-            <div className="flex items-center gap-2 sm:gap-4 ml-auto">
-              <ThemeToggle />
-              <PaymentsDueBadge />
-              <NotificationsBadge />
-              <div className="flex items-center gap-2 text-sm min-w-0">
-                <User className="h-4 w-4" />
-                <span className="truncate max-w-[40vw] sm:max-w-[200px]">
-                  {user?.name}
-                </span>
-                <span className="hidden sm:inline text-muted-foreground">
-                  ({user?.role})
-                </span>
+
+            {/* Right: actions + user */}
+            <div className="flex items-center gap-1 sm:gap-2 ml-auto">
+              {/* Action buttons - compact on mobile */}
+              <div className="flex items-center gap-0.5 sm:gap-1">
+                <ThemeToggle
+                  variant="ghost"
+                  className="h-9 w-9 rounded-xl hover:bg-muted/60"
+                />
+                <PaymentsDueBadge />
+                <NotificationsBadge />
               </div>
+
+              {/* Separator */}
+              <div className="hidden sm:block h-6 w-px bg-border/40 mx-1" />
+
+              {/* User info */}
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/50 border border-border/30">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="hidden sm:flex flex-col min-w-0">
+                  <span className="truncate text-sm font-medium leading-tight max-w-[160px]">
+                    {user?.name}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground/70 capitalize leading-tight">
+                    {user?.role}
+                  </span>
+                </div>
+              </div>
+
+              {/* Logout */}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Salir
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 rounded-xl hover:bg-destructive/10 hover:text-destructive transition-colors duration-150"
+                    title="Cerrar sesión"
+                  >
+                    <LogOut className="h-4 w-4" />
                   </Button>
                 </AlertDialogTrigger>
-                <AlertDialogContent className="sm:max-w-sm p-4">
+                <AlertDialogContent className="sm:max-w-sm rounded-2xl p-5">
                   <AlertDialogHeader className="text-center">
-                    <AlertDialogTitle className="text-base">
+                    <AlertDialogTitle className="text-base font-semibold">
                       Cerrar sesión
                     </AlertDialogTitle>
-                    <AlertDialogDescription className="text-sm">
+                    <AlertDialogDescription className="text-sm text-muted-foreground">
                       ¿Estás seguro? Saldrás de tu cuenta y volverás a la
                       pantalla de inicio de sesión.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                  <AlertDialogFooter className="gap-2 sm:gap-2">
+                    <AlertDialogCancel className="rounded-xl">
+                      Cancelar
+                    </AlertDialogCancel>
                     <AlertDialogAction
                       onClick={logout}
                       disabled={isLoading}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      className="rounded-xl bg-destructive text-destructive-foreground hover:bg-destructive/90"
                     >
                       <div className="flex items-center gap-2">
                         {isLoading ? (
