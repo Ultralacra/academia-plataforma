@@ -174,15 +174,16 @@ export default function StudentInicioPage() {
             />
           )}
 
-          {/* Ocultar Seguimiento de pagos para alumnos */}
-          {!isStudent && (
-            <InternalCard
-              title="Seguimiento de pagos"
-              description="Historial y estado de pagos"
-              href={`/admin/alumnos/${code}/pagos`}
-              icon={CreditCard}
-            />
-          )}
+          <InternalCard
+            title="Seguimiento de pagos"
+            description={
+              isStudent
+                ? "Ver estado y fechas de tus pagos"
+                : "Historial y estado de pagos"
+            }
+            href={`/admin/alumnos/${code}/pagos`}
+            icon={CreditCard}
+          />
         </div>
       </DashboardLayout>
     </ProtectedRoute>

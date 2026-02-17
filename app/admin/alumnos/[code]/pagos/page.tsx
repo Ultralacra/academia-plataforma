@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { useAuth } from "@/hooks/use-auth";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { apiFetch } from "@/lib/api-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -121,9 +122,73 @@ type ChangeLog = {
   details: string;
 };
 
+const DETAIL_STATUS_OPTIONS = [
+  { value: "en_proceso", label: "En Proceso" },
+  { value: "fallido", label: "Fallido" },
+  { value: "listo", label: "Listo" },
+  { value: "moroso", label: "Moroso" },
+  { value: "no_aplica", label: "No Aplica" },
+  { value: "pagado", label: "Pagado" },
+  { value: "pendiente", label: "Pendiente" },
+  { value: "pendiente_confirmar_pago", label: "Pendiente Confirmar Pago" },
+  { value: "pendiente_por_cobrar", label: "Pendiente Por Cobrar" },
+  { value: "reembolsado", label: "Reembolsado" },
+] as const;
+
+function normalizeDetailStatus(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/__+/g, "_");
+}
+
+function isPaidStatusValue(value: unknown) {
+  const v = normalizeDetailStatus(value);
+  return ["pagado", "paid", "completed", "listo", "aprobado"].includes(v);
+}
+
+function detailStatusLabel(value: unknown) {
+  const v = normalizeDetailStatus(value);
+  const found = DETAIL_STATUS_OPTIONS.find((o) => o.value === v);
+  if (found) return found.label;
+  if (!v) return "Pendiente";
+  return v.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function detailStatusClass(value: unknown) {
+  const v = normalizeDetailStatus(value);
+  if (["pagado", "listo", "aprobado", "completed"].includes(v)) {
+    return "bg-green-100 text-green-800 border-green-200 hover:bg-green-100";
+  }
+  if (["fallido", "moroso"].includes(v)) {
+    return "bg-red-100 text-red-800 border-red-200 hover:bg-red-100";
+  }
+  if (["reembolsado"].includes(v)) {
+    return "bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100";
+  }
+  if (
+    ["pendiente_confirmar_pago", "pendiente_por_cobrar", "en_proceso"].includes(
+      v,
+    )
+  ) {
+    return "bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-100";
+  }
+  return "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100";
+}
+
 export default function StudentPaymentsPage() {
+  const { user } = useAuth();
   const params = useParams<{ code: string }>();
   const code = decodeURIComponent(params?.code ?? "");
+  const userRole = String((user as any)?.role ?? "").toLowerCase();
+  const isStudent = userRole === "student";
+  const ownStudentCode = String((user as any)?.codigo ?? "").trim();
+  const canEdit = !isStudent;
+  const canValidatePayment = canEdit || isStudent;
+  const canAccessCurrentStudent =
+    !isStudent ||
+    (ownStudentCode && ownStudentCode.toLowerCase() === code.toLowerCase());
 
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,6 +208,10 @@ export default function StudentPaymentsPage() {
   const [addInstallmentOpen, setAddInstallmentOpen] = useState(false);
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [selectedPaymentStatus, setSelectedPaymentStatus] =
+    useState<string>("pendiente");
+  const [selectedPaymentStatusSaving, setSelectedPaymentStatusSaving] =
+    useState(false);
 
   // Form states
   const [newPayment, setNewPayment] = useState({
@@ -245,9 +314,16 @@ export default function StudentPaymentsPage() {
   });
 
   useEffect(() => {
+    if (!canAccessCurrentStudent) {
+      setLoading(false);
+      setConfig(null);
+      setPayments([]);
+      setPaymentCodigo(null);
+      return;
+    }
     loadData();
     loadLogs();
-  }, [code]);
+  }, [code, canAccessCurrentStudent]);
 
   async function loadData() {
     setLoading(true);
@@ -357,28 +433,23 @@ export default function StudentPaymentsPage() {
         : Array.isArray(plan?.details)
           ? plan.details
           : [];
-      const isPaidStatus = (s: any) => {
-        const v = String(s ?? "").toLowerCase();
-        return ["pagado", "paid", "completed", "listo", "aprobado"].includes(v);
-      };
-      const paid = detalles.filter((d) => isPaidStatus(d?.estatus));
-      const paidPayments: Payment[] = paid.map((d) => ({
+      const paidPayments: Payment[] = detalles.map((d) => ({
         id: d?.codigo ?? d?.id ?? Math.random().toString(36),
         codigo_cliente: code,
         monto: d?.monto ?? 0,
         moneda: d?.moneda ?? plan?.moneda ?? "USD",
         fecha_pago: d?.fecha_pago ?? "",
         metodo_pago: d?.metodo ?? "",
-        estado: "completed",
+        estado: String(d?.estatus ?? "pendiente"),
         referencia: d?.referencia ?? undefined,
         comprobante_url: undefined,
-        observaciones: d?.notas ?? undefined,
+        observaciones: d?.concepto || d?.notas || undefined,
         created_at: d?.created_at ?? undefined,
       }));
       setPayments(paidPayments);
       // Imprimir en consola las fechas (y códigos) de las cuotas que faltan por pagar
       try {
-        const unpaid = detalles.filter((d) => !isPaidStatus(d?.estatus));
+        const unpaid = detalles.filter((d) => !isPaidStatusValue(d?.estatus));
         const unpaidDates = unpaid.map((d) => ({
           cuota: d?.cuota_codigo ?? d?.codigo ?? null,
           date: (d?.fecha_pago || "").slice(0, 10) || null,
@@ -408,6 +479,7 @@ export default function StudentPaymentsPage() {
   }
 
   async function saveConfig() {
+    if (!canEdit) return;
     const planType = (tempConfig.planType || "contado") as CrmPaymentPlanType;
     const preset = (tempConfig.pricingPreset ||
       "descuento") as CrmPaymentPricingPreset;
@@ -582,6 +654,7 @@ export default function StudentPaymentsPage() {
   }
 
   function openRegisterModal() {
+    if (!canEdit) return;
     // Find first unpaid installment
     const nextUnpaid = upcomingPayments.find((p) => p.status !== "paid");
     if (nextUnpaid) {
@@ -616,6 +689,7 @@ export default function StudentPaymentsPage() {
     amount: number,
     date: Date,
   ) {
+    if (!canValidatePayment) return;
     setSelectedDetalleCodigo(String(detalleCodigo || "").trim() || null);
     setNewPayment({
       ...newPayment,
@@ -633,6 +707,7 @@ export default function StudentPaymentsPage() {
     date: Date,
     amount: number,
   ) {
+    if (!canEdit) return;
     if (!studentEmail) {
       toast({ title: "No hay correo del alumno", variant: "destructive" });
       return;
@@ -798,6 +873,7 @@ export default function StudentPaymentsPage() {
   }
 
   async function saveEditedPlan() {
+    if (!canEdit) return;
     if (!config) return;
     if (!paymentCodigo) {
       toast({
@@ -953,6 +1029,7 @@ export default function StudentPaymentsPage() {
   }
 
   function handleAddInstallment() {
+    if (!canEdit) return;
     const amount = Number(newInstallment.amount);
     if (!newInstallment.date) {
       toast({
@@ -993,6 +1070,7 @@ export default function StudentPaymentsPage() {
   }
 
   function openEditPlan() {
+    if (!canEdit) return;
     if (config) {
       setEditingInstallments([...config.installments]);
       setEditPlanOpen(true);
@@ -1000,6 +1078,7 @@ export default function StudentPaymentsPage() {
   }
 
   function openConfigBuilder() {
+    if (!canEdit) return;
     setTempConfig((prev) => {
       const base = config;
       return {
@@ -1017,6 +1096,7 @@ export default function StudentPaymentsPage() {
   }
 
   async function handleRegisterPayment() {
+    if (!canValidatePayment) return;
     try {
       if (!paymentCodigo) {
         toast({
@@ -1058,7 +1138,7 @@ export default function StudentPaymentsPage() {
           String((match as any)?.cuotaCodigo || "").trim() || undefined,
         monto: targetAmount,
         moneda: newPayment.moneda || (config?.currency ?? "USD"),
-        estatus: "listo",
+        estatus: isStudent ? "pendiente" : "listo",
         // Usar mediodía UTC para evitar desfases por zona horaria
         fecha_pago: targetDate ? `${targetDate}T12:00:00Z` : undefined,
         metodo: toMetodo(newPayment.metodo_pago),
@@ -1069,11 +1149,19 @@ export default function StudentPaymentsPage() {
 
       await loadData();
 
-      toast({
-        title: "Pago registrado exitosamente",
-        description: "El pago ha sido validado y registrado en el sistema.",
-        className: "bg-green-50 border-green-200 text-green-800",
-      });
+      if (isStudent) {
+        toast({
+          title: "Comprobante enviado",
+          description:
+            "Tu pago quedó en pendiente para validación de admin/equipo.",
+        });
+      } else {
+        toast({
+          title: "Pago registrado exitosamente",
+          description: "El pago ha sido validado y registrado en el sistema.",
+          className: "bg-green-50 border-green-200 text-green-800",
+        });
+      }
       setRegisterOpen(false);
       setSelectedDetalleCodigo(null);
       // Reset form
@@ -1096,6 +1184,7 @@ export default function StudentPaymentsPage() {
   const isInstallmentPaid = (inst: any) => {
     const d = new Date(inst.date);
     return payments.some((p) => {
+      if (!isPaidStatusValue(p.estado)) return false;
       const pDate = new Date(p.fecha_pago);
       const diff = Math.abs(pDate.getTime() - d.getTime());
       // Match if within 5 days and amount is similar (heuristic)
@@ -1123,6 +1212,7 @@ export default function StudentPaymentsPage() {
       // Find a matching payment that hasn't been used yet
       const matchingPayment = payments.find((p) => {
         if (usedPaymentIds.has(String(p.id))) return false;
+        if (!isPaidStatusValue(p.estado)) return false;
 
         const pDate = new Date(p.fecha_pago);
         const diff = Math.abs(pDate.getTime() - d.getTime());
@@ -1171,8 +1261,71 @@ export default function StudentPaymentsPage() {
     return config.installments.filter((i) => i.type === "bono");
   }, [config]);
 
+  useEffect(() => {
+    if (!selectedPayment) return;
+    setSelectedPaymentStatus(
+      normalizeDetailStatus(selectedPayment.estado || "pendiente") ||
+        "pendiente",
+    );
+  }, [selectedPayment]);
+
+  async function handleUpdateSelectedPaymentStatus() {
+    if (!canEdit) return;
+    if (!paymentCodigo || !selectedPayment?.id) {
+      toast({
+        title: "No se pudo actualizar",
+        description: "Falta el código del plan o del detalle.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const nextStatus =
+      normalizeDetailStatus(selectedPaymentStatus) || "pendiente";
+
+    try {
+      setSelectedPaymentStatusSaving(true);
+      await updatePaymentDetail(paymentCodigo, String(selectedPayment.id), {
+        estatus: nextStatus,
+      });
+
+      await loadData();
+      setSelectedPayment((prev) =>
+        prev ? { ...prev, estado: nextStatus } : prev,
+      );
+
+      toast({
+        title: "Estatus actualizado",
+        description: `La cuota quedó en ${detailStatusLabel(nextStatus)}.`,
+      });
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Error al actualizar estatus",
+        variant: "destructive",
+      });
+    } finally {
+      setSelectedPaymentStatusSaving(false);
+    }
+  }
+
+  if (!canAccessCurrentStudent) {
+    return (
+      <ProtectedRoute allowedRoles={["admin", "coach", "equipo", "student"]}>
+        <DashboardLayout>
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              No tienes permisos para ver el seguimiento de pagos de otro
+              alumno.
+            </CardContent>
+          </Card>
+        </DashboardLayout>
+      </ProtectedRoute>
+    );
+  }
+
   return (
-    <ProtectedRoute allowedRoles={["admin", "coach", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "coach", "equipo", "student"]}>
       <DashboardLayout>
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-6 gap-4">
           <div className="flex flex-col">
@@ -1187,16 +1340,23 @@ export default function StudentPaymentsPage() {
                 {studentEmail && <span className="ml-3">{studentEmail}</span>}
               </p>
             )}
+            {isStudent ? (
+              <p className="text-xs text-muted-foreground mt-1">
+                Vista de alumno: solo lectura de tu seguimiento de pagos.
+              </p>
+            ) : null}
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={openConfigBuilder}>
-              <Settings className="w-4 h-4 mr-2" />
-              {config ? "Configurar plan" : "Configuración inicial"}
-            </Button>
-            <Button onClick={openRegisterModal}>
-              <Plus className="w-4 h-4 mr-2" /> Registrar pago
-            </Button>
-          </div>
+          {canEdit ? (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={openConfigBuilder}>
+                <Settings className="w-4 h-4 mr-2" />
+                {config ? "Configurar plan" : "Configuración inicial"}
+              </Button>
+              <Button onClick={openRegisterModal}>
+                <Plus className="w-4 h-4 mr-2" /> Registrar pago
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1208,7 +1368,7 @@ export default function StudentPaymentsPage() {
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4" /> Plan de pagos
                   </div>
-                  {config && (
+                  {config && canEdit && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1224,13 +1384,15 @@ export default function StudentPaymentsPage() {
                 {!config ? (
                   <div className="text-center py-6 text-muted-foreground text-sm">
                     <p>No hay configuración de pagos.</p>
-                    <Button
-                      variant="link"
-                      onClick={openConfigBuilder}
-                      className="mt-2"
-                    >
-                      Iniciar configuración
-                    </Button>
+                    {canEdit ? (
+                      <Button
+                        variant="link"
+                        onClick={openConfigBuilder}
+                        className="mt-2"
+                      >
+                        Iniciar configuración
+                      </Button>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1368,25 +1530,27 @@ export default function StudentPaymentsPage() {
                                     maximumFractionDigits: 0,
                                   }).format(item.amount)}
                                 </span>
-                                {item.status !== "paid" && isNextToPay && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="h-6 text-xs px-2"
-                                    onClick={() =>
-                                      handleValidatePayment(
-                                        String(
-                                          (item as any).detalleCodigo || "",
-                                        ),
-                                        item.amount,
-                                        item.date,
-                                      )
-                                    }
-                                  >
-                                    Validar
-                                  </Button>
-                                )}
-                                {item.status !== "paid" && (
+                                {canValidatePayment &&
+                                  item.status !== "paid" &&
+                                  isNextToPay && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-6 text-xs px-2"
+                                      onClick={() =>
+                                        handleValidatePayment(
+                                          String(
+                                            (item as any).detalleCodigo || "",
+                                          ),
+                                          item.amount,
+                                          item.date,
+                                        )
+                                      }
+                                    >
+                                      Validar
+                                    </Button>
+                                  )}
+                                {canEdit && item.status !== "paid" && (
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -1506,19 +1670,9 @@ export default function StudentPaymentsPage() {
                           <TableCell>
                             <Badge
                               variant="outline"
-                              className={
-                                p.estado === "aprobado" ||
-                                p.estado === "completed"
-                                  ? "bg-green-100 text-green-800 border-green-200 hover:bg-green-100"
-                                  : "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100"
-                              }
+                              className={detailStatusClass(p.estado)}
                             >
-                              {p.estado === "completed" ||
-                              p.estado === "aprobado"
-                                ? "Completado"
-                                : p.estado === "pending"
-                                  ? "Pendiente"
-                                  : p.estado || "Completado"}
+                              {detailStatusLabel(p.estado)}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
@@ -2360,6 +2514,7 @@ export default function StudentPaymentsPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => setAddInstallmentOpen(true)}
+                    disabled={!canEdit}
                   >
                     <Plus className="w-4 h-4 mr-2" /> Agregar cuota
                   </Button>
@@ -2595,9 +2750,13 @@ export default function StudentPaymentsPage() {
         <Dialog open={registerOpen} onOpenChange={setRegisterOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Registrar Pago</DialogTitle>
+              <DialogTitle>
+                {isStudent ? "Enviar comprobante" : "Registrar Pago"}
+              </DialogTitle>
               <DialogDescription>
-                Ingresa los detalles del pago recibido.
+                {isStudent
+                  ? "Completa el método, referencia y observaciones para enviar a validación."
+                  : "Ingresa los detalles del pago recibido."}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -2607,6 +2766,7 @@ export default function StudentPaymentsPage() {
                   <Input
                     type="number"
                     value={newPayment.monto}
+                    disabled={isStudent}
                     onChange={(e) =>
                       setNewPayment({ ...newPayment, monto: e.target.value })
                     }
@@ -2616,6 +2776,7 @@ export default function StudentPaymentsPage() {
                   <Label>Moneda</Label>
                   <Select
                     value={newPayment.moneda}
+                    disabled={isStudent}
                     onValueChange={(v) =>
                       setNewPayment({ ...newPayment, moneda: v })
                     }
@@ -2637,6 +2798,7 @@ export default function StudentPaymentsPage() {
                 <Input
                   type="date"
                   value={newPayment.fecha_pago}
+                  disabled={isStudent}
                   onChange={(e) =>
                     setNewPayment({ ...newPayment, fecha_pago: e.target.value })
                   }
@@ -2688,7 +2850,9 @@ export default function StudentPaymentsPage() {
               <Button variant="outline" onClick={() => setRegisterOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleRegisterPayment}>Registrar Pago</Button>
+              <Button onClick={handleRegisterPayment}>
+                {isStudent ? "Enviar a validación" : "Registrar Pago"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -2849,22 +3013,42 @@ export default function StudentPaymentsPage() {
                     <Label className="text-muted-foreground text-xs">
                       Estado
                     </Label>
-                    <Badge
-                      variant="outline"
-                      className={
-                        selectedPayment.estado === "aprobado" ||
-                        selectedPayment.estado === "completed"
-                          ? "mt-1 bg-green-100 text-green-800 border-green-200 hover:bg-green-100"
-                          : "mt-1 bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100"
-                      }
-                    >
-                      {selectedPayment.estado === "completed" ||
-                      selectedPayment.estado === "aprobado"
-                        ? "Completado"
-                        : selectedPayment.estado === "pending"
-                          ? "Pendiente"
-                          : selectedPayment.estado || "Completado"}
-                    </Badge>
+                    {canEdit ? (
+                      <div className="mt-1 flex items-center gap-2">
+                        <Select
+                          value={selectedPaymentStatus}
+                          onValueChange={(v) => setSelectedPaymentStatus(v)}
+                          disabled={selectedPaymentStatusSaving}
+                        >
+                          <SelectTrigger className="w-[230px]">
+                            <SelectValue placeholder="Estatus" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DETAIL_STATUS_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          onClick={handleUpdateSelectedPaymentStatus}
+                          disabled={selectedPaymentStatusSaving}
+                        >
+                          {selectedPaymentStatusSaving
+                            ? "Guardando..."
+                            : "Guardar"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className={`mt-1 ${detailStatusClass(selectedPayment.estado)}`}
+                      >
+                        {detailStatusLabel(selectedPayment.estado)}
+                      </Badge>
+                    )}
                   </div>
                 </div>
 

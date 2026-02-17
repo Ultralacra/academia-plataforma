@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import {
   getPaymentByCodigo,
   getPayments,
@@ -355,6 +356,15 @@ function computePaymentMetrics(rows: PaymentRow[]): PaymentMetrics {
 }
 
 function PaymentsContent() {
+  const { user } = useAuth();
+  const userRole = String((user as any)?.role ?? "").toLowerCase();
+  const isStudent = userRole === "student";
+  const ownStudentCode = useMemo(() => {
+    const raw = (user as any)?.codigo ?? (user as any)?.id ?? "";
+    return String(raw || "").trim();
+  }, [user]);
+  const canManagePayments = !isStudent;
+
   const [activeTab, setActiveTab] = useState<"pagos" | "cuotas">("pagos");
 
   const [isLoading, setIsLoading] = useState(false);
@@ -538,6 +548,7 @@ function PaymentsContent() {
   }
 
   async function savePaymentField(field: string) {
+    if (!canManagePayments) return;
     if (!detailCodigo) return;
     setPaymentFieldSaving(true);
     try {
@@ -596,6 +607,7 @@ function PaymentsContent() {
 
   // Verifica si todas las cuotas están pagadas y actualiza el estatus del pago automáticamente
   async function checkAndUpdatePaymentStatus(paymentCodigo: string) {
+    if (!canManagePayments) return;
     try {
       // Obtener el pago actualizado
       const freshPayment = await getPaymentByCodigo(paymentCodigo);
@@ -652,6 +664,7 @@ function PaymentsContent() {
   }
 
   function openCuotaModal(cuota?: any) {
+    if (!canManagePayments) return;
     if (cuota) {
       // Editar existente
       setCuotaEditing(cuota);
@@ -688,6 +701,7 @@ function PaymentsContent() {
   }
 
   async function saveCuota() {
+    if (!canManagePayments) return;
     const paymentCodigo = String(detail?.codigo ?? detailCodigo ?? "").trim();
     if (!paymentCodigo) {
       toast({
@@ -817,6 +831,7 @@ function PaymentsContent() {
   }
 
   async function deleteCuota() {
+    if (!canManagePayments) return;
     if (!cuotaToDelete) return;
 
     const paymentCodigo = String(detail?.codigo ?? detailCodigo ?? "").trim();
@@ -877,6 +892,7 @@ function PaymentsContent() {
       const json = await getPayments({
         page: 1,
         pageSize: 10000,
+        cliente_codigo: isStudent ? ownStudentCode || undefined : undefined,
         // No enviamos filtros al backend porque no los soporta
         // El filtrado se hace localmente
       });
@@ -904,7 +920,9 @@ function PaymentsContent() {
       const metricsPageSize = 200;
       const common = {
         search: debouncedSearch.trim() || undefined,
-        cliente_codigo: debouncedClienteCodigo.trim() || undefined,
+        cliente_codigo: isStudent
+          ? ownStudentCode || undefined
+          : debouncedClienteCodigo.trim() || undefined,
         estatus: estatus || undefined,
         metodo: debouncedMetodo.trim() || undefined,
         fechaDesde: fechaDesde || undefined,
@@ -990,11 +1008,22 @@ function PaymentsContent() {
 
   const filtered = useMemo(() => {
     const base = Array.isArray(rows) ? rows.slice() : [];
+    const ownCodeNorm = String(ownStudentCode || "")
+      .trim()
+      .toLowerCase();
+    const onlyMine = isStudent
+      ? base.filter((r) => {
+          const cc = String(r?.cliente_codigo ?? "")
+            .trim()
+            .toLowerCase();
+          return !!ownCodeNorm && cc === ownCodeNorm;
+        })
+      : base;
 
     // 1. Filtro por búsqueda de texto
     const searchTerm = debouncedSearch.trim().toLowerCase();
     const withSearch = searchTerm
-      ? base.filter((r) => {
+      ? onlyMine.filter((r) => {
           const codigo = String(r?.codigo ?? "").toLowerCase();
           const clienteCodigo = String(r?.cliente_codigo ?? "").toLowerCase();
           const clienteNombre = fixMojibake(
@@ -1017,7 +1046,7 @@ function PaymentsContent() {
             concepto.includes(searchTerm)
           );
         })
-      : base;
+      : onlyMine;
 
     // 2. Filtro por cliente_codigo
     const clienteCodigoTerm = debouncedClienteCodigo.trim().toLowerCase();
@@ -1111,6 +1140,8 @@ function PaymentsContent() {
     return withLinkFilter;
   }, [
     rows,
+    isStudent,
+    ownStudentCode,
     debouncedSearch,
     debouncedClienteCodigo,
     estatus,
@@ -1183,6 +1214,7 @@ function PaymentsContent() {
   }
 
   function openSync(payment: PaymentRow) {
+    if (!canManagePayments) return;
     if (isPaymentSynced(payment)) {
       toast({
         title: "Ya está sincronizado",
@@ -1198,6 +1230,7 @@ function PaymentsContent() {
   }
 
   async function doSync() {
+    if (!canManagePayments) return;
     if (!syncPayment || !syncSelectedUser) return;
     if (isPaymentSynced(syncPayment)) {
       toast({
@@ -1290,6 +1323,7 @@ function PaymentsContent() {
   }
 
   async function saveDetalle(d: any) {
+    if (!canManagePayments) return;
     const key = getDetailRowKey(d);
     if (!key) return;
 
@@ -1442,6 +1476,7 @@ function PaymentsContent() {
   }
 
   function scheduleSaveDetalle(d: any, delayMs: number) {
+    if (!canManagePayments) return;
     const key = getDetailRowKey(d);
     if (!key) return;
 
@@ -1482,6 +1517,18 @@ function PaymentsContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!isStudent) return;
+    if (!ownStudentCode) return;
+    if (clienteCodigo === ownStudentCode) return;
+    setClienteCodigo(ownStudentCode);
+  }, [isStudent, ownStudentCode, clienteCodigo]);
+
+  useEffect(() => {
+    if (!isStudent) return;
+    if (activeTab !== "pagos") setActiveTab("pagos");
+  }, [isStudent, activeTab]);
+
   // Cuando cambian los filtros, solo resetear a página 1 (sin recargar datos)
   useEffect(() => {
     setPage(1);
@@ -1519,6 +1566,11 @@ function PaymentsContent() {
         <p className="text-sm text-muted-foreground">
           Gestión de pagos (lista + detalle)
         </p>
+        {isStudent ? (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Vista de alumno: solo lectura de tu propio seguimiento de pagos.
+          </p>
+        ) : null}
       </div>
 
       <Tabs
@@ -1528,7 +1580,9 @@ function PaymentsContent() {
       >
         <TabsList>
           <TabsTrigger value="pagos">Pagos</TabsTrigger>
-          <TabsTrigger value="cuotas">Cuotas por vencer</TabsTrigger>
+          {!isStudent ? (
+            <TabsTrigger value="cuotas">Cuotas por vencer</TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="pagos" className="space-y-4">
@@ -1619,6 +1673,7 @@ function PaymentsContent() {
                     placeholder="KrTVx8TnoVSUcFZn"
                     value={clienteCodigo}
                     onChange={(e) => setClienteCodigo(e.target.value)}
+                    readOnly={isStudent}
                   />
                 </div>
                 <div className="grid gap-1">
@@ -1754,15 +1809,17 @@ function PaymentsContent() {
                 ) : null}
               </div>
               <div className="flex items-center gap-2">
-                <Button
-                  variant={onlyUnlinked ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setOnlyUnlinked((v) => !v)}
-                >
-                  {onlyUnlinked
-                    ? "Viendo: sin sincronizar"
-                    : "Ver sin sincronizar"}
-                </Button>
+                {!isStudent ? (
+                  <Button
+                    variant={onlyUnlinked ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setOnlyUnlinked((v) => !v)}
+                  >
+                    {onlyUnlinked
+                      ? "Viendo: sin sincronizar"
+                      : "Ver sin sincronizar"}
+                  </Button>
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1872,12 +1929,12 @@ function PaymentsContent() {
                             </Badge>
                           </TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
-                            {synced ? (
+                            {synced || isStudent ? (
                               <Badge
                                 variant="outline"
                                 className="border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60"
                               >
-                                Sincronizado
+                                {synced ? "Sincronizado" : "Solo lectura"}
                               </Badge>
                             ) : (
                               <Button
@@ -1903,187 +1960,193 @@ function PaymentsContent() {
           </div>
         </TabsContent>
 
-        <TabsContent value="cuotas" className="space-y-4">
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div className="grid gap-1">
-                <Label>Mes</Label>
-                <Input
-                  type="month"
-                  value={cuotasMonth}
-                  onChange={(e) => {
-                    const next = e.target.value;
-                    setCuotasMonth(next);
-                    setCuotasLoadedMonth(null);
-                    setCuotasRows([]);
-                    setCuotasPage(1);
-                    setCuotasTotalPages(1);
-                    setCuotasTotal(0);
-                    setCuotasError(null);
-                  }}
-                />
+        {!isStudent ? (
+          <TabsContent value="cuotas" className="space-y-4">
+            <div className="rounded-lg border bg-card p-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className="grid gap-1">
+                  <Label>Mes</Label>
+                  <Input
+                    type="month"
+                    value={cuotasMonth}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setCuotasMonth(next);
+                      setCuotasLoadedMonth(null);
+                      setCuotasRows([]);
+                      setCuotasPage(1);
+                      setCuotasTotalPages(1);
+                      setCuotasTotal(0);
+                      setCuotasError(null);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => loadCuotas({ page: 1 })}
+                    disabled={cuotasLoading}
+                  >
+                    {cuotasLoading ? "Cargando…" : "Buscar"}
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => loadCuotas({ page: 1 })}
-                  disabled={cuotasLoading}
-                >
-                  {cuotasLoading ? "Cargando…" : "Buscar"}
-                </Button>
+
+              <div className="mt-2 text-xs text-muted-foreground">
+                {getMonthRange(cuotasMonth)
+                  ? `Rango: ${getMonthRange(cuotasMonth)!.fechaDesde} → ${
+                      getMonthRange(cuotasMonth)!.fechaHasta
+                    }`
+                  : "Selecciona un mes válido"}
               </div>
+
+              {cuotasError ? (
+                <div className="mt-3">
+                  <Alert variant="destructive">
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{cuotasError}</AlertDescription>
+                  </Alert>
+                </div>
+              ) : null}
             </div>
 
-            <div className="mt-2 text-xs text-muted-foreground">
-              {getMonthRange(cuotasMonth)
-                ? `Rango: ${getMonthRange(cuotasMonth)!.fechaDesde} → ${
-                    getMonthRange(cuotasMonth)!.fechaHasta
-                  }`
-                : "Selecciona un mes válido"}
-            </div>
-
-            {cuotasError ? (
-              <div className="mt-3">
-                <Alert variant="destructive">
-                  <AlertTitle>Error</AlertTitle>
-                  <AlertDescription>{cuotasError}</AlertDescription>
-                </Alert>
+            <div className="rounded-lg border bg-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                <div>
+                  Página {cuotasPage} / {cuotasTotalPages} • Mostrando{" "}
+                  {cuotasRows.length}
+                  {cuotasTotal ? ` (total API: ${cuotasTotal})` : ""}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadCuotas({ page: 1 })}
+                    disabled={cuotasLoading}
+                  >
+                    Recargar
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() =>
+                      loadCuotas({ page: cuotasPage + 1, append: true })
+                    }
+                    disabled={cuotasLoading || cuotasPage >= cuotasTotalPages}
+                  >
+                    {cuotasLoading ? "Cargando…" : "Cargar más"}
+                  </Button>
+                </div>
               </div>
-            ) : null}
-          </div>
 
-          <div className="rounded-lg border bg-card p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-              <div>
-                Página {cuotasPage} / {cuotasTotalPages} • Mostrando{" "}
-                {cuotasRows.length}
-                {cuotasTotal ? ` (total API: ${cuotasTotal})` : ""}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => loadCuotas({ page: 1 })}
-                  disabled={cuotasLoading}
-                >
-                  Recargar
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() =>
-                    loadCuotas({ page: cuotasPage + 1, append: true })
-                  }
-                  disabled={cuotasLoading || cuotasPage >= cuotasTotalPages}
-                >
-                  {cuotasLoading ? "Cargando…" : "Cargar más"}
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-3 overflow-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead className="whitespace-nowrap">Cuota</TableHead>
-                    <TableHead className="whitespace-nowrap">Fecha</TableHead>
-                    <TableHead className="whitespace-nowrap">Días</TableHead>
-                    <TableHead className="whitespace-nowrap">Monto</TableHead>
-                    <TableHead>Estatus</TableHead>
-                    <TableHead className="whitespace-nowrap">
-                      Acciones
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {!cuotasRows.length ? (
+              <div className="mt-3 overflow-auto">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={7} className="text-muted-foreground">
-                        {cuotasLoading
-                          ? "Cargando…"
-                          : "No hay cuotas para el mes seleccionado."}
-                      </TableCell>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead className="whitespace-nowrap">Cuota</TableHead>
+                      <TableHead className="whitespace-nowrap">Fecha</TableHead>
+                      <TableHead className="whitespace-nowrap">Días</TableHead>
+                      <TableHead className="whitespace-nowrap">Monto</TableHead>
+                      <TableHead>Estatus</TableHead>
+                      <TableHead className="whitespace-nowrap">
+                        Acciones
+                      </TableHead>
                     </TableRow>
-                  ) : (
-                    cuotasRows.map((r) => {
-                      const clientName = fixMojibake(r.cliente_nombre) || "—";
-                      const cuotaCode =
-                        String(r.cuota_codigo || r.codigo || "").trim() || "—";
-                      const cuotaDate = r.fecha_pago
-                        ? new Date(r.fecha_pago)
-                        : null;
-                      const dias =
-                        cuotaDate && !Number.isNaN(cuotaDate.getTime())
-                          ? diffDays(cuotaDate, new Date())
+                  </TableHeader>
+                  <TableBody>
+                    {!cuotasRows.length ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={7}
+                          className="text-muted-foreground"
+                        >
+                          {cuotasLoading
+                            ? "Cargando…"
+                            : "No hay cuotas para el mes seleccionado."}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      cuotasRows.map((r) => {
+                        const clientName = fixMojibake(r.cliente_nombre) || "—";
+                        const cuotaCode =
+                          String(r.cuota_codigo || r.codigo || "").trim() ||
+                          "—";
+                        const cuotaDate = r.fecha_pago
+                          ? new Date(r.fecha_pago)
                           : null;
+                        const dias =
+                          cuotaDate && !Number.isNaN(cuotaDate.getTime())
+                            ? diffDays(cuotaDate, new Date())
+                            : null;
 
-                      return (
-                        <TableRow key={String(r.id || r.codigo || cuotaCode)}>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <div className="text-sm">{clientName}</div>
-                              {r.cliente_codigo ? (
-                                <div className="text-xs text-muted-foreground">
-                                  {fixMojibake(r.cliente_codigo)}
-                                </div>
-                              ) : null}
-                            </div>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            <div className="flex flex-col">
-                              <div className="text-sm">{cuotaCode}</div>
-                              {r.concepto ? (
-                                <div className="text-xs text-muted-foreground">
-                                  {fixMojibake(r.concepto)}
-                                </div>
-                              ) : null}
-                            </div>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {formatDateOnly(r.fecha_pago)}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {dias === null ? (
-                              "—"
-                            ) : dias < 0 ? (
-                              <span className="text-destructive">{dias}</span>
-                            ) : (
-                              dias
-                            )}
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            {formatMoney(r.monto, r.moneda)}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={getStatusChipClass(r.estatus)}
-                            >
-                              {formatPaymentStatusLabel(r.estatus)}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="whitespace-nowrap">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={!r.payment_codigo}
-                              onClick={() =>
-                                openDetail(String(r.payment_codigo))
-                              }
-                            >
-                              Ver plan de pagos
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+                        return (
+                          <TableRow key={String(r.id || r.codigo || cuotaCode)}>
+                            <TableCell>
+                              <div className="flex flex-col">
+                                <div className="text-sm">{clientName}</div>
+                                {r.cliente_codigo ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {fixMojibake(r.cliente_codigo)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <div className="flex flex-col">
+                                <div className="text-sm">{cuotaCode}</div>
+                                {r.concepto ? (
+                                  <div className="text-xs text-muted-foreground">
+                                    {fixMojibake(r.concepto)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {formatDateOnly(r.fecha_pago)}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {dias === null ? (
+                                "—"
+                              ) : dias < 0 ? (
+                                <span className="text-destructive">{dias}</span>
+                              ) : (
+                                dias
+                              )}
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              {formatMoney(r.monto, r.moneda)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={getStatusChipClass(r.estatus)}
+                              >
+                                {formatPaymentStatusLabel(r.estatus)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="whitespace-nowrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!r.payment_codigo}
+                                onClick={() =>
+                                  openDetail(String(r.payment_codigo))
+                                }
+                              >
+                                Ver plan de pagos
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       <Dialog
@@ -2903,6 +2966,7 @@ function PaymentsContent() {
                         size="sm"
                         variant="outline"
                         onClick={() => openCuotaModal()}
+                        disabled={!canManagePayments}
                       >
                         <Plus className="h-4 w-4 mr-1" />
                         Nueva cuota
@@ -2947,6 +3011,7 @@ function PaymentsContent() {
                                     variant="ghost"
                                     onClick={() => openCuotaModal(d)}
                                     title="Editar cuota"
+                                    disabled={!canManagePayments}
                                   >
                                     <Pencil className="h-4 w-4" />
                                   </Button>
@@ -2956,6 +3021,7 @@ function PaymentsContent() {
                                     onClick={() => openDeleteConfirm(d)}
                                     title="Eliminar cuota"
                                     className="text-destructive hover:text-destructive"
+                                    disabled={!canManagePayments}
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
@@ -2997,6 +3063,7 @@ function PaymentsContent() {
                                       <Select
                                         key={`select-status-${key}`}
                                         value={value || ""}
+                                        disabled={!canManagePayments}
                                         onValueChange={(v) => {
                                           const vLower =
                                             normalizePaymentStatus(v);
@@ -3105,6 +3172,7 @@ function PaymentsContent() {
                                   return (
                                     <Input
                                       value={value}
+                                      readOnly={!canManagePayments}
                                       onChange={(e) => {
                                         const next = e.target.value;
                                         setDetailEditConceptByKey((prev) => ({
@@ -3129,6 +3197,7 @@ function PaymentsContent() {
                                   return (
                                     <Textarea
                                       value={value}
+                                      readOnly={!canManagePayments}
                                       onChange={(e) => {
                                         const next = e.target.value;
                                         setDetailEditNotesByKey((prev) => ({
@@ -3394,7 +3463,7 @@ function PaymentsContent() {
 
 export default function PaymentsPage() {
   return (
-    <ProtectedRoute allowedRoles={["admin", "coach", "equipo"]}>
+    <ProtectedRoute allowedRoles={["admin", "coach", "equipo", "student"]}>
       <DashboardLayout>
         <PaymentsContent />
       </DashboardLayout>
