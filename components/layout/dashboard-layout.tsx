@@ -303,7 +303,8 @@ function NotificationsBadge() {
 
 function PaymentsDueBadge() {
   const { user } = useAuth();
-  const enabled = user?.role === "coach" || user?.role === "equipo";
+  const enabled =
+    user?.role === "admin" || user?.role === "coach" || user?.role === "equipo";
   const { dueCount, loading, error, refresh, items } =
     usePaymentDueNotifications({ enabled, daysWindow: 5 });
 
