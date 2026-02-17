@@ -158,6 +158,82 @@ function diffDays(a: Date, b: Date) {
   return Math.floor(ms / (24 * 60 * 60 * 1000));
 }
 
+const MORA_GRACE_DAYS = 5;
+
+function isClosedOrPaidStatus(raw: unknown) {
+  const s = normalizePaymentStatus(raw);
+  if (!s) return false;
+  return (
+    s.includes("pagad") ||
+    s.includes("listo") ||
+    s.includes("reembol") ||
+    s.includes("no_aplica") ||
+    s.includes("fallid")
+  );
+}
+
+function isPendingLikeStatus(raw: unknown) {
+  const s = normalizePaymentStatus(raw);
+  if (!s) return true;
+  return (
+    s.includes("pendien") ||
+    s.includes("en_proceso") ||
+    s.includes("en_progreso")
+  );
+}
+
+function getEffectiveCuotaStatus(
+  status: unknown,
+  fechaPago: string | null | undefined,
+  now: Date = new Date(),
+) {
+  const normalized = normalizePaymentStatus(status);
+
+  if (normalized.includes("moro") || normalized.includes("venc")) {
+    return "moroso";
+  }
+
+  if (isClosedOrPaidStatus(normalized)) {
+    return (
+      normalized ||
+      String(status ?? "")
+        .trim()
+        .toLowerCase()
+    );
+  }
+
+  if (!fechaPago || !isPendingLikeStatus(normalized)) {
+    return (
+      normalized ||
+      String(status ?? "")
+        .trim()
+        .toLowerCase()
+    );
+  }
+
+  const due = new Date(fechaPago);
+  if (Number.isNaN(due.getTime())) {
+    return (
+      normalized ||
+      String(status ?? "")
+        .trim()
+        .toLowerCase()
+    );
+  }
+
+  const overdueDays = diffDays(now, due);
+  if (overdueDays > MORA_GRACE_DAYS) {
+    return "moroso";
+  }
+
+  return (
+    normalized ||
+    String(status ?? "")
+      .trim()
+      .toLowerCase()
+  );
+}
+
 function fixMojibake(value: string | null | undefined) {
   if (value === null || value === undefined) return "";
   const s = String(value);
@@ -449,12 +525,30 @@ function PaymentsContent() {
     null,
   );
   const [cuotasRows, setCuotasRows] = useState<PaymentCuotaRow[]>([]);
+  const [cuotasStatusFilter, setCuotasStatusFilter] = useState<string>("todos");
   const [cuotasPage, setCuotasPage] = useState<number>(1);
   const [cuotasTotalPages, setCuotasTotalPages] = useState<number>(1);
   const [cuotasTotal, setCuotasTotal] = useState<number>(0);
   const [cuotasLoading, setCuotasLoading] = useState(false);
   const [cuotasError, setCuotasError] = useState<string | null>(null);
   const cuotasReqIdRef = useRef(0);
+
+  const cuotasStatusOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of cuotasRows) {
+      const effective = getEffectiveCuotaStatus(r?.estatus, r?.fecha_pago);
+      if (effective) set.add(effective);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [cuotasRows]);
+
+  const filteredCuotasRows = useMemo(() => {
+    if (cuotasStatusFilter === "todos") return cuotasRows;
+    return cuotasRows.filter((r) => {
+      const effective = getEffectiveCuotaStatus(r?.estatus, r?.fecha_pago);
+      return effective === cuotasStatusFilter;
+    });
+  }, [cuotasRows, cuotasStatusFilter]);
 
   async function loadCuotas(opts: { page: number; append?: boolean }) {
     const range = getMonthRange(cuotasMonth);
@@ -1972,6 +2066,7 @@ function PaymentsContent() {
                     onChange={(e) => {
                       const next = e.target.value;
                       setCuotasMonth(next);
+                      setCuotasStatusFilter("todos");
                       setCuotasLoadedMonth(null);
                       setCuotasRows([]);
                       setCuotasPage(1);
@@ -1980,6 +2075,25 @@ function PaymentsContent() {
                       setCuotasError(null);
                     }}
                   />
+                </div>
+                <div className="grid gap-1 min-w-[220px]">
+                  <Label>Estatus</Label>
+                  <Select
+                    value={cuotasStatusFilter}
+                    onValueChange={setCuotasStatusFilter}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos</SelectItem>
+                      {cuotasStatusOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {formatPaymentStatusLabel(s)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -2014,7 +2128,10 @@ function PaymentsContent() {
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
                 <div>
                   Página {cuotasPage} / {cuotasTotalPages} • Mostrando{" "}
-                  {cuotasRows.length}
+                  {filteredCuotasRows.length}
+                  {cuotasStatusFilter !== "todos"
+                    ? ` (filtrado por: ${formatPaymentStatusLabel(cuotasStatusFilter)})`
+                    : ""}
                   {cuotasTotal ? ` (total API: ${cuotasTotal})` : ""}
                 </div>
                 <div className="flex items-center gap-2">
@@ -2055,7 +2172,7 @@ function PaymentsContent() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {!cuotasRows.length ? (
+                    {!filteredCuotasRows.length ? (
                       <TableRow>
                         <TableCell
                           colSpan={7}
@@ -2063,15 +2180,21 @@ function PaymentsContent() {
                         >
                           {cuotasLoading
                             ? "Cargando…"
-                            : "No hay cuotas para el mes seleccionado."}
+                            : "No hay cuotas para el filtro seleccionado."}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      cuotasRows.map((r) => {
+                      filteredCuotasRows.map((r) => {
+                        const now = new Date();
                         const clientName = fixMojibake(r.cliente_nombre) || "—";
                         const cuotaCode =
                           String(r.cuota_codigo || r.codigo || "").trim() ||
                           "—";
+                        const effectiveStatus = getEffectiveCuotaStatus(
+                          r.estatus,
+                          r.fecha_pago,
+                          now,
+                        );
                         const cuotaDate = r.fecha_pago
                           ? new Date(r.fecha_pago)
                           : null;
@@ -2120,9 +2243,9 @@ function PaymentsContent() {
                             <TableCell>
                               <Badge
                                 variant="outline"
-                                className={getStatusChipClass(r.estatus)}
+                                className={getStatusChipClass(effectiveStatus)}
                               >
-                                {formatPaymentStatusLabel(r.estatus)}
+                                {formatPaymentStatusLabel(effectiveStatus)}
                               </Badge>
                             </TableCell>
                             <TableCell className="whitespace-nowrap">
