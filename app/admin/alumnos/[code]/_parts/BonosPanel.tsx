@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/tooltip";
 import { toast } from "@/components/ui/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Eye, Send, UserMinus } from "lucide-react";
+import { Eye, Gift, Send, UserMinus } from "lucide-react";
 import * as alumnosApi from "@/app/admin/alumnos/api";
 import RequestBonoImplementacionTecnicaDialog from "./RequestBonoImplementacionTecnicaDialog";
 import RequestBonoImplementacionTecnicaContractualDialog from "./RequestBonoImplementacionTecnicaContractualDialog";
@@ -40,7 +40,7 @@ function pad2(n: number) {
 
 function toSqlDatetimeLocal(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(
-    d.getDate()
+    d.getDate(),
   )} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
@@ -93,7 +93,7 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
   const [allBonos, setAllBonos] = useState<alumnosApi.Bono[]>([]);
   const [assigning, setAssigning] = useState(false);
   const [selectedToAssign, setSelectedToAssign] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(),
   );
 
   const [unassignOpen, setUnassignOpen] = useState(false);
@@ -111,7 +111,7 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
   >(null);
 
   const isBonoImplementacionTecnicaContractual = (
-    b: alumnosApi.BonoAssignment
+    b: alumnosApi.BonoAssignment,
   ) => {
     const norm = (v: unknown) =>
       String(v ?? "")
@@ -189,9 +189,8 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
   async function refreshAssigned() {
     setLoading(true);
     try {
-      const rows = await alumnosApi.getBonoAssignmentsByAlumnoCodigo(
-        studentCode
-      );
+      const rows =
+        await alumnosApi.getBonoAssignmentsByAlumnoCodigo(studentCode);
       setAssigned(rows);
     } catch (e: any) {
       console.error(e);
@@ -368,26 +367,45 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="text-sm font-semibold text-foreground">
-            Bonos asignados {assignedCount > 0 ? `(${assignedCount})` : ""}
+      <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-r from-primary/10 via-background to-accent/40 p-4 md:p-5">
+        <div className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-primary/10 blur-2xl" />
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary/15 text-primary">
+                <Gift className="h-4 w-4" />
+              </span>
+              Bonos asignados {assignedCount > 0 ? `(${assignedCount})` : ""}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              El alumno solo puede ver sus bonos. La asignación la gestiona el
+              equipo.
+            </p>
           </div>
-          <p className="text-xs text-muted-foreground">
-            El alumno solo puede ver sus bonos. La asignación la gestiona el
-            equipo.
-          </p>
+          {assignedCount > 0 ? (
+            <div className="inline-flex items-center rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+              {assignedCount} activo{assignedCount === 1 ? "" : "s"}
+            </div>
+          ) : null}
         </div>
       </div>
 
       <div className="space-y-3">
         {loading ? (
-          <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-            Cargando bonos...
+          <div className="rounded-xl border border-border bg-card/80 p-5 text-sm text-muted-foreground">
+            Cargando bonos asignados...
           </div>
         ) : assignedCount === 0 ? (
-          <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-            No hay bonos asignados.
+          <div className="rounded-xl border border-dashed border-border bg-card/80 p-6 text-center">
+            <div className="mx-auto mb-2 inline-flex h-9 w-9 items-center justify-center rounded-md bg-muted text-muted-foreground">
+              <Gift className="h-4 w-4" />
+            </div>
+            <div className="text-sm font-medium text-foreground">
+              No hay bonos asignados
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Cuando se asignen, aparecerán aquí.
+            </div>
           </div>
         ) : (
           assigned.map((b) => {
@@ -395,19 +413,38 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
             const canRequestImplContractual =
               isBonoImplementacionTecnicaContractual(b);
             const canRequestVsl = isBonoEdicionVsl(b);
+            const bonoCode = String(
+              (b as any)?.bono_codigo ?? (b as any)?.codigo ?? "",
+            )
+              .trim()
+              .toUpperCase();
+            const bonoName = displayBonoName(b);
+            const bonoDesc = displayBonoDescription(b);
             return (
               <div
                 key={`${b.bono_codigo}-${b.id}`}
-                className="rounded-lg border border-border bg-card p-4"
+                className="group rounded-xl border border-border bg-gradient-to-br from-card to-card/85 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-accent/15"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground truncate">
-                      {displayBonoName(b)}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-3">
+                      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <Gift className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-foreground truncate">
+                          {bonoName}
+                        </div>
+                        {bonoCode ? (
+                          <div className="mt-1 inline-flex items-center rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[11px] text-muted-foreground">
+                            {bonoCode}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                    {displayBonoDescription(b) ? (
+                    {bonoDesc ? (
                       <div className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                        {displayBonoDescription(b)}
+                        {bonoDesc}
                       </div>
                     ) : null}
                   </div>
@@ -417,9 +454,10 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                         <TooltipTrigger asChild>
                           <Button
                             type="button"
-                            size="icon"
-                            variant="ghost"
+                            size="sm"
+                            variant="outline"
                             aria-label="Solicitar bono"
+                            className="h-8 w-8 p-0"
                             onClick={() => {
                               setRequestModal("implementacion_contractual");
                             }}
@@ -438,9 +476,10 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                         <TooltipTrigger asChild>
                           <Button
                             type="button"
-                            size="icon"
-                            variant="ghost"
+                            size="sm"
+                            variant="outline"
                             aria-label="Solicitar bono"
+                            className="h-8 w-8 p-0"
                             onClick={() => {
                               setRequestModal("implementacion");
                             }}
@@ -459,9 +498,10 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                         <TooltipTrigger asChild>
                           <Button
                             type="button"
-                            size="icon"
-                            variant="ghost"
+                            size="sm"
+                            variant="outline"
                             aria-label="Solicitar bono"
+                            className="h-8 w-8 p-0"
                             onClick={() => {
                               setRequestModal("vsl");
                             }}
@@ -480,9 +520,10 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                         <TooltipTrigger asChild>
                           <Button
                             type="button"
-                            size="icon"
-                            variant="ghost"
+                            size="sm"
+                            variant="outline"
                             aria-label="Desasignar bono"
+                            className="h-8 w-8 p-0"
                             onClick={() => {
                               setUnassignCodigo(String(b.bono_codigo));
                               setUnassignNombre(String(b.nombre ?? ""));
@@ -502,9 +543,10 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                       <TooltipTrigger asChild>
                         <Button
                           type="button"
-                          size="icon"
-                          variant="ghost"
+                          size="sm"
+                          variant="outline"
                           aria-label="Detalle del bono"
+                          className="h-8 w-8 p-0"
                           onClick={() => {
                             setDetailCodigo(b.bono_codigo);
                             setDetailOpen(true);
@@ -527,7 +569,7 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
 
       {/* Asignar más bonos (solo coach/admin/equipo) */}
       {!isStudent ? (
-        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+        <div className="rounded-xl border border-border bg-card/85 p-4 space-y-3">
           <div className="space-y-1">
             <div className="text-sm font-semibold text-foreground">
               Asignar más bonos
@@ -554,7 +596,7 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                     size="sm"
                     onClick={() =>
                       setSelectedToAssign(
-                        new Set(unassignedOptions.map((b) => String(b.codigo)))
+                        new Set(unassignedOptions.map((b) => String(b.codigo))),
                       )
                     }
                     disabled={assigning}
@@ -642,14 +684,14 @@ export default function BonosPanel({ studentCode }: { studentCode: string }) {
                 <div className="text-sm font-medium text-foreground">
                   {(() => {
                     const ovr = getBonoOverrideForStudent(
-                      (detail as any)?.codigo ?? detailCodigo
+                      (detail as any)?.codigo ?? detailCodigo,
                     );
                     return ovr?.nombre ?? detail.nombre;
                   })()}
                 </div>
                 {(() => {
                   const ovr = getBonoOverrideForStudent(
-                    (detail as any)?.codigo ?? detailCodigo
+                    (detail as any)?.codigo ?? detailCodigo,
                   );
                   const desc = ovr?.descripcion ?? detail.descripcion;
                   return desc ? (

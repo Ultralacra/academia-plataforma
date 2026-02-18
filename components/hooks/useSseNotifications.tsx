@@ -79,6 +79,62 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
   const refreshInFlightRef = useRef<boolean>(false);
   const pagingOffsetRef = useRef<number>(0);
 
+  const isStudentSession = useCallback(() => {
+    try {
+      if (typeof window === "undefined") return false;
+      const raw = window.localStorage.getItem("academy_auth");
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      const role = String(parsed?.user?.role ?? "")
+        .trim()
+        .toLowerCase();
+      return role === "student" || role === "alumno";
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const parsePayload = useCallback((src: any): any | null => {
+    try {
+      const p = src?.payload ?? src?.raw?.payload;
+      if (!p) return null;
+      if (typeof p === "string") {
+        const s = p.trim();
+        if (!s) return null;
+        return JSON.parse(s);
+      }
+      if (typeof p === "object") return p;
+    } catch {}
+    return null;
+  }, []);
+
+  const shouldHideDeleteForStudent = useCallback(
+    (src: any) => {
+      if (!isStudentSession()) return false;
+      const type = String(src?.type ?? src?.event ?? "")
+        .trim()
+        .toLowerCase();
+      const byType =
+        type.includes("ticket.delete") || type.includes("ticket.deleted");
+      if (byType) return true;
+      const payloadObj = parsePayload(src);
+      const st = String(
+        payloadObj?.current ||
+          payloadObj?.status ||
+          payloadObj?.estado ||
+          payloadObj?.ticket?.status ||
+          src?.current ||
+          src?.status ||
+          src?.estado ||
+          "",
+      )
+        .trim()
+        .toUpperCase();
+      return st.includes("ELIMINAD") || st.includes("DELETED");
+    },
+    [isStudentSession, parsePayload],
+  );
+
   const mapNotif = useCallback((src: any): SseNotificationItem => {
     const id = String(src?.id ?? src?.uuid ?? src?.code ?? Math.random());
     const type = String(src?.type ?? src?.event ?? "notification");
@@ -133,7 +189,9 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         : Array.isArray(json)
           ? (json as any)
           : [];
-      const mapped: SseNotificationItem[] = arr.map(mapNotif);
+      const mapped: SseNotificationItem[] = arr
+        .filter((it) => !shouldHideDeleteForStudent(it))
+        .map(mapNotif);
       pagingOffsetRef.current = mapped.length;
       setHasMore(mapped.length === limit);
       setItems((prev) => {
@@ -154,7 +212,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     } finally {
       refreshInFlightRef.current = false;
     }
-  }, [disabled, mapNotif]);
+  }, [disabled, mapNotif, shouldHideDeleteForStudent]);
 
   const loadMore = useCallback(async () => {
     if (disabled) return;
@@ -179,7 +237,9 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         : Array.isArray(json)
           ? (json as any)
           : [];
-      const mapped: SseNotificationItem[] = arr.map(mapNotif);
+      const mapped: SseNotificationItem[] = arr
+        .filter((it) => !shouldHideDeleteForStudent(it))
+        .map(mapNotif);
       pagingOffsetRef.current = offset + mapped.length;
       setHasMore(mapped.length === limit);
 
@@ -207,77 +267,83 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
     } finally {
       refreshInFlightRef.current = false;
     }
-  }, [disabled, hasMore, mapNotif]);
+  }, [disabled, hasMore, mapNotif, shouldHideDeleteForStudent]);
 
-  const parseEventBlocks = useCallback((chunk: string) => {
-    bufferRef.current += chunk;
-    let sepIndex: number;
-    // Procesar eventos separados por doble salto de línea
-    while ((sepIndex = bufferRef.current.indexOf("\n\n")) !== -1) {
-      const block = bufferRef.current.slice(0, sepIndex).trim();
-      bufferRef.current = bufferRef.current.slice(sepIndex + 2);
-      if (!block) continue;
-      let dataLines: string[] = [];
-      let eventName: string | null = null;
-      let sseId: string | null = null;
-      const lines = block.split(/\n/);
-      for (const ln of lines) {
-        if (ln.startsWith("data:")) dataLines.push(ln.slice(5).trim());
-        if (ln.startsWith("event:")) eventName = ln.slice(6).trim() || null;
-        if (ln.startsWith("id:")) sseId = ln.slice(3).trim() || null;
-      }
-      if (!dataLines.length) continue;
-      const dataStr = dataLines.join("\n");
-      try {
-        const json = JSON.parse(dataStr);
-        const base = mapNotif(json);
-        const id = String(
-          base.id ||
-            json.id ||
-            Date.now() + "-" + Math.random().toString(36).slice(2, 8),
-        );
-        const title = base.title;
-        const at = base.at;
-        const type = base.type;
-        setItems((prev) => {
-          if (prev.some((it) => it.id === id)) return prev; // evitar duplicados
-          const next = [
-            { id, title, at, unread: true, raw: json, type },
-            ...prev,
-          ].slice(0, 200);
-          return next;
-        });
-        setUnread((u) => u + 1);
-        // Exponer el último evento recibido vía SSE (para snacks/toasts)
-        setLastReceived({ id, title, at, unread: true, raw: json, type });
+  const parseEventBlocks = useCallback(
+    (chunk: string) => {
+      bufferRef.current += chunk;
+      let sepIndex: number;
+      // Procesar eventos separados por doble salto de línea
+      while ((sepIndex = bufferRef.current.indexOf("\n\n")) !== -1) {
+        const block = bufferRef.current.slice(0, sepIndex).trim();
+        bufferRef.current = bufferRef.current.slice(sepIndex + 2);
+        if (!block) continue;
+        let dataLines: string[] = [];
+        let eventName: string | null = null;
+        let sseId: string | null = null;
+        const lines = block.split(/\n/);
+        for (const ln of lines) {
+          if (ln.startsWith("data:")) dataLines.push(ln.slice(5).trim());
+          if (ln.startsWith("event:")) eventName = ln.slice(6).trim() || null;
+          if (ln.startsWith("id:")) sseId = ln.slice(3).trim() || null;
+        }
+        if (!dataLines.length) continue;
+        const dataStr = dataLines.join("\n");
         try {
-          const startedAt = connectedAtRef.current;
-          const elapsedMs = startedAt ? Date.now() - startedAt : 0;
-          const elapsedMin = Math.floor(elapsedMs / 60000);
-          const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
-          // console.log("[SSE] evento recibido", {
-          //   event: eventName,
-          //   sseId,
-          //   id,
-          //   type,
-          //   title,
-          //   at,
-          //   connectedFor: startedAt ? `${elapsedMin}m ${elapsedSec}s` : null,
-          //   raw: json,
-          // });
-        } catch {}
-      } catch (e) {
-        try {
-          console.warn("[SSE] error parseando evento", {
-            event: eventName,
-            sseId,
-            error: e,
-            dataStr,
+          const json = JSON.parse(dataStr);
+          if (shouldHideDeleteForStudent(json)) {
+            continue;
+          }
+          const base = mapNotif(json);
+          const id = String(
+            base.id ||
+              json.id ||
+              Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+          );
+          const title = base.title;
+          const at = base.at;
+          const type = base.type;
+          setItems((prev) => {
+            if (prev.some((it) => it.id === id)) return prev; // evitar duplicados
+            const next = [
+              { id, title, at, unread: true, raw: json, type },
+              ...prev,
+            ].slice(0, 200);
+            return next;
           });
-        } catch {}
+          setUnread((u) => u + 1);
+          // Exponer el último evento recibido vía SSE (para snacks/toasts)
+          setLastReceived({ id, title, at, unread: true, raw: json, type });
+          try {
+            const startedAt = connectedAtRef.current;
+            const elapsedMs = startedAt ? Date.now() - startedAt : 0;
+            const elapsedMin = Math.floor(elapsedMs / 60000);
+            const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
+            // console.log("[SSE] evento recibido", {
+            //   event: eventName,
+            //   sseId,
+            //   id,
+            //   type,
+            //   title,
+            //   at,
+            //   connectedFor: startedAt ? `${elapsedMin}m ${elapsedSec}s` : null,
+            //   raw: json,
+            // });
+          } catch {}
+        } catch (e) {
+          try {
+            console.warn("[SSE] error parseando evento", {
+              event: eventName,
+              sseId,
+              error: e,
+              dataStr,
+            });
+          } catch {}
+        }
       }
-    }
-  }, []);
+    },
+    [mapNotif, shouldHideDeleteForStudent],
+  );
 
   const stopConnectedTimer = useCallback(() => {
     if (connectedHeartbeatRef.current != null) {
@@ -299,7 +365,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
       const elapsedMin = Math.floor(elapsedMs / 60000);
       const elapsedSec = Math.floor((elapsedMs % 60000) / 1000);
       try {
-                /* console.log("[SSE] tiempo conectado", {
+        /* console.log("[SSE] tiempo conectado", {
           elapsed: `${elapsedMin}m ${elapsedSec}s`,
         }); */
       } catch {}
@@ -354,7 +420,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         // Conexión exitosa: resetear fallos consecutivos para evitar backoff largo tras un corte aislado.
         failuresRef.current = 0;
         try {
-                    /* console.log("[SSE] conectado", { attempt }); */
+          /* console.log("[SSE] conectado", { attempt }); */
         } catch {}
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -370,7 +436,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
           setConnected(false);
           stopConnectedTimer();
           try {
-                        /* console.log("[SSE] stream finalizado, reconectando..."); */
+            /* console.log("[SSE] stream finalizado, reconectando..."); */
           } catch {}
           setTimeout(() => start(), 1500);
         }
@@ -459,7 +525,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
         if (token) {
           if (!connectedRef.current) {
             try {
-                            /* console.log("[SSE] auth: token detectado, iniciando conexión"); */
+              /* console.log("[SSE] auth: token detectado, iniciando conexión"); */
             } catch {}
             start();
           }
@@ -473,7 +539,7 @@ function useProvideSseNotifications(): SseNotificationsContextValue {
           stopConnectedTimer();
           startedRef.current = false;
           try {
-                        /* console.log("[SSE] auth: sin token, conexión cerrada"); */
+            /* console.log("[SSE] auth: sin token, conexión cerrada"); */
           } catch {}
         }
       } catch {}

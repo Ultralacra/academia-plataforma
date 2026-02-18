@@ -25,6 +25,9 @@ import {
   Pencil,
   ArrowUp,
   ArrowDown,
+  Download,
+  FileSpreadsheet,
+  FileText,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -51,6 +54,12 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn, getSpanishApiError } from "@/lib/utils";
 import Link from "next/link";
 import { getAuthToken } from "@/lib/auth";
@@ -275,6 +284,9 @@ export default function StudentsContent() {
   );
   const [openStageFor, setOpenStageFor] = useState<string | null>(null);
   const [updatingStageFor, setUpdatingStageFor] = useState<string | null>(null);
+  const [exportingFormat, setExportingFormat] = useState<"csv" | "xlsx" | null>(
+    null,
+  );
   // Crear alumno
   const [openCreate, setOpenCreate] = useState(false);
   const [createNombre, setCreateNombre] = useState("");
@@ -465,14 +477,15 @@ export default function StudentsContent() {
     }
   };
 
-  const loadAllForSelectedCoach = async () => {
+  const loadAllForSelectedCoach = async (): Promise<StudentRow[] | null> => {
     if (coach === "todos") return;
     const coachId = selectedCoachId;
-    if (!coachId) return;
-    if (loadingCoachAll) return;
+    if (!coachId) return null;
+    if (loadingCoachAll) return null;
 
     setLoadingCoachAll(true);
     setCoachAllProgress(0);
+    let acc: StudentRow[] = [...all];
     try {
       const first = await getAllStudentsPaged({
         page: 1,
@@ -482,7 +495,7 @@ export default function StudentsContent() {
 
       const total = first.total ?? null;
       const totalPages = first.totalPages;
-      let acc: StudentRow[] = [...(first.items ?? [])];
+      acc = [...(first.items ?? [])];
       setAll(acc);
       setServerTotal(total);
       setServerTotalPages(totalPages ?? null);
@@ -548,12 +561,14 @@ export default function StudentsContent() {
 
       setCoachAllProgress(100);
       setHasMore(false);
+      return acc;
     } catch (e) {
       console.error(e);
       toast({
         title: "Ocurrió un error al traer todos los alumnos del coach",
         variant: "destructive",
       });
+      return null;
     } finally {
       setLoadingCoachAll(false);
       setTimeout(() => setCoachAllProgress(0), 600);
@@ -1138,6 +1153,279 @@ export default function StudentsContent() {
     search || coach !== "todos" || filterStage || filterState || specialFilter,
   );
 
+  const escapeCsvCell = (value: unknown) => {
+    const s = String(value ?? "");
+    if (/[\n\r",]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+
+  const stampNow = () =>
+    new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+
+  const buildExportRowsFromSource = (sourceAll: StudentRow[]) => {
+    const q = (search || "").trim().toLowerCase();
+    const NO_STAGE = "Sin fase";
+    const NO_STATE = "Sin estado";
+
+    const sourceFiltered = !q
+      ? sourceAll
+      : sourceAll.filter((s) => {
+          const name = (s.name ?? "").toString().toLowerCase();
+          const code = (s.code ?? "").toString().toLowerCase();
+          const state = (s.state ?? "").toString().toLowerCase();
+          const stage = (s.stage ?? "").toString().toLowerCase();
+          return (
+            name.includes(q) ||
+            code.includes(q) ||
+            state.includes(q) ||
+            stage.includes(q)
+          );
+        });
+
+    const byFilters = sourceFiltered.filter((s) => {
+      if (filterState) {
+        if (filterState === NO_STATE) {
+          if (s.state && String(s.state).trim()) return false;
+        } else if (s.state !== filterState) return false;
+      }
+      if (filterStage) {
+        if (filterStage === NO_STAGE) {
+          if (s.stage && String(s.stage).trim()) return false;
+        } else if (s.stage !== filterStage) return false;
+      }
+      if (specialFilter === "casos_exito") {
+        const id = s.code
+          ? String(s.code).trim()
+          : s.id != null
+            ? String(s.id).trim()
+            : "";
+        const facturacion = id ? adsSummaryByAlumnoId[id]?.facturacion : null;
+        if (!(facturacion != null && facturacion > 5000)) return false;
+      }
+      return true;
+    });
+
+    const baseSorted = [...byFilters].sort((a, b) => {
+      const ra = stageRank(a.stage);
+      const rb = stageRank(b.stage);
+      if (ra !== rb) return ra - rb;
+
+      const sa = normalizeStageLabel(a.stage);
+      const sb = normalizeStageLabel(b.stage);
+      if (sa !== sb) return sa.localeCompare(sb, "es", { sensitivity: "base" });
+
+      return (a.name ?? "").localeCompare(b.name ?? "", "es", {
+        sensitivity: "base",
+      });
+    });
+
+    const sorted = [...baseSorted];
+
+    if (adsInversionSort) {
+      sorted.sort((a, b) => {
+        const aid =
+          a.code != null
+            ? String(a.code).trim()
+            : a.id != null
+              ? String(a.id).trim()
+              : "";
+        const bid =
+          b.code != null
+            ? String(b.code).trim()
+            : b.id != null
+              ? String(b.id).trim()
+              : "";
+        const av = aid ? adsSummaryByAlumnoId[aid]?.inversion : null;
+        const bv = bid ? adsSummaryByAlumnoId[bid]?.inversion : null;
+        const aValid = av != null && Number.isFinite(Number(av));
+        const bValid = bv != null && Number.isFinite(Number(bv));
+        if (!aValid && !bValid) return 0;
+        if (!aValid) return 1;
+        if (!bValid) return -1;
+        if (Number(av) === Number(bv)) return 0;
+        return adsInversionSort === "asc"
+          ? Number(av) - Number(bv)
+          : Number(bv) - Number(av);
+      });
+    } else if (adsFacturacionSort) {
+      sorted.sort((a, b) => {
+        const aid =
+          a.code != null
+            ? String(a.code).trim()
+            : a.id != null
+              ? String(a.id).trim()
+              : "";
+        const bid =
+          b.code != null
+            ? String(b.code).trim()
+            : b.id != null
+              ? String(b.id).trim()
+              : "";
+        const av = aid ? adsSummaryByAlumnoId[aid]?.facturacion : null;
+        const bv = bid ? adsSummaryByAlumnoId[bid]?.facturacion : null;
+        const aValid = av != null && Number.isFinite(Number(av));
+        const bValid = bv != null && Number.isFinite(Number(bv));
+        if (!aValid && !bValid) return 0;
+        if (!aValid) return 1;
+        if (!bValid) return -1;
+        if (Number(av) === Number(bv)) return 0;
+        return adsFacturacionSort === "asc"
+          ? Number(av) - Number(bv)
+          : Number(bv) - Number(av);
+      });
+    } else if (inactivitySort) {
+      sorted.sort((a, b) => {
+        const ai = a.inactivityDays == null ? NaN : Number(a.inactivityDays);
+        const bi = b.inactivityDays == null ? NaN : Number(b.inactivityDays);
+        const aValid = !Number.isNaN(ai);
+        const bValid = !Number.isNaN(bi);
+        if (!aValid && !bValid) return 0;
+        if (!aValid) return 1;
+        if (!bValid) return -1;
+        if (ai === bi) return 0;
+        return inactivitySort === "asc" ? ai - bi : bi - ai;
+      });
+    } else if (lastActivitySort) {
+      sorted.sort((a, b) => {
+        const ta = a.lastActivity ? Date.parse(String(a.lastActivity)) : NaN;
+        const tb = b.lastActivity ? Date.parse(String(b.lastActivity)) : NaN;
+        const aValid = !Number.isNaN(ta);
+        const bValid = !Number.isNaN(tb);
+        if (!aValid && !bValid) return 0;
+        if (!aValid) return 1;
+        if (!bValid) return -1;
+        if (ta === tb) return 0;
+        return lastActivitySort === "asc" ? ta - tb : tb - ta;
+      });
+    }
+
+    return sorted.map((student) => {
+      const id = student.code
+        ? String(student.code).trim()
+        : student.id != null
+          ? String(student.id).trim()
+          : "";
+      const inversion = id ? adsSummaryByAlumnoId[id]?.inversion : null;
+      const facturacion = id ? adsSummaryByAlumnoId[id]?.facturacion : null;
+
+      return {
+        Código: student.code || "",
+        Nombre: student.name || "",
+        Coachs: (student.teamMembers ?? [])
+          .map((tm) => String(tm?.name ?? "").trim())
+          .filter(Boolean)
+          .join(" | "),
+        Fase: stageLabel(student.stage),
+        Estado: student.state || "",
+        Ingreso: fmtDateSmart(student.joinDate),
+        Inversión: inversion == null ? "" : Number(inversion),
+        Facturación: facturacion == null ? "" : Number(facturacion),
+        "Última actividad": fmtDateSmart(student.lastActivity),
+        "Días inactividad":
+          student.inactivityDays == null ? "" : Number(student.inactivityDays),
+      };
+    });
+  };
+
+  const handleExport = async (format: "csv" | "xlsx") => {
+    if (exportingFormat) return;
+    setExportingFormat(format);
+    try {
+      let sourceForExport = [...all];
+
+      if (coach === "todos" && hasMore) {
+        setLoadingMore(true);
+        let nextPage = serverPage;
+        let keepGoing = true;
+        let acc = [...sourceForExport];
+
+        while (keepGoing) {
+          nextPage += 1;
+          const res = await getAllStudentsPaged({
+            page: nextPage,
+            pageSize: SERVER_PAGE_SIZE,
+          });
+          const items = res.items ?? [];
+          acc = [...acc, ...items];
+
+          setAll(acc);
+          setServerPage(nextPage);
+          setServerTotal(res.total ?? serverTotal ?? null);
+          setServerTotalPages(res.totalPages ?? serverTotalPages ?? null);
+
+          if (res.totalPages != null) {
+            keepGoing = nextPage < res.totalPages;
+          } else {
+            keepGoing = items.length >= SERVER_PAGE_SIZE;
+          }
+        }
+
+        setHasMore(false);
+        sourceForExport = acc;
+      }
+
+      if (
+        coach !== "todos" &&
+        selectedCoachId &&
+        serverTotal != null &&
+        all.length < serverTotal
+      ) {
+        const fullCoachRows = await loadAllForSelectedCoach();
+        if (fullCoachRows) sourceForExport = fullCoachRows;
+      }
+
+      const exportRows = buildExportRowsFromSource(sourceForExport);
+      if (exportRows.length === 0) {
+        toast({ title: "No hay alumnos para exportar" });
+        return;
+      }
+
+      const scope = hasFilters ? "filtrado" : "completo";
+      const filenameBase = `alumnos_${scope}_${stampNow()}`;
+
+      if (format === "csv") {
+        const columns = Object.keys(exportRows[0]);
+        const header = columns.map(escapeCsvCell).join(",");
+        const lines = exportRows.map((row) =>
+          columns.map((col) => escapeCsvCell((row as any)[col])).join(","),
+        );
+        const csv = [header, ...lines].join("\n");
+
+        const blob = new Blob(["\ufeff", csv], {
+          type: "text/csv;charset=utf-8",
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${filenameBase}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } else {
+        const XLSX = await import("xlsx");
+        const ws = XLSX.utils.json_to_sheet(exportRows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Alumnos");
+        XLSX.writeFile(wb, `${filenameBase}.xlsx`);
+      }
+
+      toast({
+        title: `Exportación ${format.toUpperCase()} lista`,
+        description: `${exportRows.length} alumnos exportados`,
+      });
+    } catch (e) {
+      toast({
+        title: "No se pudo exportar el listado",
+        description: getSpanishApiError(e, "Intenta nuevamente"),
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingMore(false);
+      setExportingFormat(null);
+    }
+  };
+
   async function handleCreateStudent() {
     if (!createNombre.trim()) return;
     if (!createEmail.trim()) {
@@ -1401,6 +1689,40 @@ export default function StudentsContent() {
               Limpiar filtros
             </Button>
           )}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="default"
+                className="h-10 rounded-xl"
+                disabled={!!exportingFormat || loadingCoachAll}
+              >
+                {exportingFormat ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={() => handleExport("xlsx")}
+                disabled={!!exportingFormat}
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                Exportar Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => handleExport("csv")}
+                disabled={!!exportingFormat}
+              >
+                <FileText className="h-4 w-4" />
+                Exportar CSV (.csv)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Crear alumno */}
           <Dialog open={openCreate} onOpenChange={setOpenCreate}>

@@ -1,17 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Home,
+  ArrowRight,
   ExternalLink,
   MessageSquare,
   CalendarClock,
@@ -25,14 +29,20 @@ import {
 
 function StaticCard({ title, href }: { title: string; href: string }) {
   return (
-    <Card className="border-border bg-gradient-to-br from-card to-card/60 hover:to-accent/30 transition-colors">
+    <Card className="group h-full border border-border/80 bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">{title}</CardTitle>
+        <CardTitle className="text-base font-semibold tracking-tight">
+          {title}
+        </CardTitle>
+        <CardDescription className="text-xs">
+          Recurso externo de la academia
+        </CardDescription>
       </CardHeader>
-      <CardContent className="flex items-center justify-end gap-2">
-        <Button asChild className="w-full" variant="outline">
+      <CardContent className="pt-0">
+        <Button asChild className="w-full justify-between" variant="outline">
           <a href={href} target="_blank" rel="noreferrer">
-            Abrir <ExternalLink className="w-4 h-4 ml-1" />
+            Abrir recurso
+            <ExternalLink className="w-4 h-4 ml-2 opacity-80 transition-opacity group-hover:opacity-100" />
           </a>
         </Button>
       </CardContent>
@@ -52,19 +62,24 @@ function InternalCard({
   icon: any;
 }) {
   return (
-    <Card className="border-border bg-gradient-to-br from-card to-card/60 hover:to-accent/30 transition-colors">
+    <Card className="group h-full border border-border/80 bg-card transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30">
       <CardHeader className="pb-2">
-        <CardTitle className="text-base flex items-center gap-2">
-          <span className="inline-flex items-center justify-center rounded-md bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-300 w-7 h-7">
+        <CardTitle className="text-base font-semibold tracking-tight flex items-center gap-2.5">
+          <span className="inline-flex items-center justify-center rounded-md w-8 h-8 bg-primary/10 text-primary">
             <Icon className="w-4 h-4" />
           </span>
-          {title}
+          <span className="truncate">{title}</span>
         </CardTitle>
+        <CardDescription className="text-xs leading-relaxed">
+          {description}
+        </CardDescription>
       </CardHeader>
-      <CardContent className="flex items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">{description}</p>
-        <Button asChild variant="secondary">
-          <Link href={href}>Entrar</Link>
+      <CardContent className="pt-0">
+        <Button asChild variant="outline" className="w-full justify-between">
+          <Link href={href}>
+            Entrar
+            <ArrowRight className="w-4 h-4 ml-2 opacity-70 transition-transform duration-200 group-hover:translate-x-0.5" />
+          </Link>
         </Button>
       </CardContent>
     </Card>
@@ -80,19 +95,26 @@ export default function StudentInicioPage() {
   return (
     <ProtectedRoute allowedRoles={["admin", "coach", "student", "equipo"]}>
       <DashboardLayout>
-        <div className="rounded-2xl border border-border bg-gradient-to-r from-blue-500/10 via-transparent to-indigo-500/10 p-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold flex items-center gap-2">
-              <Home className="w-5 h-5 text-blue-600 dark:text-blue-300" />{" "}
-              Inicio
-            </h1>
+        <div className="rounded-2xl border border-border bg-card p-4 sm:p-5 md:p-6">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2">
+                <span className="inline-flex items-center justify-center rounded-lg bg-primary/10 text-primary w-8 h-8">
+                  <Home className="w-4 h-4" />
+                </span>
+                Inicio
+              </h1>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                Accesos rápidos y herramientas del perfil del alumno
+              </p>
+            </div>
+            <div className="inline-flex w-fit items-center rounded-full border border-border bg-muted px-3 py-1 text-xs text-muted-foreground">
+              {isStudent ? "Vista alumno" : "Vista staff"}
+            </div>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Accesos rápidos del alumno
-          </p>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4">
           {/* Para alumnos: Mi perfil de primero */}
           {isStudent && (
             <InternalCard
