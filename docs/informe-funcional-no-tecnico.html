@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Informe Funcional del Proyecto - Academia Plataforma</title>
+    <style>
+      :root {
+        --bg: #f7f8fb;
+        --card: #ffffff;
+        --text: #1f2937;
+        --muted: #6b7280;
+        --ok: #065f46;
+        --ok-bg: #d1fae5;
+        --warn: #92400e;
+        --warn-bg: #fef3c7;
+        --border: #e5e7eb;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Roboto, Arial, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.55;
+      }
+      .wrap {
+        max-width: 1060px;
+        margin: 24px auto 40px;
+        padding: 0 16px;
+      }
+      .hero {
+        background: linear-gradient(135deg, #111827, #374151);
+        color: #fff;
+        border-radius: 14px;
+        padding: 24px;
+        margin-bottom: 18px;
+      }
+      .hero h1 {
+        margin: 0 0 8px;
+        font-size: 28px;
+      }
+      .hero p {
+        margin: 4px 0;
+        color: #e5e7eb;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(12, 1fr);
+        gap: 14px;
+      }
+      .card {
+        grid-column: span 12;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 18px;
+      }
+      .half { grid-column: span 6; }
+      .third { grid-column: span 4; }
+      h2 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+      h3 {
+        margin: 0 0 8px;
+        font-size: 16px;
+      }
+      ul {
+        margin: 8px 0 0 18px;
+        padding: 0;
+      }
+      li { margin: 4px 0; }
+      .muted { color: var(--muted); }
+      .badge {
+        display: inline-block;
+        font-size: 12px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        margin-right: 8px;
+        margin-bottom: 8px;
+        border: 1px solid transparent;
+      }
+      .ok {
+        background: var(--ok-bg);
+        color: var(--ok);
+        border-color: #a7f3d0;
+      }
+      .warn {
+        background: var(--warn-bg);
+        color: var(--warn);
+        border-color: #fde68a;
+      }
+      .kpi {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px;
+        background: #fcfcfd;
+      }
+      .kpi b { font-size: 24px; }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      th, td {
+        border: 1px solid var(--border);
+        padding: 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th { background: #f3f4f6; }
+      .footer {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      @media (max-width: 900px) {
+        .half, .third { grid-column: span 12; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="hero">
+        <h1>Informe funcional (no técnico)</h1>
+        <p>Proyecto: Academia Plataforma</p>
+        <p>Fecha: 18 de febrero de 2026</p>
+        <p>Objetivo: mostrar qué está implementado, qué está en ajuste y qué se agregó como valor extra.</p>
+      </section>
+
+      <section class="grid">
+        <article class="card third kpi">
+          <div class="muted">Cobertura funcional general</div>
+          <b>Alta</b>
+          <div>La mayor parte del alcance está operativo para uso diario.</div>
+        </article>
+        <article class="card third kpi">
+          <div class="muted">Bloques principales en estado sólido</div>
+          <b>9 / 11</b>
+          <div>Módulos de operación, soporte y seguimiento en producción activa.</div>
+        </article>
+        <article class="card third kpi">
+          <div class="muted">Bloques en validación</div>
+          <b>2 / 11</b>
+          <div>CRM/Ventas y Contratos en etapa final de ajuste sobre casos reales.</div>
+        </article>
+
+        <article class="card">
+          <h2>Resumen ejecutivo</h2>
+          <span class="badge ok">Implementado y operativo</span>
+          <span class="badge warn">En ajuste controlado</span>
+          <ul>
+            <li>La plataforma ya cubre soporte al alumno, seguimiento interno, pagos, bonos, tickets, chat y administración.</li>
+            <li>El flujo diario del equipo (coach, soporte y administración) está habilitado para trabajar end-to-end.</li>
+            <li>CRM/Ventas y Contratos están activos en modo de validación para cerrar detalles antes de considerarlos definitivos.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h2>Cambio clave solicitado: WhatsApp → Chat con IA</h2>
+          <p>
+            Se tomó la decisión operativa de reemplazar el uso principal del bot/canal de WhatsApp por el
+            <b>chat con IA dentro del portal</b>. WhatsApp queda como canal de respaldo para casos puntuales de acceso.
+          </p>
+          <h3>¿Qué funcionalidades conserva o mejora este reemplazo?</h3>
+          <ul>
+            <li>Atención centralizada en el portal (el alumno no depende de salir a otra app).</li>
+            <li>Conversación en tiempo real con notificaciones dentro de la plataforma.</li>
+            <li>Historial visible para alumno y equipo, con mejor trazabilidad.</li>
+            <li>Adjuntos y contexto del caso en un solo lugar.</li>
+            <li>Derivación al flujo de tickets cuando corresponde, para no perder seguimiento.</li>
+            <li>Mejor control interno de tiempos, estados y responsables.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h2>Funcionalidades principales disponibles hoy</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Área</th>
+                <th>Qué se puede hacer (en lenguaje simple)</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Soporte y tickets</td>
+                <td>Crear, revisar, responder, reasignar y dar seguimiento a casos con historial y adjuntos.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>Observaciones internas</td>
+                <td>Registrar tareas/observaciones por área, marcar completadas y guardar evidencia.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>Alumnos</td>
+                <td>Listado, perfil completo, progreso, tareas, pausas, coaches asignados y exportación.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>Métricas</td>
+                <td>Paneles para operación: tickets, alumnos, coaches, equipos y actividad.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>Chat</td>
+                <td>Comunicación alumno-equipo en tiempo real con notificaciones y seguimiento.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>Pagos y bonos</td>
+                <td>Seguimiento de cuotas/estados, catálogo de bonos y solicitudes de bonos del alumno.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>PWA y notificaciones</td>
+                <td>Uso tipo app móvil y notificaciones para eventos relevantes.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>Equipos</td>
+                <td>Vista por coach/equipo, productividad y control operativo.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>Sesiones</td>
+                <td>Solicitud y seguimiento de sesiones dentro del flujo del alumno.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>Usuarios, roles y opciones</td>
+                <td>Gestión de accesos, permisos y catálogos de operación.</td>
+                <td><span class="badge ok">Operativo</span></td>
+              </tr>
+              <tr>
+                <td>CRM / Ventas</td>
+                <td>Pipeline comercial, seguimiento de oportunidades y gestión de leads.</td>
+                <td><span class="badge warn">En ajuste final</span></td>
+              </tr>
+              <tr>
+                <td>Contratos</td>
+                <td>Flujos de documentos/contratos activos, actualmente afinando validaciones y casos reales.</td>
+                <td><span class="badge warn">En ajuste final</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="card half">
+          <h2>Correos automáticos que sí se envían</h2>
+          <ul>
+            <li><b>Bienvenida / acceso al portal:</b> alta inicial y entrega de acceso.</li>
+            <li><b>Recordatorio de acceso:</b> cuando el alumno no ingresa o necesita reintento de acceso.</li>
+            <li><b>Recordatorio de pago:</b> avisos de cuotas/fechas de pago.</li>
+            <li><b>Cambio de contraseña:</b> notificación al actualizar credenciales.</li>
+          </ul>
+          <p class="muted">
+          </p>
+        </article>
+
+        <article class="card half">
+          <h2>Valor agregado implementado (de más)</h2>
+          <ul>
+            <li>Exportación avanzada de alumnos (CSV y Excel) respetando filtros activos.</li>
+            <li>Alertas en cabecera para cuotas y accesos próximos a vencer.</li>
+            <li>Mejoras de experiencia móvil con modo PWA + notificaciones.</li>
+            <li>Mayor trazabilidad operativa en soporte/chat para decisiones del equipo.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <h2>Conclusión para dirección</h2>
+          <p>
+            El proyecto se encuentra en una etapa madura y funcional para operación real. La base principal ya está cubierta y
+            el cambio de canal (WhatsApp principal → chat con IA en plataforma) está alineado con mayor control,
+            mejor seguimiento y mejor experiencia para alumno y equipo.
+          </p>
+          <p>
+            Además, se continúan incorporando funcionalidades pequeñas y mejoras puntuales de usabilidad para facilitar la
+            experiencia de las personas que usan la plataforma en su operación diaria.
+          </p>
+          <p>
+            Lo pendiente no es estructural: corresponde a ajustes finos en CRM/Ventas y Contratos para cierre definitivo.
+          </p>
+        </article>
+      </section>
+
+      <div class="footer">
+        Informe generado para presentación no técnica (cliente/gerencia/equipo operativo).
+      </div>
+    </div>
+  </body>
+</html>

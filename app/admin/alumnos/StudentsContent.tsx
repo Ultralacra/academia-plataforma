@@ -99,6 +99,22 @@ const nfNumber = new Intl.NumberFormat("es-ES", {
   maximumFractionDigits: 0,
 });
 
+const EXPORT_COLUMNS = [
+  "Código",
+  "Nombre",
+  "Coachs",
+  "Fase",
+  "Estado",
+  "Ingreso",
+  "Inversión",
+  "Facturación",
+  "fase",
+  "subfase",
+  "trascendencia",
+  "Última actividad",
+  "Días inactividad",
+] as const;
+
 const clean = (s: string) => s.replaceAll(".", "");
 
 function fmtDateSmart(value?: string | null) {
@@ -173,6 +189,10 @@ type AdsMetricsSummary = {
   savedAt: string | null;
   inversion: number | null;
   facturacion: number | null;
+  fase: string | null;
+  subfase: string | null;
+  color: string | null;
+  trascendencia: string | null;
 };
 
 function chunk<T>(arr: T[], size: number): T[] {
@@ -243,6 +263,11 @@ export default function StudentsContent() {
   const [coachAllProgress, setCoachAllProgress] = useState<number>(0);
   const [filterStage, setFilterStage] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<string | null>(null);
+  const [filterMetaFase, setFilterMetaFase] = useState<string | null>(null);
+  const [filterMetaSubfase, setFilterMetaSubfase] = useState<string | null>(
+    null,
+  );
+  const [filterMetaTrasc, setFilterMetaTrasc] = useState<string | null>(null);
   const [specialFilter, setSpecialFilter] = useState<"casos_exito" | null>(
     null,
   );
@@ -805,10 +830,65 @@ export default function StudentsContent() {
     adsSummaryRef.current = adsSummaryByAlumnoId;
   }, [adsSummaryByAlumnoId]);
 
+  const uniqueMetaFases = useMemo(() => {
+    const NO_VALUE = "sin fase";
+    const values = (all || []).map((s) => {
+      const id = s.code
+        ? String(s.code).trim()
+        : s.id != null
+          ? String(s.id).trim()
+          : "";
+      return id ? (adsSummaryByAlumnoId[id]?.fase ?? "") : "";
+    });
+    const base = Array.from(
+      new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+    const hasNo = values.some((v) => !String(v ?? "").trim());
+    return hasNo ? [NO_VALUE, ...base] : base;
+  }, [all, adsSummaryByAlumnoId]);
+
+  const uniqueMetaSubfases = useMemo(() => {
+    const NO_VALUE = "sin subfase";
+    const values = (all || []).map((s) => {
+      const id = s.code
+        ? String(s.code).trim()
+        : s.id != null
+          ? String(s.id).trim()
+          : "";
+      return id ? (adsSummaryByAlumnoId[id]?.subfase ?? "") : "";
+    });
+    const base = Array.from(
+      new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+    const hasNo = values.some((v) => !String(v ?? "").trim());
+    return hasNo ? [NO_VALUE, ...base] : base;
+  }, [all, adsSummaryByAlumnoId]);
+
+  const uniqueMetaTrasc = useMemo(() => {
+    const NO_VALUE = "sin trascendencia";
+    const values = (all || []).map((s) => {
+      const id = s.code
+        ? String(s.code).trim()
+        : s.id != null
+          ? String(s.id).trim()
+          : "";
+      const summary = id ? adsSummaryByAlumnoId[id] : undefined;
+      return summary?.trascendencia ?? summary?.color ?? "";
+    });
+    const base = Array.from(
+      new Set(values.map((v) => String(v ?? "").trim()).filter(Boolean)),
+    ).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+    const hasNo = values.some((v) => !String(v ?? "").trim());
+    return hasNo ? [NO_VALUE, ...base] : base;
+  }, [all, adsSummaryByAlumnoId]);
+
   // aplicar filtro por fase adicional
   const finalRows = useMemo(() => {
     const NO_STAGE = "Sin fase";
     const NO_STATE = "Sin estado";
+    const NO_META_FASE = "sin fase";
+    const NO_META_SUBFASE = "sin subfase";
+    const NO_META_TRASC = "sin trascendencia";
     const base = filtered.filter((s) => {
       // estado
       if (filterState) {
@@ -821,6 +901,42 @@ export default function StudentsContent() {
         if (filterStage === NO_STAGE) {
           if (s.stage && String(s.stage).trim()) return false;
         } else if (s.stage !== filterStage) return false;
+      }
+
+      const id = s.code
+        ? String(s.code).trim()
+        : s.id != null
+          ? String(s.id).trim()
+          : "";
+      const summary = id ? adsSummaryByAlumnoId[id] : undefined;
+      const metaFase = String(summary?.fase ?? "").trim();
+      const metaSubfase = String(summary?.subfase ?? "").trim();
+      const metaTrasc = String(
+        summary?.trascendencia ?? summary?.color ?? "",
+      ).trim();
+
+      if (filterMetaFase) {
+        if (filterMetaFase === NO_META_FASE) {
+          if (metaFase) return false;
+        } else if (metaFase !== filterMetaFase) {
+          return false;
+        }
+      }
+
+      if (filterMetaSubfase) {
+        if (filterMetaSubfase === NO_META_SUBFASE) {
+          if (metaSubfase) return false;
+        } else if (metaSubfase !== filterMetaSubfase) {
+          return false;
+        }
+      }
+
+      if (filterMetaTrasc) {
+        if (filterMetaTrasc === NO_META_TRASC) {
+          if (metaTrasc) return false;
+        } else if (metaTrasc !== filterMetaTrasc) {
+          return false;
+        }
       }
       return true;
     });
@@ -855,7 +971,16 @@ export default function StudentsContent() {
         sensitivity: "base",
       });
     });
-  }, [filtered, filterStage, filterState, specialFilter, adsSummaryByAlumnoId]);
+  }, [
+    filtered,
+    filterStage,
+    filterState,
+    filterMetaFase,
+    filterMetaSubfase,
+    filterMetaTrasc,
+    specialFilter,
+    adsSummaryByAlumnoId,
+  ]);
 
   // Ordenamiento local por columnas: Última actividad / Días inactividad
   const [lastActivitySort, setLastActivitySort] = useState<
@@ -1145,12 +1270,22 @@ export default function StudentsContent() {
     setCoach("todos");
     setFilterState(null);
     setFilterStage(null);
+    setFilterMetaFase(null);
+    setFilterMetaSubfase(null);
+    setFilterMetaTrasc(null);
     setSpecialFilter(null);
     setPage(1);
   };
 
   const hasFilters = Boolean(
-    search || coach !== "todos" || filterStage || filterState || specialFilter,
+    search ||
+    coach !== "todos" ||
+    filterStage ||
+    filterState ||
+    filterMetaFase ||
+    filterMetaSubfase ||
+    filterMetaTrasc ||
+    specialFilter,
   );
 
   const escapeCsvCell = (value: unknown) => {
@@ -1166,6 +1301,9 @@ export default function StudentsContent() {
     const q = (search || "").trim().toLowerCase();
     const NO_STAGE = "Sin fase";
     const NO_STATE = "Sin estado";
+    const NO_META_FASE = "sin fase";
+    const NO_META_SUBFASE = "sin subfase";
+    const NO_META_TRASC = "sin trascendencia";
 
     const sourceFiltered = !q
       ? sourceAll
@@ -1193,12 +1331,43 @@ export default function StudentsContent() {
           if (s.stage && String(s.stage).trim()) return false;
         } else if (s.stage !== filterStage) return false;
       }
+
+      const id = s.code
+        ? String(s.code).trim()
+        : s.id != null
+          ? String(s.id).trim()
+          : "";
+      const summary = id ? adsSummaryByAlumnoId[id] : undefined;
+      const metaFase = String(summary?.fase ?? "").trim();
+      const metaSubfase = String(summary?.subfase ?? "").trim();
+      const metaTrasc = String(
+        summary?.trascendencia ?? summary?.color ?? "",
+      ).trim();
+
+      if (filterMetaFase) {
+        if (filterMetaFase === NO_META_FASE) {
+          if (metaFase) return false;
+        } else if (metaFase !== filterMetaFase) {
+          return false;
+        }
+      }
+
+      if (filterMetaSubfase) {
+        if (filterMetaSubfase === NO_META_SUBFASE) {
+          if (metaSubfase) return false;
+        } else if (metaSubfase !== filterMetaSubfase) {
+          return false;
+        }
+      }
+
+      if (filterMetaTrasc) {
+        if (filterMetaTrasc === NO_META_TRASC) {
+          if (metaTrasc) return false;
+        } else if (metaTrasc !== filterMetaTrasc) {
+          return false;
+        }
+      }
       if (specialFilter === "casos_exito") {
-        const id = s.code
-          ? String(s.code).trim()
-          : s.id != null
-            ? String(s.id).trim()
-            : "";
         const facturacion = id ? adsSummaryByAlumnoId[id]?.facturacion : null;
         if (!(facturacion != null && facturacion > 5000)) return false;
       }
@@ -1305,8 +1474,9 @@ export default function StudentsContent() {
         : student.id != null
           ? String(student.id).trim()
           : "";
-      const inversion = id ? adsSummaryByAlumnoId[id]?.inversion : null;
-      const facturacion = id ? adsSummaryByAlumnoId[id]?.facturacion : null;
+      const summary = id ? adsSummaryByAlumnoId[id] : undefined;
+      const inversion = summary?.inversion ?? null;
+      const facturacion = summary?.facturacion ?? null;
 
       return {
         Código: student.code || "",
@@ -1320,6 +1490,9 @@ export default function StudentsContent() {
         Ingreso: fmtDateSmart(student.joinDate),
         Inversión: inversion == null ? "" : Number(inversion),
         Facturación: facturacion == null ? "" : Number(facturacion),
+        fase: summary?.fase ?? "",
+        subfase: summary?.subfase ?? "",
+        trascendencia: summary?.trascendencia ?? summary?.color ?? "",
         "Última actividad": fmtDateSmart(student.lastActivity),
         "Días inactividad":
           student.inactivityDays == null ? "" : Number(student.inactivityDays),
@@ -1384,7 +1557,7 @@ export default function StudentsContent() {
       const filenameBase = `alumnos_${scope}_${stampNow()}`;
 
       if (format === "csv") {
-        const columns = Object.keys(exportRows[0]);
+        const columns = EXPORT_COLUMNS as readonly string[];
         const header = columns.map(escapeCsvCell).join(",");
         const lines = exportRows.map((row) =>
           columns.map((col) => escapeCsvCell((row as any)[col])).join(","),
@@ -1404,7 +1577,14 @@ export default function StudentsContent() {
         URL.revokeObjectURL(url);
       } else {
         const XLSX = await import("xlsx");
-        const ws = XLSX.utils.json_to_sheet(exportRows);
+        const rows = exportRows.map((row) => {
+          const out: Record<string, unknown> = {};
+          for (const col of EXPORT_COLUMNS) out[col] = (row as any)[col] ?? "";
+          return out;
+        });
+        const ws = XLSX.utils.json_to_sheet(rows, {
+          header: [...EXPORT_COLUMNS],
+        });
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Alumnos");
         XLSX.writeFile(wb, `${filenameBase}.xlsx`);
@@ -1951,6 +2131,93 @@ export default function StudentsContent() {
         </div>
       )}
 
+      {(uniqueMetaFases.length > 0 ||
+        uniqueMetaSubfases.length > 0 ||
+        uniqueMetaTrasc.length > 0) && (
+        <div className="mb-3 space-y-2">
+          {uniqueMetaFases.length > 0 && (
+            <div className="flex items-center gap-2 w-full">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                fase
+              </span>
+              <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+                {uniqueMetaFases.map((it) => {
+                  const active = filterMetaFase === it;
+                  return (
+                    <button
+                      key={it}
+                      onClick={() => setFilterMetaFase(active ? null : it)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                        active
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-card text-foreground border-border hover:bg-accent",
+                      )}
+                    >
+                      {it}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {uniqueMetaSubfases.length > 0 && (
+            <div className="flex items-center gap-2 w-full">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                subfase
+              </span>
+              <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+                {uniqueMetaSubfases.map((it) => {
+                  const active = filterMetaSubfase === it;
+                  return (
+                    <button
+                      key={it}
+                      onClick={() => setFilterMetaSubfase(active ? null : it)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                        active
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-card text-foreground border-border hover:bg-accent",
+                      )}
+                    >
+                      {it}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {uniqueMetaTrasc.length > 0 && (
+            <div className="flex items-center gap-2 w-full">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                trascendencia
+              </span>
+              <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+                {uniqueMetaTrasc.map((it) => {
+                  const active = filterMetaTrasc === it;
+                  return (
+                    <button
+                      key={it}
+                      onClick={() => setFilterMetaTrasc(active ? null : it)}
+                      className={cn(
+                        "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                        active
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-card text-foreground border-border hover:bg-accent",
+                      )}
+                    >
+                      {it}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Filtros especiales */}
       <div className="mb-3">
         <div className="flex items-center gap-2 w-full">
@@ -2130,6 +2397,15 @@ export default function StudentsContent() {
                     </PopoverContent>
                   </Popover>
                 </th>
+                <th className="px-3 py-2 text-left font-medium normal-case whitespace-nowrap">
+                  fase
+                </th>
+                <th className="px-3 py-2 text-left font-medium normal-case whitespace-nowrap">
+                  subfase
+                </th>
+                <th className="px-3 py-2 text-left font-medium normal-case whitespace-nowrap">
+                  trascendencia
+                </th>
                 <th className="px-3 py-2 text-left font-medium">
                   <Popover>
                     <PopoverTrigger asChild>
@@ -2259,7 +2535,7 @@ export default function StudentsContent() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={11}
                     className="px-3 py-4 text-center text-muted-foreground"
                   >
                     <div className="flex flex-col items-center justify-center gap-2 py-2">
@@ -2278,7 +2554,7 @@ export default function StudentsContent() {
               ) : pageItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={11}
                     className="px-3 py-4 text-center text-muted-foreground"
                   >
                     No se encontraron estudiantes
@@ -2546,6 +2822,45 @@ export default function StudentsContent() {
                           : null;
                         if (v == null) return adsSummaryLoading ? "…" : "—";
                         return nfNumber.format(v);
+                      })()}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {(() => {
+                        const id = student.code
+                          ? String(student.code).trim()
+                          : student.id != null
+                            ? String(student.id).trim()
+                            : "";
+                        const v = id ? adsSummaryByAlumnoId[id]?.fase : null;
+                        if (!v) return adsSummaryLoading ? "…" : "—";
+                        return v;
+                      })()}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {(() => {
+                        const id = student.code
+                          ? String(student.code).trim()
+                          : student.id != null
+                            ? String(student.id).trim()
+                            : "";
+                        const v = id ? adsSummaryByAlumnoId[id]?.subfase : null;
+                        if (!v) return adsSummaryLoading ? "…" : "—";
+                        return v;
+                      })()}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {(() => {
+                        const id = student.code
+                          ? String(student.code).trim()
+                          : student.id != null
+                            ? String(student.id).trim()
+                            : "";
+                        const v = id
+                          ? (adsSummaryByAlumnoId[id]?.trascendencia ??
+                            adsSummaryByAlumnoId[id]?.color)
+                          : null;
+                        if (!v) return adsSummaryLoading ? "…" : "—";
+                        return v;
                       })()}
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">

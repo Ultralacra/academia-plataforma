@@ -126,7 +126,51 @@ type Summary = {
   savedAt: string | null;
   inversion: number | null;
   facturacion: number | null;
+  fase: string | null;
+  subfase: string | null;
+  color: string | null;
+  trascendencia: string | null;
 };
+
+function asText(value: unknown): string | null {
+  if (value == null) return null;
+  const s = String(value).trim();
+  return s || null;
+}
+
+function normalizeSubfase(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === "string") return asText(value);
+  if (typeof value === "object") {
+    const v = value as any;
+    return (
+      asText(v?.nombre) ??
+      asText(v?.name) ??
+      asText(v?.label) ??
+      asText(v?.value) ??
+      null
+    );
+  }
+  return asText(value);
+}
+
+function pickColor(payload: any): string | null {
+  return (
+    asText(payload?.subfase_color) ??
+    asText(payload?.color) ??
+    asText(payload?.subfase?.color) ??
+    null
+  );
+}
+
+function pickTrascendencia(payload: any): string | null {
+  return (
+    asText(payload?.trascendencia) ??
+    asText(payload?.subfase_color) ??
+    asText(payload?.subfase?.color) ??
+    null
+  );
+}
 
 function getSavedAt(meta: any): string | null {
   const p = meta?.payload;
@@ -146,9 +190,16 @@ function pickBest(prev: Summary | undefined, cand: Summary): Summary {
   const tb = cand.savedAt ? Date.parse(cand.savedAt) : NaN;
   const aValid = !Number.isNaN(ta);
   const bValid = !Number.isNaN(tb);
-  if (aValid && bValid) return tb >= ta ? cand : prev;
-  if (!aValid && bValid) return cand;
-  return prev;
+  const newer = aValid && bValid ? (tb >= ta ? cand : prev) : !aValid && bValid ? cand : prev;
+  const older = newer === cand ? prev : cand;
+
+  return {
+    ...newer,
+    fase: newer.fase ?? older.fase ?? null,
+    subfase: newer.subfase ?? older.subfase ?? null,
+    color: newer.color ?? older.color ?? null,
+    trascendencia: newer.trascendencia ?? older.trascendencia ?? null,
+  };
 }
 
 async function fetchAdsMetricsByAlumnoId(authorization: string, alumnoId: string) {
@@ -352,6 +403,10 @@ export async function POST(req: NextRequest) {
         savedAt: getSavedAt(m),
         inversion: parseAmount(payload?.inversion),
         facturacion: parseAmount(payload?.facturacion),
+        fase: asText(payload?.fase),
+        subfase: normalizeSubfase(payload?.subfase),
+        color: pickColor(payload),
+        trascendencia: pickTrascendencia(payload),
       };
       byAlumnoId[matchKey] = pickBest(byAlumnoId[matchKey], summary);
     }
@@ -365,6 +420,10 @@ export async function POST(req: NextRequest) {
           savedAt: null,
           inversion: null,
           facturacion: null,
+          fase: null,
+          subfase: null,
+          color: null,
+          trascendencia: null,
         };
       }
     }
@@ -395,6 +454,10 @@ export async function POST(req: NextRequest) {
           savedAt: getSavedAt(m),
           inversion: parseAmount(payload?.inversion),
           facturacion: parseAmount(payload?.facturacion),
+          fase: asText(payload?.fase),
+          subfase: normalizeSubfase(payload?.subfase),
+          color: pickColor(payload),
+          trascendencia: pickTrascendencia(payload),
         };
         best = pickBest(best, summary);
       }
@@ -407,6 +470,10 @@ export async function POST(req: NextRequest) {
           savedAt: null,
           inversion: null,
           facturacion: null,
+          fase: null,
+          subfase: null,
+          color: null,
+          trascendencia: null,
         } satisfies Summary);
     }),
   );

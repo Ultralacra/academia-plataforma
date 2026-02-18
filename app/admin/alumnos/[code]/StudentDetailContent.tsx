@@ -96,6 +96,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [loading, setLoading] = useState(true);
   const [student, setStudent] = useState<any | null>(null);
   const [coaches, setCoaches] = useState<CoachMember[]>([]);
+  const [userByCode, setUserByCode] = useState<any | null>(null);
 
   const [stage, setStage] = useState<Stage>("ONBOARDING");
   const [statusSint, setStatusSint] = useState<StatusSint>("EN_CURSO");
@@ -440,6 +441,34 @@ export default function StudentDetailContent({ code }: { code: string }) {
       alive = false;
     };
   }, [code]);
+
+  // Complementar datos del alumno desde /users/:codigo (nombre/correo/email)
+  useEffect(() => {
+    const targetCode = String(student?.code || code || "").trim();
+    if (!targetCode) {
+      setUserByCode(null);
+      return;
+    }
+
+    let alive = true;
+    (async () => {
+      try {
+        const userResp: any = await apiFetch(
+          `/users/${encodeURIComponent(targetCode)}`,
+        );
+        if (!alive) return;
+        setUserByCode((userResp && (userResp.data ?? userResp)) || null);
+      } catch (e) {
+        if (!alive) return;
+        setUserByCode(null);
+        console.warn("[alumnos] Error consultando /users/:codigo", e);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [student?.code, code]);
 
   // === VERIFICAR CUOTAS DEL ALUMNO ===
   useEffect(() => {
@@ -1710,6 +1739,61 @@ export default function StudentDetailContent({ code }: { code: string }) {
     venceMeta?.payload?.vence_estimado,
     (venceMeta?.payload?.historial || []).length,
   ]);
+
+  const lastEmailArrayLogKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!student || !accessStats) return;
+
+    const apiUser = userByCode ?? {};
+    const email = String(
+      student?.raw?.correo ??
+        student?.raw?.email ??
+        student?.raw?.mail ??
+        apiUser?.correo ??
+        apiUser?.email ??
+        apiUser?.mail ??
+        apiUser?.contact_email ??
+        apiUser?.email_address ??
+        "",
+    ).trim();
+    const nombre = String(
+      student?.name ??
+        student?.raw?.nombre ??
+        apiUser?.name ??
+        apiUser?.nombre ??
+        apiUser?.fullname ??
+        "",
+    ).trim();
+
+    const logKey = [
+      String(student?.id ?? ""),
+      String(student?.code ?? ""),
+      String(nombre),
+      String(email),
+      String(accessStats?.remainingDays ?? ""),
+    ].join("|");
+
+    if (lastEmailArrayLogKeyRef.current === logKey) return;
+    lastEmailArrayLogKeyRef.current = logKey;
+
+    const diasRestantes = Number(accessStats.remainingDays);
+    const alumnosParaCorreo = [
+      {
+        diasRestantes,
+        correo: email,
+        nombre,
+        email,
+      },
+    ];
+
+    if (diasRestantes === 5) {
+      const mensajeRecordatorio = `Asunto: Tu acceso sigue activo  (solo un recordatorio)\nHola, ${nombre || "Alumno"} 👋🏻\n Esperamos que estés muy bien.\nSolo pasamos por aquí para recordarte que tu membresía dentro de Hotselling está próxima a finalizar en los próximos días.\nSi deseas continuar avanzando con el acompañamiento de coaches y soporte, puedes renovar en cualquier momento para mantener todo activo sin interrupciones.\nAquí tienes el enlace de renovación 👇🏼\nhttps://pay.hotmart.com/A89063724H?off=zou56c78&amp;checkoutMode=6\nUn abrazo,\n Equipo de Javier Quest`;
+
+      console.log("[alumnos] candidatos (5 días restantes)", alumnosParaCorreo);
+      console.log("[alumnos] mensaje recordatorio", mensajeRecordatorio);
+      console.log("[alumnos] response /users/:codigo", apiUser);
+    }
+  }, [student, accessStats, userByCode]);
 
   // Vista simplificada: solo "Mi perfil" (detalle). Otras secciones van en rutas aparte.
 

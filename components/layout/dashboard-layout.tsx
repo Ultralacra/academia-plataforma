@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   BadgeDollarSign,
+  KeyRound,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import {
@@ -23,6 +24,7 @@ import {
 import { useTicketNotifications } from "@/components/hooks/useTicketNotifications";
 import { useSseNotifications } from "@/components/hooks/useSseNotifications";
 import { usePaymentDueNotifications } from "@/components/hooks/usePaymentDueNotifications";
+import { useAccessDueNotifications } from "@/components/hooks/useAccessDueNotifications";
 import { useCallback, useMemo, useState } from "react";
 import {
   AlertDialog,
@@ -428,6 +430,106 @@ function PaymentsDueBadge() {
   );
 }
 
+function AccessDueBadge() {
+  const { user } = useAuth();
+  const enabled =
+    user?.role === "admin" || user?.role === "coach" || user?.role === "equipo";
+  const { dueCount, loading, error, refresh, items } =
+    useAccessDueNotifications({ enabled, daysWindow: 5 });
+
+  const [open, setOpen] = useState(false);
+
+  if (!enabled) return null;
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={async (v) => {
+        setOpen(v);
+        if (v) await refresh();
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          className="relative p-2 rounded-full hover:bg-muted/10"
+          title={
+            error
+              ? "No se pudieron cargar accesos"
+              : loading
+                ? "Cargando accesos..."
+                : dueCount > 0
+                  ? `Accesos por vencer: ${dueCount}`
+                  : "No hay accesos por vencer"
+          }
+          type="button"
+        >
+          <KeyRound className={`h-4 w-4 ${loading ? "opacity-60" : ""}`} />
+          {dueCount > 0 && (
+            <span
+              className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+              title="Accesos por vencer"
+            >
+              {dueCount > 99 ? "99+" : dueCount}
+            </span>
+          )}
+          {dueCount === 0 && !!error && (
+            <span
+              className="absolute -top-1 -right-1 bg-muted text-muted-foreground rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
+              title="Error al cargar accesos"
+            >
+              !
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-96 p-3">
+        <div className="text-base font-semibold px-2 py-1">
+          Accesos por vencer (≤5 días)
+        </div>
+        <div className="max-h-80 overflow-y-auto">
+          {loading ? (
+            <div className="p-3 text-xs text-muted-foreground">Cargando…</div>
+          ) : items.length === 0 ? (
+            <div className="p-3 text-xs text-muted-foreground">
+              {error
+                ? "No se pudieron cargar los accesos"
+                : "No hay accesos por vencer"}
+            </div>
+          ) : (
+            items.slice(0, 30).map((it) => {
+              const who =
+                String(it.alumnoNombre ?? "").trim() ||
+                String(it.alumnoCodigo ?? "").trim() ||
+                "Alumno";
+              const when =
+                it.daysLeft === 0
+                  ? "Vence hoy"
+                  : `Vence en ${it.daysLeft} día(s)`;
+              return (
+                <div
+                  key={it.key}
+                  className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
+                >
+                  <div
+                    className="text-sm font-medium leading-snug truncate"
+                    title={who}
+                  >
+                    {who}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {when}
+                    {it.fechaVence ? ` (${it.fechaVence})` : ""}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function DashboardLayout({
   children,
   contentClassName,
@@ -469,6 +571,7 @@ export function DashboardLayout({
                   className="h-9 w-9 rounded-xl hover:bg-muted/60"
                 />
                 <PaymentsDueBadge />
+                <AccessDueBadge />
                 <NotificationsBadge />
               </div>
 
