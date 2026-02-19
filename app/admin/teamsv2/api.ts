@@ -134,6 +134,32 @@ export async function getCoachStudents(coachCode: string) {
   })) as CoachStudent[];
 }
 
+export async function getCoachCurrentLoad(coachCode: string, pageSize = 100) {
+  const q = new URLSearchParams();
+  q.set("page", "1");
+  q.set("pageSize", String(pageSize));
+  q.set("coach", String(coachCode || ""));
+  const url = `/client/get/clients?${q.toString()}`;
+
+  const json = await fetchJson<any>(url);
+  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+
+  return rows.map((r) => ({
+    id: r.id,
+    id_relacion: r.id_relacion ?? "",
+    id_coach: r.id_coach ?? String(coachCode || ""),
+    id_alumno: r.id_alumno ?? r.codigo ?? "",
+    alumno_nombre: r.alumno_nombre ?? r.nombre ?? "",
+    coach_nombre: r.coach_nombre ?? null,
+    puesto: r.puesto ?? null,
+    area: r.area ?? null,
+    fase: r.fase ?? r.etapa ?? null,
+    estatus: r.estatus ?? r.estado ?? r.status ?? null,
+    updated_at: r.updated_at ?? null,
+    created_at: r.created_at ?? null,
+  })) as CoachStudent[];
+}
+
 // ======================
 // Tickets por coach
 // ======================

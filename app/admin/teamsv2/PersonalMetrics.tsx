@@ -12,7 +12,15 @@ import TicketsByStudentDonut from "./components/TicketsByStudentDonut";
 import SlowestResponseCard from "./components/SlowestResponseCard";
 import TicketsByInformanteBar from "@/app/admin/teams/TicketsByInformanteBar";
 import SessionsMetrics from "./components/SessionsMetrics";
+import CoachStudentsListCard from "./components/CoachStudentsListCard";
+import CoachStudentsPhaseDistributionCard from "./components/CoachStudentsPhaseDistributionCard";
 // Tabla completa se deja en pestaña Detalles; no se muestra en Métricas
+
+const METRICS_CACHE_TTL_MS = 1000 * 60 * 10;
+
+function getMetricsCacheKey(coachCode: string, desde: string, hasta: string) {
+  return `teamsv2:metrics:${coachCode}:${desde}:${hasta}`;
+}
 
 function currentMonthRange() {
   const now = new Date();
@@ -20,7 +28,7 @@ function currentMonthRange() {
   const m = now.getMonth();
   const first = `${y}-${String(m + 1).padStart(2, "0")}-01`;
   const today = `${y}-${String(m + 1).padStart(2, "0")}-${String(
-    now.getDate()
+    now.getDate(),
   ).padStart(2, "0")}`;
   return { first, today };
 }
@@ -43,11 +51,45 @@ export default function PersonalMetrics({
     (async () => {
       if (!coachCode) return;
       try {
+        const cacheKey = getMetricsCacheKey(coachCode, desde, hasta);
+        let hasFreshCache = false;
+
+        try {
+          const cachedRaw = localStorage.getItem(cacheKey);
+          if (cachedRaw) {
+            const cached = JSON.parse(cachedRaw) as {
+              savedAt: number;
+              data: any;
+            };
+            const age = Date.now() - Number(cached?.savedAt ?? 0);
+            if (cached?.data) {
+              setVm(cached.data);
+              hasFreshCache = age >= 0 && age <= METRICS_CACHE_TTL_MS;
+            }
+          }
+        } catch {}
+
+        if (hasFreshCache) {
+          setLoading(false);
+          setProgress(0);
+          return;
+        }
+
         setLoading(true);
         setProgress(0);
         const res = await fetchMetrics(desde, hasta, coachCode);
         if (!active) return;
-        setVm((res?.data as any)?.teams ?? null);
+        const nextVm = (res?.data as any)?.teams ?? null;
+        setVm(nextVm);
+        try {
+          localStorage.setItem(
+            cacheKey,
+            JSON.stringify({
+              savedAt: Date.now(),
+              data: nextVm,
+            }),
+          );
+        } catch {}
       } catch (e) {
         console.error(e);
         if (active) setVm(null);
@@ -93,19 +135,42 @@ export default function PersonalMetrics({
       : [];
   }, [vm]);
 
+  useEffect(() => {
+    if (!coachCode) return;
+    if (!Array.isArray(students) || students.length === 0) {
+      console.log("[teamsv2][metricas] sin alumnos para coach", coachCode);
+      return;
+    }
+
+    const byStageMap = new Map<string, number>();
+    for (const student of students) {
+      const stage = String(student.stage || "Sin fase").trim() || "Sin fase";
+      byStageMap.set(stage, (byStageMap.get(stage) ?? 0) + 1);
+    }
+
+    const byStage = Array.from(byStageMap.entries())
+      .map(([fase, total]) => ({ fase, total }))
+      .sort((a, b) => b.total - a.total || a.fase.localeCompare(b.fase));
+
+    console.groupCollapsed(`[teamsv2][metricas] alumnos coach ${coachCode}`);
+    console.log("alumnos", students);
+    console.table(byStage);
+    console.groupEnd();
+  }, [coachCode, students]);
+
   const ticketsSeries = useMemo(() => vm?.ticketsSeries?.daily ?? [], [vm]);
   const ticketsByNameRaw = useMemo(() => vm?.ticketsByName ?? [], [vm]);
   const avgResolutionByStudent = useMemo(
     () => vm?.avgResolutionByStudent ?? [],
-    [vm]
+    [vm],
   );
   const ticketsByInformante = useMemo(
     () => vm?.ticketsByInformante ?? [],
-    [vm]
+    [vm],
   );
   const ticketsByInformanteByDay = useMemo(
     () => vm?.ticketsByInformanteByDay ?? [],
-    [vm]
+    [vm],
   );
   // Normalized tickets array: { name, count }
   const normalizedTicketsByName = useMemo(() => {
@@ -114,7 +179,7 @@ export default function PersonalMetrics({
     return raw.map((t: any) => ({
       name:
         String(
-          t.name ?? t.alumno ?? t.nombre ?? t.codigo_alumno ?? t.codigo ?? ""
+          t.name ?? t.alumno ?? t.nombre ?? t.codigo_alumno ?? t.codigo ?? "",
         ).trim() || "Sin Alumno",
       count: Number(t.count ?? t.cantidad ?? t.tickets ?? 0) || 0,
     }));
@@ -131,12 +196,12 @@ export default function PersonalMetrics({
     for (const r of arr || []) {
       const name = String(r.name ?? r.nombre ?? "").trim();
       const code = String(
-        r.code ?? r.codigo ?? r.codigo_alumno ?? r.codigo_alumno ?? ""
+        r.code ?? r.codigo ?? r.codigo_alumno ?? r.codigo_alumno ?? "",
       ).trim();
       const minutes =
-        r.avg_minutes != null ? Number(r.avg_minutes) : r.avg_minutes ?? null;
+        r.avg_minutes != null ? Number(r.avg_minutes) : (r.avg_minutes ?? null);
       const hours =
-        r.avg_hours != null ? Number(r.avg_hours) : r.avg_hours ?? null;
+        r.avg_hours != null ? Number(r.avg_hours) : (r.avg_hours ?? null);
       const hms = r.avg_time_hms ?? r.avg_time_hms ?? "";
       if (name) m.set(name, { minutes, hours, hms });
       if (code) m.set(code, { minutes, hours, hms });
@@ -158,7 +223,7 @@ export default function PersonalMetrics({
       : [];
     const sum = byStatus.reduce(
       (acc, it) => acc + (Number(it.cantidad ?? 0) || 0),
-      0
+      0,
     );
     const fallback = Number(vm?.ticketsTotal ?? 0) || 0;
     return sum > 0 ? sum : fallback;
@@ -199,6 +264,14 @@ export default function PersonalMetrics({
 
       {!loading && (
         <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
+            <CoachStudentsListCard
+              students={students}
+              title={`Alumnos de ${coachName || coachCode || "coach"}`}
+            />
+            <CoachStudentsPhaseDistributionCard students={students} />
+          </div>
+
           {/* Donas en 3 columnas */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
             <StudentsPhaseDonut

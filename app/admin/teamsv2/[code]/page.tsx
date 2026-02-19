@@ -49,6 +49,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import PersonalMetrics from "../PersonalMetrics";
 import CoachStudentsTable from "../components/CoachStudentsTable";
+import CoachCurrentLoadTab from "../components/CoachCurrentLoadTab";
 import { fetchMetrics } from "@/app/admin/teams/teamsApi";
 import { getAllStudents } from "@/app/admin/alumnos/api";
 import SessionsPanel from "../components/SessionsPanel";
@@ -252,7 +253,7 @@ export default function CoachDetailPage({
     setRequestListSignal((n) => (n ?? 0) + 1);
     setDecisionStamp(null);
     try {
-            /* console.log("[teamsv2] contacto seleccionado =>", {
+      /* console.log("[teamsv2] contacto seleccionado =>", {
         target: t.codigo,
         myself: code,
       }); */
@@ -628,7 +629,7 @@ export default function CoachDetailPage({
       isTyping: boolean;
     }) => {
       const id = String(chatId);
-            /* console.log("[Page TYPING] Recibido:", { chatId: id, isTyping }); */
+      /* console.log("[Page TYPING] Recibido:", { chatId: id, isTyping }); */
 
       // Limpiar timer previo si existe
       const prevTimer = typingTimersRef.get(id);
@@ -1163,7 +1164,7 @@ export default function CoachDetailPage({
       (acc: number, it: any) => acc + (it?.unreadCount ?? 0),
       0,
     );
-        /* console.log(
+    /* console.log(
       "[PAGE TITLE] 📊 Total mensajes sin leer:",
       total,
       "de",
@@ -1187,7 +1188,7 @@ export default function CoachDetailPage({
         totalUnreadMessages > 0
           ? `(${totalUnreadMessages}) ${baseTitle}`
           : baseTitle;
-            /* console.log("[PAGE TITLE] 📝 Actualizando título a:", newTitle); */
+      /* console.log("[PAGE TITLE] 📝 Actualizando título a:", newTitle); */
       document.title = newTitle;
     };
 
@@ -1247,7 +1248,7 @@ export default function CoachDetailPage({
     const [type, ...rest] = activeChatTab.split(":");
     const codeKey = rest.join(":");
     try {
-            /* console.log("[teamsv2] Tab activa:", activeChatTab, { type, codeKey }); */
+      /* console.log("[teamsv2] Tab activa:", activeChatTab, { type, codeKey }); */
     } catch {}
     if (type === "team") {
       setTargetStudentCode(null);
@@ -1255,7 +1256,7 @@ export default function CoachDetailPage({
       setTargetTeamCode(codeKey);
       const existing = pickExistingChatIdForTarget(codeKey);
       try {
-                /* console.log("[teamsv2] Cambiando a chat EQUIPO", {
+        /* console.log("[teamsv2] Cambiando a chat EQUIPO", {
           my: code,
           target: codeKey,
           existingChatId: existing,
@@ -1277,7 +1278,7 @@ export default function CoachDetailPage({
       setTargetStudentName(stu?.name || codeKey);
       const existing = pickExistingChatIdForStudent(codeKey);
       try {
-                /* console.log("[teamsv2] Cambiando a chat ALUMNO", {
+        /* console.log("[teamsv2] Cambiando a chat ALUMNO", {
           my: code,
           target: codeKey,
           existingChatId: existing,
@@ -1293,7 +1294,7 @@ export default function CoachDetailPage({
       // Soporte para pestañas creadas por id_chat directo
       const id = codeKey;
       try {
-                /* console.log("[teamsv2] Cambiando a chat por ID", { chatId: id }); */
+        /* console.log("[teamsv2] Cambiando a chat por ID", { chatId: id }); */
       } catch {}
       setTargetTeamCode(null);
       setTargetStudentCode(null);
@@ -1446,7 +1447,7 @@ export default function CoachDetailPage({
     const onUnreadCountUpdated = (e: any) => {
       try {
         if (e?.detail?.role === "coach") {
-                    /* console.log(
+          /* console.log(
             "[CoachDetailPage] Contador de no leídos actualizado:",
             e?.detail,
           ); */
@@ -1457,7 +1458,7 @@ export default function CoachDetailPage({
       } catch {}
     };
     const onListRefresh = () => {
-            /* console.log("[CoachDetailPage] Refrescando lista de chats"); */
+      /* console.log("[CoachDetailPage] Refrescando lista de chats"); */
       setChatsLoading(true);
       setRequestListSignal((n) => (n ?? 0) + 1);
     };
@@ -1504,7 +1505,7 @@ export default function CoachDetailPage({
         const { chatId, text, at, attachments } = e?.detail || {};
         if (chatId == null) return;
         const chatIdStr = String(chatId);
-                /* console.log(
+        /* console.log(
           "[CoachDetailPage] Mensaje recibido, actualizando lastAt:",
           {
             chatId: chatIdStr,
@@ -1654,6 +1655,7 @@ export default function CoachDetailPage({
               <TabsList>
                 <TabsTrigger value="tickets">Tickets</TabsTrigger>
                 <TabsTrigger value="metricas">Métricas</TabsTrigger>
+                <TabsTrigger value="carga">Carga actual</TabsTrigger>
                 <TabsTrigger value="alumnos">Alumnos</TabsTrigger>
                 <TabsTrigger value="chat">Chat</TabsTrigger>
                 <TabsTrigger value="sesiones">Sesiones</TabsTrigger>
@@ -1818,7 +1820,7 @@ export default function CoachDetailPage({
                                                 it?.id_chat ?? it?.id,
                                             )
                                             .filter((x: any) => x != null);
-                                                                                    /* console.log(
+                                          /* console.log(
                                             "[CoachDetailPage] Click en conversación",
                                             {
                                               tipo: item.type,
@@ -2400,6 +2402,28 @@ export default function CoachDetailPage({
               </div>
             </TabsContent>
 
+            <TabsContent value="carga" className="mt-0 flex-1 min-h-0">
+              <div className="h-full">
+                <div className="h-full overflow-auto p-4 bg-white border rounded-lg">
+                  {loading ? (
+                    <div>Cargando...</div>
+                  ) : error ? (
+                    <div className="text-sm text-red-600">{error}</div>
+                  ) : coach ? (
+                    <CoachCurrentLoadTab
+                      coachCode={coach.codigo}
+                      coachName={coach.nombre}
+                      enabled={activeTab === "carga"}
+                    />
+                  ) : (
+                    <div className="text-sm text-neutral-500">
+                      No se encontró información del coach.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
             <TabsContent value="sesiones" className="mt-0 flex-1 min-h-0">
               <div className="h-full">
                 <div className="h-full overflow-auto p-4 bg-white border rounded-lg">
@@ -2907,7 +2931,7 @@ function CoachStudentsInline({
                       notas: quickNotas.trim(),
                     } as const;
                     // eslint-disable-next-line no-console
-                                        /* console.log("[sessions] quick-offer payload", payload); */
+                    /* console.log("[sessions] quick-offer payload", payload); */
                     await offerSession(payload);
                     toast({ title: "Sesión ofrecida" });
                     setQuickOpen(false);
