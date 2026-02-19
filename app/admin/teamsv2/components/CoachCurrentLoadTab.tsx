@@ -274,7 +274,10 @@ export default function CoachCurrentLoadTab({
   }, [dedupedRows, phaseFilter, statusFilter]);
 
   const trackedTotal =
-    trackedLoad.ONBOARDING + trackedLoad.F1 + trackedLoad.F2 + trackedLoad.OTRAS;
+    trackedLoad.ONBOARDING +
+    trackedLoad.F1 +
+    trackedLoad.F2 +
+    trackedLoad.OTRAS;
   const availableSlots = Math.max(MAX_COACH_LOAD - trackedTotal, 0);
   const isFull = trackedTotal >= MAX_COACH_LOAD;
   const loadPct = Math.min(100, (trackedTotal / MAX_COACH_LOAD) * 100);
@@ -389,7 +392,10 @@ export default function CoachCurrentLoadTab({
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <div className="text-xs text-slate-600 truncate" title={item.fase}>
+                  <div
+                    className="text-xs text-slate-600 truncate"
+                    title={item.fase}
+                  >
                     {item.fase}
                   </div>
                   <Switch
