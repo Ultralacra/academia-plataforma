@@ -14,7 +14,12 @@ import { toast } from "@/components/ui/use-toast";
 import { updateTicket } from "@/app/admin/alumnos/api";
 import { buildUrl } from "@/lib/api-config";
 import { getAuthToken } from "@/lib/auth";
-import { Search, Filter, Calendar as CalendarIcon } from "lucide-react";
+import {
+  Search,
+  Filter,
+  Calendar as CalendarIcon,
+  ChevronDown,
+} from "lucide-react";
 import { Charts } from "./charts";
 import KPIs from "./kpis";
 import TeamsTable from "./teams-table";
@@ -112,17 +117,20 @@ function Select({
   options: { value: string; label: string }[];
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition focus:ring-4 focus:ring-violet-100"
-    >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/70 px-3 pr-9 text-sm outline-none transition hover:bg-white focus:border-violet-300 focus:bg-white focus:ring-4 focus:ring-violet-100"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+    </div>
   );
 }
 function Button({
@@ -170,6 +178,14 @@ function fmtDateTime(iso?: string | null) {
   if (isNaN(d.getTime())) return "-";
   return fmt.format(d);
 }
+
+function normText(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .trim();
+}
 /** Devuelve YYYY-MM-DD en hora local (para <input type="date" />) */
 function todayYMDLocal() {
   const now = new Date();
@@ -200,6 +216,7 @@ export default function TicketsContent() {
   const [estado, setEstado] = useState<string>("all");
   const [tipo, setTipo] = useState<string>("all");
   const [coachFiltro, setCoachFiltro] = useState<string>("all");
+  const [informanteFiltro, setInformanteFiltro] = useState<string>("all");
   const [coaches, setCoaches] = useState<CoachItem[]>([]);
   // Por defecto: desde el primer día del mes actual hasta hoy
   const [fechaDesde, setFechaDesde] = useState<string>(
@@ -293,15 +310,45 @@ export default function TicketsContent() {
       );
     }
     if (coachFiltro !== "all") {
+      const coachSel = coaches.find((c) => c.codigo === coachFiltro);
+      const coachSelName = normText(coachSel?.nombre ?? "");
       items = items.filter((i) => {
         const coachesArr = Array.isArray(i.coaches) ? i.coaches : [];
-        return coachesArr.some(
+        const hasCoachAssigned = coachesArr.some(
           (c) => String(c.codigo_equipo ?? "").trim() === coachFiltro,
         );
+
+        if (hasCoachAssigned) return true;
+
+        const infCode = String(i.informante ?? "").trim();
+        const infName = normText(i.informante_nombre);
+        const byInformanteCode = infCode === coachFiltro;
+        const byInformanteName = !!coachSelName && infName === coachSelName;
+
+        return byInformanteCode || byInformanteName;
       });
     }
+
+    if (informanteFiltro !== "all") {
+      if (informanteFiltro.startsWith("code:")) {
+        const code = informanteFiltro.slice(5);
+        items = items.filter((i) => String(i.informante ?? "").trim() === code);
+      } else if (informanteFiltro.startsWith("name:")) {
+        const nameKey = informanteFiltro.slice(5);
+        items = items.filter((i) => normText(i.informante_nombre) === nameKey);
+      }
+    }
+
     return items;
-  }, [allTickets, estado, tipo, search, coachFiltro]);
+  }, [
+    allTickets,
+    estado,
+    tipo,
+    search,
+    coachFiltro,
+    coaches,
+    informanteFiltro,
+  ]);
 
   // Opciones dinámicas
   const estadoOpts = useMemo(() => {
@@ -318,6 +365,39 @@ export default function TicketsContent() {
       set.add((t.tipo ?? "SIN TIPO").toLowerCase()),
     );
     return ["all", ...Array.from(set)];
+  }, [allTickets]);
+
+  const informanteOpts = useMemo(() => {
+    const map = new Map<string, { value: string; label: string }>();
+    for (const t of allTickets ?? []) {
+      const infCode = String(t.informante ?? "").trim();
+      const infNameRaw = String(t.informante_nombre ?? "").trim();
+      const infNameNorm = normText(infNameRaw);
+
+      if (infCode) {
+        const key = `code:${infCode}`;
+        map.set(key, {
+          value: key,
+          label: infNameRaw || "Informante",
+        });
+        continue;
+      }
+
+      if (infNameNorm) {
+        const key = `name:${infNameNorm}`;
+        map.set(key, {
+          value: key,
+          label: infNameRaw,
+        });
+      }
+    }
+
+    return [
+      { value: "all", label: "Todos los informantes" },
+      ...Array.from(map.values()).sort((a, b) =>
+        a.label.localeCompare(b.label, "es", { sensitivity: "base" }),
+      ),
+    ];
   }, [allTickets]);
 
   // 📊 NUEVO: métricas completas
@@ -448,9 +528,19 @@ export default function TicketsContent() {
                   { value: "all", label: "Todos los coaches" },
                   ...coaches.map((c) => ({
                     value: c.codigo,
-                    label: `${c.nombre}${c.area ? ` (${c.area})` : ""}`,
+                    label: `${c.nombre}${c.puesto ? ` · ${c.puesto}` : ""}${c.area ? ` (${c.area})` : ""}`,
                   })),
                 ]}
+              />
+            </div>
+            <div className="md:col-span-2">
+              <Select
+                value={informanteFiltro}
+                onChange={(v) => {
+                  setPage(1);
+                  setInformanteFiltro(v);
+                }}
+                options={informanteOpts}
               />
             </div>
             <div className="md:col-span-1">
