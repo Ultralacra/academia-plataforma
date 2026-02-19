@@ -26,6 +26,7 @@ import { useSseNotifications } from "@/components/hooks/useSseNotifications";
 import { usePaymentDueNotifications } from "@/components/hooks/usePaymentDueNotifications";
 import { useAccessDueNotifications } from "@/components/hooks/useAccessDueNotifications";
 import { useCallback, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +38,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Spinner from "@/components/ui/spinner";
 
 interface DashboardLayoutProps {
@@ -304,13 +306,26 @@ function NotificationsBadge() {
 }
 
 function PaymentsDueBadge() {
+  const router = useRouter();
   const { user } = useAuth();
   const enabled =
     user?.role === "admin" || user?.role === "coach" || user?.role === "equipo";
   const { dueCount, loading, error, refresh, items } =
-    usePaymentDueNotifications({ enabled, daysWindow: 5 });
+    usePaymentDueNotifications({
+      enabled,
+      pastDaysWindow: 10,
+      futureDaysWindow: 10,
+    });
 
   const [open, setOpen] = useState(false);
+  const overdueItems = useMemo(
+    () => items.filter((it) => it.daysLeft < 0),
+    [items],
+  );
+  const upcomingItems = useMemo(
+    () => items.filter((it) => it.daysLeft >= 0),
+    [items],
+  );
 
   const fmtDateShort = useCallback((raw: string | null) => {
     if (!raw) return "";
@@ -337,6 +352,35 @@ function PaymentsDueBadge() {
     return s;
   }, []);
 
+  const fmtStatus = useCallback((raw: string | null) => {
+    const s = String(raw ?? "")
+      .trim()
+      .toLowerCase();
+    if (!s) return "Pendiente";
+    return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  }, []);
+
+  const openPaymentPlan = useCallback(
+    (item: (typeof items)[number]) => {
+      const clientCode = String(item.cliente_codigo ?? "").trim();
+      const paymentCode = String(item.payment_codigo ?? "").trim();
+      setOpen(false);
+
+      if (clientCode) {
+        router.push(`/admin/alumnos/${encodeURIComponent(clientCode)}/pagos`);
+        return;
+      }
+
+      if (paymentCode) {
+        router.push(`/admin/payments?payment=${encodeURIComponent(paymentCode)}`);
+        return;
+      }
+
+      router.push("/admin/payments");
+    },
+    [items, router],
+  );
+
   if (!enabled) return null;
 
   return (
@@ -356,8 +400,8 @@ function PaymentsDueBadge() {
               : loading
                 ? "Cargando cuotas..."
                 : dueCount > 0
-                  ? `Cuotas por vencer: ${dueCount}`
-                  : "No hay cuotas por vencer"
+                  ? `Cuotas pendientes: ${dueCount}`
+                  : "No hay cuotas pendientes"
           }
           type="button"
         >
@@ -367,7 +411,7 @@ function PaymentsDueBadge() {
           {dueCount > 0 && (
             <span
               className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center"
-              title="Cuotas por vencer"
+              title="Cuotas pendientes"
             >
               {dueCount > 99 ? "99+" : dueCount}
             </span>
@@ -384,47 +428,137 @@ function PaymentsDueBadge() {
       </PopoverTrigger>
       <PopoverContent className="w-96 p-3">
         <div className="text-base font-semibold px-2 py-1">
-          Pagos por vencer (≤5 días)
+          Pagos pendientes
         </div>
-        <div className="max-h-80 overflow-y-auto">
-          {loading ? (
-            <div className="p-3 text-xs text-muted-foreground">Cargando…</div>
-          ) : items.length === 0 ? (
-            <div className="p-3 text-xs text-muted-foreground">
-              {error
-                ? "No se pudieron cargar las cuotas"
-                : "No hay cuotas por vencer"}
-            </div>
-          ) : (
-            items.slice(0, 30).map((it) => {
-              const who =
-                String(it.cliente_nombre ?? "").trim() ||
-                String(it.cliente_codigo ?? "").trim() ||
-                "Usuario";
-              const when =
-                it.daysLeft === 0
-                  ? "Vence hoy"
-                  : `Vence en ${it.daysLeft} día(s)`;
-              return (
-                <div
-                  key={it.key}
-                  className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
-                >
+        <Tabs defaultValue="vencidas" className="mt-2">
+          <TabsList className="w-full grid grid-cols-2">
+            <TabsTrigger value="vencidas">
+              Vencidas ({overdueItems.length})
+            </TabsTrigger>
+            <TabsTrigger value="por-vencer">
+              Por vencer ({upcomingItems.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="vencidas" className="max-h-80 overflow-y-auto">
+            {loading ? (
+              <div className="p-3 text-xs text-muted-foreground">Cargando…</div>
+            ) : error ? (
+              <div className="p-3 text-xs text-muted-foreground">
+                No se pudieron cargar las cuotas
+              </div>
+            ) : overdueItems.length === 0 ? (
+              <div className="p-3 text-xs text-muted-foreground">
+                No hay cuotas vencidas (últimos 10 días)
+              </div>
+            ) : (
+              overdueItems.slice(0, 30).map((it) => {
+                const who =
+                  String(it.cliente_nombre ?? "").trim() ||
+                  String(it.cliente_codigo ?? "").trim() ||
+                  "Usuario";
+                const when = `Vencida hace ${Math.abs(it.daysLeft)} día(s)`;
+                return (
                   <div
-                    className="text-sm font-medium leading-snug truncate"
-                    title={who}
+                    key={it.key}
+                    className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
                   >
-                    {who}
+                    <div className="flex items-center justify-between gap-2">
+                      <div
+                        className="text-sm font-medium leading-snug truncate"
+                        title={who}
+                      >
+                        {who}
+                      </div>
+                      <span className="inline-flex items-center rounded-md border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                        Vencida
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {when}
+                      {it.fecha_pago ? ` (${fmtDateShort(it.fecha_pago)})` : ""}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      Estado: {fmtStatus(it.estatus)}
+                    </div>
+                    <div className="mt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => openPaymentPlan(it)}
+                      >
+                        Ver plan de pagos
+                      </Button>
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {when}
-                    {it.fecha_pago ? ` (${fmtDateShort(it.fecha_pago)})` : ""}
+                );
+              })
+            )}
+          </TabsContent>
+
+          <TabsContent value="por-vencer" className="max-h-80 overflow-y-auto">
+            {loading ? (
+              <div className="p-3 text-xs text-muted-foreground">Cargando…</div>
+            ) : error ? (
+              <div className="p-3 text-xs text-muted-foreground">
+                No se pudieron cargar las cuotas
+              </div>
+            ) : upcomingItems.length === 0 ? (
+              <div className="p-3 text-xs text-muted-foreground">
+                No hay cuotas por vencer (próximos 10 días)
+              </div>
+            ) : (
+              upcomingItems.slice(0, 30).map((it) => {
+                const who =
+                  String(it.cliente_nombre ?? "").trim() ||
+                  String(it.cliente_codigo ?? "").trim() ||
+                  "Usuario";
+                const when =
+                  it.daysLeft === 0
+                    ? "Vence hoy"
+                    : `Vence en ${it.daysLeft} día(s)`;
+                return (
+                  <div
+                    key={it.key}
+                    className="p-3 border-b last:border-b-0 hover:bg-muted/30 rounded-md"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div
+                        className="text-sm font-medium leading-snug truncate"
+                        title={who}
+                      >
+                        {who}
+                      </div>
+                      <span className="inline-flex items-center rounded-md border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        {it.daysLeft === 0 ? "Hoy" : "Por vencer"}
+                      </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {when}
+                      {it.fecha_pago ? ` (${fmtDateShort(it.fecha_pago)})` : ""}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      Estado: {fmtStatus(it.estatus)}
+                    </div>
+                    <div className="mt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => openPaymentPlan(it)}
+                      >
+                        Ver plan de pagos
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              );
-            })
-          )}
-        </div>
+                );
+              })
+            )}
+          </TabsContent>
+        </Tabs>
       </PopoverContent>
     </Popover>
   );

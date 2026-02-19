@@ -14,6 +14,7 @@ export type PaymentDueItem = {
   cliente_nombre: string | null;
   cuota_codigo: string | null;
   payment_codigo: string | null;
+  estatus: string | null;
   fecha_pago: string | null;
   daysLeft: number;
   monto: number | null;
@@ -28,9 +29,15 @@ function toIsoDate(d: Date) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function getMonthRange(now: Date) {
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+function getWindowRange(
+  now: Date,
+  pastDaysWindow: number,
+  futureDaysWindow: number,
+) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  start.setDate(start.getDate() - pastDaysWindow);
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  end.setDate(end.getDate() + futureDaysWindow);
   return { fechaDesde: toIsoDate(start), fechaHasta: toIsoDate(end) };
 }
 
@@ -74,7 +81,13 @@ function diffDays(from: Date, to: Date) {
 function isPaidStatus(raw: unknown) {
   const s = String(raw ?? "").toLowerCase();
   if (!s) return false;
-  return s.includes("pagad");
+  return (
+    s.includes("pagad") ||
+    s.includes("listo") ||
+    s.includes("reembol") ||
+    s.includes("no_aplica") ||
+    s.includes("fallid")
+  );
 }
 
 function makeClientKey(r: PaymentCuotaRow) {
@@ -138,9 +151,18 @@ function setAutoShownToday(todayIso: string) {
 export function usePaymentDueNotifications(opts: {
   enabled: boolean;
   daysWindow?: number;
+  pastDaysWindow?: number;
+  futureDaysWindow?: number;
 }) {
   const { toast } = useToast();
-  const daysWindow = typeof opts.daysWindow === "number" ? opts.daysWindow : 5;
+  const futureDaysWindow =
+    typeof opts.futureDaysWindow === "number"
+      ? opts.futureDaysWindow
+      : typeof opts.daysWindow === "number"
+        ? opts.daysWindow
+        : 5;
+  const pastDaysWindow =
+    typeof opts.pastDaysWindow === "number" ? opts.pastDaysWindow : 10;
 
   const [items, setItems] = useState<PaymentDueItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -166,7 +188,7 @@ export function usePaymentDueNotifications(opts: {
         if (!due) continue;
 
         const daysLeft = diffDays(today, due);
-        if (daysLeft < 0 || daysLeft > daysWindow) continue;
+        if (daysLeft < -pastDaysWindow || daysLeft > futureDaysWindow) continue;
 
         const key = makeClientKey(r);
         const cand: PaymentDueItem = {
@@ -175,6 +197,7 @@ export function usePaymentDueNotifications(opts: {
           cliente_nombre: r?.cliente_nombre ?? null,
           cuota_codigo: r?.cuota_codigo ?? null,
           payment_codigo: r?.payment_codigo ?? null,
+          estatus: r?.estatus ?? null,
           fecha_pago: r?.fecha_pago ?? null,
           daysLeft,
           monto: r?.monto ?? null,
@@ -189,7 +212,7 @@ export function usePaymentDueNotifications(opts: {
         (a, b) => a.daysLeft - b.daysLeft,
       );
     },
-    [daysWindow],
+    [futureDaysWindow, pastDaysWindow],
   );
 
   const fetchDue = useCallback(async () => {
@@ -202,7 +225,7 @@ export function usePaymentDueNotifications(opts: {
 
     try {
       const now = new Date();
-      const range = getMonthRange(now);
+      const range = getWindowRange(now, pastDaysWindow, futureDaysWindow);
 
       const pageSize = 200;
       const first = await getPaymentCuotas({
@@ -241,7 +264,7 @@ export function usePaymentDueNotifications(opts: {
       inflightRef.current = false;
       setLoading(false);
     }
-  }, [computeDueItems, opts.enabled]);
+  }, [computeDueItems, futureDaysWindow, opts.enabled, pastDaysWindow]);
 
   const showSnackbars = useCallback(
     async (mode: "new" | "all") => {
@@ -267,7 +290,12 @@ export function usePaymentDueNotifications(opts: {
         const codigo = String(it.cliente_codigo ?? "").trim();
         const who = nombre || codigo || "Usuario";
 
-        const when = it.daysLeft === 0 ? "hoy" : `en ${it.daysLeft} día(s)`;
+        const when =
+          it.daysLeft < 0
+            ? `hace ${Math.abs(it.daysLeft)} día(s)`
+            : it.daysLeft === 0
+              ? "hoy"
+              : `en ${it.daysLeft} día(s)`;
         const fecha = it.fecha_pago
           ? formatDateShort(String(it.fecha_pago))
           : "";
@@ -280,10 +308,10 @@ export function usePaymentDueNotifications(opts: {
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold leading-snug opacity-100">
-                  Cuota por vencer
+                  Cuota pendiente
                 </div>
                 <div className="text-sm text-foreground/80">
-                  {who} vence {when}
+                  {it.daysLeft < 0 ? `${who} venció` : `${who} vence`} {when}
                   {fecha ? ` (${fecha})` : ""}
                 </div>
               </div>
@@ -311,11 +339,11 @@ export function usePaymentDueNotifications(opts: {
               </div>
               <div className="min-w-0">
                 <div className="text-sm font-semibold leading-snug opacity-100">
-                  Más cuotas por vencer
+                  Más cuotas pendientes
                 </div>
                 <div className="text-sm text-foreground/80">
-                  Hay {remaining} usuario(s) más con cuota por vencer en ≤
-                  {daysWindow} días.
+                  Hay {remaining} usuario(s) más con cuotas por vencer o ya
+                  vencidas.
                 </div>
               </div>
             </div>
@@ -325,7 +353,7 @@ export function usePaymentDueNotifications(opts: {
         });
       }
     },
-    [daysWindow, opts.enabled, toast],
+    [opts.enabled, toast],
   );
 
   // Auto-load + auto-snackbars (solo una vez por sesión/día gracias al storage)
