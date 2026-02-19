@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { getCoachCurrentLoad, type CoachStudent } from "../api";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { Eye } from "lucide-react";
 
 const MAX_COACH_LOAD = 35;
 
@@ -99,6 +102,39 @@ function toTimestamp(value?: string | null) {
   return Number.isFinite(t) ? t : 0;
 }
 
+function formatDateEs(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function calculateInactiveDays(value?: string | null) {
+  if (!value) return null;
+  const lastActivity = new Date(value);
+  if (Number.isNaN(lastActivity.getTime())) return null;
+
+  const today = new Date();
+  const todayAtMidnight = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  const lastAtMidnight = new Date(
+    lastActivity.getFullYear(),
+    lastActivity.getMonth(),
+    lastActivity.getDate(),
+  );
+
+  const diffMs = todayAtMidnight.getTime() - lastAtMidnight.getTime();
+  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  return days < 0 ? 0 : days;
+}
+
 export default function CoachCurrentLoadTab({
   coachCode,
   coachName,
@@ -113,6 +149,8 @@ export default function CoachCurrentLoadTab({
   const [rows, setRows] = useState<CoachStudent[]>([]);
   const [phaseFilter, setPhaseFilter] = useState<string>("__ALL__");
   const [statusFilter, setStatusFilter] = useState<string>("__ALL__");
+  const [showOnly30PlusInactive, setShowOnly30PlusInactive] =
+    useState<boolean>(false);
   const [useTotalsForCapacity, setUseTotalsForCapacity] =
     useState<boolean>(false);
   const [includedPhases, setIncludedPhases] = useState<Record<string, boolean>>(
@@ -267,11 +305,24 @@ export default function CoachCurrentLoadTab({
     return dedupedRows.filter((row) => {
       const fase = String(row.fase || "Sin fase").trim() || "Sin fase";
       const status = classifyStatus(row.estatus);
+      const inactiveDays = calculateInactiveDays(row.ultima_actividad);
       const phaseOk = phaseFilter === "__ALL__" || fase === phaseFilter;
       const statusOk = statusFilter === "__ALL__" || status === statusFilter;
-      return phaseOk && statusOk;
+      const inactivityOk =
+        !showOnly30PlusInactive ||
+        (inactiveDays != null && Number(inactiveDays) >= 30);
+      return phaseOk && statusOk && inactivityOk;
     });
-  }, [dedupedRows, phaseFilter, statusFilter]);
+  }, [dedupedRows, phaseFilter, statusFilter, showOnly30PlusInactive]);
+
+  const inactive30PlusCount = useMemo(
+    () =>
+      dedupedRows.filter((row) => {
+        const days = calculateInactiveDays(row.ultima_actividad);
+        return days != null && days >= 30;
+      }).length,
+    [dedupedRows],
+  );
 
   const trackedTotal =
     trackedLoad.ONBOARDING +
@@ -481,6 +532,43 @@ export default function CoachCurrentLoadTab({
                 </div>
               </div>
             </div>
+
+            <div className="mt-3 rounded-md border bg-slate-50 px-3 py-2 flex items-center justify-between gap-3">
+              <div className="text-xs text-slate-700">
+                Switch estado rápido
+                <div className="text-[11px] text-slate-500">
+                  {statusFilter === "INACTIVO"
+                    ? "Mostrando inactivos"
+                    : "Mostrando activos"}
+                </div>
+              </div>
+              <Switch
+                checked={statusFilter === "INACTIVO"}
+                onCheckedChange={(checked) =>
+                  setStatusFilter(checked ? "INACTIVO" : "ACTIVO")
+                }
+                aria-label="Cambiar entre activos e inactivos"
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowOnly30PlusInactive((v) => !v)}
+                className={`h-9 rounded-md border px-3 text-sm font-medium transition-colors ${
+                  showOnly30PlusInactive
+                    ? "border-rose-300 bg-rose-50 text-rose-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {showOnly30PlusInactive
+                  ? "Mostrando inactividad 30+ días"
+                  : "Ver inactividad 30+ días"}
+              </button>
+              <span className="text-xs text-slate-600">
+                Alumnos con 30+ días: <strong>{inactive30PlusCount}</strong>
+              </span>
+            </div>
           </div>
 
           <div className="rounded-lg border overflow-hidden">
@@ -491,13 +579,19 @@ export default function CoachCurrentLoadTab({
                     <th className="px-3 py-2 text-left font-medium">Alumno</th>
                     <th className="px-3 py-2 text-left font-medium">Fase</th>
                     <th className="px-3 py-2 text-left font-medium">Estado</th>
+                    <th className="px-3 py-2 text-left font-medium">
+                      Última actividad
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium">
+                      Inactividad (días)
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={3}
+                        colSpan={5}
                         className="px-3 py-6 text-center text-muted-foreground"
                       >
                         No hay resultados con los filtros seleccionados.
@@ -509,8 +603,25 @@ export default function CoachCurrentLoadTab({
                         key={`${row.id}-${row.id_alumno}`}
                         className="border-t"
                       >
-                        <td className="px-3 py-2">
-                          {row.alumno_nombre || "Sin nombre"}
+                        <td className="px-3 py-2 align-top">
+                          <div className="font-medium text-slate-900">
+                            {row.alumno_nombre || "Sin nombre"}
+                          </div>
+                          {row.id_alumno ? (
+                            <Button
+                              asChild
+                              size="sm"
+                              variant="ghost"
+                              className="mt-1 h-7 px-2 text-xs text-slate-600 hover:text-slate-900"
+                            >
+                              <Link
+                                href={`/admin/alumnos/${encodeURIComponent(String(row.id_alumno))}/perfil`}
+                              >
+                                <Eye className="mr-1 h-3.5 w-3.5" />
+                                Ver alumno
+                              </Link>
+                            </Button>
+                          ) : null}
                         </td>
                         <td className="px-3 py-2 text-slate-600">
                           <span
@@ -525,6 +636,16 @@ export default function CoachCurrentLoadTab({
                           >
                             {row.estatus || "Sin estado"}
                           </span>
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {formatDateEs(row.ultima_actividad)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-700">
+                          {calculateInactiveDays(row.ultima_actividad) == null
+                            ? "—"
+                            : Number(
+                                calculateInactiveDays(row.ultima_actividad),
+                              ).toLocaleString("es-ES")}
                         </td>
                       </tr>
                     ))

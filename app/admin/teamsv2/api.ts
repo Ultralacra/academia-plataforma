@@ -25,6 +25,8 @@ export type CoachStudent = {
   area?: string | null;
   fase?: string | null;
   estatus?: string | null;
+  inactividad?: number | null;
+  ultima_actividad?: string | null;
   updated_at?: string;
   created_at?: string;
 };
@@ -155,6 +157,12 @@ export async function getCoachCurrentLoad(coachCode: string, pageSize = 100) {
     area: r.area ?? null,
     fase: r.fase ?? r.etapa ?? null,
     estatus: r.estatus ?? r.estado ?? r.status ?? null,
+    inactividad:
+      r.inactividad != null && !Number.isNaN(Number(r.inactividad))
+        ? Number(r.inactividad)
+        : null,
+    ultima_actividad:
+      r.ultima_actividad ?? r.ultimaActividad ?? r.updated_at ?? null,
     updated_at: r.updated_at ?? null,
     created_at: r.created_at ?? null,
   })) as CoachStudent[];
