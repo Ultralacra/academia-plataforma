@@ -1790,7 +1790,9 @@ function PaymentsContent() {
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div className="grid gap-3 md:grid-cols-4 w-full">
                 <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">Buscar</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Buscar
+                  </Label>
                   <Input
                     placeholder="Nombre, código, estatus, moneda…"
                     value={search}
@@ -1798,7 +1800,9 @@ function PaymentsContent() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">Cliente código</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Cliente código
+                  </Label>
                   <Input
                     placeholder="KrTVx8TnoVSUcFZn"
                     value={clienteCodigo}
@@ -1807,7 +1811,9 @@ function PaymentsContent() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">Estatus</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Estatus
+                  </Label>
                   <Select
                     value={normalizePaymentStatus(estatus) || "__ALL__"}
                     onValueChange={(v) => {
@@ -1837,7 +1843,9 @@ function PaymentsContent() {
                   </Select>
                 </div>
                 <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">Método</Label>
+                  <Label className="text-xs text-muted-foreground">
+                    Método
+                  </Label>
                   <Input
                     placeholder="Transferencia / Tarjeta…"
                     value={metodo}
@@ -1879,7 +1887,9 @@ function PaymentsContent() {
 
             <div className="mt-3 grid gap-3 md:grid-cols-6">
               <div className="grid gap-1 md:col-span-1">
-                <Label className="text-xs text-muted-foreground">Fecha desde</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Fecha desde
+                </Label>
                 <Input
                   type="date"
                   value={fechaDesde}
@@ -1887,7 +1897,9 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label className="text-xs text-muted-foreground">Fecha hasta</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Fecha hasta
+                </Label>
                 <Input
                   type="date"
                   value={fechaHasta}
@@ -1895,7 +1907,9 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label className="text-xs text-muted-foreground">Monto min</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Monto min
+                </Label>
                 <Input
                   inputMode="numeric"
                   placeholder="0"
@@ -1904,7 +1918,9 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label className="text-xs text-muted-foreground">Monto max</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Monto max
+                </Label>
                 <Input
                   inputMode="numeric"
                   placeholder="5000"
@@ -1913,7 +1929,9 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label className="text-xs text-muted-foreground">Reserva min</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Reserva min
+                </Label>
                 <Input
                   inputMode="numeric"
                   placeholder="0"
@@ -1922,7 +1940,9 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label className="text-xs text-muted-foreground">Reserva max</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Reserva max
+                </Label>
                 <Input
                   inputMode="numeric"
                   placeholder="2000"
