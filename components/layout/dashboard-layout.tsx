@@ -372,7 +372,9 @@ function PaymentsDueBadge() {
       }
 
       if (paymentCode) {
-        router.push(`/admin/payments?payment=${encodeURIComponent(paymentCode)}`);
+        router.push(
+          `/admin/payments?payment=${encodeURIComponent(paymentCode)}`,
+        );
         return;
       }
 
