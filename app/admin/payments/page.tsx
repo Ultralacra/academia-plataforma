@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
@@ -1607,7 +1608,6 @@ function PaymentsContent() {
   useEffect(() => {
     // Carga inicial: traer todos los registros una sola vez
     void loadList({ page: 1, pageSize: 25 });
-    void loadMetrics();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1647,6 +1647,26 @@ function PaymentsContent() {
   }, [syncOpen, debouncedSyncUserSearch]);
 
   useEffect(() => {
+    if (activeTab !== "pagos") return;
+    void loadMetrics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeTab,
+    isStudent,
+    ownStudentCode,
+    estatus,
+    fechaDesde,
+    fechaHasta,
+    debouncedSearch,
+    debouncedClienteCodigo,
+    debouncedMetodo,
+    debouncedMontoMin,
+    debouncedMontoMax,
+    debouncedReservaMin,
+    debouncedReservaMax,
+  ]);
+
+  useEffect(() => {
     if (activeTab !== "cuotas") return;
     if (cuotasLoadedMonth === cuotasMonth) return;
     void loadCuotas({ page: 1 });
@@ -1672,10 +1692,20 @@ function PaymentsContent() {
         onValueChange={(v) => setActiveTab((v as any) || "pagos")}
         className="space-y-4"
       >
-        <TabsList>
-          <TabsTrigger value="pagos">Pagos</TabsTrigger>
+        <TabsList className="grid h-10 w-full max-w-md grid-cols-2 items-center rounded-xl border bg-muted/40 p-1">
+          <TabsTrigger
+            value="pagos"
+            className="h-8 rounded-lg whitespace-nowrap text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none"
+          >
+            Pagos
+          </TabsTrigger>
           {!isStudent ? (
-            <TabsTrigger value="cuotas">Cuotas por vencer</TabsTrigger>
+            <TabsTrigger
+              value="cuotas"
+              className="h-8 rounded-lg whitespace-nowrap text-sm data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-none"
+            >
+              Cuotas por vencer
+            </TabsTrigger>
           ) : null}
         </TabsList>
 
@@ -1686,17 +1716,15 @@ function PaymentsContent() {
                 <div className="text-sm font-semibold">Métricas</div>
                 <div className="text-xs text-muted-foreground">
                   Calculadas sobre todos los pagos que coinciden con los filtros
-                  actuales.
+                  actuales. Se actualizan automáticamente.
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={metricsLoading}
-                onClick={() => loadMetrics()}
-              >
-                {metricsLoading ? "Calculando…" : "Recalcular"}
-              </Button>
+              {metricsLoading ? (
+                <div className="inline-flex items-center gap-2 rounded-md border px-2 py-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Actualizando…
+                </div>
+              ) : null}
             </div>
 
             {metricsError ? (
@@ -1751,10 +1779,18 @@ function PaymentsContent() {
           </div>
 
           <div className="rounded-lg border bg-card p-4">
+            <div className="mb-3">
+              <div className="text-sm font-semibold">Filtros</div>
+              <div className="text-xs text-muted-foreground">
+                Usa primero búsqueda rápida y luego ajusta rango/montos si lo
+                necesitas.
+              </div>
+            </div>
+
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div className="grid gap-3 md:grid-cols-4">
+              <div className="grid gap-3 md:grid-cols-4 w-full">
                 <div className="grid gap-1">
-                  <Label>Buscar</Label>
+                  <Label className="text-xs text-muted-foreground">Buscar</Label>
                   <Input
                     placeholder="Nombre, código, estatus, moneda…"
                     value={search}
@@ -1762,7 +1798,7 @@ function PaymentsContent() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label>Cliente código</Label>
+                  <Label className="text-xs text-muted-foreground">Cliente código</Label>
                   <Input
                     placeholder="KrTVx8TnoVSUcFZn"
                     value={clienteCodigo}
@@ -1771,7 +1807,7 @@ function PaymentsContent() {
                   />
                 </div>
                 <div className="grid gap-1">
-                  <Label>Estatus</Label>
+                  <Label className="text-xs text-muted-foreground">Estatus</Label>
                   <Select
                     value={normalizePaymentStatus(estatus) || "__ALL__"}
                     onValueChange={(v) => {
@@ -1801,7 +1837,7 @@ function PaymentsContent() {
                   </Select>
                 </div>
                 <div className="grid gap-1">
-                  <Label>Método</Label>
+                  <Label className="text-xs text-muted-foreground">Método</Label>
                   <Input
                     placeholder="Transferencia / Tarjeta…"
                     value={metodo}
@@ -1810,20 +1846,40 @@ function PaymentsContent() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-start md:self-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSearch("");
+                    setClienteCodigo(isStudent ? ownStudentCode : "");
+                    setEstatus("");
+                    setMetodo("");
+                    setFechaDesde("");
+                    setFechaHasta("");
+                    setMontoMin("");
+                    setMontoMax("");
+                    setReservaMin("");
+                    setReservaMax("");
+                    setOnlyUnlinked(false);
+                    setPage(1);
+                  }}
+                  disabled={isLoading}
+                >
+                  Limpiar filtros
+                </Button>
                 <Button
                   variant="secondary"
                   onClick={() => loadList({ page: 1, pageSize })}
                   disabled={isLoading}
                 >
-                  {isLoading ? "Cargando…" : "Aplicar"}
+                  {isLoading ? "Cargando…" : "Refrescar datos"}
                 </Button>
               </div>
             </div>
 
             <div className="mt-3 grid gap-3 md:grid-cols-6">
               <div className="grid gap-1 md:col-span-1">
-                <Label>Fecha desde</Label>
+                <Label className="text-xs text-muted-foreground">Fecha desde</Label>
                 <Input
                   type="date"
                   value={fechaDesde}
@@ -1831,7 +1887,7 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label>Fecha hasta</Label>
+                <Label className="text-xs text-muted-foreground">Fecha hasta</Label>
                 <Input
                   type="date"
                   value={fechaHasta}
@@ -1839,7 +1895,7 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label>Monto min</Label>
+                <Label className="text-xs text-muted-foreground">Monto min</Label>
                 <Input
                   inputMode="numeric"
                   placeholder="0"
@@ -1848,7 +1904,7 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label>Monto max</Label>
+                <Label className="text-xs text-muted-foreground">Monto max</Label>
                 <Input
                   inputMode="numeric"
                   placeholder="5000"
@@ -1857,7 +1913,7 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label>Reserva min</Label>
+                <Label className="text-xs text-muted-foreground">Reserva min</Label>
                 <Input
                   inputMode="numeric"
                   placeholder="0"
@@ -1866,7 +1922,7 @@ function PaymentsContent() {
                 />
               </div>
               <div className="grid gap-1 md:col-span-1">
-                <Label>Reserva max</Label>
+                <Label className="text-xs text-muted-foreground">Reserva max</Label>
                 <Input
                   inputMode="numeric"
                   placeholder="2000"
@@ -2001,9 +2057,26 @@ function PaymentsContent() {
                                 ) : null}
                               </div>
                               {r.cliente_nombre && r.cliente_codigo ? (
-                                <span className="text-xs text-muted-foreground">
-                                  {fixMojibake(r.cliente_codigo)}
-                                </span>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>{fixMojibake(r.cliente_codigo)}</span>
+                                  {!isStudent && synced ? (
+                                    <Button
+                                      asChild
+                                      variant="link"
+                                      size="sm"
+                                      className="h-auto p-0 text-xs"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Link
+                                        href={`/admin/alumnos/${encodeURIComponent(
+                                          String(r.cliente_codigo ?? "").trim(),
+                                        )}/perfil`}
+                                      >
+                                        Ver perfil
+                                      </Link>
+                                    </Button>
+                                  ) : null}
+                                </div>
                               ) : null}
                             </div>
                           </TableCell>
