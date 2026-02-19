@@ -12,8 +12,6 @@ import TicketsByStudentDonut from "./components/TicketsByStudentDonut";
 import SlowestResponseCard from "./components/SlowestResponseCard";
 import TicketsByInformanteBar from "@/app/admin/teams/TicketsByInformanteBar";
 import SessionsMetrics from "./components/SessionsMetrics";
-import CoachStudentsListCard from "./components/CoachStudentsListCard";
-import CoachStudentsPhaseDistributionCard from "./components/CoachStudentsPhaseDistributionCard";
 // Tabla completa se deja en pestaña Detalles; no se muestra en Métricas
 
 const METRICS_CACHE_TTL_MS = 1000 * 60 * 10;
@@ -264,14 +262,6 @@ export default function PersonalMetrics({
 
       {!loading && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 w-full">
-            <CoachStudentsListCard
-              students={students}
-              title={`Alumnos de ${coachName || coachCode || "coach"}`}
-            />
-            <CoachStudentsPhaseDistributionCard students={students} />
-          </div>
-
           {/* Donas en 3 columnas */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full">
             <StudentsPhaseDonut
