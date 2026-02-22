@@ -57,6 +57,79 @@ const AREAS = [
   "MENTALIDAD",
 ] as const;
 
+const PREVIEW_TAREAS_IN_ADS_METADATA_ONLY = false;
+
+type AdsMetadataLike = {
+  id?: string | number | null;
+  entity?: string | null;
+  entity_id?: string | number | null;
+  created_at?: string | null;
+  payload?: any;
+};
+
+function normalizeId(value: unknown): string {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+function pickBestAdsMetadataForStudent(
+  items: AdsMetadataLike[],
+  alumnoId: string,
+) {
+  const alumnoIdStr = normalizeId(alumnoId);
+  const matches = (items || []).filter((m) => {
+    const entity = String(m?.entity ?? "").trim();
+    const entityId = normalizeId(m?.entity_id);
+    const payload = m?.payload ?? {};
+    const payloadAlumnoId = normalizeId(payload?.alumno_id);
+    const payloadAlumnoCodigo = normalizeId(payload?.alumno_codigo);
+    const payloadTag = normalizeId(payload?._tag);
+
+    const entityMatches =
+      entity === "ads_metrics" || payloadTag === "admin_alumnos_ads_metrics";
+    if (!entityMatches) return false;
+
+    return Boolean(
+      (entityId && entityId === alumnoIdStr) ||
+      (payloadAlumnoId && payloadAlumnoId === alumnoIdStr) ||
+      (payloadAlumnoCodigo &&
+        payloadAlumnoCodigo.toLowerCase() === alumnoIdStr.toLowerCase()),
+    );
+  });
+
+  const best =
+    [...matches].sort((a, b) => {
+      const aId = Number(a?.id);
+      const bId = Number(b?.id);
+      const aHasNum = Number.isFinite(aId);
+      const bHasNum = Number.isFinite(bId);
+      if (aHasNum && bHasNum) return bId - aId;
+      if (aHasNum) return -1;
+      if (bHasNum) return 1;
+      const aT =
+        Date.parse(String(a?.payload?._saved_at ?? a?.created_at ?? "")) || 0;
+      const bT =
+        Date.parse(String(b?.payload?._saved_at ?? b?.created_at ?? "")) || 0;
+      return bT - aT;
+    })[0] ?? null;
+
+  return { best, count: matches.length };
+}
+
+function parseTareasFromAdsPayload(payload: any): any[] {
+  const raw = payload?.tareas;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 type ObservacionesSectionProps = {
   ticketCode?: string;
   ticketCodeForCreate?: string;
@@ -113,8 +186,11 @@ export default function ObservacionesSection({
     }
   }, [ticketCode, alumnoId]);
 
-  const loadAdsMetadata = async () => {
-    if (!alumnoId) return setAdsMetadata(null);
+  const loadAdsMetadata = async (): Promise<AdsMetadataLike | null> => {
+    if (!alumnoId) {
+      setAdsMetadata(null);
+      return null;
+    }
     setAdsMetadataLoading(true);
     try {
       const token = getAuthToken();
@@ -135,39 +211,21 @@ export default function ObservacionesSection({
         throw new Error(txt || `HTTP ${res.status}`);
       }
       const json = (await res.json().catch(() => null)) as any;
-      const items = Array.isArray(json?.items) ? json.items : [];
-      // Buscar metadata de entidad 'ads_metrics' para este alumno
-      const matches = items.filter((m: any) => {
-        try {
-          if (String(m?.entity) !== "ads_metrics") return false;
-          if (String(m?.entity_id) === String(alumnoId)) return true;
-          const p = m?.payload || {};
-          if (p?.alumno_id && String(p.alumno_id) === String(alumnoId))
-            return true;
-          if (p?.alumno_codigo && String(p.alumno_codigo) === String(alumnoId))
-            return true;
-        } catch {}
-        return false;
-      });
-      if (matches.length === 0) {
+      const items = Array.isArray(json?.items)
+        ? (json.items as AdsMetadataLike[])
+        : [];
+      const { best } = pickBestAdsMetadataForStudent(items, alumnoId);
+      if (!best) {
         setAdsMetadata(null);
+        return null;
       } else {
-        // elegir la más reciente por payload._saved_at si existe, sino la de mayor id
-        matches.sort((a: any, b: any) => {
-          const ta = a?.payload?._saved_at
-            ? Date.parse(a.payload._saved_at)
-            : 0;
-          const tb = b?.payload?._saved_at
-            ? Date.parse(b.payload._saved_at)
-            : 0;
-          if (ta !== tb) return tb - ta;
-          return (b.id || 0) - (a.id || 0);
-        });
-        setAdsMetadata(matches[0]);
+        setAdsMetadata(best);
+        return best;
       }
     } catch (e) {
       console.error("Error cargando metadata ADS:", e);
       setAdsMetadata(null);
+      return null;
     } finally {
       setAdsMetadataLoading(false);
     }
@@ -283,22 +341,35 @@ export default function ObservacionesSection({
 
     setSubmitting(true);
     try {
-      // Subir nuevos archivos si hay
-      const uploadedUrls = await uploadFiles();
+      const isPreviewCreate = PREVIEW_TAREAS_IN_ADS_METADATA_ONLY && !editingId;
 
-      // Combinar URLs existentes con las nuevas
-      const allUrls = [...existingConstanciaUrls, ...uploadedUrls];
+      // En modo preview no subimos archivos al backend.
+      const uploadedUrls = isPreviewCreate ? [] : await uploadFiles();
+
+      // Combinar URLs existentes con las nuevas (o placeholders locales en preview)
+      const localFilePlaceholders = isPreviewCreate
+        ? constanciaFiles.map(
+            (f) => `local-file://${encodeURIComponent(f.name)}`,
+          )
+        : [];
+      const allUrls = [
+        ...existingConstanciaUrls,
+        ...uploadedUrls,
+        ...localFilePlaceholders,
+      ];
       const constanciaJson = JSON.stringify(allUrls);
 
+      const latestAdsMetadata = (await loadAdsMetadata()) ?? adsMetadata;
+
       // Preparar snapshot de metadata ADS para asociar a la observación
-      const adsSnapshot = adsMetadata
+      const adsSnapshot = latestAdsMetadata
         ? {
-            id: adsMetadata.id,
-            fase: adsMetadata.payload?.fase ?? null,
-            subfase: adsMetadata.payload?.subfase ?? null,
-            trascendencia: adsMetadata.payload?.subfase_color ?? null,
-            pauta_activa: adsMetadata.payload?.pauta_activa ?? null,
-            requiere_interv: adsMetadata.payload?.requiere_interv ?? null,
+            id: latestAdsMetadata.id,
+            fase: latestAdsMetadata.payload?.fase ?? null,
+            subfase: latestAdsMetadata.payload?.subfase ?? null,
+            trascendencia: latestAdsMetadata.payload?.subfase_color ?? null,
+            pauta_activa: latestAdsMetadata.payload?.pauta_activa ?? null,
+            requiere_interv: latestAdsMetadata.payload?.requiere_interv ?? null,
           }
         : null;
 
@@ -333,6 +404,70 @@ export default function ObservacionesSection({
           description: "Observación actualizada correctamente",
         });
       } else {
+        if (PREVIEW_TAREAS_IN_ADS_METADATA_ONLY) {
+          if (!latestAdsMetadata?.id) {
+            toast({
+              title: "Sin metadata ADS",
+              description:
+                "No se encontró metadata ADS del alumno para crear vista previa de tareas.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          const currentPayload = latestAdsMetadata.payload ?? {};
+          const tareasActuales = parseTareasFromAdsPayload(currentPayload);
+          const nowIso = new Date().toISOString();
+          const nuevaTarea = {
+            id: `tmp_tarea_${Date.now()}`,
+            fecha: fecha ? `${fecha}T12:00:00` : nowIso,
+            recomendacion,
+            area,
+            estado,
+            constancia: allUrls,
+            constancia_texto: constanciaTexto,
+            creada_desde: "admin_tareas_preview",
+            creado_por_id: coachId || null,
+            alumno_id: alumnoId || null,
+            ads_metadata_id: latestAdsMetadata.id,
+            created_at: nowIso,
+            updated_at: nowIso,
+          };
+
+          const payloadActualizado = {
+            ...currentPayload,
+            tareas: [...tareasActuales, nuevaTarea],
+            _preview_only: true,
+            _preview_generated_at: nowIso,
+          };
+
+          const metadataActualizadaPreview = {
+            ...latestAdsMetadata,
+            payload: payloadActualizado,
+            updated_at: nowIso,
+          };
+
+          console.group("[PREVIEW][ADS metadata + tareas]");
+          console.log("metadata_actual_id:", latestAdsMetadata.id);
+          console.log("tareas_previas_count:", tareasActuales.length);
+          console.log("nueva_tarea:", nuevaTarea);
+          console.log(
+            "metadata_actualizada_preview:",
+            metadataActualizadaPreview,
+          );
+          console.groupEnd();
+
+          toast({
+            title: "Preview generado",
+            description:
+              "Se imprimió en consola la metadata ADS actualizada con la nueva tarea (sin enviar al backend).",
+          });
+
+          setDialogOpen(false);
+          resetForm();
+          return;
+        }
+
         const effectiveTicketCode = ticketCodeForCreate ?? ticketCode ?? "";
         if (!effectiveTicketCode.trim()) {
           toast({
@@ -514,7 +649,7 @@ export default function ObservacionesSection({
           }
         >
           <Plus className="h-3.5 w-3.5" />
-          Nueva tarea
+          Nueva observación
         </Button>
       </div>
 
@@ -760,6 +895,17 @@ export default function ObservacionesSection({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div className="rounded-md border border-border bg-muted/40 p-2.5 text-xs">
+              <span className="text-muted-foreground">ID metadata ADS:</span>{" "}
+              <strong>
+                {adsMetadataLoading
+                  ? "Cargando..."
+                  : adsMetadata?.id != null
+                    ? String(adsMetadata.id)
+                    : "Sin metadata ADS"}
+              </strong>
             </div>
 
             <div className="space-y-2">

@@ -5,7 +5,9 @@ import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { useAuth } from "@/hooks/use-auth";
 import { ClipboardList } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import TareasCard from "../_parts/TareasCard";
+import TareasMetadataSection from "../_parts/TareasMetadataSection";
 
 export default function StudentTareasPage() {
   const params = useParams<{ code: string }>();
@@ -23,7 +25,20 @@ export default function StudentTareasPage() {
         </div>
 
         <div className="mt-4">
-          <TareasCard alumnoId={code} canEdit={canEdit} />
+          <Tabs defaultValue="tareas" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="tareas">Tareas</TabsTrigger>
+              <TabsTrigger value="observaciones">Observaciones</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="tareas">
+              <TareasMetadataSection alumnoCode={code} canEdit={canEdit} />
+            </TabsContent>
+
+            <TabsContent value="observaciones">
+              <TareasCard alumnoId={code} canEdit={canEdit} />
+            </TabsContent>
+          </Tabs>
         </div>
       </DashboardLayout>
     </ProtectedRoute>

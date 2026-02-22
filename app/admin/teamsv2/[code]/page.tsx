@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { Button } from "@/components/ui/button";
-import { Edit, Search } from "lucide-react";
+import { Edit, Eye, EyeOff, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { Label } from "@/components/ui/label";
@@ -17,6 +17,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { CoachStudentsModal } from "../coach-students-modal";
 import {
   getCoachByCode,
@@ -25,6 +35,8 @@ import {
   type CoachItem,
   getCoachStudents,
 } from "../api";
+import { changePassword } from "@/app/admin/users/api";
+import { getAuthToken } from "@/lib/auth";
 import { getOptions, type OpcionItem } from "@/app/admin/opciones/api";
 import {
   Table,
@@ -88,8 +100,20 @@ export default function CoachDetailPage({
     (process.env.NEXT_PUBLIC_CHAT_MAINTENANCE || "") === "1";
 
   const [open, setOpen] = useState(false);
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const isAdmin = (user?.role || "").toLowerCase() === "admin";
+  const role = (user?.role || "").toLowerCase();
+  const isEquipo = role === "equipo";
+  const isCoach = role === "coach";
+  const currentUserCode = String(user?.codigo || "")
+    .trim()
+    .toLowerCase();
+  const viewedCoachCode = String(code || "")
+    .trim()
+    .toLowerCase();
+  const isOwnProfile =
+    Boolean(currentUserCode) && currentUserCode === viewedCoachCode;
+  const canEditCoach = isAdmin || ((isEquipo || isCoach) && isOwnProfile);
   const [coach, setCoach] = useState<CoachItem | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +123,17 @@ export default function CoachDetailPage({
   const [saving, setSaving] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [confirmPasswordOpen, setConfirmPasswordOpen] = useState(false);
+  const [draftPassword, setDraftPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordSavingOpen, setPasswordSavingOpen] = useState(false);
+  const [passwordSuccessOpen, setPasswordSuccessOpen] = useState(false);
+  const [passwordSuccessData, setPasswordSuccessData] = useState<any | null>(
+    null,
+  );
+  const [passwordRedirectSeconds, setPasswordRedirectSeconds] = useState(3);
   const [teamsList, setTeamsList] = useState<CoachMini[]>([]);
   const [targetTeamCode, setTargetTeamCode] = useState<string | null>(null);
   const [studentsList, setStudentsList] = useState<StudentMini[]>([]);
@@ -220,6 +255,52 @@ export default function CoachDetailPage({
     })();
     return () => ctrl.abort();
   }, [code]);
+
+  useEffect(() => {
+    if (!passwordSuccessOpen) return;
+    if (passwordRedirectSeconds <= 0) {
+      setPasswordSuccessOpen(false);
+      logout();
+      return;
+    }
+    const t = window.setTimeout(() => {
+      setPasswordRedirectSeconds((s) => s - 1);
+    }, 1000);
+    return () => window.clearTimeout(t);
+  }, [passwordSuccessOpen, passwordRedirectSeconds, logout]);
+
+  async function sendPasswordChangedEmail(params: {
+    email: string;
+    name?: string | null;
+    username?: string | null;
+    newPassword: string;
+  }): Promise<boolean> {
+    try {
+      const token = getAuthToken();
+      const res = await fetch("/api/brevo/password-changed", {
+        method: "POST",
+        keepalive: true,
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          email: params.email,
+          name: params.name ?? "",
+          username: params.username ?? "",
+          newPassword: params.newPassword,
+        }),
+      });
+
+      if (!res.ok) {
+        const j: any = await res.json().catch(() => null);
+        throw new Error(j?.message || "No se pudo enviar el correo por Brevo");
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   // Optimización: Mapas para búsqueda rápida O(1)
   const teamsMap = useMemo(() => {
@@ -1589,9 +1670,22 @@ export default function CoachDetailPage({
                 ).toUpperCase()}
               </div>
               <div className="min-w-0">
-                <h2 className="text-2xl font-semibold leading-tight">
-                  {coach?.nombre ?? code}
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl font-semibold leading-tight">
+                    {coach?.nombre ?? code}
+                  </h2>
+                  {canEditCoach && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setEditOpen(true)}
+                      aria-label="Editar nombre"
+                      className="p-2"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
                 <div className="text-sm text-neutral-500 flex items-center gap-3">
                   <span>
                     Código: <span className="font-mono">{code}</span>
@@ -1620,19 +1714,24 @@ export default function CoachDetailPage({
                     </Badge>
                   )}
                 </div>
+                <div className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+                  <span>Contraseña: ••••••••</span>
+                  {canEditCoach && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPasswordOpen(true)}
+                      aria-label="Editar contraseña"
+                      className="p-2"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
             <div className="ml-auto flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setEditOpen((s) => !s)}
-                aria-label={editOpen ? "Cancelar" : "Editar"}
-                className="p-2"
-              >
-                <Edit className="h-4 w-4" />
-              </Button>
               {isAdmin && (
                 <Button
                   size="sm"
@@ -2457,7 +2556,7 @@ export default function CoachDetailPage({
                 <Input
                   value={draftNombre}
                   onChange={(e) => setDraftNombre(e.target.value)}
-                  disabled={!isAdmin}
+                  disabled={!canEditCoach}
                 />
               </div>
 
@@ -2467,7 +2566,7 @@ export default function CoachDetailPage({
                   className="w-full h-9 rounded-md border px-3 text-sm"
                   value={draftPuesto ?? ""}
                   onChange={(e) => setDraftPuesto(e.target.value)}
-                  disabled={optsLoading || !isAdmin}
+                  disabled={optsLoading || !canEditCoach}
                 >
                   <option value="">-- Ninguno --</option>
                   {puestoOptionsApi.map((o) => (
@@ -2484,7 +2583,7 @@ export default function CoachDetailPage({
                   className="w-full h-9 rounded-md border px-3 text-sm"
                   value={draftArea ?? ""}
                   onChange={(e) => setDraftArea(e.target.value)}
-                  disabled={optsLoading || !isAdmin}
+                  disabled={optsLoading || !canEditCoach}
                 >
                   <option value="">-- Ninguno --</option>
                   {areaOptionsApi.map((o) => (
@@ -2502,7 +2601,7 @@ export default function CoachDetailPage({
                   Cancelar
                 </Button>
                 <Button
-                  disabled={saving || !isAdmin}
+                  disabled={saving || !canEditCoach}
                   onClick={async () => {
                     try {
                       setSaving(true);
@@ -2528,6 +2627,201 @@ export default function CoachDetailPage({
                 </Button>
               </div>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={passwordOpen}
+          onOpenChange={(open) => {
+            setPasswordOpen(open);
+            if (!open) {
+              setDraftPassword("");
+              setShowPassword(false);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cambiar contraseña</DialogTitle>
+            </DialogHeader>
+
+            <div className="grid gap-3 py-2">
+              <div>
+                <Label className="text-xs">Nueva contraseña</Label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={draftPassword}
+                    onChange={(e) => setDraftPassword(e.target.value)}
+                    placeholder="Mínimo 8 caracteres"
+                    disabled={!canEditCoach || savingPassword}
+                    className="pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 p-0"
+                    onClick={() => setShowPassword((v) => !v)}
+                    disabled={!canEditCoach || savingPassword}
+                    aria-label={
+                      showPassword ? "Ocultar contraseña" : "Mostrar contraseña"
+                    }
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setPasswordOpen(false);
+                    setConfirmPasswordOpen(false);
+                    setDraftPassword("");
+                    setShowPassword(false);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={
+                    !canEditCoach ||
+                    savingPassword ||
+                    draftPassword.trim().length < 8
+                  }
+                  onClick={() => setConfirmPasswordOpen(true)}
+                >
+                  Guardar
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog
+          open={confirmPasswordOpen}
+          onOpenChange={setConfirmPasswordOpen}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Confirmar cambio de contraseña
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                ¿Seguro que deseas cambiar la contraseña de este coach? Se
+                cerrará la sesión para iniciar nuevamente con la nueva clave.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={async () => {
+                  try {
+                    if (!coach?.codigo) return;
+                    const passwordToSend = draftPassword.trim();
+                    setSavingPassword(true);
+                    setPasswordSavingOpen(true);
+                    const res = await changePassword(
+                      coach.codigo,
+                      passwordToSend,
+                    );
+                    const data = (res as any)?.data ?? null;
+
+                    const recipientEmail = String(data?.email ?? "").trim();
+                    let emailSent = false;
+                    if (recipientEmail) {
+                      emailSent = await sendPasswordChangedEmail({
+                        email: recipientEmail,
+                        name: String(data?.name ?? coach?.nombre ?? "").trim(),
+                        username: String(data?.email ?? "").trim(),
+                        newPassword: passwordToSend,
+                      });
+                    }
+
+                    if (recipientEmail && !emailSent) {
+                      toast({
+                        title: "Contraseña actualizada",
+                        description:
+                          "La clave se cambió, pero no se pudo enviar el correo de notificación.",
+                        variant: "destructive",
+                      });
+                    } else if (recipientEmail && emailSent) {
+                      toast({
+                        title: "Correo enviado",
+                        description:
+                          "Se notificó el cambio de contraseña al correo del coach.",
+                      });
+                    }
+
+                    setPasswordSuccessData(data);
+                    setPasswordRedirectSeconds(3);
+                    setPasswordSuccessOpen(true);
+                    setPasswordOpen(false);
+                    setConfirmPasswordOpen(false);
+                    setDraftPassword("");
+                    setShowPassword(false);
+                  } catch (err: any) {
+                    toast({
+                      title: err?.message ?? "Error al actualizar contraseña",
+                    });
+                  } finally {
+                    setPasswordSavingOpen(false);
+                    setSavingPassword(false);
+                  }
+                }}
+              >
+                Confirmar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        <Dialog open={passwordSavingOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Actualizando contraseña...</DialogTitle>
+            </DialogHeader>
+            <div className="py-2 flex items-center gap-3 text-sm text-neutral-600">
+              <Spinner className="h-4 w-4" />
+              Procesando cambio de clave y notificación por correo.
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={passwordSuccessOpen}
+          onOpenChange={(open) => {
+            if (!open) return;
+            setPasswordSuccessOpen(open);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Contraseña actualizada correctamente</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-2 text-sm text-neutral-700">
+              <p>
+                Usuario:{" "}
+                <strong>
+                  {passwordSuccessData?.name ?? coach?.nombre ?? "—"}
+                </strong>
+              </p>
+              <p>
+                Correo: <strong>{passwordSuccessData?.email ?? "—"}</strong>
+              </p>
+              <p>
+                En {passwordRedirectSeconds} segundos serás redirigido al login
+                para iniciar sesión con la nueva clave.
+              </p>
+            </div>
           </DialogContent>
         </Dialog>
 

@@ -10,6 +10,8 @@ import {
   User,
   Menu,
   Bell,
+  ClipboardList,
+  ArrowUpRight,
   Plus,
   RefreshCw,
   BadgeDollarSign,
@@ -21,12 +23,21 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { useTicketNotifications } from "@/components/hooks/useTicketNotifications";
 import { useSseNotifications } from "@/components/hooks/useSseNotifications";
 import { usePaymentDueNotifications } from "@/components/hooks/usePaymentDueNotifications";
 import { useAccessDueNotifications } from "@/components/hooks/useAccessDueNotifications";
 import { useCallback, useMemo, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -299,6 +310,328 @@ function NotificationsBadge() {
           >
             Ver más
           </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function TasksNotificationsBadge() {
+  const { user } = useAuth();
+  const isStudent = user?.role === "student";
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [tasksByStudent, setTasksByStudent] = useState<
+    Array<{
+      alumnoCodigo: string;
+      alumnoNombre: string;
+      total: number;
+      tareas: Array<{
+        id: string;
+        fecha: string;
+        fase: string;
+        resumen: string;
+      }>;
+    }>
+  >([]);
+
+  const totalTasks = useMemo(
+    () => tasksByStudent.reduce((acc, g) => acc + g.total, 0),
+    [tasksByStudent],
+  );
+
+  const loadTaskNotifications = useCallback(async () => {
+    setTasksLoading(true);
+    setTasksError(null);
+    try {
+      const alumnoCode = String(
+        (user as any)?.codigo ?? (user as any)?.code ?? "",
+      ).trim();
+      const alumnoId = String((user as any)?.id ?? "").trim();
+      const alumnoRef = alumnoCode || alumnoId;
+      if (isStudent && !alumnoRef) {
+        setTasksByStudent([]);
+        setTasksError("No se pudo identificar el alumno");
+        return;
+      }
+
+      const json = isStudent
+        ? await fetch(
+            `/api/alumnos/${encodeURIComponent(alumnoRef)}/metadata?entity=${encodeURIComponent("ads_metrics")}`,
+            {
+              method: "GET",
+              headers: {
+                ...(() => {
+                  try {
+                    const token = getAuthToken();
+                    return token ? { Authorization: `Bearer ${token}` } : {};
+                  } catch {
+                    return {};
+                  }
+                })(),
+              },
+              cache: "no-store",
+            },
+          ).then(async (res) => {
+            if (!res.ok) {
+              const txt = await res.text().catch(() => "");
+              throw new Error(txt || `HTTP ${res.status}`);
+            }
+            return res.json().catch(() => null);
+          })
+        : await apiFetch<any>("/metadata?entity=ads_metrics", {
+            method: "GET",
+          });
+
+      const rows: any[] = isStudent
+        ? Array.isArray(json?.items)
+          ? json.items
+          : []
+        : Array.isArray(json?.data)
+          ? json.data
+          : Array.isArray(json?.data?.data)
+            ? json.data.data
+            : Array.isArray(json)
+              ? json
+              : [];
+
+      const byStudent = new Map<
+        string,
+        {
+          alumnoCodigo: string;
+          alumnoNombre: string;
+          total: number;
+          tareas: Array<{
+            id: string;
+            fecha: string;
+            fase: string;
+            resumen: string;
+          }>;
+        }
+      >();
+
+      for (const record of rows) {
+        const payload = record?.payload ?? {};
+        const entity = String(record?.entity ?? "");
+        const tag = String(payload?._tag ?? "");
+        if (entity !== "ads_metrics" && tag !== "admin_alumnos_ads_metrics") {
+          continue;
+        }
+
+        const alumnoCodigo = String(payload?.alumno_codigo ?? "").trim();
+        const alumnoNombre =
+          String(payload?.alumno_nombre ?? "").trim() ||
+          alumnoCodigo ||
+          "Alumno";
+        if (!alumnoCodigo) continue;
+
+        const rawTasks = payload?.tareas;
+        const taskList = Array.isArray(rawTasks)
+          ? rawTasks
+          : typeof rawTasks === "string"
+            ? (() => {
+                try {
+                  const parsed = JSON.parse(rawTasks);
+                  return Array.isArray(parsed) ? parsed : [];
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
+
+        if (!taskList.length) continue;
+
+        const entry = byStudent.get(alumnoCodigo) ?? {
+          alumnoCodigo,
+          alumnoNombre,
+          total: 0,
+          tareas: [],
+        };
+
+        for (let i = 0; i < taskList.length; i++) {
+          const t = taskList[i] ?? {};
+          const dateRaw = String(t?.created_at ?? t?.fecha ?? "").trim();
+          const parsedDate = Date.parse(dateRaw);
+          const fecha = Number.isFinite(parsedDate)
+            ? new Date(parsedDate).toISOString()
+            : new Date(0).toISOString();
+
+          const campos =
+            t?.campos &&
+            typeof t.campos === "object" &&
+            !Array.isArray(t.campos)
+              ? t.campos
+              : {};
+          const resumen =
+            String(
+              campos?.doc_link ??
+                campos?.nombre ??
+                campos?.correo_compras ??
+                campos?.whatsapp ??
+                "Tarea enviada",
+            ).trim() || "Tarea enviada";
+
+          entry.tareas.push({
+            id: String(t?.id ?? `${alumnoCodigo}-${i}`),
+            fecha,
+            fase: String(t?.fase_formulario ?? "—"),
+            resumen,
+          });
+          entry.total += 1;
+        }
+
+        byStudent.set(alumnoCodigo, entry);
+      }
+
+      const grouped = [...byStudent.values()]
+        .map((g) => ({
+          ...g,
+          tareas: [...g.tareas].sort(
+            (a, b) => Date.parse(b.fecha) - Date.parse(a.fecha),
+          ),
+        }))
+        .sort((a, b) => {
+          const at = a.tareas[0]?.fecha ? Date.parse(a.tareas[0].fecha) : 0;
+          const bt = b.tareas[0]?.fecha ? Date.parse(b.tareas[0].fecha) : 0;
+          return bt - at;
+        });
+
+      setTasksByStudent(grouped);
+    } catch (e) {
+      console.error("Error cargando notificaciones de tareas:", e);
+      setTasksError("No se pudieron cargar las tareas");
+      setTasksByStudent([]);
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [isStudent, user]);
+
+  useEffect(() => {
+    loadTaskNotifications();
+    const id = window.setInterval(
+      () => {
+        loadTaskNotifications();
+      },
+      3 * 60 * 1000,
+    );
+    return () => window.clearInterval(id);
+  }, [loadTaskNotifications]);
+
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+      }}
+    >
+      <PopoverTrigger asChild>
+        <button
+          className="relative p-2 rounded-full hover:bg-muted/10"
+          title="Tareas enviadas"
+          type="button"
+        >
+          <ClipboardList
+            className={`h-4 w-4 ${tasksLoading ? "opacity-60" : ""}`}
+          />
+          {totalTasks > 0 && (
+            <span className="absolute -top-1 -right-1 bg-emerald-600 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center">
+              {totalTasks > 99 ? "99+" : totalTasks}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[26rem] p-3">
+        <div className="px-2 py-1 text-base font-semibold">Tareas enviadas</div>
+        <div className="mb-2 mt-1 flex items-center justify-between px-1">
+          <div className="text-xs text-muted-foreground">
+            Se actualiza automáticamente cada 3 minutos
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={loadTaskNotifications}
+            disabled={tasksLoading}
+          >
+            {tasksLoading ? "Actualizando..." : "Actualizar"}
+          </Button>
+        </div>
+
+        <div className="max-h-80 overflow-y-auto rounded-md border">
+          {tasksLoading && tasksByStudent.length === 0 ? (
+            <div className="p-3 text-xs text-muted-foreground">
+              Cargando tareas…
+            </div>
+          ) : tasksError ? (
+            <div className="p-3 text-xs text-muted-foreground">
+              {tasksError}
+            </div>
+          ) : tasksByStudent.length === 0 ? (
+            <div className="p-3 text-xs text-muted-foreground">
+              No hay tareas enviadas por alumnos
+            </div>
+          ) : (
+            <Accordion type="multiple" className="w-full">
+              {tasksByStudent.map((group) => (
+                <AccordionItem
+                  key={group.alumnoCodigo}
+                  value={group.alumnoCodigo}
+                >
+                  <AccordionTrigger className="px-3 py-2 text-sm hover:no-underline">
+                    <div className="flex min-w-0 flex-1 items-center justify-between gap-2 pr-2">
+                      <div className="truncate text-left font-medium">
+                        {group.alumnoNombre}
+                      </div>
+                      <span className="shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                        {group.total} tarea{group.total === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="space-y-1 px-3 pb-2">
+                      {group.tareas.map((task) => (
+                        <div
+                          key={`${group.alumnoCodigo}-${task.id}`}
+                          className="rounded-md border bg-muted/30 px-2.5 py-2"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs font-medium">
+                              Fase {task.fase}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {new Date(task.fecha).toLocaleString()}
+                            </div>
+                          </div>
+                          <div
+                            className="mt-1 truncate text-xs text-muted-foreground"
+                            title={task.resumen}
+                          >
+                            {task.resumen}
+                          </div>
+                        </div>
+                      ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-1 h-7 w-full justify-between text-xs"
+                        onClick={() => {
+                          setOpen(false);
+                          router.push(
+                            `/admin/alumnos/${encodeURIComponent(group.alumnoCodigo)}/tareas`,
+                          );
+                        }}
+                      >
+                        Ir a tareas del alumno
+                        <ArrowUpRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          )}
         </div>
       </PopoverContent>
     </Popover>
@@ -708,6 +1041,7 @@ export function DashboardLayout({
                 />
                 <PaymentsDueBadge />
                 <AccessDueBadge />
+                <TasksNotificationsBadge />
                 <NotificationsBadge />
               </div>
 
