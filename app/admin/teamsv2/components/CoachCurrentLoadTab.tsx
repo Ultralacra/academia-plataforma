@@ -252,7 +252,9 @@ export default function CoachCurrentLoadTab({
         setTicketRows(all);
       } catch (err: any) {
         if (cancelled) return;
-        setTicketsError(err?.message ?? "No se pudieron cargar métricas de tickets");
+        setTicketsError(
+          err?.message ?? "No se pudieron cargar métricas de tickets",
+        );
         setTicketRows([]);
       } finally {
         if (!cancelled) setTicketsLoading(false);
@@ -541,7 +543,8 @@ export default function CoachCurrentLoadTab({
             </div>
 
             <div className="rounded-md border bg-slate-50 px-3 py-2 text-xs text-slate-700">
-              Carga actual calculada según modo, fases incluidas y ajustes activos.
+              Carga actual calculada según modo, fases incluidas y ajustes
+              activos.
             </div>
 
             <div className="rounded-md border bg-white px-3 py-2 flex items-center justify-between gap-3">
@@ -726,7 +729,9 @@ export default function CoachCurrentLoadTab({
                 type="button"
                 onClick={() =>
                   setActivityWindowFilter((prev) =>
-                    prev === "INACTIVE_30_PLUS" ? "__ALL__" : "INACTIVE_30_PLUS",
+                    prev === "INACTIVE_30_PLUS"
+                      ? "__ALL__"
+                      : "INACTIVE_30_PLUS",
                   )
                 }
                 className={`h-9 rounded-md border px-3 text-sm font-medium transition-colors ${
@@ -760,7 +765,8 @@ export default function CoachCurrentLoadTab({
                 Alumnos con 30+ días: <strong>{inactive30PlusCount}</strong>
               </span>
               <span className="text-xs text-slate-600">
-                Alumnos activos (&lt;30 días): <strong>{activeRecentCount}</strong>
+                Alumnos activos (&lt;30 días):{" "}
+                <strong>{activeRecentCount}</strong>
               </span>
             </div>
           </div>
