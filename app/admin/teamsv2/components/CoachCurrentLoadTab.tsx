@@ -2,12 +2,35 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { getCoachCurrentLoad, type CoachStudent } from "../api";
+import {
+  getCoachCurrentLoad,
+  getCoachTickets,
+  type CoachStudent,
+  type CoachTicket,
+} from "../api";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
+import type { Ticket } from "@/lib/data-service";
+import { computeTicketMetrics } from "@/app/admin/tickets/components/metrics";
+import TicketsKPIs from "@/app/admin/tickets/components/kpis";
+import TicketsSummaryCard from "@/app/admin/tickets/components/tickets-summary-card";
 
 const MAX_COACH_LOAD = 35;
+
+function ymdLocal(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function defaultTicketsRange() {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(to.getDate() - 7);
+  return { from: ymdLocal(from), to: ymdLocal(to) };
+}
 
 function normalizeText(value?: string | null) {
   return String(value || "")
@@ -149,13 +172,23 @@ export default function CoachCurrentLoadTab({
   const [rows, setRows] = useState<CoachStudent[]>([]);
   const [phaseFilter, setPhaseFilter] = useState<string>("__ALL__");
   const [statusFilter, setStatusFilter] = useState<string>("__ALL__");
-  const [showOnly30PlusInactive, setShowOnly30PlusInactive] =
-    useState<boolean>(false);
+  const [activityWindowFilter, setActivityWindowFilter] = useState<
+    "__ALL__" | "INACTIVE_30_PLUS" | "ACTIVE_RECENT"
+  >("__ALL__");
   const [useTotalsForCapacity, setUseTotalsForCapacity] =
+    useState<boolean>(false);
+  const [subtractInactive30ForCapacity, setSubtractInactive30ForCapacity] =
     useState<boolean>(false);
   const [includedPhases, setIncludedPhases] = useState<Record<string, boolean>>(
     {},
   );
+  const [ticketFrom, setTicketFrom] = useState<string>(
+    defaultTicketsRange().from,
+  );
+  const [ticketTo, setTicketTo] = useState<string>(defaultTicketsRange().to);
+  const [ticketRows, setTicketRows] = useState<CoachTicket[]>([]);
+  const [ticketsLoading, setTicketsLoading] = useState<boolean>(false);
+  const [ticketsError, setTicketsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!coachCode || !enabled) return;
@@ -186,6 +219,98 @@ export default function CoachCurrentLoadTab({
       cancelled = true;
     };
   }, [coachCode, enabled]);
+
+  useEffect(() => {
+    if (!coachCode || !enabled || !ticketFrom || !ticketTo) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        setTicketsLoading(true);
+        setTicketsError(null);
+
+        const pageSize = 100;
+        let page = 1;
+        let totalPages = 1;
+        const all: CoachTicket[] = [];
+
+        while (!cancelled && page <= totalPages && page <= 50) {
+          const res = await getCoachTickets({
+            coach: coachCode,
+            page,
+            pageSize,
+            fechaDesde: ticketFrom,
+            fechaHasta: ticketTo,
+          });
+
+          all.push(...(Array.isArray(res.data) ? res.data : []));
+          totalPages = Number(res.totalPages ?? 1) || 1;
+          page += 1;
+        }
+
+        if (cancelled) return;
+        setTicketRows(all);
+      } catch (err: any) {
+        if (cancelled) return;
+        setTicketsError(err?.message ?? "No se pudieron cargar métricas de tickets");
+        setTicketRows([]);
+      } finally {
+        if (!cancelled) setTicketsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [coachCode, enabled, ticketFrom, ticketTo]);
+
+  const ticketsForMetrics = useMemo<Ticket[]>(() => {
+    return ticketRows.map((t) => {
+      const estadoNormalizado = String(t.estado ?? "")
+        .replace(/_/g, " ")
+        .toUpperCase();
+
+      const ultimoEstadoObj =
+        t.ultimo_estado && typeof t.ultimo_estado === "object"
+          ? {
+              estatus:
+                String((t.ultimo_estado as any).estatus ?? "").replace(
+                  /_/g,
+                  " ",
+                ) || null,
+              fecha: (t.ultimo_estado as any).fecha ?? null,
+            }
+          : null;
+
+      return {
+        id: Number(t.id),
+        id_externo: t.codigo ?? null,
+        nombre: t.nombre ?? null,
+        alumno_nombre: t.alumno_nombre ?? null,
+        informante: t.informante ?? null,
+        informante_nombre: t.informante_nombre ?? null,
+        estado: estadoNormalizado || null,
+        tipo: t.tipo ?? null,
+        creacion: t.created_at ?? new Date().toISOString(),
+        deadline: t.deadline ?? null,
+        equipo_urls: [],
+        coaches: [
+          {
+            codigo_equipo: coachCode,
+            nombre: coachName ?? null,
+            puesto: null,
+            area: null,
+          },
+        ],
+        ultimo_estado: ultimoEstadoObj,
+      } as Ticket;
+    });
+  }, [ticketRows, coachCode, coachName]);
+
+  const ticketMetrics = useMemo(
+    () => computeTicketMetrics(ticketsForMetrics),
+    [ticketsForMetrics],
+  );
 
   const dedupedRows = useMemo(() => {
     const map = new Map<string, CoachStudent>();
@@ -302,18 +427,32 @@ export default function CoachCurrentLoadTab({
   );
 
   const filteredRows = useMemo(() => {
-    return dedupedRows.filter((row) => {
+    const base = dedupedRows.filter((row) => {
       const fase = String(row.fase || "Sin fase").trim() || "Sin fase";
       const status = classifyStatus(row.estatus);
       const inactiveDays = calculateInactiveDays(row.ultima_actividad);
       const phaseOk = phaseFilter === "__ALL__" || fase === phaseFilter;
       const statusOk = statusFilter === "__ALL__" || status === statusFilter;
-      const inactivityOk =
-        !showOnly30PlusInactive ||
-        (inactiveDays != null && Number(inactiveDays) >= 30);
-      return phaseOk && statusOk && inactivityOk;
+      const activityOk =
+        activityWindowFilter === "__ALL__"
+          ? true
+          : activityWindowFilter === "INACTIVE_30_PLUS"
+            ? inactiveDays != null && Number(inactiveDays) >= 30
+            : inactiveDays != null && Number(inactiveDays) < 30;
+      return phaseOk && statusOk && activityOk;
     });
-  }, [dedupedRows, phaseFilter, statusFilter, showOnly30PlusInactive]);
+
+    return base.sort((a, b) => {
+      const faseA = String(a.fase || "Sin fase").trim() || "Sin fase";
+      const faseB = String(b.fase || "Sin fase").trim() || "Sin fase";
+      const cmpFase = faseA.localeCompare(faseB, "es", { sensitivity: "base" });
+      if (cmpFase !== 0) return cmpFase;
+
+      const nombreA = String(a.alumno_nombre || "").trim();
+      const nombreB = String(b.alumno_nombre || "").trim();
+      return nombreA.localeCompare(nombreB, "es", { sensitivity: "base" });
+    });
+  }, [dedupedRows, phaseFilter, statusFilter, activityWindowFilter]);
 
   const inactive30PlusCount = useMemo(
     () =>
@@ -324,14 +463,27 @@ export default function CoachCurrentLoadTab({
     [dedupedRows],
   );
 
+  const activeRecentCount = useMemo(
+    () =>
+      dedupedRows.filter((row) => {
+        const days = calculateInactiveDays(row.ultima_actividad);
+        return days != null && days < 30;
+      }).length,
+    [dedupedRows],
+  );
+
   const trackedTotal =
     trackedLoad.ONBOARDING +
     trackedLoad.F1 +
     trackedLoad.F2 +
     trackedLoad.OTRAS;
-  const availableSlots = Math.max(MAX_COACH_LOAD - trackedTotal, 0);
-  const isFull = trackedTotal >= MAX_COACH_LOAD;
-  const loadPct = Math.min(100, (trackedTotal / MAX_COACH_LOAD) * 100);
+  const effectiveTrackedTotal = Math.max(
+    trackedTotal - (subtractInactive30ForCapacity ? inactive30PlusCount : 0),
+    0,
+  );
+  const availableSlots = Math.max(MAX_COACH_LOAD - effectiveTrackedTotal, 0);
+  const isFull = effectiveTrackedTotal >= MAX_COACH_LOAD;
+  const loadPct = Math.min(100, (effectiveTrackedTotal / MAX_COACH_LOAD) * 100);
 
   return (
     <div className="space-y-4">
@@ -367,7 +519,7 @@ export default function CoachCurrentLoadTab({
                 }`}
               >
                 {isFull
-                  ? `Carga llena (${trackedTotal}/${MAX_COACH_LOAD})`
+                  ? `Carga llena (${effectiveTrackedTotal}/${MAX_COACH_LOAD})`
                   : `Carga disponible (${availableSlots} cupos)`}
               </span>
             </div>
@@ -389,7 +541,7 @@ export default function CoachCurrentLoadTab({
             </div>
 
             <div className="rounded-md border bg-slate-50 px-3 py-2 text-xs text-slate-700">
-              Carga actual calculada según modo y fases incluidas.
+              Carga actual calculada según modo, fases incluidas y ajustes activos.
             </div>
 
             <div className="rounded-md border bg-white px-3 py-2 flex items-center justify-between gap-3">
@@ -407,6 +559,24 @@ export default function CoachCurrentLoadTab({
                   setUseTotalsForCapacity(Boolean(checked))
                 }
                 aria-label="Calcular carga con totales"
+              />
+            </div>
+
+            <div className="rounded-md border bg-white px-3 py-2 flex items-center justify-between gap-3">
+              <div className="text-xs text-slate-700">
+                Restar alumnos con inactividad 30+ días en carga actual
+                <div className="text-[11px] text-slate-500">
+                  {subtractInactive30ForCapacity
+                    ? `Se restan ${inactive30PlusCount} alumno(s) con inactividad de 30+ días`
+                    : "No se resta inactividad 30+ días"}
+                </div>
+              </div>
+              <Switch
+                checked={subtractInactive30ForCapacity}
+                onCheckedChange={(checked) =>
+                  setSubtractInactive30ForCapacity(Boolean(checked))
+                }
+                aria-label="Restar inactividad 30+ días en carga actual"
               />
             </div>
 
@@ -554,21 +724,96 @@ export default function CoachCurrentLoadTab({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShowOnly30PlusInactive((v) => !v)}
+                onClick={() =>
+                  setActivityWindowFilter((prev) =>
+                    prev === "INACTIVE_30_PLUS" ? "__ALL__" : "INACTIVE_30_PLUS",
+                  )
+                }
                 className={`h-9 rounded-md border px-3 text-sm font-medium transition-colors ${
-                  showOnly30PlusInactive
+                  activityWindowFilter === "INACTIVE_30_PLUS"
                     ? "border-rose-300 bg-rose-50 text-rose-800"
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
-                {showOnly30PlusInactive
+                {activityWindowFilter === "INACTIVE_30_PLUS"
                   ? "Mostrando inactividad 30+ días"
                   : "Ver inactividad 30+ días"}
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActivityWindowFilter((prev) =>
+                    prev === "ACTIVE_RECENT" ? "__ALL__" : "ACTIVE_RECENT",
+                  )
+                }
+                className={`h-9 rounded-md border px-3 text-sm font-medium transition-colors ${
+                  activityWindowFilter === "ACTIVE_RECENT"
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {activityWindowFilter === "ACTIVE_RECENT"
+                  ? "Mostrando activos (<30 días)"
+                  : "Ver activos (<30 días)"}
               </button>
               <span className="text-xs text-slate-600">
                 Alumnos con 30+ días: <strong>{inactive30PlusCount}</strong>
               </span>
+              <span className="text-xs text-slate-600">
+                Alumnos activos (&lt;30 días): <strong>{activeRecentCount}</strong>
+              </span>
             </div>
+          </div>
+
+          <div className="rounded-lg border bg-white p-4 space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900">
+                  Métricas de tickets del coach
+                </h4>
+                <p className="text-xs text-slate-500">
+                  Mismo resumen de tickets, integrado en la carga actual.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-600">Desde</label>
+                  <input
+                    type="date"
+                    value={ticketFrom}
+                    onChange={(e) => setTicketFrom(e.target.value)}
+                    className="h-9 rounded-md border px-2 text-sm"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-slate-600">Hasta</label>
+                  <input
+                    type="date"
+                    value={ticketTo}
+                    onChange={(e) => setTicketTo(e.target.value)}
+                    className="h-9 rounded-md border px-2 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {ticketsLoading ? (
+              <div className="rounded-md border bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                Cargando métricas de tickets...
+              </div>
+            ) : ticketsError ? (
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {ticketsError}
+              </div>
+            ) : (
+              <>
+                <TicketsKPIs metrics={ticketMetrics} loading={ticketsLoading} />
+                <TicketsSummaryCard
+                  tickets={ticketsForMetrics}
+                  metrics={ticketMetrics}
+                />
+              </>
+            )}
           </div>
 
           <div className="rounded-lg border overflow-hidden">

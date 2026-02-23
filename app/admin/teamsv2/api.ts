@@ -175,6 +175,7 @@ export type CoachTicket = {
   id: number;
   codigo: string;
   nombre: string | null;
+  tipo?: string | null;
   id_alumno: string | null;
   alumno_nombre: string | null;
   informante?: string | null;
@@ -233,6 +234,7 @@ export async function getCoachTickets(params: {
     id: Number(r.id),
     codigo: String(r.codigo ?? ""),
     nombre: r.nombre ?? null,
+    tipo: r.tipo ?? null,
     id_alumno: r.id_alumno ?? null,
     alumno_nombre: r.alumno_nombre ?? null,
     informante: r.informante ?? r.informado_por ?? null,

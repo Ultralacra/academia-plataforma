@@ -47,6 +47,12 @@ function toInt(value: string | null, fallback: number, min: number, max: number)
   return Math.min(max, Math.max(min, Math.trunc(n)));
 }
 
+function getBrevoTimeoutMs() {
+  const raw = Number(process.env.BREVO_EVENTS_TIMEOUT_MS ?? 15000);
+  if (!Number.isFinite(raw)) return 15000;
+  return Math.min(60000, Math.max(5000, Math.trunc(raw)));
+}
+
 function canonicalEvent(value: unknown): string {
   const raw = String(value ?? "")
     .trim()
@@ -230,6 +236,7 @@ export async function GET(req: Request) {
   const email = String(url.searchParams.get("email") ?? "").trim();
   const event = canonicalEvent(url.searchParams.get("event") ?? "");
   const subjectType = canonicalSubjectType(url.searchParams.get("subjectType") ?? "all");
+  const timeoutMs = getBrevoTimeoutMs();
 
   const buildBrevoUrl = (queryLimit: number, queryOffset: number) => {
     const brevoUrl = new URL("https://api.brevo.com/v3/smtp/statistics/events");
@@ -256,7 +263,7 @@ export async function GET(req: Request) {
             "api-key": apiKey,
           },
           cache: "no-store",
-          signal: AbortSignal.timeout(8_000),
+          signal: AbortSignal.timeout(timeoutMs),
         });
 
         const text = await res.text().catch(() => "");
