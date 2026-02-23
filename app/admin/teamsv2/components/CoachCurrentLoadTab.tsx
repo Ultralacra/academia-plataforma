@@ -474,13 +474,38 @@ export default function CoachCurrentLoadTab({
     [dedupedRows],
   );
 
+  const inactivity30PlusInIncludedPhases = useMemo(() => {
+    const byPhase: Record<string, number> = {};
+
+    for (const row of dedupedRows) {
+      const fase = String(row.fase || "Sin fase").trim() || "Sin fase";
+      if (!includedPhases[fase]) continue;
+
+      if (!useTotalsForCapacity) {
+        const status = classifyStatus(row.estatus);
+        if (status !== "ACTIVO") continue;
+      }
+
+      const days = calculateInactiveDays(row.ultima_actividad);
+      if (days == null || days < 30) continue;
+
+      byPhase[fase] = (byPhase[fase] ?? 0) + 1;
+    }
+
+    const total = Object.values(byPhase).reduce((acc, n) => acc + n, 0);
+    return { total, byPhase };
+  }, [dedupedRows, includedPhases, useTotalsForCapacity]);
+
   const trackedTotal =
     trackedLoad.ONBOARDING +
     trackedLoad.F1 +
     trackedLoad.F2 +
     trackedLoad.OTRAS;
   const effectiveTrackedTotal = Math.max(
-    trackedTotal - (subtractInactive30ForCapacity ? inactive30PlusCount : 0),
+    trackedTotal -
+      (subtractInactive30ForCapacity
+        ? inactivity30PlusInIncludedPhases.total
+        : 0),
     0,
   );
   const availableSlots = Math.max(MAX_COACH_LOAD - effectiveTrackedTotal, 0);
@@ -570,15 +595,33 @@ export default function CoachCurrentLoadTab({
                 Restar alumnos con inactividad 30+ días en carga actual
                 <div className="text-[11px] text-slate-500">
                   {subtractInactive30ForCapacity
-                    ? `Se restan ${inactive30PlusCount} alumno(s) con inactividad de 30+ días`
+                    ? `Se restan ${inactivity30PlusInIncludedPhases.total} alumno(s) con inactividad de 30+ días en fases contempladas`
                     : "No se resta inactividad 30+ días"}
                 </div>
               </div>
               <Switch
                 checked={subtractInactive30ForCapacity}
-                onCheckedChange={(checked) =>
-                  setSubtractInactive30ForCapacity(Boolean(checked))
-                }
+                onCheckedChange={(checked) => {
+                  const next = Boolean(checked);
+                  setSubtractInactive30ForCapacity(next);
+
+                  const fasesContempladas = allPhaseBreakdown
+                    .filter((item) => Boolean(includedPhases[item.fase]))
+                    .map((item) => item.fase);
+
+                  console.log("[teamsv2][carga] switch inactividad 30+", {
+                    coachCode,
+                    activo: next,
+                    modoCarga: useTotalsForCapacity
+                      ? "totales"
+                      : "solo_activos",
+                    alumnosInactividad30Plus:
+                      inactivity30PlusInIncludedPhases.total,
+                    alumnosInactividad30PlusPorFase:
+                      inactivity30PlusInIncludedPhases.byPhase,
+                    fasesContempladas,
+                  });
+                }}
                 aria-label="Restar inactividad 30+ días en carga actual"
               />
             </div>
