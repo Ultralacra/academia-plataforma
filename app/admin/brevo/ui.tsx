@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -108,7 +109,7 @@ export function BrevoClientPage() {
 
   const [template, setTemplate] = useState<"welcome" | "reminder">("welcome");
   const [origin, setOrigin] = useState<string>(
-    "https://academia.valinkgroup.com"
+    "https://academia.valinkgroup.com",
   );
   const [appName, setAppName] = useState<string>("Sistema Hotselling");
   const [subject, setSubject] = useState<string>("");
@@ -125,7 +126,7 @@ export function BrevoClientPage() {
   const [sentEmails, setSentEmails] = useState<Set<string>>(() => new Set());
 
   const [selectedEmails, setSelectedEmails] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(),
   );
 
   const [knownNamesByEmail, setKnownNamesByEmail] = useState<
@@ -133,10 +134,10 @@ export function BrevoClientPage() {
   >(() => ({}));
 
   const [credsByEmail, setCredsByEmail] = useState<Record<string, Creds>>(
-    () => ({})
+    () => ({}),
   );
   const [revealedPasswords, setRevealedPasswords] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(),
   );
 
   const [sending, setSending] = useState<boolean>(false);
@@ -222,10 +223,10 @@ export function BrevoClientPage() {
               .map((x) =>
                 String(x ?? "")
                   .trim()
-                  .toLowerCase()
+                  .toLowerCase(),
               )
-              .filter((x) => isEmail(x))
-          )
+              .filter((x) => isEmail(x)),
+          ),
         );
       }
     } catch {
@@ -237,7 +238,7 @@ export function BrevoClientPage() {
     try {
       localStorage.setItem(
         SENT_EMAILS_STORAGE_KEY,
-        JSON.stringify(Array.from(sentEmails))
+        JSON.stringify(Array.from(sentEmails)),
       );
     } catch {
       // ignore
@@ -278,7 +279,7 @@ export function BrevoClientPage() {
     const visibleRows = rows.filter((r) => {
       if (!search.trim()) return true;
       const haystack = `${rowName(r)} ${String(r["Correo"] ?? "")} ${String(
-        r["Usuario App"] ?? ""
+        r["Usuario App"] ?? "",
       )}`.toLowerCase();
       return haystack.includes(search.trim().toLowerCase());
     });
@@ -291,7 +292,7 @@ export function BrevoClientPage() {
 
     const selectedWithCreds = selectedList.reduce(
       (acc, email) => acc + (credsByEmail[email]?.password ? 1 : 0),
-      0
+      0,
     );
     const totalCreds = Object.keys(credsByEmail).length;
     return { pageWithCreds, selectedWithCreds, totalCreds };
@@ -302,7 +303,7 @@ export function BrevoClientPage() {
     if (!q) return rows;
     return rows.filter((r) => {
       const haystack = `${rowName(r)} ${String(r["Correo"] ?? "")} ${String(
-        r["Usuario App"] ?? ""
+        r["Usuario App"] ?? "",
       )}`.toLowerCase();
       return haystack.includes(q);
     });
@@ -345,7 +346,7 @@ export function BrevoClientPage() {
     if (visibleEmails.length === 0) return false;
     const selectedCount = visibleEmails.reduce(
       (acc, email) => acc + (selectedEmails.has(email) ? 1 : 0),
-      0
+      0,
     );
     if (selectedCount === 0) return false;
     if (selectedCount === visibleEmails.length) return true;
@@ -362,7 +363,7 @@ export function BrevoClientPage() {
         : [];
 
       const alreadyHasStatic = loaded.some(
-        (r) => (rowRecipientEmail(r) ?? "") === STATIC_BREVO_EMAIL
+        (r) => (rowRecipientEmail(r) ?? "") === STATIC_BREVO_EMAIL,
       );
 
       const loadedWithStatic = alreadyHasStatic
@@ -426,7 +427,7 @@ export function BrevoClientPage() {
         : [];
 
       const alreadyHasStatic = rows.some(
-        (r) => (rowRecipientEmail(r as BrevoRow) ?? "") === STATIC_BREVO_EMAIL
+        (r) => (rowRecipientEmail(r as BrevoRow) ?? "") === STATIC_BREVO_EMAIL,
       );
       const rowsWithStatic = alreadyHasStatic
         ? rows
@@ -578,7 +579,12 @@ export function BrevoClientPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Brevo · Envío de correos</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle>Brevo · Envío de correos</CardTitle>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/admin/brevo/events">Ver estado de correos</Link>
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="space-y-2">

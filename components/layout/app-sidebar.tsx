@@ -73,6 +73,11 @@ const adminItems: MenuItem[] = [
   // { title: "Brevo", url: "/admin/brevo", icon: Mail },
   { title: "Roles", url: "/admin/access/roles", icon: Settings },
   { title: "CRM", url: "/admin/crm", icon: Users },
+  {
+    title: "Estado correos",
+    url: "/admin/brevo/events",
+    icon: Mail,
+  },
 
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
@@ -312,6 +317,11 @@ export function AppSidebar() {
               { title: "Pagos", url: "/admin/payments", icon: CreditCard },
               { title: "CRM", url: "/admin/crm", icon: Users },
               { title: "Usuarios sistema", url: "/admin/users", icon: Users },
+              {
+                title: "Estado correos",
+                url: "/admin/brevo/events",
+                icon: Mail,
+              },
             ]
           : [
               {
@@ -355,6 +365,11 @@ export function AppSidebar() {
               { title: "Pagos", url: "/admin/payments", icon: CreditCard },
               { title: "CRM", url: "/admin/crm", icon: Users },
               { title: "Usuarios sistema", url: "/admin/users", icon: Users },
+              {
+                title: "Estado correos",
+                url: "/admin/brevo/events",
+                icon: Mail,
+              },
             ];
         // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
         return (

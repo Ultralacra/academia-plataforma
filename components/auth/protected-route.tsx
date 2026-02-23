@@ -119,6 +119,12 @@ export function ProtectedRoute({
       segments.length === 2;
     // Permitir gestión de usuarios del sistema
     const isUsersPath = segments[0] === "admin" && segments[1] === "users";
+    // Permitir vista de estado de correos Brevo
+    const isBrevoEventsPath =
+      segments[0] === "admin" &&
+      segments[1] === "brevo" &&
+      (segments.length === 2 ||
+        (segments.length === 3 && segments[2] === "events"));
     // Esperamos /admin/teamsv2/[code] como vista principal
     const isTeamDetail =
       segments[0] === "admin" &&
@@ -140,7 +146,8 @@ export function ProtectedRoute({
       !isCrm &&
       !isTeamsMetrics &&
       !isStudentsMetrics &&
-      !isUsersPath
+      !isUsersPath &&
+      !isBrevoEventsPath
     ) {
       if (pathname !== target) {
         router.replace(target);
