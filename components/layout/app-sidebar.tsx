@@ -17,6 +17,7 @@ import {
   ThumbsUp,
   ClipboardList,
   Mail,
+  CircleHelp,
 } from "lucide-react";
 import {
   Sidebar,
@@ -77,6 +78,11 @@ const adminItems: MenuItem[] = [
     title: "Estado correos",
     url: "/admin/brevo/events",
     icon: Mail,
+  },
+  {
+    title: "Preguntas frecuentes",
+    url: "/admin/preguntas-frecuentes",
+    icon: CircleHelp,
   },
 
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
@@ -322,6 +328,11 @@ export function AppSidebar() {
                 url: "/admin/brevo/events",
                 icon: Mail,
               },
+              {
+                title: "Preguntas frecuentes",
+                url: "/admin/preguntas-frecuentes",
+                icon: CircleHelp,
+              },
             ]
           : [
               {
@@ -369,6 +380,11 @@ export function AppSidebar() {
                 title: "Estado correos",
                 url: "/admin/brevo/events",
                 icon: Mail,
+              },
+              {
+                title: "Preguntas frecuentes",
+                url: "/admin/preguntas-frecuentes",
+                icon: CircleHelp,
               },
             ];
         // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno

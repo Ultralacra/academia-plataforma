@@ -125,6 +125,10 @@ export function ProtectedRoute({
       segments[1] === "brevo" &&
       (segments.length === 2 ||
         (segments.length === 3 && segments[2] === "events"));
+    const isPreguntasFrecuentesPath =
+      segments[0] === "admin" &&
+      segments[1] === "preguntas-frecuentes" &&
+      segments.length === 2;
     // Esperamos /admin/teamsv2/[code] como vista principal
     const isTeamDetail =
       segments[0] === "admin" &&
@@ -147,7 +151,8 @@ export function ProtectedRoute({
       !isTeamsMetrics &&
       !isStudentsMetrics &&
       !isUsersPath &&
-      !isBrevoEventsPath
+      !isBrevoEventsPath &&
+      !isPreguntasFrecuentesPath
     ) {
       if (pathname !== target) {
         router.replace(target);
