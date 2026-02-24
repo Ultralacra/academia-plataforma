@@ -340,6 +340,16 @@ export function AppSidebar() {
                 icon: Mail,
               },
               {
+                title: "Plantillas de mails",
+                url: "/admin/plantillas-mails",
+                icon: FileText,
+              },
+              {
+                title: "Mensajes seguimiento",
+                url: "/admin/mensajes-seguimiento",
+                icon: MessageSquare,
+              },
+              {
                 title: "Preguntas frecuentes",
                 url: "/admin/preguntas-frecuentes",
                 icon: CircleHelp,
@@ -391,6 +401,16 @@ export function AppSidebar() {
                 title: "Estado correos",
                 url: "/admin/brevo/events",
                 icon: Mail,
+              },
+              {
+                title: "Plantillas de mails",
+                url: "/admin/plantillas-mails",
+                icon: FileText,
+              },
+              {
+                title: "Mensajes seguimiento",
+                url: "/admin/mensajes-seguimiento",
+                icon: MessageSquare,
               },
               {
                 title: "Preguntas frecuentes",
