@@ -71,7 +71,7 @@ function normalizeRecipients(value: unknown): Recipient[] {
   return Array.from(map.values());
 }
 
-async function requireAdmin(token: string | null) {
+async function requireStaff(token: string | null) {
   // Permitir envío en entornos de desarrollo o si la variable de entorno
   // `BREVO_ALLOW_NOAUTH` está a 'true'. Esto facilita pruebas locales cuando
   // no se dispone de una sesión admin. No use esto en producción.
@@ -97,10 +97,13 @@ async function requireAdmin(token: string | null) {
       return { ok: false, status: res.status, error: "No autorizado" };
     }
 
-    const me: any = await res.json();
-    const role = String(me?.role ?? "").toLowerCase();
-    if (role !== "admin") {
-      return { ok: false, status: 403, error: "Solo admin" };
+    const raw: any = await res.json().catch(() => null);
+    const me: any = raw?.data ?? raw ?? {};
+    const role = String(me?.role ?? me?.tipo ?? "")
+      .trim()
+      .toLowerCase();
+    if (!["admin", "coach", "equipo"].includes(role)) {
+      return { ok: false, status: 403, error: "Solo staff" };
     }
 
     return { ok: true as const, me };
@@ -121,7 +124,7 @@ export async function POST(req: Request) {
   const tokenFromCookie = cookies().get("token")?.value ?? null;
   const token = tokenFromHeader || tokenFromCookie;
 
-  const gate = await requireAdmin(token);
+  const gate = await requireStaff(token);
   if (!gate.ok) return json({ status: "error", message: gate.error }, gate.status);
   const apiKey = String(
     process.env.BREVO_API_KEY ?? process.env.NEXT_PUBLIC_BREVO_API_KEY ?? "",

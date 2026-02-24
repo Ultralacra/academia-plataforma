@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useAuth } from "@/hooks/use-auth";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { apiFetch } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import {
@@ -742,9 +743,14 @@ export default function StudentPaymentsPage() {
         },
       } as any;
 
+      const token = getAuthToken();
+
       const res = await fetch("/api/brevo/send-test", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify(body),
         credentials: "include",
       });
