@@ -66,11 +66,24 @@ export async function POST(req: Request) {
   const gate = await requireStaff(token);
   if (!gate.ok) return json({ status: "error", message: gate.error }, gate.status);
 
-  const apiKey = String(process.env.BREVO_API_KEY ?? "").trim();
-  if (!apiKey) return json({ status: "error", message: "Falta BREVO_API_KEY" }, 500);
+  const apiKey = String(
+    process.env.BREVO_API_KEY ?? process.env.NEXT_PUBLIC_BREVO_API_KEY ?? "",
+  ).trim();
+  if (!apiKey) {
+    return json(
+      { status: "error", message: "Falta BREVO_API_KEY / NEXT_PUBLIC_BREVO_API_KEY" },
+      500,
+    );
+  }
 
-  const fromEmail = process.env.BREVO_FROM_EMAIL || "no-responder@sistemahotselling.com";
-  const fromName = process.env.BREVO_FROM_NAME || "Sistema Hotselling";
+  const fromEmail =
+    process.env.BREVO_FROM_EMAIL ||
+    process.env.NEXT_PUBLIC_BREVO_FROM_EMAIL ||
+    "no-responder@sistemahotselling.com";
+  const fromName =
+    process.env.BREVO_FROM_NAME ||
+    process.env.NEXT_PUBLIC_BREVO_FROM_NAME ||
+    "Sistema Hotselling";
 
   let body: any = null;
   try {

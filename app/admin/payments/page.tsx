@@ -65,6 +65,7 @@ import { fetchUsers, type SysUser } from "../users/api";
 import { toast } from "@/components/ui/use-toast";
 import {
   CreditCard,
+  Download,
   Plus,
   Pencil,
   Trash2,
@@ -73,6 +74,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import * as XLSX from "xlsx";
 
 function useDebouncedValue<T>(value: T, delayMs: number) {
   const [debounced, setDebounced] = useState<T>(value);
@@ -125,6 +127,34 @@ function formatDateOnly(value: string | null | undefined) {
     month: "2-digit",
     day: "2-digit",
   }).format(d);
+}
+
+function csvEscape(value: unknown) {
+  const raw = value == null ? "" : String(value);
+  if (/[",\n\r]/.test(raw)) return `"${raw.replace(/"/g, '""')}"`;
+  return raw;
+}
+
+function buildCsv(rows: Record<string, unknown>[]) {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const lines = [headers.map((h) => csvEscape(h)).join(",")];
+  for (const row of rows) {
+    lines.push(headers.map((h) => csvEscape(row[h])).join(","));
+  }
+  return `\uFEFF${lines.join("\n")}`;
+}
+
+function triggerDownload(filename: string, content: BlobPart, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function getMonthValue(d: Date) {
@@ -533,6 +563,116 @@ function PaymentsContent() {
   const [cuotasLoading, setCuotasLoading] = useState(false);
   const [cuotasError, setCuotasError] = useState<string | null>(null);
   const cuotasReqIdRef = useRef(0);
+
+  function exportPayments(format: "csv" | "xlsx") {
+    if (!filtered.length) {
+      toast({
+        title: "Sin datos",
+        description: "No hay pagos para exportar con el filtro actual.",
+      });
+      return;
+    }
+
+    const data = filtered.map((r) => ({
+      codigo: r.codigo,
+      cliente_codigo: r.cliente_codigo || "",
+      cliente_nombre: fixMojibake(r.cliente_nombre || ""),
+      monto: r.monto ?? "",
+      monto_reserva: r.monto_reserva ?? "",
+      moneda: r.moneda || "",
+      estatus: formatPaymentStatusLabel(r.estatus),
+      metodo: r.metodo || "",
+      modalidad: r.modalidad || "",
+      referencia: r.referencia || "",
+      concepto: fixMojibake(r.concepto || ""),
+      notas: fixMojibake(r.notas || ""),
+      fecha_pago: formatDateOnly(r.fecha_pago),
+      creado: formatDateTime(r.created_at),
+      actualizado: formatDateTime(r.updated_at),
+    }));
+
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    if (format === "csv") {
+      const csv = buildCsv(data);
+      triggerDownload(
+        `pagos-filtrados-${stamp}.csv`,
+        csv,
+        "text/csv;charset=utf-8;",
+      );
+    } else {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Pagos");
+      XLSX.writeFile(wb, `pagos-filtrados-${stamp}.xlsx`);
+    }
+
+    toast({
+      title: "Exportación lista",
+      description: `Se exportaron ${data.length} pagos filtrados.`,
+    });
+  }
+
+  function exportCuotas(format: "csv" | "xlsx") {
+    if (!filteredCuotasRows.length) {
+      toast({
+        title: "Sin datos",
+        description: "No hay cuotas para exportar con el filtro actual.",
+      });
+      return;
+    }
+
+    const now = new Date();
+    const data = filteredCuotasRows.map((r) => {
+      const effectiveStatus = getEffectiveCuotaStatus(
+        r?.estatus,
+        r?.fecha_pago,
+        now,
+      );
+      const cuotaDate = r.fecha_pago ? new Date(r.fecha_pago) : null;
+      const dias =
+        cuotaDate && !Number.isNaN(cuotaDate.getTime())
+          ? diffDays(cuotaDate, now)
+          : "";
+
+      return {
+        payment_codigo: r.payment_codigo || "",
+        cuota_codigo: r.cuota_codigo || r.codigo || "",
+        cliente_codigo: r.cliente_codigo || "",
+        cliente_nombre: fixMojibake(r.cliente_nombre || ""),
+        monto: r.monto ?? "",
+        moneda: r.moneda || "",
+        fecha_pago: formatDateOnly(r.fecha_pago),
+        dias: dias,
+        estatus: formatPaymentStatusLabel(effectiveStatus),
+        metodo: r.metodo || "",
+        referencia: r.referencia || "",
+        concepto: fixMojibake(r.concepto || ""),
+        notas: fixMojibake(r.notas || ""),
+        creado: formatDateTime(r.created_at),
+        actualizado: formatDateTime(r.updated_at),
+      };
+    });
+
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-");
+    if (format === "csv") {
+      const csv = buildCsv(data);
+      triggerDownload(
+        `cuotas-filtradas-${stamp}.csv`,
+        csv,
+        "text/csv;charset=utf-8;",
+      );
+    } else {
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Cuotas");
+      XLSX.writeFile(wb, `cuotas-filtradas-${stamp}.xlsx`);
+    }
+
+    toast({
+      title: "Exportación lista",
+      description: `Se exportaron ${data.length} cuotas filtradas.`,
+    });
+  }
 
   const cuotasStatusOptions = useMemo(() => {
     const set = new Set<string>();
@@ -1993,6 +2133,24 @@ function PaymentsContent() {
                 <Button
                   variant="outline"
                   size="sm"
+                  onClick={() => exportPayments("csv")}
+                  disabled={filtered.length === 0}
+                >
+                  <Download className="mr-1 h-4 w-4" />
+                  CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportPayments("xlsx")}
+                  disabled={filtered.length === 0}
+                >
+                  <Download className="mr-1 h-4 w-4" />
+                  Excel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
                   disabled={page <= 1}
                   onClick={() => setPage(Math.max(1, page - 1))}
                 >
@@ -2228,6 +2386,24 @@ function PaymentsContent() {
                   {cuotasTotal ? ` (total API: ${cuotasTotal})` : ""}
                 </div>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportCuotas("csv")}
+                    disabled={filteredCuotasRows.length === 0}
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportCuotas("xlsx")}
+                    disabled={filteredCuotasRows.length === 0}
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    Excel
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
