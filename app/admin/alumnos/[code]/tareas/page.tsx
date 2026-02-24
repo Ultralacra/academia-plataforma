@@ -13,7 +13,9 @@ export default function StudentTareasPage() {
   const params = useParams<{ code: string }>();
   const code = decodeURIComponent(params?.code ?? "");
   const { user } = useAuth();
-  const canEdit = (user?.role ?? "").toLowerCase() !== "student";
+  const role = (user?.role ?? "").toLowerCase();
+  const canEdit = role === "student" || role === "admin";
+  const canDelete = role === "student" || role === "admin";
 
   return (
     <ProtectedRoute allowedRoles={["admin", "coach", "student", "equipo"]}>
@@ -32,7 +34,11 @@ export default function StudentTareasPage() {
             </TabsList>
 
             <TabsContent value="tareas">
-              <TareasMetadataSection alumnoCode={code} canEdit={canEdit} />
+              <TareasMetadataSection
+                alumnoCode={code}
+                canEdit={canEdit}
+                canDelete={canDelete}
+              />
             </TabsContent>
 
             <TabsContent value="observaciones">

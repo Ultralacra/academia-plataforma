@@ -11,6 +11,7 @@ import { StudentChatSnackbar } from "@/components/chat/StudentChatSnackbar";
 import { SseTicketSnackbar } from "@/components/hooks/SseTicketSnackbar";
 import { PwaPushClient } from "@/components/pwa/PwaPushClient";
 import { UpdateEmailOnLoginModal } from "@/components/auth/UpdateEmailOnLoginModal";
+import { StudentInactivityModal } from "@/components/auth/StudentInactivityModal";
 
 function isPublicNoNotificationsPath(pathname: string) {
   if (!pathname) return false;
@@ -38,6 +39,7 @@ export function ConditionalAppOverlays({
       <StudentChatSnackbar />
       <SseTicketSnackbar />
       <UpdateEmailOnLoginModal />
+      <StudentInactivityModal />
       {children}
     </SseNotificationsProvider>
   );

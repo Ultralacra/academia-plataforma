@@ -13,10 +13,28 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import Spinner from "@/components/ui/spinner";
 import { toast } from "@/components/ui/use-toast";
 import { getAuthToken } from "@/lib/auth";
-import { CalendarDays, Edit2, FileText, RefreshCw } from "lucide-react";
+import {
+  CalendarDays,
+  Copy,
+  Edit2,
+  ExternalLink,
+  FileText,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 
 type MetadataRecord = {
   id?: string | number | null;
@@ -144,15 +162,26 @@ function formatFieldLabel(value: string): string {
     .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
+function isLikelyUrl(value: string) {
+  const v = String(value || "").trim();
+  return /^https?:\/\//i.test(v);
+}
+
 export default function TareasMetadataSection({
   alumnoCode,
   canEdit,
+  canDelete = false,
 }: {
   alumnoCode: string;
   canEdit: boolean;
+  canDelete?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
+  const [confirmDeleteTaskId, setConfirmDeleteTaskId] = useState<string | null>(
+    null,
+  );
   const [metadata, setMetadata] = useState<MetadataRecord | null>(null);
   const [tasks, setTasks] = useState<TareaItem[]>([]);
   const [editOpen, setEditOpen] = useState(false);
@@ -263,7 +292,7 @@ export default function TareasMetadataSection({
 
       const token = getAuthToken();
       const res = await fetch(
-        `/api/metadata/${encodeURIComponent(String(metadata.id))}`,
+        `/api/alumnos/${encodeURIComponent(alumnoCode)}/metadata/update-ads`,
         {
           method: "PUT",
           headers: {
@@ -300,6 +329,84 @@ export default function TareasMetadataSection({
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!metadata?.id) {
+      toast({
+        title: "Sin metadata",
+        description: "No existe metadata ADS para este alumno",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDeletingTaskId(taskId);
+    try {
+      const currentPayload = metadata.payload ?? {};
+      const currentTasks = parseTareas(currentPayload);
+      const updatedTasks = currentTasks.filter((task) => task.id !== taskId);
+
+      const payloadUpdated = {
+        ...currentPayload,
+        tareas: updatedTasks,
+        _saved_at: new Date().toISOString(),
+      };
+
+      const updateBody = {
+        id: metadata.id,
+        entity: metadata.entity ?? "ads_metrics",
+        entity_id: metadata.entity_id ?? alumnoCode,
+        payload: payloadUpdated,
+      };
+
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/alumnos/${encodeURIComponent(alumnoCode)}/metadata/update-ads`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(updateBody),
+        },
+      );
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+
+      toast({
+        title: "Tarea eliminada",
+        description: "Se eliminó la tarea del historial.",
+      });
+
+      await loadMetadataAndTasks();
+    } catch (error) {
+      console.error("Error eliminando tarea en metadata ADS:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo eliminar la tarea",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingTaskId(null);
+    }
+  };
+
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Copiado", description: "Link copiado al portapapeles." });
+    } catch {
+      toast({
+        title: "No se pudo copiar",
+        description: "Intenta copiar manualmente el enlace.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -362,6 +469,8 @@ export default function TareasMetadataSection({
           {sortedTasks.map((task, idx) => {
             const taskDate = formatDate(task.created_at ?? task.fecha);
             const taskFields = Object.entries(task.campos);
+            const docLink = String(task.campos?.doc_link ?? "").trim();
+            const hasDocLink = Boolean(docLink);
 
             return (
               <Card
@@ -381,18 +490,68 @@ export default function TareasMetadataSection({
                         <CalendarDays className="h-3 w-3" />
                         {taskDate}
                       </Badge>
+                      {hasDocLink ? (
+                        <div className="inline-flex items-center gap-1 rounded-md border border-border bg-background px-1.5 py-0.5">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                            onClick={() => {
+                              if (isLikelyUrl(docLink)) {
+                                window.open(
+                                  docLink,
+                                  "_blank",
+                                  "noopener,noreferrer",
+                                );
+                              }
+                            }}
+                            aria-label="Abrir doc link"
+                            title="Abrir doc link"
+                            disabled={!isLikelyUrl(docLink)}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6"
+                            onClick={() => handleCopy(docLink)}
+                            aria-label="Copiar doc link"
+                            title="Copiar doc link"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      ) : null}
                     </div>
 
-                    {canEdit && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openEdit(task)}
-                      >
-                        <Edit2 className="mr-1 h-3.5 w-3.5" />
-                        Editar
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {canEdit && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => openEdit(task)}
+                          className="h-8 w-8 p-0"
+                          aria-label="Editar tarea"
+                          title="Editar tarea"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setConfirmDeleteTaskId(task.id)}
+                          disabled={deletingTaskId === task.id}
+                          className="text-destructive hover:text-destructive"
+                          aria-label="Eliminar tarea"
+                          title="Eliminar tarea"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
 
                   {taskFields.length > 0 ? (
@@ -405,9 +564,39 @@ export default function TareasMetadataSection({
                           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                             {formatFieldLabel(key)}
                           </p>
-                          <p className="mt-1 break-words text-sm text-foreground">
-                            {value || "—"}
-                          </p>
+                          {key === "doc_link" && value ? (
+                            <div className="mt-1 flex items-center gap-2">
+                              {isLikelyUrl(value) ? (
+                                <a
+                                  href={value}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline"
+                                >
+                                  Abrir link
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                </a>
+                              ) : (
+                                <p className="break-words text-sm text-foreground">
+                                  {value}
+                                </p>
+                              )}
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => handleCopy(value)}
+                                aria-label="Copiar doc link"
+                                title="Copiar doc link"
+                              >
+                                <Copy className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="mt-1 break-words text-sm text-foreground">
+                              {value || "—"}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -490,6 +679,40 @@ export default function TareasMetadataSection({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(confirmDeleteTaskId)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDeleteTaskId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Estás seguro de borrar la tarea?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará la tarea seleccionada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={Boolean(deletingTaskId)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={Boolean(deletingTaskId)}
+              onClick={async (e) => {
+                e.preventDefault();
+                if (!confirmDeleteTaskId) return;
+                await handleDeleteTask(confirmDeleteTaskId);
+                setConfirmDeleteTaskId(null);
+              }}
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

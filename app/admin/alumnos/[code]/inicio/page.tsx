@@ -36,6 +36,7 @@ import { toast } from "@/components/ui/use-toast";
 import {
   Home,
   ArrowRight,
+  Copy,
   ExternalLink,
   MessageSquare,
   CalendarClock,
@@ -272,6 +273,22 @@ export default function StudentInicioPage() {
   const [savingTaskPreview, setSavingTaskPreview] = useState(false);
   const [taskSavedSuccessOpen, setTaskSavedSuccessOpen] = useState(false);
 
+  const isLikelyUrl = (value: string) =>
+    /^https?:\/\//i.test(String(value || "").trim());
+
+  const copyTaskValue = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({ title: "Copiado", description: "Link copiado al portapapeles." });
+    } catch {
+      toast({
+        title: "No se pudo copiar",
+        description: "Intenta copiar manualmente el enlace.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const phaseNumber = normalizePhase(studentStage);
   const effectivePhase = selectedPhase ? Number(selectedPhase) : phaseNumber;
   const phaseFields = getFieldsByPhase(effectivePhase);
@@ -297,6 +314,75 @@ export default function StudentInicioPage() {
       ? (json.items as AdsMetadataLike[])
       : [];
     return pickBestAdsMetadataForStudent(items, alumnoCode);
+  };
+
+  const createDefaultAdsMetadataForStudent = async (
+    alumnoCode: string,
+  ): Promise<AdsMetadataLike | null> => {
+    if (!alumnoCode) return null;
+
+    const nowIso = new Date().toISOString();
+    const createdById = (user as any)?.id ?? null;
+    const createdByCode =
+      (user as any)?.codigo ??
+      (user as any)?.code ??
+      (user as any)?.user_code ??
+      null;
+    const createdByName =
+      (user as any)?.nombre ??
+      (user as any)?.name ??
+      (user as any)?.email ??
+      null;
+
+    const payload = {
+      alumno_codigo: alumnoCode,
+      alumno_nombre: studentName || "",
+      auto_roas: true,
+      auto_eff: true,
+      pauta_activa: false,
+      requiere_interv: false,
+      roas: "",
+      tareas: [],
+      creado_por_id: createdById,
+      creado_por_codigo: createdByCode,
+      creado_por_nombre: createdByName,
+      _tag: "admin_alumnos_ads_metrics",
+      _view: "/admin/alumnos/[code]/ads",
+      _saved_at: nowIso,
+    };
+
+    const token = getAuthToken();
+    const createRes = await fetch(
+      `/api/alumnos/${encodeURIComponent(alumnoCode)}/metadata/ensure-ads`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          entity_id: alumnoCode,
+          payload,
+        }),
+      },
+    );
+
+    if (!createRes.ok) {
+      const txt = await createRes.text().catch(() => "");
+      throw new Error(txt || `HTTP ${createRes.status}`);
+    }
+
+    const createdJson = (await createRes.json().catch(() => null)) as any;
+    const created: AdsMetadataLike = {
+      id: createdJson?.id ?? null,
+      entity: "ads_metrics",
+      entity_id: alumnoCode,
+      payload,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    return created;
   };
 
   useEffect(() => {
@@ -378,7 +464,17 @@ export default function StudentInicioPage() {
     try {
       const nowIso = new Date().toISOString();
       const phase = selectedPhase || (phaseNumber ? String(phaseNumber) : "");
-      const latestMetadata = await fetchLatestAdsMetadata(code);
+      let latestMetadata = await fetchLatestAdsMetadata(code);
+
+      if (!latestMetadata?.id) {
+        latestMetadata = await createDefaultAdsMetadataForStudent(code);
+        toast({
+          title: "Metadata ADS creada",
+          description:
+            "Se creó una metadata base con ROAS automático para poder guardar la tarea.",
+        });
+      }
+
       const latestMetadataId =
         latestMetadata?.id != null ? String(latestMetadata.id) : "";
       if (latestMetadataId !== adsMetadataId) {
@@ -428,7 +524,7 @@ export default function StudentInicioPage() {
 
       const token = getAuthToken();
       const updateRes = await fetch(
-        `/api/metadata/${encodeURIComponent(String(latestMetadata.id))}`,
+        `/api/alumnos/${encodeURIComponent(code)}/metadata/update-ads`,
         {
           method: "PUT",
           headers: {
@@ -467,6 +563,17 @@ export default function StudentInicioPage() {
         title: "Tarea guardada",
         description: "Se actualizó la metadata ADS correctamente.",
       });
+    } catch (error: any) {
+      const detail =
+        typeof error?.message === "string" && error.message.trim()
+          ? error.message
+          : "No se pudo guardar la tarea";
+      toast({
+        title: "Error",
+        description: detail,
+        variant: "destructive",
+      });
+      console.error("Error guardando tarea en metadata ADS:", error);
     } finally {
       setSavingTaskPreview(false);
     }
@@ -680,6 +787,32 @@ export default function StudentInicioPage() {
                             }))
                           }
                         />
+                        {field.key === "doc_link" && taskValues.doc_link ? (
+                          <div className="flex items-center gap-2 pt-1">
+                            {isLikelyUrl(taskValues.doc_link) ? (
+                              <a
+                                href={taskValues.doc_link}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-xs text-primary underline-offset-4 hover:underline"
+                              >
+                                Abrir link
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            ) : null}
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7"
+                              onClick={() => copyTaskValue(taskValues.doc_link)}
+                              aria-label="Copiar doc link"
+                              title="Copiar doc link"
+                            >
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>

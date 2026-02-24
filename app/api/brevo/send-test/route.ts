@@ -4,6 +4,11 @@ import { buildUrl } from "@/lib/api-config";
 import { buildWelcomeEmail } from "@/lib/email-templates/welcome";
 import { buildReminderEmail } from "@/lib/email-templates/reminder";
 import { buildPaymentReminderEmail } from "@/lib/email-templates/payment-reminder";
+import {
+  applyTemplateOverrideWithVars,
+  fetchMailTemplateOverride,
+  interpolateTemplateVariables,
+} from "@/app/api/brevo/_shared/template-runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -148,14 +153,7 @@ export async function POST(req: Request) {
     return json({ status: "error", message: "No hay destinatarios válidos" }, 400);
   }
 
-  const renderSubject = (name?: string) => {
-    const n = String(name ?? "").trim();
-    if (!subjectOverride) return "";
-    // Soporta placeholder opcional
-    return subjectOverride.includes("{{name}}")
-      ? subjectOverride.replace(/\{\{name\}\}/g, n)
-      : subjectOverride;
-  };
+  const templateOverride = await fetchMailTemplateOverride(token, template);
 
   if (!apiKey) {
     return json({ status: "error", message: "Falta BREVO_API_KEY" }, 500);
@@ -200,14 +198,33 @@ export async function POST(req: Request) {
       });
     }
 
-    const resolvedSubject = renderSubject(r.name) || email.subject;
+    const paymentData = body?.payment ?? {};
+    const vars = {
+      appName,
+      template,
+      recipientName: String(r.name ?? "").trim(),
+      recipientEmail: r.email,
+      recipientUsername: resolvedUsername || r.email,
+      recipientPassword: resolvedPassword,
+      portalLink: resolvedPortalLink || `${String(origin || "").replace(/\/$/, "")}/login`,
+      origin,
+      cuotaCodigo: String(paymentData?.cuotaCodigo ?? "").trim(),
+      dueDate: String(paymentData?.dueDate ?? "").trim(),
+      amount: paymentData?.amount ?? "",
+    };
+
+    const rendered = applyTemplateOverrideWithVars(email, templateOverride, vars);
+    const subjectFromBody = subjectOverride
+      ? interpolateTemplateVariables(subjectOverride, vars)
+      : "";
+    const resolvedSubject = subjectFromBody || rendered.subject;
 
     const brevoPayload = {
       sender: { name: fromName, email: fromEmail },
       to: [{ email: r.email, ...(r.name ? { name: r.name } : {}) }],
       subject: resolvedSubject,
-      htmlContent: email.html,
-      textContent: email.text,
+      htmlContent: rendered.html,
+      textContent: rendered.text,
     };
 
     const res = await fetch("https://api.brevo.com/v3/smtp/email", {

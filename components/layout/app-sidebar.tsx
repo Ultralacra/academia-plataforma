@@ -18,6 +18,7 @@ import {
   ClipboardList,
   Mail,
   CircleHelp,
+  FileText,
 } from "lucide-react";
 import {
   Sidebar,
@@ -80,9 +81,19 @@ const adminItems: MenuItem[] = [
     icon: Mail,
   },
   {
+    title: "Plantillas de mails",
+    url: "/admin/plantillas-mails",
+    icon: FileText,
+  },
+  {
     title: "Preguntas frecuentes",
     url: "/admin/preguntas-frecuentes",
     icon: CircleHelp,
+  },
+  {
+    title: "Mensajes seguimiento",
+    url: "/admin/mensajes-seguimiento",
+    icon: MessageSquare,
   },
 
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
