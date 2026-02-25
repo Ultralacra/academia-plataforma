@@ -578,7 +578,7 @@ export default function PlantillasMailsPage() {
   }, [openEditor, editorTab, form?.key]);
 
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <div className="space-y-5 max-w-full overflow-x-hidden pb-4">
           <div className="rounded-xl border bg-card p-5 sm:p-6">

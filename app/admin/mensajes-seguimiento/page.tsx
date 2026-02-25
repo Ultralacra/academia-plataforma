@@ -406,7 +406,7 @@ export default function MensajesSeguimientoPage() {
   }
 
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <div className="space-y-6 p-4 md:p-6">
           <div className="space-y-2">

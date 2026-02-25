@@ -129,6 +129,17 @@ export function ProtectedRoute({
       segments[0] === "admin" &&
       segments[1] === "preguntas-frecuentes" &&
       segments.length === 2;
+    // Permitir vista de plantillas de mails
+    const isPlantillasMailsPath =
+      segments[0] === "admin" && segments[1] === "plantillas-mails";
+    // Permitir vista de mensajes de seguimiento
+    const isMensajesSeguimientoPath =
+      segments[0] === "admin" && segments[1] === "mensajes-seguimiento";
+    // Permitir métricas de chat
+    const isMetricsChatPath =
+      segments[0] === "admin" &&
+      segments[1] === "metrics" &&
+      segments[2] === "chat";
     // Esperamos /admin/teamsv2/[code] como vista principal
     const isTeamDetail =
       segments[0] === "admin" &&
@@ -152,7 +163,10 @@ export function ProtectedRoute({
       !isStudentsMetrics &&
       !isUsersPath &&
       !isBrevoEventsPath &&
-      !isPreguntasFrecuentesPath
+      !isPreguntasFrecuentesPath &&
+      !isPlantillasMailsPath &&
+      !isMensajesSeguimientoPath &&
+      !isMetricsChatPath
     ) {
       if (pathname !== target) {
         router.replace(target);

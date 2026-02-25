@@ -7,6 +7,7 @@ export interface User {
   role: UserRole;
   codigo?: string;
   tipo?: string;
+  area?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -136,6 +137,7 @@ class AuthService {
         role: this.normalizeRole(payload?.role, payload?.tipo),
         codigo: payload?.codigo,
         tipo: payload?.tipo,
+        area: payload?.area,
         created_at: payload?.created_at,
         updated_at: payload?.updated_at,
       };
@@ -209,6 +211,7 @@ class AuthService {
             role: this.normalizeRole(payload?.role, payload?.tipo),
             codigo: payload?.codigo,
             tipo: payload?.tipo,
+            area: payload?.area,
             created_at: payload?.created_at,
             updated_at: payload?.updated_at,
           };

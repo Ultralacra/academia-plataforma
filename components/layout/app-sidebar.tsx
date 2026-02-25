@@ -418,11 +418,31 @@ export function AppSidebar() {
                 icon: CircleHelp,
               },
             ];
+
+        // Filtrar ítems según el área del usuario equipo
+        const userArea = (user?.area || "").toUpperCase();
+        const filteredBase =
+          userArea === "ADS"
+            ? base.filter(
+                (item) =>
+                  ![
+                    "CRM",
+                    "Usuarios sistema",
+                    "Estado correos",
+                    "Plantillas de mails",
+                    "Chat Beta",
+                    "Pagos",
+                    "Bonos",
+                    "Solicitud de bonos",
+                  ].includes(item.title),
+              )
+            : base;
+
         // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
         return (
           alumnoCodeInPath
             ? [
-                ...base,
+                ...filteredBase,
                 { title: "Vista Alumno", isSeparator: true },
                 {
                   title: "Inicio",
@@ -465,7 +485,7 @@ export function AppSidebar() {
                   icon: CreditCard,
                 },
               ]
-            : base
+            : filteredBase
         ) as MenuItem[];
       }
       case "student": {
@@ -512,6 +532,28 @@ export function AppSidebar() {
             : userRoleForLabel === "sales"
               ? "Ventas"
               : "Invitado";
+
+  /** Formatea áreas tipo "ATENCION_AL_CLIENTE" → "Atención al cliente" */
+  const formatArea = (raw?: string): string | null => {
+    if (!raw) return null;
+    const map: Record<string, string> = {
+      ATENCION_AL_CLIENTE: "Atención al cliente",
+      VENTAS: "Ventas",
+      MARKETING: "Marketing",
+      ADMINISTRACION: "Administración",
+      RECURSOS_HUMANOS: "Recursos humanos",
+      COACHING: "Coaching",
+      SOPORTE: "Soporte",
+      TECNOLOGIA: "Tecnología",
+    };
+    if (map[raw]) return map[raw];
+    // Fallback: reemplaza _ por espacio y capitaliza primera letra
+    return raw
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/^\w/, (c) => c.toUpperCase());
+  };
+  const areaLabel = formatArea(user?.area);
 
   const [metricsOpen, setMetricsOpen] = useState(false);
   const roleKey = (
@@ -622,13 +664,21 @@ export function AppSidebar() {
               <p className="truncate text-sm font-semibold text-sidebar-foreground leading-tight">
                 {user?.name ?? user?.email ?? "Usuario"}
               </p>
-              <div className="mt-1 flex items-center gap-1.5">
+              <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                 <Badge
                   variant="outline"
                   className="h-5 px-2 text-[10px] font-medium rounded-md border-sidebar-border/50 text-muted-foreground bg-sidebar-accent/40"
                 >
                   {roleLabel}
                 </Badge>
+                {areaLabel && (
+                  <Badge
+                    variant="secondary"
+                    className="h-5 px-2 text-[10px] font-medium rounded-md"
+                  >
+                    {areaLabel}
+                  </Badge>
+                )}
               </div>
               {mounted && (
                 <p className="mt-1.5 text-[10px] text-muted-foreground/70 capitalize">

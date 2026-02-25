@@ -50,6 +50,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import Spinner from "@/components/ui/spinner";
 
 interface DashboardLayoutProps {
@@ -1005,6 +1006,41 @@ export function DashboardLayout({
 }: DashboardLayoutProps) {
   const { user, logout, isLoading } = useAuth();
 
+  /* Helpers para mostrar rol y área formateados */
+  const userRoleForLabel = (user?.role || "").toLowerCase();
+  const roleLabel =
+    userRoleForLabel === "admin"
+      ? "Administrador"
+      : userRoleForLabel === "coach"
+        ? "Coach"
+        : userRoleForLabel === "equipo"
+          ? "Equipo"
+          : userRoleForLabel === "student"
+            ? "Estudiante"
+            : userRoleForLabel === "sales"
+              ? "Ventas"
+              : "Invitado";
+
+  const formatArea = (raw?: string): string | null => {
+    if (!raw) return null;
+    const map: Record<string, string> = {
+      ATENCION_AL_CLIENTE: "Atención al cliente",
+      VENTAS: "Ventas",
+      MARKETING: "Marketing",
+      ADMINISTRACION: "Administración",
+      RECURSOS_HUMANOS: "Recursos humanos",
+      COACHING: "Coaching",
+      SOPORTE: "Soporte",
+      TECNOLOGIA: "Tecnología",
+    };
+    if (map[raw]) return map[raw];
+    return raw
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/^\w/, (c) => c.toUpperCase());
+  };
+  const areaLabel = formatArea(user?.area);
+
   const MenuToggleButton = () => {
     const { toggleSidebar } = useSidebar();
     return (
@@ -1053,13 +1089,26 @@ export function DashboardLayout({
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted/50 border border-border/30">
                   <User className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <div className="hidden sm:flex flex-col min-w-0">
-                  <span className="truncate text-sm font-medium leading-tight max-w-[160px]">
+                <div className="hidden sm:flex flex-col min-w-0 gap-0.5">
+                  <span className="truncate text-sm font-medium leading-tight max-w-[200px]">
                     {user?.name}
                   </span>
-                  <span className="text-[10px] text-muted-foreground/70 capitalize leading-tight">
-                    {user?.role}
-                  </span>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <Badge
+                      variant="outline"
+                      className="h-[18px] px-1.5 text-[9px] font-medium rounded-md"
+                    >
+                      {roleLabel}
+                    </Badge>
+                    {areaLabel && (
+                      <Badge
+                        variant="secondary"
+                        className="h-[18px] px-1.5 text-[9px] font-medium rounded-md"
+                      >
+                        {areaLabel}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </div>
 
