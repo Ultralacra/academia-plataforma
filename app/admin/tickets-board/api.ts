@@ -298,7 +298,7 @@ export async function getTickets(opts: {
     return apiFetch<any>(path, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ codigo_equipo: codigoEquipo }),
+      body: JSON.stringify({ codigo_equipo: codigoEquipo, mode: "soft" }),
     });
   }
 
