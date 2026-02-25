@@ -73,7 +73,8 @@ function parseOptionalInt(value: string): number | undefined {
 export default function AdminBonosPage() {
   const { user } = useAuth();
   const readOnly =
-    user?.role === "equipo" && (user?.area || "").toUpperCase() === "ADS";
+    user?.role === "equipo" &&
+    ["ADS", "COPY"].includes((user?.area || "").toUpperCase());
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<alumnosApi.Bono[]>([]);
