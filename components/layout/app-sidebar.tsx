@@ -70,7 +70,7 @@ const adminItems: MenuItem[] = [
     icon: ClipboardList,
   },
   { title: "Pagos", url: "/admin/payments", icon: CreditCard },
-  { title: "Chat Beta", url: "/chat/beta", icon: MessageSquare },
+  { title: "Chat general", url: "/chat/beta", icon: MessageSquare },
   { title: "Usuarios sistema", url: "/admin/users", icon: Users },
   // { title: "Brevo", url: "/admin/brevo", icon: Mail },
   { title: "Roles", url: "/admin/access/roles", icon: Settings },
@@ -154,11 +154,29 @@ export function AppSidebar() {
     switch (userRole) {
       case "sales":
         return [{ title: "CRM", url: "/admin/crm", icon: Users }] as MenuItem[];
-      case "admin":
+      case "admin": {
+        // Filtrar ítems para admins que son de equipo con área específica
+        const adminTipo = ((user as any)?.tipo || "").toLowerCase();
+        const adminArea = (user?.area || "").toUpperCase();
+        const isAdminAtc =
+          adminTipo === "equipo" && adminArea === "ATENCION_AL_CLIENTE";
+        const baseAdmin = isAdminAtc
+          ? adminItems.filter(
+              (item) =>
+                ![
+                  "Opciones",
+                  "Roles",
+                  "CRM",
+                  "Usuarios sistema",
+                  "Pagos",
+                ].includes(item.title),
+            )
+          : adminItems;
+
         return (
           alumnoCodeInPath
             ? [
-                ...adminItems,
+                ...baseAdmin,
                 { title: "Vista Alumno", isSeparator: true },
                 {
                   title: "Inicio",
@@ -201,8 +219,9 @@ export function AppSidebar() {
                   icon: CreditCard,
                 },
               ]
-            : adminItems
+            : baseAdmin
         ) as MenuItem[];
+      }
       case "coach":
         return (
           alumnoCodeInPath
@@ -430,7 +449,7 @@ export function AppSidebar() {
                     "Usuarios sistema",
                     "Estado correos",
                     "Plantillas de mails",
-                    "Chat Beta",
+                    "Chat general",
                     "Pagos",
                   ].includes(item.title),
               )
