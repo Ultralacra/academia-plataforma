@@ -432,7 +432,6 @@ export function AppSidebar() {
                     "Plantillas de mails",
                     "Chat Beta",
                     "Pagos",
-                    "Bonos",
                     "Solicitud de bonos",
                   ].includes(item.title),
               )

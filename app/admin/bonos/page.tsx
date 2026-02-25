@@ -4,6 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +42,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/use-toast";
+import {
+  Gift,
+  Plus,
+  Search,
+  Pencil,
+  Trash2,
+  CheckCircle2,
+  XCircle,
+  Info,
+  Package,
+} from "lucide-react";
 import * as alumnosApi from "@/app/admin/alumnos/api";
+import { useAuth } from "@/hooks/use-auth";
 
 function parseOptionalNumber(value: string): number | undefined {
   const trimmed = value.trim();
@@ -51,8 +71,13 @@ function parseOptionalInt(value: string): number | undefined {
 }
 
 export default function AdminBonosPage() {
+  const { user } = useAuth();
+  const readOnly =
+    user?.role === "equipo" && (user?.area || "").toUpperCase() === "ADS";
+
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<alumnosApi.Bono[]>([]);
+  const [search, setSearch] = useState("");
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -85,7 +110,7 @@ export default function AdminBonosPage() {
       const list = await alumnosApi.getAllBonos({ includeInactivos: true });
       const normalized = Array.isArray(list) ? list : [];
       normalized.sort((a, b) =>
-        String(a.codigo).localeCompare(String(b.codigo))
+        String(a.codigo).localeCompare(String(b.codigo)),
       );
       setRows(normalized);
     } catch (e: any) {
@@ -111,19 +136,44 @@ export default function AdminBonosPage() {
     return String(found?.nombre ?? "");
   }, [deleteCodigo, rows]);
 
+  const filteredRows = useMemo(() => {
+    if (!search.trim()) return rows;
+    const q = search.toLowerCase();
+    return rows.filter(
+      (b) =>
+        String(b.codigo).toLowerCase().includes(q) ||
+        String(b.nombre ?? "")
+          .toLowerCase()
+          .includes(q) ||
+        String(b.descripcion ?? "")
+          .toLowerCase()
+          .includes(q) ||
+        String(b.metadata?.tipo ?? "")
+          .toLowerCase()
+          .includes(q),
+    );
+  }, [rows, search]);
+
+  const stats = useMemo(() => {
+    const total = rows.length;
+    const activos = rows.filter((b) => !Boolean(b.inactivado)).length;
+    const inactivos = total - activos;
+    return { total, activos, inactivos };
+  }, [rows]);
+
   function openEdit(b: alumnosApi.Bono) {
     setEditCodigo(String(b.codigo));
     setEditNombre(String(b.nombre ?? ""));
     setEditDescripcion(String(b.descripcion ?? ""));
     setEditValor(
-      b.valor === null || b.valor === undefined ? "" : String(b.valor)
+      b.valor === null || b.valor === undefined ? "" : String(b.valor),
     );
     setEditInactivado(Boolean(b.inactivado));
     setEditTipo(String(b.metadata?.tipo ?? ""));
     setEditMaxUsos(
       b.metadata?.max_usos === null || b.metadata?.max_usos === undefined
         ? ""
-        : String(b.metadata.max_usos)
+        : String(b.metadata.max_usos),
     );
     setEditOpen(true);
   }
@@ -261,83 +311,261 @@ export default function AdminBonosPage() {
   return (
     <ProtectedRoute allowedRoles={["admin", "coach", "equipo"]}>
       <DashboardLayout>
-        <div className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1">
-              <div className="text-sm font-semibold text-foreground">Bonos</div>
-              <p className="text-xs text-muted-foreground">
-                Lista de bonos creados y administración básica (CRUD).
-              </p>
+        <div className="space-y-5">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Gift className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-lg font-semibold text-foreground leading-tight">
+                  Bonos
+                </h1>
+                <p className="text-xs text-muted-foreground">
+                  Gestión de bonos disponibles para alumnos
+                </p>
+              </div>
             </div>
-            <Button type="button" onClick={() => setCreateOpen(true)}>
-              Nuevo bono
-            </Button>
+            {!readOnly && (
+              <Button onClick={() => setCreateOpen(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nuevo bono
+              </Button>
+            )}
           </div>
 
+          {/* Stats cards */}
+          {!loading && rows.length > 0 && (
+            <div className="grid grid-cols-3 gap-3">
+              <Card className="border-border/40">
+                <CardContent className="p-3 flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted/50">
+                    <Package className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground leading-tight">
+                      Total
+                    </p>
+                    <p className="text-lg font-bold leading-tight">
+                      {stats.total}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border/40">
+                <CardContent className="p-3 flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground leading-tight">
+                      Activos
+                    </p>
+                    <p className="text-lg font-bold text-emerald-600 leading-tight">
+                      {stats.activos}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="border-border/40">
+                <CardContent className="p-3 flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/10">
+                    <XCircle className="h-4 w-4 text-red-400" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground leading-tight">
+                      Inactivos
+                    </p>
+                    <p className="text-lg font-bold text-red-500 leading-tight">
+                      {stats.inactivos}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Search */}
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              placeholder="Buscar por código, nombre o tipo..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 text-sm"
+            />
+          </div>
+
+          {/* Table */}
           {loading ? (
-            <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-              Cargando bonos...
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-              No hay bonos.
-            </div>
+            <Card className="border-border/40">
+              <CardContent className="p-8 text-center">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground/20 border-t-primary" />
+                  <p className="text-sm text-muted-foreground">
+                    Cargando bonos...
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : filteredRows.length === 0 ? (
+            <Card className="border-border/40">
+              <CardContent className="p-8 text-center">
+                <Gift className="h-10 w-10 mx-auto text-muted-foreground/30 mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  {rows.length === 0
+                    ? "No hay bonos creados aún."
+                    : "Sin resultados para esta búsqueda."}
+                </p>
+              </CardContent>
+            </Card>
           ) : (
-            <div className="rounded-lg border border-border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Código</TableHead>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.map((b) => {
-                    const inactivo = Boolean(b.inactivado);
-                    return (
-                      <TableRow key={String(b.codigo)}>
-                        <TableCell className="font-mono text-xs">
-                          {String(b.codigo)}
-                        </TableCell>
-                        <TableCell>{String(b.nombre ?? "")}</TableCell>
-                        <TableCell>
-                          {b.valor === null || b.valor === undefined
-                            ? "—"
-                            : String(b.valor)}
-                        </TableCell>
-                        <TableCell>
-                          {inactivo ? "Inactivo" : "Activo"}
-                        </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEdit(b)}
-                          >
-                            Editar
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                              setDeleteCodigo(String(b.codigo));
-                              setDeleteOpen(true);
-                            }}
-                          >
-                            Eliminar
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+            <Card className="border-border/40 overflow-hidden">
+              <TooltipProvider delayDuration={200}>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/30 hover:bg-muted/30">
+                      <TableHead className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                        Código
+                      </TableHead>
+                      <TableHead className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                        Nombre
+                      </TableHead>
+                      {!readOnly && (
+                        <TableHead className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                          Tipo
+                        </TableHead>
+                      )}
+                      {!readOnly && (
+                        <TableHead className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                          Valor
+                        </TableHead>
+                      )}
+                      <TableHead className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                        Estado
+                      </TableHead>
+                      {!readOnly && (
+                        <TableHead className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground text-right">
+                          Acciones
+                        </TableHead>
+                      )}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredRows.map((b) => {
+                      const inactivo = Boolean(b.inactivado);
+                      const tipo = b.metadata?.tipo || "—";
+                      const desc = b.descripcion || "";
+                      return (
+                        <TableRow key={String(b.codigo)} className="group">
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {String(b.codigo)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">
+                                {String(b.nombre ?? "")}
+                              </span>
+                              {desc && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Info className="h-3.5 w-3.5 text-muted-foreground/50 cursor-help shrink-0" />
+                                  </TooltipTrigger>
+                                  <TooltipContent
+                                    side="top"
+                                    className="max-w-[240px] text-xs"
+                                  >
+                                    {desc}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </div>
+                          </TableCell>
+                          {!readOnly && (
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] font-medium"
+                              >
+                                {tipo}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          {!readOnly && (
+                            <TableCell className="text-sm tabular-nums">
+                              {b.valor === null || b.valor === undefined ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <span className="font-medium">
+                                  {String(b.valor)}
+                                </span>
+                              )}
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            {inactivo ? (
+                              <Badge
+                                variant="secondary"
+                                className="gap-1 text-[10px] bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/10"
+                              >
+                                <XCircle className="h-3 w-3" />
+                                Inactivo
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="secondary"
+                                className="gap-1 text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/10"
+                              >
+                                <CheckCircle2 className="h-3 w-3" />
+                                Activo
+                              </Badge>
+                            )}
+                          </TableCell>
+                          {!readOnly && (
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 rounded-lg"
+                                      onClick={() => openEdit(b)}
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Editar</TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={() => {
+                                        setDeleteCodigo(String(b.codigo));
+                                        setDeleteOpen(true);
+                                      }}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Eliminar</TooltipContent>
+                                </Tooltip>
+                              </div>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TooltipProvider>
+            </Card>
           )}
 
           {/* Crear */}
