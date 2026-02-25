@@ -171,13 +171,37 @@ export function StudentInactivityModal() {
   );
 
   React.useEffect(() => {
-    console.log("[InactivityModal] effect run", { isLoading, isAuthenticated, role, code, email, userId });
-    if (isLoading) { console.log("[InactivityModal] skipping: isLoading"); return; }
-    if (!isAuthenticated || role !== "student") { console.log("[InactivityModal] skipping: not student or not authenticated", { isAuthenticated, role }); return; }
+    console.log("[InactivityModal] effect run", {
+      isLoading,
+      isAuthenticated,
+      role,
+      code,
+      email,
+      userId,
+    });
+    if (isLoading) {
+      console.log("[InactivityModal] skipping: isLoading");
+      return;
+    }
+    if (!isAuthenticated || role !== "student") {
+      console.log(
+        "[InactivityModal] skipping: not student or not authenticated",
+        { isAuthenticated, role },
+      );
+      return;
+    }
 
     const identity = code || email || userId;
-    if (!identity) { console.log("[InactivityModal] skipping: no identity (code/email/userId empty)"); return; }
-    if (openedForRef.current === identity) { console.log("[InactivityModal] skipping: already checked for", identity); return; }
+    if (!identity) {
+      console.log(
+        "[InactivityModal] skipping: no identity (code/email/userId empty)",
+      );
+      return;
+    }
+    if (openedForRef.current === identity) {
+      console.log("[InactivityModal] skipping: already checked for", identity);
+      return;
+    }
     openedForRef.current = identity;
 
     // Debe abrir apenas conecta el alumno, aunque luego estemos cargando datos.
@@ -216,7 +240,18 @@ export function StudentInactivityModal() {
         });
 
         const first = rowByCode ?? rowByEmail ?? rows[0] ?? null;
-        console.log("[InactivityModal] API result", { rowsCount: rows.length, first: first ? { codigo: first?.codigo, email: first?.email, dias_inactividad: first?.dias_inactividad, ultima_actividad: first?.ultima_actividad, fase: first?.fase ?? first?.etapa } : null });
+        console.log("[InactivityModal] API result", {
+          rowsCount: rows.length,
+          first: first
+            ? {
+                codigo: first?.codigo,
+                email: first?.email,
+                dias_inactividad: first?.dias_inactividad,
+                ultima_actividad: first?.ultima_actividad,
+                fase: first?.fase ?? first?.etapa,
+              }
+            : null,
+        });
         const resolvedCodeBase = first?.codigo ?? first?.code ?? code;
         const resolvedCode = String(resolvedCodeBase ?? "").trim();
         const inactivityDays = first ? parseInactivityFromRow(first) : null;
@@ -256,12 +291,27 @@ export function StudentInactivityModal() {
         setMessage(resolvedMessage.message);
 
         // Regla solicitada: mostrar modal solo cuando hay + de 8 días de inactividad.
-        console.log("[InactivityModal] resolved", { inactivityDays, resolvedPhase, resolvedName, resolvedCode, withTrafficker, phaseKey: resolvedMessage.phaseKey });
+        console.log("[InactivityModal] resolved", {
+          inactivityDays,
+          resolvedPhase,
+          resolvedName,
+          resolvedCode,
+          withTrafficker,
+          phaseKey: resolvedMessage.phaseKey,
+        });
         if (inactivityDays != null && inactivityDays > 8) {
-          console.log("[InactivityModal] ✅ SHOWING modal — inactivity:", inactivityDays, "days");
+          console.log(
+            "[InactivityModal] ✅ SHOWING modal — inactivity:",
+            inactivityDays,
+            "days",
+          );
           setOpen(true);
         } else {
-          console.log("[InactivityModal] ❌ NOT showing — inactivity:", inactivityDays, "(need >8)");
+          console.log(
+            "[InactivityModal] ❌ NOT showing — inactivity:",
+            inactivityDays,
+            "(need >8)",
+          );
           setOpen(false);
         }
       } catch (err) {
