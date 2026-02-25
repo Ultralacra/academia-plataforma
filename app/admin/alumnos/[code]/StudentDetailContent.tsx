@@ -34,6 +34,8 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -55,10 +57,13 @@ import {
   Check,
   Copy,
   Eye,
+  Loader2,
+  Mail,
   MessageSquare,
   Pencil,
   Plus,
   RefreshCw,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/use-toast";
@@ -87,8 +92,16 @@ import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/hooks/use-auth";
 import { deleteStudent } from "../api";
 import { useRouter } from "next/navigation";
-import { type MetadataRecord } from "@/lib/metadata";
+import { type MetadataRecord, listMetadata } from "@/lib/metadata";
 import { getAuthToken } from "@/lib/auth";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  ACCESS_EXPIRY_TEMPLATES,
+  getAccessExpirySource,
+  DEFAULT_RENEWAL_LINK,
+  type AccessExpiryDay,
+} from "@/lib/email-templates/access-expiry";
+import StudentBrevoEvents from "./_parts/StudentBrevoEvents";
 
 export default function StudentDetailContent({ code }: { code: string }) {
   const { user } = useAuth();
@@ -115,6 +128,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
   );
   const [usedPassword, setUsedPassword] = useState("");
   const [salida, setSalida] = useState<string>("");
+
+  // ── Access email dialog ──
+  const [accessEmailOpen, setAccessEmailOpen] = useState(false);
+  const [accessEmailDay, setAccessEmailDay] = useState<AccessExpiryDay>("-5");
+  const [accessEmailSending, setAccessEmailSending] = useState(false);
   const [lastActivity, setLastActivity] = useState<string>("");
   const [lastTaskAt, setLastTaskAt] = useState<string>("");
   const [pF1, setPF1] = useState<string>("");
@@ -217,6 +235,160 @@ export default function StudentDetailContent({ code }: { code: string }) {
       setSavingPassword(false);
       setConfirmPasswordOpen(false);
       setChangePasswordOpen(false);
+    }
+  }
+
+  /* ── Helpers para email de acceso ───────────────────────────── */
+
+  function getStudentEmail(): string {
+    const apiUser = userByCode ?? {};
+    return String(
+      student?.raw?.correo ??
+        student?.raw?.email ??
+        student?.raw?.mail ??
+        apiUser?.correo ??
+        apiUser?.email ??
+        apiUser?.mail ??
+        apiUser?.contact_email ??
+        apiUser?.email_address ??
+        "",
+    ).trim();
+  }
+
+  function getStudentName(): string {
+    return String(student?.name ?? userByCode?.name ?? "").trim();
+  }
+
+  function interpolateEmailVars(
+    input: string,
+    vars: Record<string, string>,
+  ): string {
+    return String(input || "").replace(
+      /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g,
+      (_, key) => vars[key] ?? "",
+    );
+  }
+
+  function openAccessEmailDialog() {
+    if (!accessStats) return;
+    // Auto-sugerir según días restantes
+    const remaining = accessStats.remainingDays;
+    let suggested: AccessExpiryDay = "-5";
+    if (remaining <= 0) {
+      // Ya vencido
+      const daysAfter = Math.abs(remaining);
+      if (daysAfter >= 5) suggested = "+5";
+      else if (daysAfter >= 1) suggested = "+1";
+      else suggested = "0";
+    } else if (remaining <= 1) {
+      suggested = "0";
+    } else if (remaining <= 3) {
+      suggested = "-3";
+    } else {
+      suggested = "-5";
+    }
+    setAccessEmailDay(suggested);
+    setAccessEmailOpen(true);
+  }
+
+  async function handleSendAccessEmail() {
+    const email = getStudentEmail();
+    if (!email) {
+      toast({
+        title: "Sin email",
+        description: "No se encontró email del alumno.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAccessEmailSending(true);
+    try {
+      const token = getAuthToken();
+
+      // Buscar override de metadata
+      const tplKey =
+        ACCESS_EXPIRY_TEMPLATES.find((t) => t.day === accessEmailDay)?.key ||
+        `acceso_dia_${accessEmailDay}`;
+      let tplSource = getAccessExpirySource(accessEmailDay);
+
+      try {
+        const res = await listMetadata<any>();
+        const allRecord = (res.items || []).find(
+          (item: any) =>
+            String(item?.entity || "") === "plantillas_mails" &&
+            String(item?.entity_id || "").toLowerCase() === "all_templates",
+        );
+        if (allRecord?.payload?.templates?.[tplKey]) {
+          const override = allRecord.payload.templates[tplKey];
+          tplSource = {
+            subject: override.subject || tplSource.subject,
+            html: override.html || tplSource.html,
+            text: override.text || tplSource.text,
+          };
+        }
+      } catch {
+        /* fallback to base template */
+      }
+
+      const expiryDate = accessStats
+        ? accessStats.estimatedEnd.toLocaleDateString("es-AR", {
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })
+        : "";
+
+      const vars: Record<string, string> = {
+        recipientName: getStudentName(),
+        appName: "Hotselling",
+        expiryDate,
+        renewalLink: DEFAULT_RENEWAL_LINK,
+        portalLink:
+          typeof window !== "undefined"
+            ? `${window.location.origin}/login`
+            : "",
+        origin: typeof window !== "undefined" ? window.location.origin : "",
+        recipientEmail: email,
+      };
+
+      const finalSubject = interpolateEmailVars(tplSource.subject, vars);
+      const finalHtml = interpolateEmailVars(tplSource.html, vars);
+      const finalText = interpolateEmailVars(tplSource.text, vars);
+
+      const res = await fetch("/api/brevo/send-preview", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          to: email,
+          subject: finalSubject,
+          html: finalHtml,
+          text: finalText,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || String(json?.status || "") !== "success") {
+        throw new Error(String(json?.message || "No se pudo enviar"));
+      }
+
+      toast({
+        title: "Email enviado",
+        description: `Plantilla "${ACCESS_EXPIRY_TEMPLATES.find((t) => t.day === accessEmailDay)?.name}" enviada a ${email}.`,
+      });
+      setAccessEmailOpen(false);
+    } catch (err: any) {
+      toast({
+        title: "Error al enviar",
+        description: String(err?.message || "Intenta nuevamente."),
+        variant: "destructive",
+      });
+    } finally {
+      setAccessEmailSending(false);
     }
   }
 
@@ -2261,6 +2433,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
                     >
                       <Plus className="h-4 w-4 text-muted-foreground hover:text-foreground" />
                     </button>
+                    <button
+                      type="button"
+                      className="p-1 rounded hover:bg-muted transition-colors"
+                      title="Enviar email de acceso"
+                      onClick={openAccessEmailDialog}
+                      disabled={!accessStats}
+                    >
+                      <Mail className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                    </button>
                   </div>
                   {accessStats ? (
                     accessStats.isExpired ? (
@@ -2654,6 +2835,14 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 onChangeMember={(idx, candidate) => changeCoach(idx, candidate)}
               />
             </div>
+
+            {/* Historial de emails (Brevo) */}
+            {canSeeAdminAccessInfo && (
+              <StudentBrevoEvents
+                email={getStudentEmail()}
+                studentCode={student.code || code}
+              />
+            )}
 
             {/* Contrato card */}
             <div className="rounded-xl border border-border bg-card p-4">
@@ -3295,6 +3484,98 @@ export default function StudentDetailContent({ code }: { code: string }) {
       </Dialog>
 
       {/* Se eliminó el botón flotante de chat; ahora está en una pestaña */}
+
+      {/* ── Access Email Dialog ─────────────────────────────── */}
+      <Dialog open={accessEmailOpen} onOpenChange={setAccessEmailOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5" /> Enviar email de acceso
+            </DialogTitle>
+            <DialogDescription>
+              {accessStats && (
+                <span>
+                  Vencimiento estimado:{" "}
+                  <strong>
+                    {accessStats.estimatedEnd.toLocaleDateString("es-AR", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </strong>
+                  {" — "}
+                  {accessStats.isExpired
+                    ? `Vencido hace ${Math.abs(accessStats.remainingDays)} días`
+                    : `${accessStats.remainingDays} días restantes`}
+                </span>
+              )}
+              {getStudentEmail() && (
+                <span className="block mt-1 text-xs">
+                  Destinatario: <strong>{getStudentEmail()}</strong>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2">
+            <Label className="mb-2 block text-sm font-medium">
+              Seleccioná la plantilla
+            </Label>
+            <RadioGroup
+              value={accessEmailDay}
+              onValueChange={(v) => setAccessEmailDay(v as AccessExpiryDay)}
+              className="gap-2"
+            >
+              {ACCESS_EXPIRY_TEMPLATES.map((tpl) => (
+                <label
+                  key={tpl.day}
+                  className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
+                    accessEmailDay === tpl.day
+                      ? "border-primary bg-primary/5"
+                      : "hover:bg-muted/50"
+                  }`}
+                >
+                  <RadioGroupItem
+                    value={tpl.day}
+                    id={`access-tpl-${tpl.day}`}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">{tpl.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {tpl.description}
+                    </p>
+                  </div>
+                </label>
+              ))}
+            </RadioGroup>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setAccessEmailOpen(false)}
+              disabled={accessEmailSending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSendAccessEmail}
+              disabled={accessEmailSending || !getStudentEmail()}
+            >
+              {accessEmailSending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando…
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" /> Enviar
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Nota: los cambios de acceso se guardan en metadata (persistente). */}
     </div>

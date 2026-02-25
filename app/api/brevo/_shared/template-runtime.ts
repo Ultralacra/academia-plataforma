@@ -71,6 +71,25 @@ export async function fetchMailTemplateOverride(
     const items = coerceList(json);
     const normalizedKey = String(templateKey || "").trim().toLowerCase();
 
+    // 1) Prioridad: registro unificado "all_templates"
+    const allRecord = items.find((item) => {
+      const entity = String(item?.entity || "").trim();
+      const entityId = String(item?.entity_id || "").trim().toLowerCase();
+      return entity === "plantillas_mails" && entityId === "all_templates";
+    });
+
+    if (allRecord) {
+      const templates = allRecord?.payload?.templates;
+      if (templates && typeof templates === "object") {
+        const tplPayload: MetadataTemplatePayload | undefined = templates[normalizedKey];
+        if (tplPayload) {
+          if (!toBoolean(tplPayload?.activo, true)) return null;
+          return tplPayload;
+        }
+      }
+    }
+
+    // 2) Fallback: registros individuales (legacy)
     const found = items.find((item) => {
       const entity = String(item?.entity || "").trim();
       if (entity !== "plantillas_mails") return false;

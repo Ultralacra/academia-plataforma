@@ -902,6 +902,7 @@ function PaymentsDueBadge() {
 
 function AccessDueBadge() {
   const { user } = useAuth();
+  const router = useRouter();
   const enabled =
     user?.role === "admin" || user?.role === "coach" || user?.role === "equipo";
   const { dueCount, loading, error, refresh, items } =
@@ -990,6 +991,24 @@ function AccessDueBadge() {
                     {when}
                     {it.fechaVence ? ` (${it.fechaVence})` : ""}
                   </div>
+                  {it.alumnoCodigo && (
+                    <div className="mt-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-[11px]"
+                        onClick={() => {
+                          setOpen(false);
+                          router.push(
+                            `/admin/alumnos/${encodeURIComponent(it.alumnoCodigo!)}/perfil`,
+                          );
+                        }}
+                      >
+                        Ver perfil
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })

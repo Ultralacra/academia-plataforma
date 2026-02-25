@@ -19,19 +19,75 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { AlertCircle, Loader2, Mail, Pencil, Send } from "lucide-react";
+import {
+  AlertCircle,
+  CloudUpload,
+  Loader2,
+  Mail,
+  Pencil,
+  RefreshCw,
+  Send,
+} from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { createMetadata, listMetadata, updateMetadata } from "@/lib/metadata";
-import { buildWelcomeEmail } from "@/lib/email-templates/welcome";
-import { buildReminderEmail } from "@/lib/email-templates/reminder";
-import { buildPaymentReminderEmail } from "@/lib/email-templates/payment-reminder";
-import { buildPasswordChangedEmail } from "@/lib/email-templates/password-changed";
+import { getWelcomeEmailSource } from "@/lib/email-templates/welcome";
+import { getReminderEmailSource } from "@/lib/email-templates/reminder";
+import { getPaymentReminderEmailSource } from "@/lib/email-templates/payment-reminder";
+import { getPasswordChangedEmailSource } from "@/lib/email-templates/password-changed";
+import {
+  getPaymentFollowupSource,
+  PAYMENT_FOLLOWUP_TEMPLATES,
+  DEFAULT_PAYMENT_LINKS_HTML,
+} from "@/lib/email-templates/payment-followup";
+import {
+  getAccessExpirySource,
+  ACCESS_EXPIRY_TEMPLATES,
+  DEFAULT_RENEWAL_LINK,
+} from "@/lib/email-templates/access-expiry";
 
 type MailTemplateKey =
   | "welcome"
   | "reminder"
   | "payment_reminder"
-  | "password_changed";
+  | "password_changed"
+  | "pago_dia_m3"
+  | "pago_dia_m1"
+  | "pago_dia_0"
+  | "pago_dia_p2"
+  | "pago_dia_p4"
+  | "pago_dia_p6"
+  | "acceso_dia_m5"
+  | "acceso_dia_m3"
+  | "acceso_dia_0"
+  | "acceso_dia_p1"
+  | "acceso_dia_p5";
+
+type TemplateCategory = "general" | "cobros" | "accesos" | "contrasena";
+
+const TEMPLATE_CATEGORIES: { id: TemplateCategory; label: string }[] = [
+  { id: "general", label: "General" },
+  { id: "cobros", label: "Cobros" },
+  { id: "accesos", label: "Accesos" },
+  { id: "contrasena", label: "Contraseña" },
+];
+
+const TEMPLATE_CATEGORY_MAP: Record<MailTemplateKey, TemplateCategory> = {
+  welcome: "general",
+  reminder: "general",
+  payment_reminder: "cobros",
+  password_changed: "contrasena",
+  pago_dia_m3: "cobros",
+  pago_dia_m1: "cobros",
+  pago_dia_0: "cobros",
+  pago_dia_p2: "cobros",
+  pago_dia_p4: "cobros",
+  pago_dia_p6: "cobros",
+  acceso_dia_m5: "accesos",
+  acceso_dia_m3: "accesos",
+  acceso_dia_0: "accesos",
+  acceso_dia_p1: "accesos",
+  acceso_dia_p5: "accesos",
+};
 
 type MetadataTemplatePayload = {
   key?: string;
@@ -85,6 +141,7 @@ type TemplateVariable = {
 };
 
 const MAIL_TEMPLATES_ENTITY = "plantillas_mails";
+const ALL_TEMPLATES_ENTITY_ID = "all_templates";
 const TEST_TEMPLATE_EMAIL = "cesaramuroc@gmail.com";
 
 const COMMON_TEMPLATE_VARIABLES: TemplateVariable[] = [
@@ -112,6 +169,42 @@ const COMMON_TEMPLATE_VARIABLES: TemplateVariable[] = [
     key: "{{origin}}",
     description: "Origen base",
     example: "https://academia.valinkgroup.com",
+  },
+];
+
+const PAYMENT_FOLLOWUP_VARS: TemplateVariable[] = [
+  {
+    key: "{{cuotaCodigo}}",
+    description: "Código o nombre de cuota",
+    example: "Cuota 1",
+  },
+  {
+    key: "{{dueDate}}",
+    description: "Fecha de vencimiento",
+    example: "2026-03-10",
+  },
+  {
+    key: "{{amount}}",
+    description: "Monto",
+    example: "$200",
+  },
+  {
+    key: "{{paymentLinks}}",
+    description: "Bloque HTML con enlaces de pago",
+    example: "(enlaces de pago)",
+  },
+];
+
+const ACCESS_EXPIRY_VARS: TemplateVariable[] = [
+  {
+    key: "{{expiryDate}}",
+    description: "Fecha de vencimiento del acceso",
+    example: "15 de marzo de 2026",
+  },
+  {
+    key: "{{renewalLink}}",
+    description: "Enlace de renovación",
+    example: DEFAULT_RENEWAL_LINK,
   },
 ];
 
@@ -160,7 +253,64 @@ const TEMPLATE_SPECIFIC_VARIABLES: Record<MailTemplateKey, TemplateVariable[]> =
         example: "Abc123",
       },
     ],
+    pago_dia_m3: PAYMENT_FOLLOWUP_VARS,
+    pago_dia_m1: PAYMENT_FOLLOWUP_VARS,
+    pago_dia_0: PAYMENT_FOLLOWUP_VARS,
+    pago_dia_p2: PAYMENT_FOLLOWUP_VARS,
+    pago_dia_p4: PAYMENT_FOLLOWUP_VARS,
+    pago_dia_p6: PAYMENT_FOLLOWUP_VARS,
+    acceso_dia_m5: ACCESS_EXPIRY_VARS,
+    acceso_dia_m3: ACCESS_EXPIRY_VARS,
+    acceso_dia_0: ACCESS_EXPIRY_VARS,
+    acceso_dia_p1: ACCESS_EXPIRY_VARS,
+    acceso_dia_p5: ACCESS_EXPIRY_VARS,
   };
+
+/* ── Interpolación de variables para preview / test ────────────── */
+
+function interpolateVars(input: string, vars: Record<string, string>): string {
+  return String(input || "").replace(
+    /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g,
+    (_, key) => vars[key] ?? "",
+  );
+}
+
+function getExampleVarsForTemplate(
+  key: MailTemplateKey,
+): Record<string, string> {
+  const allVars = [
+    ...COMMON_TEMPLATE_VARIABLES,
+    ...(TEMPLATE_SPECIFIC_VARIABLES[key] || []),
+  ];
+  const map: Record<string, string> = {};
+  for (const v of allVars) {
+    const name = v.key.replace(/^\{\{|\}\}$/g, "");
+    // Para paymentLinks usar el bloque HTML real en vez de texto plano
+    if (name === "paymentLinks") {
+      map[name] = DEFAULT_PAYMENT_LINKS_HTML;
+    } else if (name === "renewalLink") {
+      map[name] = DEFAULT_RENEWAL_LINK;
+    } else {
+      map[name] = v.example || "";
+    }
+  }
+  return map;
+}
+
+function renderTemplatePreview(template: MailTemplateItem): string {
+  const vars = getExampleVarsForTemplate(template.key);
+  return interpolateVars(template.html, vars);
+}
+
+function renderTextPreview(template: MailTemplateItem): string {
+  const vars = getExampleVarsForTemplate(template.key);
+  return interpolateVars(template.text, vars);
+}
+
+function renderSubjectPreview(template: MailTemplateItem): string {
+  const vars = getExampleVarsForTemplate(template.key);
+  return interpolateVars(template.subject, vars);
+}
 
 function toBoolean(value: unknown, fallback = true) {
   if (typeof value === "boolean") return value;
@@ -196,42 +346,12 @@ function serializeIframeDocument(doc: Document) {
 }
 
 function getDefaultTemplates(): MailTemplateItem[] {
-  const welcome = buildWelcomeEmail({
-    appName: "Hotselling",
-    recipientName: "Alumno",
-    recipientEmail: "alumno@example.com",
-    recipientUsername: "alumno@example.com",
-    recipientPassword: "******",
-    origin: "https://academia.valinkgroup.com",
-  });
+  const welcomeSource = getWelcomeEmailSource();
+  const reminderSource = getReminderEmailSource();
+  const paymentReminderSource = getPaymentReminderEmailSource();
+  const passwordChangedSource = getPasswordChangedEmailSource();
 
-  const reminder = buildReminderEmail({
-    appName: "Hotselling",
-    recipientName: "Alumno",
-    recipientEmail: "alumno@example.com",
-    origin: "https://academia.valinkgroup.com",
-  });
-
-  const paymentReminder = buildPaymentReminderEmail({
-    appName: "Hotselling",
-    recipientName: "Alumno",
-    recipientEmail: "alumno@example.com",
-    origin: "https://academia.valinkgroup.com",
-    cuotaCodigo: "Cuota 1",
-    dueDate: "2026-03-10",
-    amount: "$200",
-  });
-
-  const passwordChanged = buildPasswordChangedEmail({
-    appName: "Hotselling",
-    recipientName: "Alumno",
-    recipientEmail: "alumno@example.com",
-    recipientUsername: "alumno@example.com",
-    newPassword: "******",
-    origin: "https://academia.valinkgroup.com",
-  });
-
-  return [
+  const base: MailTemplateItem[] = [
     {
       key: "welcome",
       entityId: "welcome",
@@ -239,10 +359,10 @@ function getDefaultTemplates(): MailTemplateItem[] {
       description: "Correo de alta al portal con usuario y contraseña.",
       endpoint: "/api/brevo/send-test (template: welcome)",
       source: "lib/email-templates/welcome.ts",
-      subject: welcome.subject,
-      html: welcome.html,
-      text: welcome.text,
-      headerImageUrl: extractFirstImageSrc(welcome.html),
+      subject: welcomeSource.subject,
+      html: welcomeSource.html,
+      text: welcomeSource.text,
+      headerImageUrl: extractFirstImageSrc(welcomeSource.html),
       activo: true,
       orden: 1,
       fromMetadata: false,
@@ -254,10 +374,10 @@ function getDefaultTemplates(): MailTemplateItem[] {
       description: "Recordatorio para ingresar al portal y consultar soporte.",
       endpoint: "/api/brevo/send-test (template: reminder)",
       source: "lib/email-templates/reminder.ts",
-      subject: reminder.subject,
-      html: reminder.html,
-      text: reminder.text,
-      headerImageUrl: extractFirstImageSrc(reminder.html),
+      subject: reminderSource.subject,
+      html: reminderSource.html,
+      text: reminderSource.text,
+      headerImageUrl: extractFirstImageSrc(reminderSource.html),
       activo: true,
       orden: 2,
       fromMetadata: false,
@@ -265,14 +385,14 @@ function getDefaultTemplates(): MailTemplateItem[] {
     {
       key: "payment_reminder",
       entityId: "payment_reminder",
-      name: "Recordatorio de pago",
-      description: "Aviso de cuota próxima a vencer.",
+      name: "Recordatorio de pago (genérico)",
+      description: "Aviso genérico de cuota próxima a vencer.",
       endpoint: "/api/brevo/send-test (template: payment_reminder)",
       source: "lib/email-templates/payment-reminder.ts",
-      subject: paymentReminder.subject,
-      html: paymentReminder.html,
-      text: paymentReminder.text,
-      headerImageUrl: extractFirstImageSrc(paymentReminder.html),
+      subject: paymentReminderSource.subject,
+      html: paymentReminderSource.html,
+      text: paymentReminderSource.text,
+      headerImageUrl: extractFirstImageSrc(paymentReminderSource.html),
       activo: true,
       orden: 3,
       fromMetadata: false,
@@ -284,15 +404,59 @@ function getDefaultTemplates(): MailTemplateItem[] {
       description: "Confirmación de contraseña actualizada en el portal.",
       endpoint: "/api/brevo/password-changed",
       source: "lib/email-templates/password-changed.ts",
-      subject: passwordChanged.subject,
-      html: passwordChanged.html,
-      text: passwordChanged.text,
-      headerImageUrl: extractFirstImageSrc(passwordChanged.html),
+      subject: passwordChangedSource.subject,
+      html: passwordChangedSource.html,
+      text: passwordChangedSource.text,
+      headerImageUrl: extractFirstImageSrc(passwordChangedSource.html),
       activo: true,
       orden: 4,
       fromMetadata: false,
     },
   ];
+
+  // Agregar las 6 plantillas de seguimiento de pago
+  for (let i = 0; i < PAYMENT_FOLLOWUP_TEMPLATES.length; i++) {
+    const meta = PAYMENT_FOLLOWUP_TEMPLATES[i];
+    const src = getPaymentFollowupSource(meta.day);
+    base.push({
+      key: meta.key as MailTemplateKey,
+      entityId: meta.key,
+      name: meta.name,
+      description: meta.description,
+      endpoint: "/api/brevo/send-preview",
+      source: "lib/email-templates/payment-followup.ts",
+      subject: src.subject,
+      html: src.html,
+      text: src.text,
+      headerImageUrl: extractFirstImageSrc(src.html),
+      activo: true,
+      orden: 5 + i,
+      fromMetadata: false,
+    });
+  }
+
+  // Agregar las 5 plantillas de vencimiento de acceso
+  for (let i = 0; i < ACCESS_EXPIRY_TEMPLATES.length; i++) {
+    const meta = ACCESS_EXPIRY_TEMPLATES[i];
+    const src = getAccessExpirySource(meta.day);
+    base.push({
+      key: meta.key as MailTemplateKey,
+      entityId: meta.key,
+      name: meta.name,
+      description: meta.description,
+      endpoint: "/api/brevo/send-preview",
+      source: "lib/email-templates/access-expiry.ts",
+      subject: src.subject,
+      html: src.html,
+      text: src.text,
+      headerImageUrl: extractFirstImageSrc(src.html),
+      activo: true,
+      orden: 11 + i,
+      fromMetadata: false,
+    });
+  }
+
+  return base;
 }
 
 function mergeWithMetadata(
@@ -341,6 +505,38 @@ function mergeWithMetadata(
   return Array.from(byKey.values()).sort((a, b) => a.orden - b.orden);
 }
 
+/** Merge usando el payload.templates del registro unificado */
+function mergeWithSingleRecord(
+  baseTemplates: MailTemplateItem[],
+  templatesPayload: Record<string, MetadataTemplatePayload>,
+): MailTemplateItem[] {
+  return baseTemplates
+    .map((base) => {
+      const payload = templatesPayload[base.key];
+      if (!payload) return base;
+
+      return {
+        ...base,
+        name: String(payload.name || "").trim() || base.name,
+        description:
+          String(payload.description || "").trim() || base.description,
+        endpoint: String(payload.endpoint || "").trim() || base.endpoint,
+        source: String(payload.source || "").trim() || base.source,
+        subject: String(payload.subject || "").trim() || base.subject,
+        html: String(payload.html || "").trim() || base.html,
+        text: String(payload.text || "").trim() || base.text,
+        headerImageUrl:
+          String(payload.headerImageUrl || "").trim() ||
+          extractFirstImageSrc(String(payload.html || "")) ||
+          base.headerImageUrl,
+        activo: toBoolean(payload.activo, true),
+        orden: toNumber(payload.orden, base.orden),
+        fromMetadata: true,
+      };
+    })
+    .sort((a, b) => a.orden - b.orden);
+}
+
 function toFormState(item: MailTemplateItem): MailTemplateFormState {
   return {
     key: item.key,
@@ -386,6 +582,8 @@ export default function PlantillasMailsPage() {
     getDefaultTemplates(),
   );
   const [selectedKey, setSelectedKey] = useState<MailTemplateKey>("welcome");
+  const [selectedCategory, setSelectedCategory] =
+    useState<TemplateCategory>("general");
   const [openEditor, setOpenEditor] = useState(false);
   const [form, setForm] = useState<MailTemplateFormState | null>(null);
   const [imageErrorByKey, setImageErrorByKey] = useState<
@@ -397,16 +595,32 @@ export default function PlantillasMailsPage() {
   const visualIframeRef = useRef<HTMLIFrameElement | null>(null);
   const [visualHtmlDoc, setVisualHtmlDoc] = useState<string>("<p></p>");
 
+  // ── Single metadata record state ──
+  const [metaRecordId, setMetaRecordId] = useState<string | number | null>(
+    null,
+  );
+  const [syncingKey, setSyncingKey] = useState<MailTemplateKey | null>(null);
+  const [creatingMeta, setCreatingMeta] = useState(false);
+
   const activeTemplates = useMemo(
     () => templates.filter((item) => item.activo),
     [templates],
   );
 
+  const categoryTemplates = useMemo(
+    () =>
+      activeTemplates.filter(
+        (item) => TEMPLATE_CATEGORY_MAP[item.key] === selectedCategory,
+      ),
+    [activeTemplates, selectedCategory],
+  );
+
   const selectedTemplate = useMemo(() => {
     const inActive = activeTemplates.find((item) => item.key === selectedKey);
     if (inActive) return inActive;
-    return activeTemplates[0] || templates[0] || null;
-  }, [activeTemplates, selectedKey, templates]);
+    // Fallback al primer item de la categoría activa
+    return categoryTemplates[0] || activeTemplates[0] || templates[0] || null;
+  }, [activeTemplates, categoryTemplates, selectedKey, templates]);
 
   const selectedTemplateVariables = useMemo(() => {
     if (!selectedTemplate) return COMMON_TEMPLATE_VARIABLES;
@@ -420,10 +634,34 @@ export default function PlantillasMailsPage() {
     setLoading(true);
     try {
       const res = await listMetadata<any>();
-      const metadataItems = (res.items || []).filter(
-        (item) => String(item?.entity || "") === MAIL_TEMPLATES_ENTITY,
+      const allItems = res.items || [];
+
+      // Buscar registro unificado
+      const allRecord = allItems.find(
+        (item: any) =>
+          String(item?.entity || "") === MAIL_TEMPLATES_ENTITY &&
+          String(item?.entity_id || "").toLowerCase() ===
+            ALL_TEMPLATES_ENTITY_ID,
       );
-      const merged = mergeWithMetadata(getDefaultTemplates(), metadataItems);
+
+      let merged: MailTemplateItem[];
+
+      if (allRecord) {
+        setMetaRecordId(allRecord.id);
+        const templatesPayload: Record<string, MetadataTemplatePayload> =
+          allRecord.payload?.templates || {};
+        merged = mergeWithSingleRecord(getDefaultTemplates(), templatesPayload);
+      } else {
+        setMetaRecordId(null);
+        // Fallback: registros individuales (legacy)
+        const metadataItems = allItems.filter(
+          (item: any) => String(item?.entity || "") === MAIL_TEMPLATES_ENTITY,
+        );
+        merged = metadataItems.length
+          ? mergeWithMetadata(getDefaultTemplates(), metadataItems)
+          : getDefaultTemplates();
+      }
+
       setTemplates(merged);
       if (merged.length) {
         setSelectedKey((prev) => {
@@ -436,6 +674,7 @@ export default function PlantillasMailsPage() {
         });
       }
     } catch (error: any) {
+      setMetaRecordId(null);
       const fallback = getDefaultTemplates();
       setTemplates(fallback);
       setSelectedKey(fallback[0]?.key || "welcome");
@@ -490,6 +729,108 @@ export default function PlantillasMailsPage() {
     applyEditorCommand("insertImage", imageUrl.trim());
   }
 
+  /* ── Helpers para leer / escribir el registro unificado ────── */
+
+  async function fetchCurrentAllTemplatesPayload(): Promise<{
+    recordId: string | number | null;
+    currentPayload: any;
+    currentTemplates: Record<string, MetadataTemplatePayload>;
+  }> {
+    const res = await listMetadata<any>();
+    const allRecord = (res.items || []).find(
+      (item: any) =>
+        String(item?.entity || "") === MAIL_TEMPLATES_ENTITY &&
+        String(item?.entity_id || "").toLowerCase() === ALL_TEMPLATES_ENTITY_ID,
+    );
+    if (allRecord) {
+      return {
+        recordId: allRecord.id,
+        currentPayload: allRecord.payload || {},
+        currentTemplates: allRecord.payload?.templates || {},
+      };
+    }
+    return { recordId: null, currentPayload: {}, currentTemplates: {} };
+  }
+
+  async function upsertAllTemplatesRecord(
+    updatedTemplates: Record<string, MetadataTemplatePayload>,
+    existingRecordId?: string | number | null,
+  ) {
+    const recId = existingRecordId ?? metaRecordId;
+    if (recId != null) {
+      await updateMetadata(recId, {
+        id: recId,
+        entity: MAIL_TEMPLATES_ENTITY,
+        entity_id: ALL_TEMPLATES_ENTITY_ID,
+        payload: { templates: updatedTemplates },
+      } as any);
+    } else {
+      const created = await createMetadata({
+        entity: MAIL_TEMPLATES_ENTITY,
+        entity_id: ALL_TEMPLATES_ENTITY_ID,
+        payload: { templates: updatedTemplates },
+      });
+      setMetaRecordId(created.id);
+    }
+  }
+
+  /* ── Crear metadata con TODAS las plantillas base ────────── */
+
+  async function handleCreateMetadata() {
+    setCreatingMeta(true);
+    try {
+      const base = getDefaultTemplates();
+      const tplPayload: Record<string, MetadataTemplatePayload> = {};
+      for (const tpl of base) {
+        tplPayload[tpl.key] = buildMetadataPayload(toFormState(tpl));
+      }
+      await upsertAllTemplatesRecord(tplPayload);
+      toast({
+        title: "Metadata creado",
+        description: `Se sincronizaron ${base.length} plantillas en un registro unificado.`,
+      });
+      await loadTemplates();
+    } catch (error: any) {
+      toast({
+        title: "Error al crear metadata",
+        description: String(error?.message || "Intenta nuevamente."),
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingMeta(false);
+    }
+  }
+
+  /* ── Sincronizar UNA plantilla individual al registro ────── */
+
+  async function handleSyncTemplate(key: MailTemplateKey) {
+    const template = templates.find((t) => t.key === key);
+    if (!template) return;
+
+    setSyncingKey(key);
+    try {
+      const { recordId, currentTemplates } =
+        await fetchCurrentAllTemplatesPayload();
+      currentTemplates[key] = buildMetadataPayload(toFormState(template));
+      await upsertAllTemplatesRecord(currentTemplates, recordId);
+      toast({
+        title: "Plantilla sincronizada",
+        description: `"${template.name}" guardada en metadata.`,
+      });
+      await loadTemplates();
+    } catch (error: any) {
+      toast({
+        title: "Error al sincronizar",
+        description: String(error?.message || "Intenta nuevamente."),
+        variant: "destructive",
+      });
+    } finally {
+      setSyncingKey(null);
+    }
+  }
+
+  /* ── Guardar plantilla editada ────────────────────────────── */
+
   async function saveTemplate() {
     if (!selectedTemplate || !form) return;
 
@@ -505,20 +846,10 @@ export default function PlantillasMailsPage() {
     setSaving(true);
     try {
       const payload = buildMetadataPayload(form);
-      if (selectedTemplate.id != null) {
-        await updateMetadata(selectedTemplate.id, {
-          id: selectedTemplate.id,
-          entity: MAIL_TEMPLATES_ENTITY,
-          entity_id: selectedTemplate.entityId,
-          payload,
-        } as any);
-      } else {
-        await createMetadata({
-          entity: MAIL_TEMPLATES_ENTITY,
-          entity_id: selectedTemplate.key,
-          payload,
-        });
-      }
+      const { recordId, currentTemplates } =
+        await fetchCurrentAllTemplatesPayload();
+      currentTemplates[form.key] = payload;
+      await upsertAllTemplatesRecord(currentTemplates, recordId);
 
       toast({ title: "Plantilla guardada" });
       setOpenEditor(false);
@@ -545,9 +876,9 @@ export default function PlantillasMailsPage() {
         credentials: "include",
         body: JSON.stringify({
           to: TEST_TEMPLATE_EMAIL,
-          subject: template.subject,
-          html: template.html,
-          text: template.text,
+          subject: renderSubjectPreview(template),
+          html: renderTemplatePreview(template),
+          text: renderTextPreview(template),
         }),
       });
 
@@ -602,37 +933,65 @@ export default function PlantillasMailsPage() {
                     <Badge variant="secondary">
                       Activas: {activeTemplates.length}
                     </Badge>
+                    <Badge
+                      variant={metaRecordId != null ? "default" : "destructive"}
+                    >
+                      {metaRecordId != null
+                        ? `Metadata activo (ID: ${metaRecordId})`
+                        : "Sin metadata"}
+                    </Badge>
                   </div>
                 </div>
               </div>
 
-              <Button
-                type="button"
-                onClick={openEditDialog}
-                className="gap-2"
-                disabled={!selectedTemplate || loading}
-              >
-                <Pencil className="h-4 w-4" />
-                Editar plantilla seleccionada
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2"
-                disabled={
-                  !selectedTemplate || loading || sendingTestKey !== null
-                }
-                onClick={() =>
-                  selectedTemplate && sendTemplateTest(selectedTemplate)
-                }
-              >
-                {selectedTemplate && sendingTestKey === selectedTemplate.key ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-                Enviar prueba a {TEST_TEMPLATE_EMAIL}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant={metaRecordId != null ? "outline" : "default"}
+                  className="gap-2"
+                  disabled={loading || creatingMeta}
+                  onClick={handleCreateMetadata}
+                >
+                  {creatingMeta ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : metaRecordId != null ? (
+                    <RefreshCw className="h-4 w-4" />
+                  ) : (
+                    <CloudUpload className="h-4 w-4" />
+                  )}
+                  {metaRecordId != null
+                    ? "Re-sincronizar todo"
+                    : "Crear metadata"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={openEditDialog}
+                  className="gap-2"
+                  disabled={!selectedTemplate || loading}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Editar seleccionada
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-2"
+                  disabled={
+                    !selectedTemplate || loading || sendingTestKey !== null
+                  }
+                  onClick={() =>
+                    selectedTemplate && sendTemplateTest(selectedTemplate)
+                  }
+                >
+                  {selectedTemplate &&
+                  sendingTestKey === selectedTemplate.key ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  Enviar prueba a {TEST_TEMPLATE_EMAIL}
+                </Button>
+              </div>
             </div>
           </div>
 
@@ -647,11 +1006,40 @@ export default function PlantillasMailsPage() {
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-[320px_minmax(0,1fr)] gap-4">
               <Card className="rounded-xl">
-                <CardHeader>
+                <CardHeader className="pb-2">
                   <CardTitle className="text-base">Plantillas</CardTitle>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {TEMPLATE_CATEGORIES.map((cat) => {
+                      const count = activeTemplates.filter(
+                        (t) => TEMPLATE_CATEGORY_MAP[t.key] === cat.id,
+                      ).length;
+                      const isActive = selectedCategory === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedCategory(cat.id);
+                            // Auto-seleccionar la primera de la nueva categoría
+                            const first = activeTemplates.find(
+                              (t) => TEMPLATE_CATEGORY_MAP[t.key] === cat.id,
+                            );
+                            if (first) setSelectedKey(first.key);
+                          }}
+                          className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
+                            isActive
+                              ? "border-primary bg-primary/10 text-primary font-medium"
+                              : "border-border text-muted-foreground hover:bg-muted/40"
+                          }`}
+                        >
+                          {cat.label} ({count})
+                        </button>
+                      );
+                    })}
+                  </div>
                 </CardHeader>
-                <CardContent className="space-y-2">
-                  {activeTemplates.map((item) => {
+                <CardContent className="space-y-2 pt-2">
+                  {categoryTemplates.map((item) => {
                     const isSelected = selectedTemplate?.key === item.key;
                     return (
                       <button
@@ -680,7 +1068,7 @@ export default function PlantillasMailsPage() {
                         <p className="text-[11px] text-muted-foreground mt-2">
                           Orden: {item.orden}
                         </p>
-                        <div className="mt-2">
+                        <div className="mt-2 flex gap-1.5">
                           <Button
                             type="button"
                             variant="outline"
@@ -698,6 +1086,24 @@ export default function PlantillasMailsPage() {
                               <Send className="h-3.5 w-3.5" />
                             )}
                             <span className="ml-1.5">Probar</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7"
+                            title="Sincronizar plantilla a metadata"
+                            disabled={syncingKey !== null || creatingMeta}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSyncTemplate(item.key);
+                            }}
+                          >
+                            {syncingKey === item.key ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            )}
                           </Button>
                         </div>
                       </button>
@@ -831,7 +1237,7 @@ export default function PlantillasMailsPage() {
                         <div className="rounded-lg border overflow-hidden bg-background">
                           <iframe
                             title={`preview-${selectedTemplate.key}`}
-                            srcDoc={selectedTemplate.html}
+                            srcDoc={renderTemplatePreview(selectedTemplate)}
                             className="w-full h-[620px]"
                             sandbox="allow-same-origin"
                           />
@@ -865,6 +1271,41 @@ export default function PlantillasMailsPage() {
                 Los cambios se guardan en metadata y reemplazan la versión base.
               </DialogDescription>
             </DialogHeader>
+
+            <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/30 p-3 text-sm">
+              <p className="font-medium text-blue-900 dark:text-blue-200 mb-1">
+                Variables dinámicas
+              </p>
+              <p className="text-blue-800 dark:text-blue-300 text-xs">
+                Usa la sintaxis{" "}
+                <code className="font-mono bg-blue-100 dark:bg-blue-900 px-1 rounded">
+                  {"{{nombreVariable}}"}
+                </code>{" "}
+                en el HTML o texto. Al enviar el correo, estas variables se
+                reemplazan automáticamente con los datos reales del
+                destinatario.
+              </p>
+              {form ? (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[
+                    ...COMMON_TEMPLATE_VARIABLES,
+                    ...(TEMPLATE_SPECIFIC_VARIABLES[form.key] || []),
+                  ].map((v) => (
+                    <span
+                      key={v.key}
+                      className="inline-flex items-center gap-1 rounded bg-blue-100 dark:bg-blue-900 px-1.5 py-0.5 text-xs font-mono text-blue-800 dark:text-blue-200 cursor-pointer hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                      title={`${v.description}${v.example ? ` (ej: ${v.example})` : ""}`}
+                      onClick={() => navigator.clipboard?.writeText(v.key)}
+                    >
+                      {v.key}
+                    </span>
+                  ))}
+                  <span className="text-[10px] text-blue-600 dark:text-blue-400 self-center ml-1">
+                    (click para copiar)
+                  </span>
+                </div>
+              ) : null}
+            </div>
 
             {form ? (
               <div className="space-y-4">

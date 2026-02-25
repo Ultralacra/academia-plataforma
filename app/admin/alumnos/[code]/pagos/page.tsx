@@ -26,6 +26,9 @@ import {
   Split,
   Gift,
   RefreshCw,
+  Mail,
+  Send,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,6 +51,7 @@ import {
   SelectLabel,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Table,
   TableBody,
@@ -86,6 +90,14 @@ import {
 import { format, differenceInDays, addDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { BONOS_CONTRACTUALES, BONOS_EXTRA } from "@/lib/bonos";
+import {
+  PAYMENT_FOLLOWUP_TEMPLATES,
+  DEFAULT_PAYMENT_LINKS_HTML,
+  DEFAULT_PAYMENT_LINKS_TEXT,
+  getPaymentFollowupSource,
+  type PaymentFollowupDay,
+} from "@/lib/email-templates/payment-followup";
+import { listMetadata, type MetadataRecord } from "@/lib/metadata";
 import {
   Popover,
   PopoverContent,
@@ -213,6 +225,19 @@ export default function StudentPaymentsPage() {
     useState<string>("pendiente");
   const [selectedPaymentStatusSaving, setSelectedPaymentStatusSaving] =
     useState(false);
+
+  // ── Email reminder dialog ──
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailDialogCuota, setEmailDialogCuota] = useState<{
+    detalleCodigo: string;
+    cuotaCodigo: string;
+    date: Date;
+    amount: number;
+  } | null>(null);
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailSelectedDay, setEmailSelectedDay] = useState<
+    PaymentFollowupDay | "generic"
+  >("-3");
 
   // Form states
   const [newPayment, setNewPayment] = useState({
@@ -702,7 +727,7 @@ export default function StudentPaymentsPage() {
     setRegisterOpen(true);
   }
 
-  async function handleSendPaymentReminder(
+  function openEmailDialog(
     detalleCodigo: string,
     cuotaCodigo: string,
     date: Date,
@@ -713,68 +738,175 @@ export default function StudentPaymentsPage() {
       toast({ title: "No hay correo del alumno", variant: "destructive" });
       return;
     }
+    // Calcular el día sugerido respecto a la fecha de vencimiento
+    const diff = differenceInDays(new Date(date), new Date());
+    let suggestedDay: PaymentFollowupDay | "generic" = "generic";
+    if (diff >= 3) suggestedDay = "-3";
+    else if (diff >= 1) suggestedDay = "-1";
+    else if (diff === 0) suggestedDay = "0";
+    else if (diff >= -2) suggestedDay = "+2";
+    else if (diff >= -4) suggestedDay = "+4";
+    else suggestedDay = "+6";
 
+    setEmailDialogCuota({ detalleCodigo, cuotaCodigo, date, amount });
+    setEmailSelectedDay(suggestedDay);
+    setEmailDialogOpen(true);
+  }
+
+  function interpolateEmailVars(
+    template: string,
+    vars: Record<string, string>,
+  ): string {
+    return String(template || "").replace(
+      /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g,
+      (_, key) => vars[key] ?? "",
+    );
+  }
+
+  async function handleSendSelectedTemplate() {
+    if (!emailDialogCuota || !studentEmail) return;
+    setEmailSending(true);
     try {
+      const token = getAuthToken();
+      const { cuotaCodigo, date, amount } = emailDialogCuota;
       const formattedDate = format(new Date(date), "dd 'de' MMM yyyy", {
         locale: es,
       });
-      const subject = `Recordatorio de pago: cuota ${cuotaCodigo} vence ${formattedDate}`;
+      const origin =
+        typeof window !== "undefined"
+          ? window.location.origin
+          : "https://academia.valinkgroup.com";
+      const portalLink = `${origin}/login`;
 
-      const body = {
-        template: "payment_reminder",
-        recipients: [
-          {
-            email: studentEmail,
-            name: studentName ?? undefined,
+      if (emailSelectedDay === "generic") {
+        // Enviar la plantilla genérica existente vía /api/brevo/send-test
+        const subject = `Recordatorio de pago: cuota ${cuotaCodigo} vence ${formattedDate}`;
+        const body = {
+          template: "payment_reminder",
+          recipients: [{ email: studentEmail, name: studentName ?? undefined }],
+          subject,
+          appName: "Hotselling",
+          origin,
+          portalLink,
+          payment: {
+            cuotaCodigo: String(cuotaCodigo || ""),
+            dueDate: format(new Date(date), "yyyy-MM-dd"),
+            amount,
           },
-        ],
-        subject,
-        appName: "Hotselling",
-        origin:
-          typeof window !== "undefined" ? window.location.origin : undefined,
-        portalLink:
-          typeof window !== "undefined"
-            ? window.location.origin + "/login"
-            : undefined,
-        payment: {
-          cuotaCodigo: String(cuotaCodigo || ""),
-          dueDate: format(new Date(date), "yyyy-MM-dd"),
-          amount: amount,
-        },
-      } as any;
+        } as any;
 
-      const token = getAuthToken();
-
-      const res = await fetch("/api/brevo/send-test", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(body),
-        credentials: "include",
-      });
-
-      const jsonRes = await res
-        .json()
-        .catch(() => ({ status: "error", message: "Respuesta inválida" }));
-      if (!res.ok || jsonRes?.status !== "success") {
-        console.error("[Pagos] Error enviando mail", jsonRes);
-        toast({
-          title: "Error enviando mail",
-          description: String(jsonRes?.message ?? "Error"),
-          variant: "destructive",
+        const res = await fetch("/api/brevo/send-test", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
+          credentials: "include",
         });
-        return;
+
+        const jsonRes = await res
+          .json()
+          .catch(() => ({ status: "error", message: "Respuesta inválida" }));
+        if (!res.ok || jsonRes?.status !== "success") {
+          throw new Error(String(jsonRes?.message ?? "Error"));
+        }
+      } else {
+        // Usar plantilla de seguimiento de pago por día
+        const day = emailSelectedDay as PaymentFollowupDay;
+        const meta = PAYMENT_FOLLOWUP_TEMPLATES.find((t) => t.day === day);
+        if (!meta) throw new Error("Plantilla no encontrada");
+
+        // Intentar cargar override desde metadata
+        let htmlSource: string;
+        let textSource: string;
+        let subjectSource: string;
+        try {
+          const metaRes = await listMetadata<any>();
+          const items = (metaRes.items || []).filter(
+            (item) => String(item?.entity || "") === "plantillas_mails",
+          );
+          const override = items.find((item) => {
+            const eid = String(item?.entity_id || "")
+              .trim()
+              .toLowerCase();
+            const pkey = String(item?.payload?.key || "")
+              .trim()
+              .toLowerCase();
+            return eid === meta.key || pkey === meta.key;
+          });
+          if (override?.payload?.html) {
+            htmlSource = String(override.payload.html);
+            textSource = String(override.payload.text || "");
+            subjectSource = String(override.payload.subject || meta.subject);
+          } else {
+            const src = getPaymentFollowupSource(day);
+            htmlSource = src.html;
+            textSource = src.text;
+            subjectSource = src.subject;
+          }
+        } catch {
+          const src = getPaymentFollowupSource(day);
+          htmlSource = src.html;
+          textSource = src.text;
+          subjectSource = src.subject;
+        }
+
+        // Interpolar variables
+        const vars: Record<string, string> = {
+          recipientName: studentName || "",
+          recipientEmail: studentEmail,
+          appName: "Hotselling",
+          cuotaCodigo: String(cuotaCodigo || ""),
+          dueDate: formattedDate,
+          amount: typeof amount === "number" ? `$${amount}` : String(amount),
+          portalLink,
+          origin,
+          paymentLinks: DEFAULT_PAYMENT_LINKS_HTML,
+        };
+        const varsText = { ...vars, paymentLinks: DEFAULT_PAYMENT_LINKS_TEXT };
+
+        const finalHtml = interpolateEmailVars(htmlSource, vars);
+        const finalText = interpolateEmailVars(textSource, varsText);
+        const finalSubject = interpolateEmailVars(subjectSource, vars);
+
+        const res = await fetch("/api/brevo/send-preview", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            to: studentEmail,
+            subject: finalSubject,
+            html: finalHtml,
+            text: finalText,
+          }),
+          credentials: "include",
+        });
+
+        const jsonRes = await res
+          .json()
+          .catch(() => ({ status: "error", message: "Respuesta inválida" }));
+        if (!res.ok || String(jsonRes?.status || "") !== "success") {
+          throw new Error(String(jsonRes?.message ?? "Error"));
+        }
       }
 
       toast({
         title: "Correo enviado",
         description: `Notificación enviada a ${studentEmail}`,
       });
-    } catch (e) {
-      console.error("[Pagos] Excepción enviando mail", e);
-      toast({ title: "Error enviando mail", variant: "destructive" });
+      setEmailDialogOpen(false);
+    } catch (e: any) {
+      console.error("[Pagos] Error enviando mail", e);
+      toast({
+        title: "Error enviando mail",
+        description: String(e?.message ?? "Error"),
+        variant: "destructive",
+      });
+    } finally {
+      setEmailSending(false);
     }
   }
 
@@ -1560,9 +1692,9 @@ export default function StudentPaymentsPage() {
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    className="h-6 text-xs px-2"
+                                    className="h-6 text-xs px-2 gap-1"
                                     onClick={() =>
-                                      void handleSendPaymentReminder(
+                                      openEmailDialog(
                                         String(
                                           (item as any).detalleCodigo || "",
                                         ),
@@ -1572,6 +1704,7 @@ export default function StudentPaymentsPage() {
                                       )
                                     }
                                   >
+                                    <Mail className="h-3 w-3" />
                                     Enviar mail
                                   </Button>
                                 )}
@@ -3130,6 +3263,115 @@ export default function StudentPaymentsPage() {
                 className="w-full"
               >
                 Cerrar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Email Template Selector Dialog ── */}
+        <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Mail className="w-5 h-5" /> Enviar recordatorio de pago
+              </DialogTitle>
+              <DialogDescription>
+                {emailDialogCuota && (
+                  <span>
+                    Cuota <strong>{emailDialogCuota.cuotaCodigo}</strong> — $
+                    {emailDialogCuota.amount?.toLocaleString("es-AR")} — vence{" "}
+                    {new Date(emailDialogCuota.date).toLocaleDateString(
+                      "es-AR",
+                    )}
+                  </span>
+                )}
+                {studentEmail && (
+                  <span className="block mt-1 text-xs">
+                    Destinatario: <strong>{studentEmail}</strong>
+                  </span>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="py-2">
+              <Label className="mb-2 block text-sm font-medium">
+                Seleccioná la plantilla
+              </Label>
+              <RadioGroup
+                value={emailSelectedDay}
+                onValueChange={(v) =>
+                  setEmailSelectedDay(v as PaymentFollowupDay | "generic")
+                }
+                className="gap-2"
+              >
+                {/* Genérico */}
+                <label
+                  className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
+                    emailSelectedDay === "generic"
+                      ? "border-primary bg-primary/5"
+                      : "hover:bg-muted/50"
+                  }`}
+                >
+                  <RadioGroupItem
+                    value="generic"
+                    id="email-tpl-generic"
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">Recordatorio genérico</p>
+                    <p className="text-xs text-muted-foreground">
+                      Plantilla base de recordatorio de pago
+                    </p>
+                  </div>
+                </label>
+
+                {/* Followup templates */}
+                {PAYMENT_FOLLOWUP_TEMPLATES.map((tpl) => (
+                  <label
+                    key={tpl.day}
+                    className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
+                      emailSelectedDay === tpl.day
+                        ? "border-primary bg-primary/5"
+                        : "hover:bg-muted/50"
+                    }`}
+                  >
+                    <RadioGroupItem
+                      value={tpl.day}
+                      id={`email-tpl-${tpl.day}`}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{tpl.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {tpl.description}
+                      </p>
+                    </div>
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => setEmailDialogOpen(false)}
+                disabled={emailSending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleSendSelectedTemplate}
+                disabled={emailSending || !studentEmail}
+              >
+                {emailSending ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando…
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" /> Enviar
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
