@@ -74,7 +74,7 @@ export default function AdminBonosPage() {
   const { user } = useAuth();
   const readOnly =
     user?.role === "equipo" &&
-    ["ADS", "COPY"].includes((user?.area || "").toUpperCase());
+    ["ADS", "COPY", "TECNICO"].includes((user?.area || "").toUpperCase());
 
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<alumnosApi.Bono[]>([]);

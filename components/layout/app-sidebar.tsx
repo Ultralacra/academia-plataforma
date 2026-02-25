@@ -422,7 +422,7 @@ export function AppSidebar() {
         // Filtrar ítems según el área del usuario equipo
         const userArea = (user?.area || "").toUpperCase();
         const filteredBase =
-          userArea === "ADS" || userArea === "COPY"
+          userArea === "ADS" || userArea === "COPY" || userArea === "TECNICO"
             ? base.filter(
                 (item) =>
                   ![
