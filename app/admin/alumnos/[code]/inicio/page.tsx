@@ -15,6 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -51,7 +52,7 @@ import {
 type TaskField = {
   key: string;
   label: string;
-  type?: "text" | "date" | "url" | "tel" | "email";
+  type?: "text" | "date" | "url" | "tel" | "email" | "textarea";
 };
 
 type AdsMetadataLike = {
@@ -139,6 +140,11 @@ function getFieldsByPhase(phase: number | null): TaskField[] {
   const base: TaskField[] = [
     { key: "fecha", label: "Fecha", type: "date" },
     { key: "nombre", label: "Nombre", type: "text" },
+    {
+      key: "observaciones",
+      label: "Observaciones",
+      type: "textarea",
+    },
   ];
 
   if (phase === 1) {
@@ -495,6 +501,7 @@ export default function StudentInicioPage() {
         alumno_codigo: code,
         alumno_nombre: studentName || null,
         fase_formulario: phase || null,
+        estatus: "Nueva tarea creada",
         ads_metadata_id: latestMetadata.id,
         fecha: taskValues.fecha ? `${taskValues.fecha}T12:00:00` : nowIso,
         campos: { ...taskValues },
@@ -777,16 +784,29 @@ export default function StudentInicioPage() {
                         <Label className="text-xs text-muted-foreground">
                           {field.label}
                         </Label>
-                        <Input
-                          type={field.type ?? "text"}
-                          value={taskValues[field.key] ?? ""}
-                          onChange={(e) =>
-                            setTaskValues((prev) => ({
-                              ...prev,
-                              [field.key]: e.target.value,
-                            }))
-                          }
-                        />
+                        {field.type === "textarea" ? (
+                          <Textarea
+                            value={taskValues[field.key] ?? ""}
+                            onChange={(e) =>
+                              setTaskValues((prev) => ({
+                                ...prev,
+                                [field.key]: e.target.value,
+                              }))
+                            }
+                            rows={3}
+                          />
+                        ) : (
+                          <Input
+                            type={field.type ?? "text"}
+                            value={taskValues[field.key] ?? ""}
+                            onChange={(e) =>
+                              setTaskValues((prev) => ({
+                                ...prev,
+                                [field.key]: e.target.value,
+                              }))
+                            }
+                          />
+                        )}
                         {field.key === "doc_link" && taskValues.doc_link ? (
                           <div className="flex items-center gap-2 pt-1">
                             {isLikelyUrl(taskValues.doc_link) ? (

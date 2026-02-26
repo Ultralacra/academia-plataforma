@@ -318,6 +318,7 @@ function NotificationsBadge() {
 }
 
 function TasksNotificationsBadge() {
+  const TASK_STATUS_NEW = "Nueva tarea creada";
   const { user } = useAuth();
   const isStudent = user?.role === "student";
   const router = useRouter();
@@ -333,6 +334,7 @@ function TasksNotificationsBadge() {
         id: string;
         fecha: string;
         fase: string;
+        estatus: string;
         resumen: string;
       }>;
     }>
@@ -358,21 +360,21 @@ function TasksNotificationsBadge() {
         return;
       }
 
+      const authHeaders: HeadersInit | undefined = (() => {
+        try {
+          const token = getAuthToken();
+          return token ? { Authorization: `Bearer ${token}` } : undefined;
+        } catch {
+          return undefined;
+        }
+      })();
+
       const json = isStudent
         ? await fetch(
             `/api/alumnos/${encodeURIComponent(alumnoRef)}/metadata?entity=${encodeURIComponent("ads_metrics")}`,
             {
               method: "GET",
-              headers: {
-                ...(() => {
-                  try {
-                    const token = getAuthToken();
-                    return token ? { Authorization: `Bearer ${token}` } : {};
-                  } catch {
-                    return {};
-                  }
-                })(),
-              },
+              headers: authHeaders,
               cache: "no-store",
             },
           ).then(async (res) => {
@@ -408,6 +410,7 @@ function TasksNotificationsBadge() {
             id: string;
             fecha: string;
             fase: string;
+            estatus: string;
             resumen: string;
           }>;
         }
@@ -453,6 +456,12 @@ function TasksNotificationsBadge() {
 
         for (let i = 0; i < taskList.length; i++) {
           const t = taskList[i] ?? {};
+          const normalizedStatus = String(t?.estatus ?? TASK_STATUS_NEW)
+            .trim()
+            .toLowerCase();
+          const isNewTask = normalizedStatus === TASK_STATUS_NEW.toLowerCase();
+          if (!isNewTask) continue;
+
           const dateRaw = String(t?.created_at ?? t?.fecha ?? "").trim();
           const parsedDate = Date.parse(dateRaw);
           const fecha = Number.isFinite(parsedDate)
@@ -471,19 +480,22 @@ function TasksNotificationsBadge() {
                 campos?.nombre ??
                 campos?.correo_compras ??
                 campos?.whatsapp ??
-                "Tarea enviada",
-            ).trim() || "Tarea enviada";
+                TASK_STATUS_NEW,
+            ).trim() || TASK_STATUS_NEW;
 
           entry.tareas.push({
             id: String(t?.id ?? `${alumnoCodigo}-${i}`),
             fecha,
             fase: String(t?.fase_formulario ?? "—"),
+            estatus: TASK_STATUS_NEW,
             resumen,
           });
           entry.total += 1;
         }
 
-        byStudent.set(alumnoCodigo, entry);
+        if (entry.total > 0) {
+          byStudent.set(alumnoCodigo, entry);
+        }
       }
 
       const grouped = [...byStudent.values()]
@@ -530,7 +542,7 @@ function TasksNotificationsBadge() {
       <PopoverTrigger asChild>
         <button
           className="relative p-2 rounded-full hover:bg-muted/10"
-          title="Tareas enviadas"
+          title="Nuevas tareas"
           type="button"
         >
           <ClipboardList
@@ -544,7 +556,7 @@ function TasksNotificationsBadge() {
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-[26rem] p-3">
-        <div className="px-2 py-1 text-base font-semibold">Tareas enviadas</div>
+        <div className="px-2 py-1 text-base font-semibold">Nuevas tareas</div>
         <div className="mb-2 mt-1 flex items-center justify-between px-1">
           <div className="text-xs text-muted-foreground">
             Se actualiza automáticamente cada 3 minutos
@@ -571,7 +583,7 @@ function TasksNotificationsBadge() {
             </div>
           ) : tasksByStudent.length === 0 ? (
             <div className="p-3 text-xs text-muted-foreground">
-              No hay tareas enviadas por alumnos
+              No hay tareas nuevas por revisar
             </div>
           ) : (
             <Accordion type="multiple" className="w-full">
@@ -604,6 +616,11 @@ function TasksNotificationsBadge() {
                             <div className="text-[11px] text-muted-foreground">
                               {new Date(task.fecha).toLocaleString()}
                             </div>
+                          </div>
+                          <div className="mt-1">
+                            <Badge variant="outline" className="text-[10px]">
+                              {task.estatus}
+                            </Badge>
                           </div>
                           <div
                             className="mt-1 truncate text-xs text-muted-foreground"

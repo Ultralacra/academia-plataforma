@@ -7,6 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -49,12 +56,33 @@ type TareaItem = {
   id: string;
   fecha?: string | null;
   fase_formulario?: string | null;
+  estatus?: string | null;
   alumno_codigo?: string | null;
   alumno_nombre?: string | null;
   ads_metadata_id?: string | number | null;
   created_at?: string | null;
   campos: Record<string, string>;
 };
+
+const TASK_STATUS_NEW = "Nueva tarea creada";
+const TASK_STATUS_OPTIONS = [
+  TASK_STATUS_NEW,
+  "Enviado a coach",
+  "Revisión",
+  "Resuelto",
+];
+
+function normalizeTaskStatus(value: unknown, fallback = TASK_STATUS_NEW) {
+  const raw = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (!raw) return fallback;
+  if (raw === TASK_STATUS_NEW.toLowerCase()) return TASK_STATUS_NEW;
+  const match = TASK_STATUS_OPTIONS.find(
+    (status) => status.toLowerCase() === raw,
+  );
+  return match ?? fallback;
+}
 
 function normalizeId(value: unknown): string {
   if (value == null) return "";
@@ -80,6 +108,7 @@ function parseTareas(payload: any): TareaItem[] {
     id: String(t?.id ?? `tarea_${idx}`),
     fecha: t?.fecha ?? null,
     fase_formulario: t?.fase_formulario ?? null,
+    estatus: normalizeTaskStatus(t?.estatus),
     alumno_codigo: t?.alumno_codigo ?? null,
     alumno_nombre: t?.alumno_nombre ?? null,
     ads_metadata_id: t?.ads_metadata_id ?? null,
@@ -170,10 +199,12 @@ function isLikelyUrl(value: string) {
 export default function TareasMetadataSection({
   alumnoCode,
   canEdit,
+  canEditStatus = false,
   canDelete = false,
 }: {
   alumnoCode: string;
   canEdit: boolean;
+  canEditStatus?: boolean;
   canDelete?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
@@ -188,7 +219,11 @@ export default function TareasMetadataSection({
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editFecha, setEditFecha] = useState("");
   const [editFase, setEditFase] = useState("");
+  const [editStatus, setEditStatus] = useState("");
   const [editCampos, setEditCampos] = useState<Record<string, string>>({});
+  const [statusSavingTaskId, setStatusSavingTaskId] = useState<string | null>(
+    null,
+  );
 
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {
@@ -247,6 +282,7 @@ export default function TareasMetadataSection({
     setEditingTaskId(task.id);
     setEditFecha(toDateInputValue(task.fecha));
     setEditFase(String(task.fase_formulario ?? ""));
+    setEditStatus(normalizeTaskStatus(task.estatus));
     setEditCampos({ ...task.campos });
     setEditOpen(true);
   };
@@ -269,10 +305,14 @@ export default function TareasMetadataSection({
 
       const updatedTasks = currentTasks.map((task) => {
         if (task.id !== editingTaskId) return task;
+        const nextStatus = canEditStatus
+          ? normalizeTaskStatus(editStatus, normalizeTaskStatus(task.estatus))
+          : normalizeTaskStatus(task.estatus);
         return {
           ...task,
           fecha: editFecha ? `${editFecha}T12:00:00` : task.fecha,
           fase_formulario: editFase || null,
+          estatus: nextStatus,
           campos: { ...editCampos },
           updated_at: new Date().toISOString(),
         };
@@ -397,6 +437,70 @@ export default function TareasMetadataSection({
     }
   };
 
+  const handleQuickStatusChange = async (
+    taskId: string,
+    nextStatus: string,
+  ) => {
+    if (!canEditStatus || !metadata?.id) return;
+    setStatusSavingTaskId(taskId);
+    try {
+      const currentPayload = metadata.payload ?? {};
+      const currentTasks = parseTareas(currentPayload);
+      const normalizedNext = normalizeTaskStatus(nextStatus);
+
+      const updatedTasks = currentTasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              estatus: normalizedNext,
+              updated_at: new Date().toISOString(),
+            }
+          : task,
+      );
+
+      const payloadUpdated = {
+        ...currentPayload,
+        tareas: updatedTasks,
+      };
+
+      const updateBody = {
+        id: metadata.id,
+        entity: metadata.entity ?? "ads_metrics",
+        entity_id: metadata.entity_id ?? alumnoCode,
+        payload: payloadUpdated,
+      };
+
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/alumnos/${encodeURIComponent(alumnoCode)}/metadata/update-ads`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(updateBody),
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+
+      await loadMetadataAndTasks();
+      toast({ title: "Estatus actualizado" });
+    } catch (error) {
+      console.error("Error actualizando estatus de tarea:", error);
+      toast({
+        title: "Error",
+        description: "No se pudo actualizar el estatus",
+        variant: "destructive",
+      });
+    } finally {
+      setStatusSavingTaskId(null);
+    }
+  };
+
   const handleCopy = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -486,6 +590,9 @@ export default function TareasMetadataSection({
                       <Badge variant="outline">
                         Fase {task.fase_formulario || "—"}
                       </Badge>
+                      <Badge variant="outline">
+                        {normalizeTaskStatus(task.estatus)}
+                      </Badge>
                       <Badge variant="muted" className="h-6 gap-1">
                         <CalendarDays className="h-3 w-3" />
                         {taskDate}
@@ -552,6 +659,32 @@ export default function TareasMetadataSection({
                         </Button>
                       )}
                     </div>
+                  </div>
+
+                  <div className="w-full sm:max-w-xs">
+                    <Label className="text-[11px] text-muted-foreground">
+                      Estatus
+                    </Label>
+                    <Select
+                      value={normalizeTaskStatus(task.estatus)}
+                      onValueChange={(value) =>
+                        handleQuickStatusChange(task.id, value)
+                      }
+                      disabled={
+                        !canEditStatus || statusSavingTaskId === task.id
+                      }
+                    >
+                      <SelectTrigger className="h-8 mt-1">
+                        <SelectValue placeholder="Selecciona estatus" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TASK_STATUS_OPTIONS.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {taskFields.length > 0 ? (
@@ -635,6 +768,25 @@ export default function TareasMetadataSection({
                   onChange={(e) => setEditFase(e.target.value)}
                   placeholder="Ej: 3"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Estatus</Label>
+                <Select
+                  value={editStatus}
+                  onValueChange={setEditStatus}
+                  disabled={!canEditStatus}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona un estatus" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TASK_STATUS_OPTIONS.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

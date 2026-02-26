@@ -14,7 +14,8 @@ export default function StudentTareasPage() {
   const code = decodeURIComponent(params?.code ?? "");
   const { user } = useAuth();
   const role = (user?.role ?? "").toLowerCase();
-  const canEdit = role === "student" || role === "admin";
+  const canEdit = role === "student" || role === "admin" || role === "equipo";
+  const canEditStatus = role === "equipo" || role === "admin";
   const canDelete = role === "student" || role === "admin";
 
   return (
@@ -37,6 +38,7 @@ export default function StudentTareasPage() {
               <TareasMetadataSection
                 alumnoCode={code}
                 canEdit={canEdit}
+                canEditStatus={canEditStatus}
                 canDelete={canDelete}
               />
             </TabsContent>
