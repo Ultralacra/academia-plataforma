@@ -362,7 +362,8 @@ export default function PreguntasFrecuentesPage() {
     null,
   );
   const [form, setForm] = useState<FaqFormState>(DEFAULT_FORM);
-  const isAdmin = String(user?.role || "").toLowerCase() === "admin";
+  const userRole = String(user?.role || "").toLowerCase();
+  const canManageFaqs = userRole === "admin" || userRole === "equipo";
 
   const loadFaqs = useCallback(async () => {
     setIsLoading(true);
@@ -395,14 +396,14 @@ export default function PreguntasFrecuentesPage() {
   const loadCoaches = useCallback(async () => {
     try {
       const rows = await getCoaches({ page: 1, pageSize: 200 });
-      const names = Array.from(
+      const areas = Array.from(
         new Set(
           rows
-            .map((coach) => String(coach?.nombre || "").trim())
+            .map((coach) => String(coach?.area || "").trim() || "Sin área")
             .filter(Boolean),
         ),
       ).sort((a, b) => a.localeCompare(b, "es"));
-      setCoaches(names);
+      setCoaches(areas);
     } catch {
       setCoaches([]);
     }
@@ -438,7 +439,7 @@ export default function PreguntasFrecuentesPage() {
   );
 
   function openCreate() {
-    if (!isAdmin) return;
+    if (!canManageFaqs) return;
     setEditing(null);
     setForm({
       ...DEFAULT_FORM,
@@ -449,7 +450,7 @@ export default function PreguntasFrecuentesPage() {
   }
 
   function openEdit(item: FaqItem) {
-    if (!isAdmin) return;
+    if (!canManageFaqs) return;
     setEditing(item);
     setForm({
       target: item.target,
@@ -465,10 +466,10 @@ export default function PreguntasFrecuentesPage() {
   }
 
   async function handleSubmit() {
-    if (!isAdmin) {
+    if (!canManageFaqs) {
       toast({
         title: "Acceso restringido",
-        description: "Solo un administrador puede crear o editar FAQs.",
+        description: "Solo admin o equipo pueden crear o editar FAQs.",
         variant: "destructive",
       });
       return;
@@ -486,7 +487,7 @@ export default function PreguntasFrecuentesPage() {
     if (!payload.responsable) {
       toast({
         title: "Responsable requerido",
-        description: "Selecciona un coach o ATC.",
+        description: "Selecciona un área o ATC.",
         variant: "destructive",
       });
       return;
@@ -530,10 +531,10 @@ export default function PreguntasFrecuentesPage() {
   }
 
   async function handleDeactivate(item: FaqItem) {
-    if (!isAdmin) {
+    if (!canManageFaqs) {
       toast({
         title: "Acceso restringido",
-        description: "Solo un administrador puede desactivar FAQs.",
+        description: "Solo admin o equipo pueden desactivar FAQs.",
         variant: "destructive",
       });
       return;
@@ -572,7 +573,7 @@ export default function PreguntasFrecuentesPage() {
     }
   }
 
-  const coachSelectOptions = coaches.length ? coaches : ["Johan", "Karina"];
+  const coachSelectOptions = coaches.length ? coaches : ["Sin área"];
 
   return (
     <ProtectedRoute allowedRoles={["admin", "equipo"]}>
@@ -585,7 +586,7 @@ export default function PreguntasFrecuentesPage() {
                 Gestión dinámica desde metadata (entidad: preguntas_frecuentes).
               </p>
             </div>
-            {isAdmin ? (
+            {canManageFaqs ? (
               <Button type="button" onClick={openCreate} className="gap-2">
                 <Plus className="h-4 w-4" />
                 Nueva FAQ
@@ -620,7 +621,7 @@ export default function PreguntasFrecuentesPage() {
                   onEdit={openEdit}
                   onRequestDeactivate={setConfirmDeleteItem}
                   saving={isSaving}
-                  canManage={isAdmin}
+                  canManage={canManageFaqs}
                 />
               </TabsContent>
 
@@ -630,14 +631,14 @@ export default function PreguntasFrecuentesPage() {
                   onEdit={openEdit}
                   onRequestDeactivate={setConfirmDeleteItem}
                   saving={isSaving}
-                  canManage={isAdmin}
+                  canManage={canManageFaqs}
                 />
               </TabsContent>
             </Tabs>
           )}
         </div>
 
-        <Dialog open={isAdmin && openModal} onOpenChange={setOpenModal}>
+        <Dialog open={canManageFaqs && openModal} onOpenChange={setOpenModal}>
           <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>{editing ? "Editar FAQ" : "Crear FAQ"}</DialogTitle>
@@ -674,7 +675,7 @@ export default function PreguntasFrecuentesPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Coach / Responsable</Label>
+                  <Label>Área / Responsable</Label>
                   {form.target === "coaches" ? (
                     <Select
                       value={form.responsable}
@@ -683,12 +684,12 @@ export default function PreguntasFrecuentesPage() {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecciona coach" />
+                        <SelectValue placeholder="Selecciona área" />
                       </SelectTrigger>
                       <SelectContent>
-                        {coachSelectOptions.map((name) => (
-                          <SelectItem key={name} value={name}>
-                            {name}
+                        {coachSelectOptions.map((area) => (
+                          <SelectItem key={area} value={area}>
+                            {area}
                           </SelectItem>
                         ))}
                       </SelectContent>
