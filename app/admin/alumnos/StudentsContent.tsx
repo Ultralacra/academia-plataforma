@@ -71,6 +71,24 @@ function getUniqueCoaches(students: StudentRow[]) {
   return Array.from(new Set(allCoaches)).filter(Boolean).sort();
 }
 
+function getUniqueTags(students: StudentRow[]) {
+  const allTags = students
+    .map((s) => String(s.tag ?? "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(allTags)).sort((a, b) =>
+    a.localeCompare(b, "es", { sensitivity: "base" }),
+  );
+}
+
+function getUniqueBonos(students: StudentRow[]) {
+  const allBonos = students.flatMap(
+    (s) => s.bonos?.map((b) => String(b.nombre ?? "").trim()) ?? [],
+  );
+  return Array.from(new Set(allBonos))
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+}
+
 function getCoachMetrics(students: StudentRow[]) {
   const total = students.length;
   const fases = ["F1", "F2", "F3", "F4", "F5"];
@@ -271,6 +289,8 @@ export default function StudentsContent() {
   const [specialFilter, setSpecialFilter] = useState<"casos_exito" | null>(
     null,
   );
+  const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [filterBono, setFilterBono] = useState<string | null>(null);
   const [openCoach, setOpenCoach] = useState(false);
 
   // Cache local: dataset "todos" para volver sin refetch.
@@ -813,6 +833,18 @@ export default function StudentsContent() {
     return hasNoState ? [NO_STATE, ...base] : base;
   }, [all]);
 
+  // valores únicos de tags
+  const uniqueTags = useMemo(() => {
+    const source = all || [];
+    return getUniqueTags(source);
+  }, [all]);
+
+  // valores únicos de bonos
+  const uniqueBonos = useMemo(() => {
+    const source = all || [];
+    return getUniqueBonos(source);
+  }, [all]);
+
   const [adsInversionSort, setAdsInversionSort] = useState<
     "asc" | "desc" | null
   >(null);
@@ -938,6 +970,20 @@ export default function StudentsContent() {
           return false;
         }
       }
+
+      // tag
+      if (filterTag) {
+        if (String(s.tag ?? "").trim() !== filterTag) return false;
+      }
+
+      // bono
+      if (filterBono) {
+        const hasBono = s.bonos?.some(
+          (b) => String(b.nombre ?? "").trim() === filterBono,
+        );
+        if (!hasBono) return false;
+      }
+
       return true;
     });
 
@@ -978,6 +1024,8 @@ export default function StudentsContent() {
     filterMetaFase,
     filterMetaSubfase,
     filterMetaTrasc,
+    filterTag,
+    filterBono,
     specialFilter,
     adsSummaryByAlumnoId,
   ]);
@@ -1270,6 +1318,8 @@ export default function StudentsContent() {
     setCoach("todos");
     setFilterState(null);
     setFilterStage(null);
+    setFilterTag(null);
+    setFilterBono(null);
     setFilterMetaFase(null);
     setFilterMetaSubfase(null);
     setFilterMetaTrasc(null);
@@ -1282,11 +1332,63 @@ export default function StudentsContent() {
     coach !== "todos" ||
     filterStage ||
     filterState ||
+    filterTag ||
+    filterBono ||
     filterMetaFase ||
     filterMetaSubfase ||
     filterMetaTrasc ||
     specialFilter,
   );
+
+  useEffect(() => {
+    if (!hasFilters) return;
+
+    const activeFilters = {
+      search: search || null,
+      coach: coach !== "todos" ? coach : null,
+      stage: filterStage,
+      state: filterState,
+      tag: filterTag,
+      bono: filterBono,
+      metaFase: filterMetaFase,
+      metaSubfase: filterMetaSubfase,
+      metaTrasc: filterMetaTrasc,
+      special: specialFilter,
+    };
+
+    const filteredUsers = finalRows.map((student) => ({
+      id: student.id,
+      code: student.code ?? null,
+      name: student.name,
+      state: student.state ?? null,
+      stage: student.stage ?? null,
+      tag: String(student.tag ?? "").trim() || null,
+      bonos: (student.bonos ?? [])
+        .map((b) => String(b.nombre ?? "").trim())
+        .filter(Boolean),
+    }));
+
+    const usersWithoutTag = filteredUsers.filter(
+      (student) => student.tag === null || String(student.tag).trim() === "",
+    );
+
+    console.log("[Alumnos] Filtros activos:", activeFilters);
+    console.log("[Alumnos] Usuarios filtrados:", filteredUsers);
+    console.log("[Alumnos] Usuarios sin tag:", usersWithoutTag);
+  }, [
+    hasFilters,
+    search,
+    coach,
+    filterStage,
+    filterState,
+    filterTag,
+    filterBono,
+    filterMetaFase,
+    filterMetaSubfase,
+    filterMetaTrasc,
+    specialFilter,
+    finalRows,
+  ]);
 
   const escapeCsvCell = (value: unknown) => {
     const s = String(value ?? "");
@@ -1367,6 +1469,18 @@ export default function StudentsContent() {
           return false;
         }
       }
+
+      if (filterTag) {
+        if (String(s.tag ?? "").trim() !== filterTag) return false;
+      }
+
+      if (filterBono) {
+        const hasBono = s.bonos?.some(
+          (b) => String(b.nombre ?? "").trim() === filterBono,
+        );
+        if (!hasBono) return false;
+      }
+
       if (specialFilter === "casos_exito") {
         const facturacion = id ? adsSummaryByAlumnoId[id]?.facturacion : null;
         if (!(facturacion != null && facturacion > 5000)) return false;
@@ -2131,6 +2245,82 @@ export default function StudentsContent() {
         </div>
       )}
 
+      {/* Filtro por Tag (chips) */}
+      {uniqueTags.length > 0 && (
+        <div className="mb-2">
+          <div className="flex items-center gap-2 w-full">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Tag
+            </span>
+            <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+              {uniqueTags.map((it) => {
+                const active = filterTag === it;
+                return (
+                  <button
+                    key={it}
+                    onClick={() => setFilterTag(active ? null : it)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                      active
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-card text-foreground border-border hover:bg-accent",
+                    )}
+                  >
+                    {it}
+                  </button>
+                );
+              })}
+              {filterTag && (
+                <button
+                  onClick={() => setFilterTag(null)}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtro por Bono (chips) */}
+      {uniqueBonos.length > 0 && (
+        <div className="mb-2">
+          <div className="flex items-center gap-2 w-full">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Bono
+            </span>
+            <div className="flex gap-1.5 whitespace-nowrap overflow-x-auto md:overflow-visible md:flex-wrap md:whitespace-normal w-full">
+              {uniqueBonos.map((it) => {
+                const active = filterBono === it;
+                return (
+                  <button
+                    key={it}
+                    onClick={() => setFilterBono(active ? null : it)}
+                    className={cn(
+                      "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
+                      active
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-card text-foreground border-border hover:bg-accent",
+                    )}
+                  >
+                    {it}
+                  </button>
+                );
+              })}
+              {filterBono && (
+                <button
+                  onClick={() => setFilterBono(null)}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-medium border bg-muted text-muted-foreground hover:bg-muted/80"
+                >
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {(uniqueMetaFases.length > 0 ||
         uniqueMetaSubfases.length > 0 ||
         uniqueMetaTrasc.length > 0) && (
@@ -2242,18 +2432,6 @@ export default function StudentsContent() {
               title="Muestra alumnos con facturación > 5000"
             >
               Casos de éxito
-            </button>
-
-            <button
-              type="button"
-              disabled
-              className={cn(
-                "px-2.5 py-1 rounded-full text-[11px] font-medium transition border",
-                "bg-muted text-muted-foreground border-border opacity-70 cursor-not-allowed",
-              )}
-              title="Próximamente"
-            >
-              Bonos
             </button>
 
             {specialFilter && (

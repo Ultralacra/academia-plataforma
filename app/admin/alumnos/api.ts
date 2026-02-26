@@ -134,6 +134,14 @@ export type StudentRow = {
   inactivityDays?: number | null;
   contractUrl?: string | null;
   ticketsCount?: number | null;
+  tag?: string | null;
+  bonos?: Array<{
+    nombre: string;
+    codigo: string;
+    cantidad: number;
+    fecha_vencimiento: string;
+    usado: boolean;
+  }> | null;
 };
 
 export type CoachTeam = {
@@ -385,6 +393,90 @@ function cleanClientName(raw: any): string {
   return s || '—';
 }
 
+function parseTagFromClientRow(row: any): string | null {
+  const pick = (v: any): string | null => {
+    if (typeof v === 'string') {
+      const s = v.trim();
+      return s || null;
+    }
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        const parsed = pick(item);
+        if (parsed) return parsed;
+      }
+      return null;
+    }
+    if (v && typeof v === 'object') {
+      const candidate =
+        v.tag ?? v.nombre ?? v.name ?? v.value ?? v.label ?? v.etiqueta ?? null;
+      return pick(candidate);
+    }
+    return null;
+  };
+
+  return pick(row?.tag ?? row?.tags ?? row?.etiqueta ?? row?.label ?? null);
+}
+
+function parseBonosFromClientRow(row: any): StudentRow['bonos'] {
+  const raw =
+    row?.bonos ??
+    row?.bono ??
+    row?.bonos_asignados ??
+    row?.bono_asignaciones ??
+    row?.assignments ??
+    [];
+
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+
+  const toBool = (v: any): boolean => {
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'number') return v === 1;
+    const s = String(v ?? '')
+      .trim()
+      .toLowerCase();
+    return s === '1' || s === 'true' || s === 'si' || s === 'sí';
+  };
+
+  const normalized = raw
+    .map((item: any) => {
+      const source = item?.bono && typeof item.bono === 'object' ? item.bono : item;
+      const nombre = String(
+        source?.nombre ?? source?.name ?? item?.bono_nombre ?? item?.nombre_bono ?? '',
+      ).trim();
+      if (!nombre) return null;
+
+      const codigo = String(
+        source?.codigo ?? item?.bono_codigo ?? item?.codigo ?? '',
+      ).trim();
+
+      const cantidadRaw = item?.cantidad ?? source?.cantidad ?? item?.max_usos ?? 0;
+      const cantidadNum = typeof cantidadRaw === 'number' ? cantidadRaw : Number(cantidadRaw);
+
+      const fecha = String(
+        item?.fecha_vencimiento ?? source?.fecha_vencimiento ?? item?.vencimiento ?? '',
+      ).trim();
+
+      return {
+        nombre,
+        codigo,
+        cantidad: Number.isFinite(cantidadNum) ? cantidadNum : 0,
+        fecha_vencimiento: fecha,
+        usado: toBool(item?.usado ?? source?.usado ?? item?.used ?? source?.used),
+      };
+    })
+    .filter((b): b is NonNullable<typeof b> => Boolean(b));
+
+  if (!normalized.length) return [];
+
+  const seen = new Set<string>();
+  return normalized.filter((b) => {
+    const key = `${b.codigo}|${b.nombre}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // 1) Alumnos — endpoint con soporte de paginación y búsqueda
 export type StudentsPagedResult = {
   items: StudentRow[];
@@ -407,7 +499,7 @@ export async function getAllStudentsPaged(params?: {
   const estado = String(params?.estado ?? "").trim();
   const coach = String(params?.coach ?? "").trim();
 
-  const cacheKey = `students:${page}:${pageSize}:${encodeURIComponent(search)}:${encodeURIComponent(estado)}:${encodeURIComponent(coach)}`;
+  const cacheKey = `students:v2:${page}:${pageSize}:${encodeURIComponent(search)}:${encodeURIComponent(estado)}:${encodeURIComponent(coach)}`;
   const cached = cacheGet<StudentsPagedResult>(cacheKey, 30_000);
   if (cached) return cached;
 
@@ -456,6 +548,8 @@ export async function getAllStudentsPaged(params?: {
 
     contractUrl: r.contrato ?? r.contractUrl ?? null,
     ticketsCount: r.tickets ?? r.ticketsCount ?? null,
+    tag: parseTagFromClientRow(r),
+    bonos: parseBonosFromClientRow(r),
   }));
 
   const toNumOrNull = (v: any): number | null => {
@@ -922,6 +1016,32 @@ export async function updateClientNombre(clientCode: string, nombre: string): Pr
   const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
   const fd = new FormData();
   fd.set('nombre', name);
+  const token = typeof window !== 'undefined' ? getAuthToken() : null;
+  const res = await fetch(url, {
+    method: 'PUT',
+    body: fd,
+    cache: 'no-store',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(text || `HTTP ${res.status} on ${url}`);
+  }
+  const json = await res.json().catch(() => ({}));
+  // Mutación: invalidar cache de alumnos
+  invalidateStudentsCache();
+  return json;
+}
+
+// Actualizar tag del cliente (usa FormData por compatibilidad con backend)
+// Enviar como key: tag (string).
+export async function updateClientTag(clientCode: string, tag: string): Promise<any> {
+  if (!clientCode) throw new Error('clientCode requerido');
+  const safeTag = String(tag ?? '').trim();
+  if (!safeTag) throw new Error('tag requerido');
+  const url = buildUrl(`/client/update/client/${encodeURIComponent(clientCode)}`);
+  const fd = new FormData();
+  fd.set('tag', safeTag);
   const token = typeof window !== 'undefined' ? getAuthToken() : null;
   const res = await fetch(url, {
     method: 'PUT',

@@ -75,6 +75,7 @@ import {
   getClienteTareas,
   updateClientLastTask,
   updateClientNombre,
+  updateClientTag,
 } from "../api";
 import {
   Select,
@@ -103,6 +104,40 @@ import {
 } from "@/lib/email-templates/access-expiry";
 import StudentBrevoEvents from "./_parts/StudentBrevoEvents";
 
+function extractStudentTag(raw: any): string | null {
+  const pick = (value: any): string | null => {
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      return normalized || null;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const parsed = pick(item);
+        if (parsed) return parsed;
+      }
+      return null;
+    }
+    if (value && typeof value === "object") {
+      return pick(
+        value.tag ??
+          value.nombre ??
+          value.name ??
+          value.value ??
+          value.label ??
+          null,
+      );
+    }
+    return null;
+  };
+
+  return pick(raw?.tag ?? raw?.tags ?? raw?.etiqueta ?? raw?.label ?? null);
+}
+
+const STUDENT_TAG_OPTIONS = [
+  "Hotselling Pro",
+  "Hotselling Foundation",
+] as const;
+
 export default function StudentDetailContent({ code }: { code: string }) {
   const { user } = useAuth();
   const router = useRouter();
@@ -116,6 +151,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const [pIngreso, setPIngreso] = useState<string>("");
   const [editNameOpen, setEditNameOpen] = useState(false);
   const [tempName, setTempName] = useState<string>("");
+  const [editTagOpen, setEditTagOpen] = useState(false);
+  const [tempTag, setTempTag] = useState<string>("");
+  const [savingTag, setSavingTag] = useState(false);
 
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [newPassword, setNewPassword] = useState("");
@@ -148,6 +186,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const canChangeStudentPassword = ["admin", "coach", "equipo"].includes(
     normalizedRole,
   );
+  const canEditTag = normalizedRole !== "student";
 
   const studentCodeForPassword = String(student?.code || code || "");
   const changePasswordDisabled = studentCodeForPassword
@@ -488,6 +527,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               teamMembers: Array.isArray(rawSelected.teamMembers)
                 ? rawSelected.teamMembers
                 : (rawSelected.equipo ?? rawSelected.alumnos ?? []),
+              tag: extractStudentTag(rawSelected),
               contrato: rawSelected.contrato ?? null,
               raw: rawSelected,
             } as any)
@@ -574,6 +614,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
               teamMembers: Array.isArray(r.teamMembers)
                 ? r.teamMembers
                 : (r.equipo ?? r.alumnos ?? []),
+              tag: extractStudentTag(r),
               contrato: r.contrato ?? null,
               raw: r,
             } as any;
@@ -603,6 +644,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
             ingreso: null,
             lastActivity: null,
             teamMembers: [],
+            tag: null,
             contrato: null,
             raw: { source: "auth-fallback" },
           });
@@ -613,6 +655,17 @@ export default function StudentDetailContent({ code }: { code: string }) {
       alive = false;
     };
   }, [code]);
+
+  useEffect(() => {
+    if (!student) return;
+    const tag =
+      extractStudentTag(student) ?? extractStudentTag(student?.raw) ?? null;
+    console.log("[Alumno Perfil] Tag:", {
+      code: String(student?.code ?? code ?? "").trim() || null,
+      name: String(student?.name ?? "").trim() || null,
+      tag,
+    });
+  }, [student, code]);
 
   // Complementar datos del alumno desde /users/:codigo (nombre/correo/email)
   useEffect(() => {
@@ -1998,6 +2051,8 @@ export default function StudentDetailContent({ code }: { code: string }) {
   const canSeeAdminAccessInfo = ["admin", "equipo", "atc"].includes(
     String((user as any)?.role ?? "").toLowerCase(),
   );
+  const currentTag =
+    extractStudentTag(student) ?? extractStudentTag(student?.raw) ?? null;
 
   return (
     <div className="space-y-6">
@@ -2035,6 +2090,37 @@ export default function StudentDetailContent({ code }: { code: string }) {
           setChangePasswordOpen(true);
         }}
       />
+
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Tag
+            </p>
+            <div className="mt-1">
+              <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-medium text-foreground">
+                {currentTag ?? "Sin tag"}
+              </span>
+            </div>
+          </div>
+
+          {canEditTag ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title="Editar tag"
+              onClick={() => {
+                setTempTag(currentTag ?? "");
+                setEditTagOpen(true);
+              }}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
+      </div>
 
       <Dialog open={editNameOpen} onOpenChange={setEditNameOpen}>
         <DialogContent className="max-w-md">
@@ -2089,6 +2175,84 @@ export default function StudentDetailContent({ code }: { code: string }) {
                 }}
               >
                 Guardar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={editTagOpen} onOpenChange={setEditTagOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar tag</DialogTitle>
+            <DialogDescription>
+              Selecciona el tag del alumno. Por ahora se guarda solo en esta
+              vista.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Tag</Label>
+              <Select value={tempTag} onValueChange={setTempTag}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STUDENT_TAG_OPTIONS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {option}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setEditTagOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={!tempTag || savingTag}
+                onClick={async () => {
+                  const nextTag = String(tempTag ?? "").trim();
+                  if (!nextTag) return;
+                  if (!STUDENT_TAG_OPTIONS.includes(nextTag as any)) return;
+
+                  try {
+                    setSavingTag(true);
+                    const clientCode = String(
+                      student?.code || code || "",
+                    ).trim();
+                    await updateClientTag(clientCode, nextTag);
+
+                    setStudent((prev: any) => {
+                      if (!prev) return prev;
+                      return {
+                        ...prev,
+                        tag: nextTag,
+                        raw: { ...(prev.raw || {}), tag: nextTag },
+                      };
+                    });
+
+                    toast({ title: "Tag actualizado" });
+                    setEditTagOpen(false);
+                  } catch (e: any) {
+                    toast({
+                      title: "No se pudo actualizar el tag",
+                      description: e?.message || "Intenta nuevamente",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setSavingTag(false);
+                  }
+                }}
+              >
+                {savingTag ? "Guardando..." : "Guardar"}
               </Button>
             </div>
           </div>
@@ -2878,6 +3042,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                           teamMembers: Array.isArray(r.teamMembers)
                             ? r.teamMembers
                             : (r.equipo ?? r.alumnos ?? []),
+                          tag: extractStudentTag(r),
                           contrato: r.contrato ?? null,
                           raw: r,
                         }))
@@ -2939,6 +3104,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
                       teamMembers: Array.isArray(r.teamMembers)
                         ? r.teamMembers
                         : (r.equipo ?? r.alumnos ?? []),
+                      tag: extractStudentTag(r),
                       contrato: r.contrato ?? null,
                       raw: r,
                     }) as any,
