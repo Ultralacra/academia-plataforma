@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { listMetadata } from "@/lib/metadata";
 
 interface ContractGeneratorProps {
   lead: any;
@@ -51,6 +52,8 @@ interface ContractGeneratorProps {
   triggerLabel?: string;
   triggerVariant?: React.ComponentProps<typeof Button>["variant"];
   triggerClassName?: string;
+  /** Callback que notifica al padre cuándo este diálogo se abre/cierra */
+  onOpenChange?: (open: boolean) => void;
 }
 
 // URL del template por defecto (se debe subir a public/)
@@ -65,14 +68,25 @@ export function ContractGenerator({
   triggerLabel,
   triggerVariant,
   triggerClassName,
+  onOpenChange: parentOnOpenChange,
 }: ContractGeneratorProps) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [open, setOpenInternal] = useState(false);
+
+  // Sincroniza con el padre al cambiar open
+  const setOpen = React.useCallback(
+    (v: boolean) => {
+      setOpenInternal(v);
+      parentOnOpenChange?.(v);
+    },
+    [parentOnOpenChange],
+  );
   const [generating, setGenerating] = useState(false);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [useCustomTemplate, setUseCustomTemplate] = useState(false);
   const [editBeforeGenerate, setEditBeforeGenerate] = useState(true);
   const [overrides, setOverrides] = useState<Partial<ContractData>>({});
+  // --- Modal-stack: al abrir preview ocultamos visualmente el dialog principal ---
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -170,11 +184,38 @@ export function ContractGenerator({
     setPreviewLoading(true);
     setPreviewError(null);
     try {
-      // Cache-buster para evitar que el navegador se quede con una versión antigua
-      const url = forceReload
-        ? `${DEFAULT_CONTRACT_TEXT_URL}?v=${Date.now()}`
-        : DEFAULT_CONTRACT_TEXT_URL;
-      const txt = await loadContractTextFromUrl(url);
+      // 1) Intentar cargar la plantilla activa desde metadata
+      let txt: string | null = null;
+      try {
+        const res = await listMetadata<any>();
+        const record = (res.items || []).find(
+          (item: any) =>
+            String(item?.entity || "") === "plantillas_contratos" &&
+            String(item?.entity_id || "").toLowerCase() === "all_templates",
+        );
+        if (record) {
+          const payload = record.payload || {};
+          const tplMap: Record<string, any> = payload.templates || {};
+          const activeId: string | undefined = payload.activeTemplateId;
+          const activeTpl = activeId ? tplMap[activeId] : undefined;
+          const content =
+            activeTpl?.content || Object.values(tplMap)[0]?.content;
+          if (content && typeof content === "string" && content.length > 100) {
+            txt = content;
+          }
+        }
+      } catch {
+        // Silencioso: caerá al fallback estático
+      }
+
+      // 2) Fallback: cargar desde archivo estático
+      if (!txt) {
+        const url = forceReload
+          ? `${DEFAULT_CONTRACT_TEXT_URL}?v=${Date.now()}`
+          : DEFAULT_CONTRACT_TEXT_URL;
+        txt = await loadContractTextFromUrl(url);
+      }
+
       setBaseContractText(txt);
       setBaseContractStats({
         lines: txt.split(/\r?\n/).length,
@@ -530,10 +571,8 @@ export function ContractGenerator({
       if (usedTemplate && templateBuffer) {
         await generateContract(templateBuffer, mergedData, filename);
       } else {
-        // Cache-buster para asegurar que se use el texto más reciente
-        const baseText = await loadContractTextFromUrl(
-          `${DEFAULT_CONTRACT_TEXT_URL}?v=${Date.now()}`,
-        );
+        // Usar el texto que ya fue cargado desde metadata (o fallback estático)
+        const baseText = await ensureBaseContractText(true);
         await generateContractFromText(baseText, mergedData, filename);
       }
 
@@ -557,646 +596,662 @@ export function ContractGenerator({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button
-          variant={triggerVariant || "outline"}
-          className={triggerClassName || "gap-2"}
+    <>
+      {/* Dialog principal – se oculta visualmente mientras el preview está abierto */}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button
+            variant={triggerVariant || "outline"}
+            className={triggerClassName || "gap-2"}
+          >
+            <FileText className="h-4 w-4" />
+            {triggerLabel || "Generar Contrato"}
+          </Button>
+        </DialogTrigger>
+        <DialogContent
+          className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+          visuallyHidden={previewOpen}
         >
-          <FileText className="h-4 w-4" />
-          {triggerLabel || "Generar Contrato"}
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <DialogTitle>Generar Contrato</DialogTitle>
-              <DialogDescription>
-                Genera un documento Word (.docx) con los datos del lead. El
-                documento será completamente editable.
-              </DialogDescription>
-            </div>
-            {!!(lead as any)?.codigo && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={refreshingLead}
-                onClick={async () => {
-                  try {
-                    setRefreshingLead(true);
-                    const fresh = await getLead(String((lead as any)?.codigo));
-                    setLiveLead(fresh);
-                    toast({
-                      title: "Lead actualizado",
-                      description:
-                        "Se sincronizó el detalle del lead para el contrato.",
-                    });
-                  } catch (e: any) {
-                    toast({
-                      title: "No se pudo actualizar",
-                      description:
-                        e?.message ||
-                        "No se pudo refrescar el lead desde el CRM.",
-                      variant: "destructive",
-                    });
-                  } finally {
-                    setRefreshingLead(false);
-                  }
-                }}
-              >
-                {refreshingLead ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-                <span className="ml-2">Sincronizar</span>
-              </Button>
-            )}
-          </div>
-        </DialogHeader>
-
-        <div className="space-y-4 py-4">
-          {/* Advertencia de campos faltantes */}
-          {missingFields.length > 0 && (
-            <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <FileWarning className="h-5 w-5 text-amber-600 mt-0.5" />
+          <DialogHeader>
+            <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-sm font-medium text-amber-800">
-                  Campos incompletos
-                </p>
-                <p className="text-xs text-amber-700 mt-1">
-                  Los siguientes campos aparecerán en blanco:{" "}
-                  {missingFields.join(", ")}
-                </p>
+                <DialogTitle>Generar Contrato</DialogTitle>
+                <DialogDescription>
+                  Genera un documento Word (.docx) con los datos del lead. El
+                  documento será completamente editable.
+                </DialogDescription>
               </div>
-            </div>
-          )}
-
-          {/* Vista previa de datos */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Vista previa de datos</CardTitle>
-              <CardDescription>
-                Estos datos se insertarán en el contrato
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Nombre:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.NOMBRE_COMPLETO}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Email:</span>
-                  <span className="ml-2 font-medium truncate">
-                    {preparedData.EMAIL}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Teléfono:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.TELEFONO}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">DNI:</span>
-                  <span className="ml-2 font-medium">{preparedData.DNI}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Duración:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.DURACION_PROGRAMA}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Inicio:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.DIA_INICIO} {preparedData.MES_INICIO}{" "}
-                    {preparedData.ANIO_INICIO}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Programa:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.PROGRAMA}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Monto:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.MONTO_TOTAL}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Modalidad:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.MODALIDAD_PAGO}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Plataforma:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.PLATAFORMA_PAGO}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Fecha:</span>
-                  <span className="ml-2 font-medium">
-                    {preparedData.FECHA_CONTRATO}
-                  </span>
-                </div>
-              </div>
-
-              {mergedData.bonuses && mergedData.bonuses.length > 0 && (
-                <div className="mt-3 pt-3 border-t">
-                  <span className="text-muted-foreground text-sm">
-                    Bonos incluidos:
-                  </span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {mergedData.bonuses.map((b, i) => (
-                      <Badge key={i} variant="secondary" className="text-xs">
-                        {b}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Editor rápido de datos */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
-                Revisar / editar antes de generar
-              </CardTitle>
-              <CardDescription>
-                El usuario puede corregir datos aquí y luego descargar el
-                contrato.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="edit-before-generate"
-                  checked={editBeforeGenerate}
-                  onCheckedChange={(checked) =>
-                    setEditBeforeGenerate(checked === true)
-                  }
-                />
-                <Label
-                  htmlFor="edit-before-generate"
-                  className="text-sm cursor-pointer"
+              {!!(lead as any)?.codigo && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={refreshingLead}
+                  onClick={async () => {
+                    try {
+                      setRefreshingLead(true);
+                      const fresh = await getLead(
+                        String((lead as any)?.codigo),
+                      );
+                      setLiveLead(fresh);
+                      toast({
+                        title: "Lead actualizado",
+                        description:
+                          "Se sincronizó el detalle del lead para el contrato.",
+                      });
+                    } catch (e: any) {
+                      toast({
+                        title: "No se pudo actualizar",
+                        description:
+                          e?.message ||
+                          "No se pudo refrescar el lead desde el CRM.",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setRefreshingLead(false);
+                    }
+                  }}
                 >
-                  Permitir edición en este paso
-                </Label>
+                  {refreshingLead ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  <span className="ml-2">Sincronizar</span>
+                </Button>
+              )}
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Advertencia de campos faltantes */}
+            {missingFields.length > 0 && (
+              <div className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                <FileWarning className="h-5 w-5 text-amber-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800">
+                    Campos incompletos
+                  </p>
+                  <p className="text-xs text-amber-700 mt-1">
+                    Los siguientes campos aparecerán en blanco:{" "}
+                    {missingFields.join(", ")}
+                  </p>
+                </div>
               </div>
+            )}
 
-              {editBeforeGenerate && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-fullName">
-                      Nombre completo
-                    </Label>
-                    <Input
-                      id="cg-fullName"
-                      value={overrides.fullName ?? mergedData.fullName ?? ""}
-                      onChange={(e) =>
-                        setOverrides((p) => ({
-                          ...p,
-                          fullName: e.target.value,
-                        }))
-                      }
-                    />
+            {/* Vista previa de datos */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Vista previa de datos</CardTitle>
+                <CardDescription>
+                  Estos datos se insertarán en el contrato
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Nombre:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.NOMBRE_COMPLETO}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-dni">
-                      DNI / Documento
-                    </Label>
-                    <Input
-                      id="cg-dni"
-                      value={overrides.dni ?? mergedData.dni ?? ""}
-                      onChange={(e) =>
-                        setOverrides((p) => ({ ...p, dni: e.target.value }))
-                      }
-                    />
+                  <div>
+                    <span className="text-muted-foreground">Email:</span>
+                    <span className="ml-2 font-medium truncate">
+                      {preparedData.EMAIL}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-email">
-                      Email
-                    </Label>
-                    <Input
-                      id="cg-email"
-                      value={overrides.email ?? mergedData.email ?? ""}
-                      onChange={(e) =>
-                        setOverrides((p) => ({ ...p, email: e.target.value }))
-                      }
-                    />
+                  <div>
+                    <span className="text-muted-foreground">Teléfono:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.TELEFONO}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-phone">
-                      Teléfono
-                    </Label>
-                    <Input
-                      id="cg-phone"
-                      value={overrides.phone ?? mergedData.phone ?? ""}
-                      onChange={(e) =>
-                        setOverrides((p) => ({ ...p, phone: e.target.value }))
-                      }
-                    />
+                  <div>
+                    <span className="text-muted-foreground">DNI:</span>
+                    <span className="ml-2 font-medium">{preparedData.DNI}</span>
                   </div>
-
-                  <div className="space-y-1 md:col-span-2">
-                    <Label className="text-xs" htmlFor="cg-address">
-                      Dirección
-                    </Label>
-                    <Input
-                      id="cg-address"
-                      value={overrides.address ?? mergedData.address ?? ""}
-                      onChange={(e) =>
-                        setOverrides((p) => ({ ...p, address: e.target.value }))
-                      }
-                    />
+                  <div>
+                    <span className="text-muted-foreground">Duración:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.DURACION_PROGRAMA}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-city">
-                      Ciudad
-                    </Label>
-                    <Input
-                      id="cg-city"
-                      value={overrides.city ?? mergedData.city ?? ""}
-                      onChange={(e) =>
-                        setOverrides((p) => ({ ...p, city: e.target.value }))
-                      }
-                    />
+                  <div>
+                    <span className="text-muted-foreground">Inicio:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.DIA_INICIO} {preparedData.MES_INICIO}{" "}
+                      {preparedData.ANIO_INICIO}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-country">
-                      País
-                    </Label>
-                    <Input
-                      id="cg-country"
-                      value={overrides.country ?? mergedData.country ?? ""}
-                      onChange={(e) =>
-                        setOverrides((p) => ({ ...p, country: e.target.value }))
-                      }
-                    />
+                  <div>
+                    <span className="text-muted-foreground">Programa:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.PROGRAMA}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-duration">
-                      Duración (meses)
-                    </Label>
-                    <Input
-                      id="cg-duration"
-                      type="number"
-                      min={1}
-                      max={36}
-                      value={
-                        overrides.programDurationNumber ??
-                        mergedData.programDurationNumber ??
-                        4
-                      }
-                      onChange={(e) => {
-                        const v = Number.parseInt(e.target.value, 10);
-                        setOverrides((p) => ({
-                          ...p,
-                          programDurationNumber: Number.isFinite(v) ? v : 4,
-                        }));
-                      }}
-                    />
+                  <div>
+                    <span className="text-muted-foreground">Monto:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.MONTO_TOTAL}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-startDate">
-                      Fecha de inicio (editable)
-                    </Label>
-                    <Input
-                      id="cg-startDate"
-                      type="date"
-                      value={(
-                        overrides.startDate ??
-                        mergedData.startDate ??
-                        ""
-                      ).slice(0, 10)}
-                      onChange={(e) =>
-                        setOverrides((p) => ({
-                          ...p,
-                          startDate: e.target.value,
-                        }))
-                      }
-                    />
+                  <div>
+                    <span className="text-muted-foreground">Modalidad:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.MODALIDAD_PAGO}
+                    </span>
                   </div>
-
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-paymentAmount">
-                      Monto total (USD)
-                    </Label>
-                    <Input
-                      id="cg-paymentAmount"
-                      value={
-                        (overrides.paymentAmount ??
-                          mergedData.paymentAmount ??
-                          "") as any
-                      }
-                      onChange={(e) =>
-                        setOverrides((p) => ({
-                          ...p,
-                          paymentAmount: e.target.value,
-                        }))
-                      }
-                    />
+                  <div>
+                    <span className="text-muted-foreground">Plataforma:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.PLATAFORMA_PAGO}
+                    </span>
                   </div>
+                  <div>
+                    <span className="text-muted-foreground">Fecha:</span>
+                    <span className="ml-2 font-medium">
+                      {preparedData.FECHA_CONTRATO}
+                    </span>
+                  </div>
+                </div>
 
-                  <div className="space-y-1">
-                    <Label className="text-xs" htmlFor="cg-paymentMode">
-                      Modalidad de pago
-                    </Label>
-                    <Select
-                      value={
-                        isPresetPaymentMode
-                          ? currentPaymentMode
-                          : currentPaymentMode
-                            ? "custom"
-                            : ""
-                      }
-                      onValueChange={(v) => {
-                        if (v === "custom") {
-                          setOverrides((p) => ({ ...p, paymentMode: "" }));
-                          return;
-                        }
-                        setOverrides((p) => ({ ...p, paymentMode: v }));
-                      }}
-                    >
-                      <SelectTrigger id="cg-paymentMode">
-                        <SelectValue placeholder="Selecciona una modalidad" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {PAYMENT_MODE_PRESETS.map((p) => (
-                          <SelectItem key={p.value} value={p.value}>
-                            {p.label}
-                          </SelectItem>
-                        ))}
-                        <SelectItem value="custom">Otro (escribir)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                {mergedData.bonuses && mergedData.bonuses.length > 0 && (
+                  <div className="mt-3 pt-3 border-t">
+                    <span className="text-muted-foreground text-sm">
+                      Bonos incluidos:
+                    </span>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {mergedData.bonuses.map((b, i) => (
+                        <Badge key={i} variant="secondary" className="text-xs">
+                          {b}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-                    {!isPresetPaymentMode && (
+            {/* Editor rápido de datos */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">
+                  Revisar / editar antes de generar
+                </CardTitle>
+                <CardDescription>
+                  El usuario puede corregir datos aquí y luego descargar el
+                  contrato.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="edit-before-generate"
+                    checked={editBeforeGenerate}
+                    onCheckedChange={(checked) =>
+                      setEditBeforeGenerate(checked === true)
+                    }
+                  />
+                  <Label
+                    htmlFor="edit-before-generate"
+                    className="text-sm cursor-pointer"
+                  >
+                    Permitir edición en este paso
+                  </Label>
+                </div>
+
+                {editBeforeGenerate && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-fullName">
+                        Nombre completo
+                      </Label>
                       <Input
-                        className="mt-2"
-                        value={currentPaymentMode}
+                        id="cg-fullName"
+                        value={overrides.fullName ?? mergedData.fullName ?? ""}
                         onChange={(e) =>
                           setOverrides((p) => ({
                             ...p,
-                            paymentMode: e.target.value,
+                            fullName: e.target.value,
                           }))
                         }
-                        placeholder="Ej: pago_total / 3_cuotas / reserva"
                       />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-dni">
+                        DNI / Documento
+                      </Label>
+                      <Input
+                        id="cg-dni"
+                        value={overrides.dni ?? mergedData.dni ?? ""}
+                        onChange={(e) =>
+                          setOverrides((p) => ({ ...p, dni: e.target.value }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-email">
+                        Email
+                      </Label>
+                      <Input
+                        id="cg-email"
+                        value={overrides.email ?? mergedData.email ?? ""}
+                        onChange={(e) =>
+                          setOverrides((p) => ({ ...p, email: e.target.value }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-phone">
+                        Teléfono
+                      </Label>
+                      <Input
+                        id="cg-phone"
+                        value={overrides.phone ?? mergedData.phone ?? ""}
+                        onChange={(e) =>
+                          setOverrides((p) => ({ ...p, phone: e.target.value }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1 md:col-span-2">
+                      <Label className="text-xs" htmlFor="cg-address">
+                        Dirección
+                      </Label>
+                      <Input
+                        id="cg-address"
+                        value={overrides.address ?? mergedData.address ?? ""}
+                        onChange={(e) =>
+                          setOverrides((p) => ({
+                            ...p,
+                            address: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-city">
+                        Ciudad
+                      </Label>
+                      <Input
+                        id="cg-city"
+                        value={overrides.city ?? mergedData.city ?? ""}
+                        onChange={(e) =>
+                          setOverrides((p) => ({ ...p, city: e.target.value }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-country">
+                        País
+                      </Label>
+                      <Input
+                        id="cg-country"
+                        value={overrides.country ?? mergedData.country ?? ""}
+                        onChange={(e) =>
+                          setOverrides((p) => ({
+                            ...p,
+                            country: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-duration">
+                        Duración (meses)
+                      </Label>
+                      <Input
+                        id="cg-duration"
+                        type="number"
+                        min={1}
+                        max={36}
+                        value={
+                          overrides.programDurationNumber ??
+                          mergedData.programDurationNumber ??
+                          4
+                        }
+                        onChange={(e) => {
+                          const v = Number.parseInt(e.target.value, 10);
+                          setOverrides((p) => ({
+                            ...p,
+                            programDurationNumber: Number.isFinite(v) ? v : 4,
+                          }));
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-startDate">
+                        Fecha de inicio (editable)
+                      </Label>
+                      <Input
+                        id="cg-startDate"
+                        type="date"
+                        value={(
+                          overrides.startDate ??
+                          mergedData.startDate ??
+                          ""
+                        ).slice(0, 10)}
+                        onChange={(e) =>
+                          setOverrides((p) => ({
+                            ...p,
+                            startDate: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-paymentAmount">
+                        Monto total (USD)
+                      </Label>
+                      <Input
+                        id="cg-paymentAmount"
+                        value={
+                          (overrides.paymentAmount ??
+                            mergedData.paymentAmount ??
+                            "") as any
+                        }
+                        onChange={(e) =>
+                          setOverrides((p) => ({
+                            ...p,
+                            paymentAmount: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs" htmlFor="cg-paymentMode">
+                        Modalidad de pago
+                      </Label>
+                      <Select
+                        value={
+                          isPresetPaymentMode
+                            ? currentPaymentMode
+                            : currentPaymentMode
+                              ? "custom"
+                              : ""
+                        }
+                        onValueChange={(v) => {
+                          if (v === "custom") {
+                            setOverrides((p) => ({ ...p, paymentMode: "" }));
+                            return;
+                          }
+                          setOverrides((p) => ({ ...p, paymentMode: v }));
+                        }}
+                      >
+                        <SelectTrigger id="cg-paymentMode">
+                          <SelectValue placeholder="Selecciona una modalidad" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAYMENT_MODE_PRESETS.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="custom">
+                            Otro (escribir)
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      {!isPresetPaymentMode && (
+                        <Input
+                          className="mt-2"
+                          value={currentPaymentMode}
+                          onChange={(e) =>
+                            setOverrides((p) => ({
+                              ...p,
+                              paymentMode: e.target.value,
+                            }))
+                          }
+                          placeholder="Ej: pago_total / 3_cuotas / reserva"
+                        />
+                      )}
+
+                      <div className="mt-2 text-[11px] text-muted-foreground">
+                        En el contrato se mostrará como:{" "}
+                        <b>{preparedData.MODALIDAD_PAGO}</b>
+                      </div>
+                    </div>
+
+                    {(String(currentPaymentMode)
+                      .toLowerCase()
+                      .includes("cuota") ||
+                      String(currentPaymentMode)
+                        .toLowerCase()
+                        .includes("excepcion")) && (
+                      <>
+                        <div className="space-y-1">
+                          <Label
+                            className="text-xs"
+                            htmlFor="cg-installmentsCount"
+                          >
+                            Número de cuotas
+                          </Label>
+                          <Input
+                            id="cg-installmentsCount"
+                            type="number"
+                            min={1}
+                            max={36}
+                            value={
+                              (overrides.installmentsCount ??
+                                mergedData.installmentsCount ??
+                                "") as any
+                            }
+                            onChange={(e) => {
+                              const v = Number.parseInt(e.target.value, 10);
+                              setOverrides((p) => ({
+                                ...p,
+                                installmentsCount: Number.isFinite(v)
+                                  ? v
+                                  : undefined,
+                              }));
+                            }}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label
+                            className="text-xs"
+                            htmlFor="cg-installmentAmount"
+                          >
+                            Monto por cuota (USD)
+                          </Label>
+                          <Input
+                            id="cg-installmentAmount"
+                            value={
+                              (overrides.installmentAmount ??
+                                mergedData.installmentAmount ??
+                                "") as any
+                            }
+                            onChange={(e) =>
+                              setOverrides((p) => ({
+                                ...p,
+                                installmentAmount: e.target.value,
+                              }))
+                            }
+                            placeholder="Ej: 1600"
+                          />
+                        </div>
+                      </>
                     )}
 
-                    <div className="mt-2 text-[11px] text-muted-foreground">
-                      En el contrato se mostrará como:{" "}
-                      <b>{preparedData.MODALIDAD_PAGO}</b>
+                    {String(currentPaymentMode)
+                      .toLowerCase()
+                      .includes("reserva") && (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-xs" htmlFor="cg-reserveAmount">
+                            Monto de reserva (USD)
+                          </Label>
+                          <Input
+                            id="cg-reserveAmount"
+                            value={
+                              (overrides.reserveAmount ??
+                                mergedData.reserveAmount ??
+                                "") as any
+                            }
+                            onChange={(e) =>
+                              setOverrides((p) => ({
+                                ...p,
+                                reserveAmount: e.target.value,
+                              }))
+                            }
+                            placeholder="Ej: 500"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <Label
+                            className="text-xs"
+                            htmlFor="cg-nextChargeDate"
+                          >
+                            Próximo cobro (opcional)
+                          </Label>
+                          <Input
+                            id="cg-nextChargeDate"
+                            type="date"
+                            value={
+                              (
+                                overrides.nextChargeDate ??
+                                mergedData.nextChargeDate ??
+                                ""
+                              ).slice(0, 10) as any
+                            }
+                            onChange={(e) =>
+                              setOverrides((p) => ({
+                                ...p,
+                                nextChargeDate: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    <div className="space-y-1 md:col-span-2">
+                      <Label className="text-xs" htmlFor="cg-notes">
+                        Notas (opcional)
+                      </Label>
+                      <Textarea
+                        id="cg-notes"
+                        value={overrides.notes ?? mergedData.notes ?? ""}
+                        onChange={(e) =>
+                          setOverrides((p) => ({ ...p, notes: e.target.value }))
+                        }
+                        rows={3}
+                      />
                     </div>
                   </div>
+                )}
+              </CardContent>
+            </Card>
 
-                  {(String(currentPaymentMode)
-                    .toLowerCase()
-                    .includes("cuota") ||
-                    String(currentPaymentMode)
-                      .toLowerCase()
-                      .includes("excepcion")) && (
-                    <>
-                      <div className="space-y-1">
-                        <Label
-                          className="text-xs"
-                          htmlFor="cg-installmentsCount"
-                        >
-                          Número de cuotas
-                        </Label>
-                        <Input
-                          id="cg-installmentsCount"
-                          type="number"
-                          min={1}
-                          max={36}
-                          value={
-                            (overrides.installmentsCount ??
-                              mergedData.installmentsCount ??
-                              "") as any
-                          }
-                          onChange={(e) => {
-                            const v = Number.parseInt(e.target.value, 10);
-                            setOverrides((p) => ({
-                              ...p,
-                              installmentsCount: Number.isFinite(v)
-                                ? v
-                                : undefined,
-                            }));
-                          }}
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label
-                          className="text-xs"
-                          htmlFor="cg-installmentAmount"
-                        >
-                          Monto por cuota (USD)
-                        </Label>
-                        <Input
-                          id="cg-installmentAmount"
-                          value={
-                            (overrides.installmentAmount ??
-                              mergedData.installmentAmount ??
-                              "") as any
-                          }
-                          onChange={(e) =>
-                            setOverrides((p) => ({
-                              ...p,
-                              installmentAmount: e.target.value,
-                            }))
-                          }
-                          placeholder="Ej: 1600"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  {String(currentPaymentMode)
-                    .toLowerCase()
-                    .includes("reserva") && (
-                    <>
-                      <div className="space-y-1">
-                        <Label className="text-xs" htmlFor="cg-reserveAmount">
-                          Monto de reserva (USD)
-                        </Label>
-                        <Input
-                          id="cg-reserveAmount"
-                          value={
-                            (overrides.reserveAmount ??
-                              mergedData.reserveAmount ??
-                              "") as any
-                          }
-                          onChange={(e) =>
-                            setOverrides((p) => ({
-                              ...p,
-                              reserveAmount: e.target.value,
-                            }))
-                          }
-                          placeholder="Ej: 500"
-                        />
-                      </div>
-
-                      <div className="space-y-1">
-                        <Label className="text-xs" htmlFor="cg-nextChargeDate">
-                          Próximo cobro (opcional)
-                        </Label>
-                        <Input
-                          id="cg-nextChargeDate"
-                          type="date"
-                          value={
-                            (
-                              overrides.nextChargeDate ??
-                              mergedData.nextChargeDate ??
-                              ""
-                            ).slice(0, 10) as any
-                          }
-                          onChange={(e) =>
-                            setOverrides((p) => ({
-                              ...p,
-                              nextChargeDate: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  <div className="space-y-1 md:col-span-2">
-                    <Label className="text-xs" htmlFor="cg-notes">
-                      Notas (opcional)
-                    </Label>
-                    <Textarea
-                      id="cg-notes"
-                      value={overrides.notes ?? mergedData.notes ?? ""}
-                      onChange={(e) =>
-                        setOverrides((p) => ({ ...p, notes: e.target.value }))
-                      }
-                      rows={3}
-                    />
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Selector de template */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Template del contrato</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="custom-template"
-                  checked={useCustomTemplate}
-                  onCheckedChange={(checked) =>
-                    setUseCustomTemplate(checked === true)
-                  }
-                />
-                <Label
-                  htmlFor="custom-template"
-                  className="text-sm cursor-pointer"
-                >
-                  Usar template personalizado
-                </Label>
-              </div>
-
-              {useCustomTemplate && (
-                <div className="space-y-2">
+            {/* Selector de template */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">Template del contrato</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="custom-template"
+                    checked={useCustomTemplate}
+                    onCheckedChange={(checked) =>
+                      setUseCustomTemplate(checked === true)
+                    }
+                  />
                   <Label
-                    htmlFor="template-file"
-                    className="text-xs text-muted-foreground"
+                    htmlFor="custom-template"
+                    className="text-sm cursor-pointer"
                   >
-                    Sube tu template .docx con los placeholders (ej:{" "}
-                    {"{{NOMBRE_COMPLETO}}"})
+                    Usar template personalizado
                   </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      ref={fileInputRef}
-                      id="template-file"
-                      type="file"
-                      accept=".docx"
-                      onChange={handleFileChange}
-                      className="flex-1"
-                    />
-                    {templateFile && (
-                      <Badge variant="outline" className="whitespace-nowrap">
-                        {templateFile.name}
-                      </Badge>
-                    )}
-                  </div>
                 </div>
-              )}
 
-              {!useCustomTemplate && (
-                <p className="text-xs text-muted-foreground">
-                  Se usará el template por defecto del sistema. Asegúrate de que
-                  exista en{" "}
-                  <code className="bg-muted px-1 py-0.5 rounded">
-                    /public/templates/
-                  </code>
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                {useCustomTemplate && (
+                  <div className="space-y-2">
+                    <Label
+                      htmlFor="template-file"
+                      className="text-xs text-muted-foreground"
+                    >
+                      Sube tu template .docx con los placeholders (ej:{" "}
+                      {"{{NOMBRE_COMPLETO}}"})
+                    </Label>
+                    <div className="flex gap-2">
+                      <Input
+                        ref={fileInputRef}
+                        id="template-file"
+                        type="file"
+                        accept=".docx"
+                        onChange={handleFileChange}
+                        className="flex-1"
+                      />
+                      {templateFile && (
+                        <Badge variant="outline" className="whitespace-nowrap">
+                          {templateFile.name}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-          {/* Información sobre placeholders */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">
-                Placeholders disponibles
-              </CardTitle>
-              <CardDescription>
-                Usa estos marcadores en tu template Word (entre {"{{ }}"})
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-1 text-xs font-mono">
-                {Object.keys(preparedData)
-                  .slice(0, 12)
-                  .map((key) => (
-                    <code key={key} className="bg-muted px-1 py-0.5 rounded">
-                      {`{{${key}}}`}
+                {!useCustomTemplate && (
+                  <p className="text-xs text-muted-foreground">
+                    Se usará el template por defecto del sistema. Asegúrate de
+                    que exista en{" "}
+                    <code className="bg-muted px-1 py-0.5 rounded">
+                      /public/templates/
                     </code>
-                  ))}
-                <span className="text-muted-foreground col-span-full mt-1">
-                  ... y más (ver documentación)
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-        <DialogFooter>
-          <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+            {/* Información sobre placeholders */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm">
+                  Placeholders disponibles
+                </CardTitle>
+                <CardDescription>
+                  Usa estos marcadores en tu template Word (entre {"{{ }}"})
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-1 text-xs font-mono">
+                  {Object.keys(preparedData)
+                    .slice(0, 12)
+                    .map((key) => (
+                      <code key={key} className="bg-muted px-1 py-0.5 rounded">
+                        {`{{${key}}}`}
+                      </code>
+                    ))}
+                  <span className="text-muted-foreground col-span-full mt-1">
+                    ... y más (ver documentación)
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <DialogFooter>
             <Button
               type="button"
               variant="outline"
               onClick={async () => {
                 setPreviewOpen(true);
                 try {
-                  // Al abrir, siempre recargamos para mostrar el texto completo y más reciente
                   await ensureBaseContractText(true);
                 } catch {
                   // error ya seteado
@@ -1208,228 +1263,220 @@ export function ContractGenerator({
               Vista previa
             </Button>
 
-            <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden">
-              <DialogHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <DialogTitle>Vista previa del contrato</DialogTitle>
-                    <DialogDescription>
-                      Vista previa basada en el texto del contrato (modo sin
-                      plantilla). Si usas un template .docx personalizado, la
-                      vista previa puede diferir.
-                    </DialogDescription>
-                    {baseContractStats && !previewError && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        Cargado: {baseContractStats.lines} líneas,{" "}
-                        {baseContractStats.chars} caracteres.
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={async () => {
-                        try {
-                          await ensureBaseContractText(true);
-                        } catch {
-                          // error ya seteado
-                        }
-                      }}
-                      disabled={previewLoading}
-                    >
-                      Actualizar
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={downloadPreviewHtml}
-                      disabled={
-                        previewLoading || !baseContractText || !!previewError
-                      }
-                      className="gap-2"
-                    >
-                      <Download className="h-4 w-4" />
-                      Descargar HTML
-                    </Button>
-                  </div>
-                </div>
-              </DialogHeader>
-
-              {previewError ? (
-                <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                  {previewError}
-                </div>
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleGenerate}
+              disabled={generating || (useCustomTemplate && !templateFile)}
+              className="gap-2"
+            >
+              {generating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Generando...
+                </>
               ) : (
-                <ScrollArea className="h-[70vh] rounded-md border">
-                  <div
-                    className="p-6 text-[14px] leading-relaxed"
-                    style={{ fontFamily: "Arial" }}
-                  >
-                    {baseContractWarnings.length > 0 && (
-                      <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
-                        <div className="text-sm font-medium text-amber-900">
-                          Aviso
-                        </div>
-                        <div className="mt-1 space-y-1 text-xs text-amber-900">
-                          {baseContractWarnings.map((w, i) => (
-                            <div key={i}>- {w}</div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {previewLoading && !baseContractText ? (
-                      <p className="text-sm text-muted-foreground">
-                        Cargando vista previa…
-                      </p>
-                    ) : (
-                      previewBlocks.map((b, idx) => {
-                        if (b.type === "h1") {
-                          return (
-                            <h1
-                              key={idx}
-                              className="text-center font-bold text-[18px] mb-4"
-                            >
-                              {b.text}
-                            </h1>
-                          );
-                        }
-                        if (b.type === "centerTitle") {
-                          return (
-                            <div
-                              key={idx}
-                              className="text-center font-bold text-[16px] my-4"
-                            >
-                              {b.text}
-                            </div>
-                          );
-                        }
-                        if (b.type === "h2") {
-                          return (
-                            <div
-                              key={idx}
-                              className="font-bold text-[15px] mt-5 mb-2"
-                            >
-                              {b.text}
-                            </div>
-                          );
-                        }
-                        if (b.type === "p") {
-                          return (
-                            <p
-                              key={idx}
-                              className="mb-3"
-                              style={{
-                                textAlign: "justify" as const,
-                                textJustify: "inter-word",
-                              }}
-                            >
-                              {b.text}
-                            </p>
-                          );
-                        }
-                        if (b.type === "list") {
-                          const pad = Math.min(56, 12 + b.level * 14);
-                          return (
-                            <div
-                              key={idx}
-                              className="mb-2"
-                              style={{
-                                paddingLeft: pad,
-                                textAlign: "justify" as const,
-                              }}
-                            >
-                              <span className="font-bold">{b.label}</span>
-                              <span className="ml-2">{b.text}</span>
-                            </div>
-                          );
-                        }
-                        if (b.type === "signatures") {
-                          return (
-                            <div key={idx} className="my-6">
-                              <div className="grid grid-cols-2 gap-8 items-start">
-                                <div className="text-center">
-                                  <div className="font-bold">
-                                    JAVIER MIRANDA
-                                  </div>
-                                  <div className="font-bold">MHF GROUP LLC</div>
-                                </div>
-                                <div>
-                                  <div className="text-center">
-                                    <div className="border-b border-black pb-1 font-bold">
-                                      {preparedData.NOMBRE_COMPLETO}
-                                    </div>
-                                    <div className="text-[12px] font-bold mt-1">
-                                      (NOMBRE Y APELLIDO)
-                                    </div>
-                                  </div>
+                <>
+                  <Download className="h-4 w-4" />
+                  Descargar Contrato
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-                                  <div className="mt-4 space-y-2">
-                                    {[
-                                      [
-                                        "Correo Electrónico:",
-                                        preparedData.EMAIL,
-                                      ],
-                                      [
-                                        "Ciudad de Residencia:",
-                                        preparedData.CIUDAD,
-                                      ],
-                                      [
-                                        "País de Residencia:",
-                                        preparedData.PAIS,
-                                      ],
-                                      [
-                                        "Nro. de Telef.:",
-                                        preparedData.TELEFONO,
-                                      ],
-                                    ].map(([label, value]) => (
-                                      <div
-                                        key={label}
-                                        className="grid grid-cols-[auto,1fr] gap-3"
-                                      >
-                                        <div className="font-bold">{label}</div>
-                                        <div className="border-b border-black">
-                                          {value}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
+      {/* Dialog de vista previa del contrato – separado para no anidar */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-hidden">
+          <DialogHeader>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <DialogTitle>Vista previa del contrato</DialogTitle>
+                <DialogDescription>
+                  Vista previa basada en el texto del contrato (modo sin
+                  plantilla). Si usas un template .docx personalizado, la vista
+                  previa puede diferir.
+                </DialogDescription>
+                {baseContractStats && !previewError && (
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Cargado: {baseContractStats.lines} líneas,{" "}
+                    {baseContractStats.chars} caracteres.
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await ensureBaseContractText(true);
+                    } catch {
+                      // error ya seteado
+                    }
+                  }}
+                  disabled={previewLoading}
+                >
+                  Actualizar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={downloadPreviewHtml}
+                  disabled={
+                    previewLoading || !baseContractText || !!previewError
+                  }
+                  className="gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Descargar HTML
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {previewError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {previewError}
+            </div>
+          ) : (
+            <ScrollArea className="h-[70vh] rounded-md border">
+              <div
+                className="p-6 text-[14px] leading-relaxed"
+                style={{ fontFamily: "Arial" }}
+              >
+                {baseContractWarnings.length > 0 && (
+                  <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3">
+                    <div className="text-sm font-medium text-amber-900">
+                      Aviso
+                    </div>
+                    <div className="mt-1 space-y-1 text-xs text-amber-900">
+                      {baseContractWarnings.map((w, i) => (
+                        <div key={i}>- {w}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {previewLoading && !baseContractText ? (
+                  <p className="text-sm text-muted-foreground">
+                    Cargando vista previa…
+                  </p>
+                ) : (
+                  previewBlocks.map((b, idx) => {
+                    if (b.type === "h1") {
+                      return (
+                        <h1
+                          key={idx}
+                          className="text-center font-bold text-[18px] mb-4"
+                        >
+                          {b.text}
+                        </h1>
+                      );
+                    }
+                    if (b.type === "centerTitle") {
+                      return (
+                        <div
+                          key={idx}
+                          className="text-center font-bold text-[16px] my-4"
+                        >
+                          {b.text}
+                        </div>
+                      );
+                    }
+                    if (b.type === "h2") {
+                      return (
+                        <div
+                          key={idx}
+                          className="font-bold text-[15px] mt-5 mb-2"
+                        >
+                          {b.text}
+                        </div>
+                      );
+                    }
+                    if (b.type === "p") {
+                      return (
+                        <p
+                          key={idx}
+                          className="mb-3"
+                          style={{
+                            textAlign: "justify" as const,
+                            textJustify: "inter-word",
+                          }}
+                        >
+                          {b.text}
+                        </p>
+                      );
+                    }
+                    if (b.type === "list") {
+                      const pad = Math.min(56, 12 + b.level * 14);
+                      return (
+                        <div
+                          key={idx}
+                          className="mb-2"
+                          style={{
+                            paddingLeft: pad,
+                            textAlign: "justify" as const,
+                          }}
+                        >
+                          <span className="font-bold">{b.label}</span>
+                          <span className="ml-2">{b.text}</span>
+                        </div>
+                      );
+                    }
+                    if (b.type === "signatures") {
+                      return (
+                        <div key={idx} className="my-6">
+                          <div className="grid grid-cols-2 gap-8 items-start">
+                            <div className="text-center">
+                              <div className="font-bold">JAVIER MIRANDA</div>
+                              <div className="font-bold">MHF GROUP LLC</div>
+                            </div>
+                            <div>
+                              <div className="text-center">
+                                <div className="border-b border-black pb-1 font-bold">
+                                  {preparedData.NOMBRE_COMPLETO}
+                                </div>
+                                <div className="text-[12px] font-bold mt-1">
+                                  (NOMBRE Y APELLIDO)
                                 </div>
                               </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      })
-                    )}
-                  </div>
-                </ScrollArea>
-              )}
-            </DialogContent>
-          </Dialog>
 
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleGenerate}
-            disabled={generating || (useCustomTemplate && !templateFile)}
-            className="gap-2"
-          >
-            {generating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Generando...
-              </>
-            ) : (
-              <>
-                <Download className="h-4 w-4" />
-                Descargar Contrato
-              </>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+                              <div className="mt-4 space-y-2">
+                                {[
+                                  ["Correo Electrónico:", preparedData.EMAIL],
+                                  [
+                                    "Ciudad de Residencia:",
+                                    preparedData.CIUDAD,
+                                  ],
+                                  ["País de Residencia:", preparedData.PAIS],
+                                  ["Nro. de Telef.:", preparedData.TELEFONO],
+                                ].map(([label, value]) => (
+                                  <div
+                                    key={label}
+                                    className="grid grid-cols-[auto,1fr] gap-3"
+                                  >
+                                    <div className="font-bold">{label}</div>
+                                    <div className="border-b border-black">
+                                      {value}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

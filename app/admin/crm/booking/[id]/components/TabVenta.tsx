@@ -52,6 +52,9 @@ export function TabVenta({
 }: TabVentaProps) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
 
+  // Modal-stack: ocultar dialog padre visualmente cuando ContractGenerator abre su dialog
+  const [contractOpen, setContractOpen] = React.useState(false);
+
   return (
     <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
       <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
@@ -79,7 +82,10 @@ export function TabVenta({
                   Vista previa
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+              <DialogContent
+                className="sm:max-w-3xl max-h-[90vh] overflow-y-auto"
+                visuallyHidden={contractOpen}
+              >
                 <DialogHeader>
                   <DialogTitle className="flex items-center justify-between gap-3 text-slate-800">
                     <span className="flex items-center gap-2">
@@ -92,6 +98,7 @@ export function TabVenta({
                       triggerLabel="Ver contrato"
                       triggerVariant="secondary"
                       triggerClassName="gap-2"
+                      onOpenChange={setContractOpen}
                     />
                   </DialogTitle>
                 </DialogHeader>

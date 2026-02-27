@@ -86,6 +86,11 @@ const adminItems: MenuItem[] = [
     icon: FileText,
   },
   {
+    title: "Plantillas de contratos",
+    url: "/admin/plantillas-contratos",
+    icon: FileText,
+  },
+  {
     title: "Preguntas frecuentes",
     url: "/admin/preguntas-frecuentes",
     icon: CircleHelp,
