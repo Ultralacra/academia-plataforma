@@ -225,26 +225,6 @@ export default function TicketsSummaryCard({
         </Card>
       </div>
 
-      {avgResolution !== null && (
-        <div className="md:col-span-4">
-          <Card className="border-violet-200 shadow-none">
-            <CardHeader className="flex items-center gap-3">
-              <div className="rounded-lg bg-violet-50 p-2 border border-violet-200">
-                <Clock className="h-4 w-4 text-violet-600" />
-              </div>
-              <div className="text-sm font-semibold">
-                Tiempo medio a resolución
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <div className="mt-2 text-sm text-gray-700">
-                {fmtDuration(avgResolution)}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
       {metrics.avgInformanteResponseMs !== null &&
         metrics.informanteRespondedCount > 0 && (
           <div className="md:col-span-4">

@@ -25,6 +25,7 @@ import KPIs from "./kpis";
 import TeamsTable from "./teams-table";
 import { computeTicketMetrics, type TicketsMetrics } from "./metrics";
 import TicketsSummaryCard from "./tickets-summary-card";
+import PersonalMetrics from "@/app/admin/teamsv2/PersonalMetrics";
 
 /* ---------------------------------------
   UI helpers lightweight (sin shadcn)
@@ -400,6 +401,11 @@ export default function TicketsContent() {
     ];
   }, [allTickets]);
 
+  const selectedCoach = useMemo(
+    () => coaches.find((c) => c.codigo === coachFiltro) ?? null,
+    [coaches, coachFiltro],
+  );
+
   // 📊 NUEVO: métricas completas
   const metrics: TicketsMetrics = useMemo(
     () => computeTicketMetrics(filtered ?? []),
@@ -579,6 +585,22 @@ export default function TicketsContent() {
 
       {/* KPIs nuevas */}
       <KPIs metrics={metrics} loading={loading} />
+
+      {/* Métricas completas por coach (solo cuando se filtra un coach específico) */}
+      {coachFiltro !== "all" && selectedCoach && (
+        <Card>
+          <CardHeader
+            title={`Métricas completas · ${selectedCoach.nombre}`}
+            subtitle="Resumen ampliado por coach seleccionado"
+          />
+          <CardBody>
+            <PersonalMetrics
+              coachCode={selectedCoach.codigo}
+              coachName={selectedCoach.nombre}
+            />
+          </CardBody>
+        </Card>
+      )}
 
       {/* Resumen adicional (por alumno/tipo) */}
       <TicketsSummaryCard tickets={filtered} metrics={metrics} />
