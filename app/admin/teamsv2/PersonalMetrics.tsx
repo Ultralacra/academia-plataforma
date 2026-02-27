@@ -68,7 +68,14 @@ export default function PersonalMetrics({
         } catch {}
 
         if (hasFreshCache) {
-          console.log("[PersonalMetrics] 📦 Usando datos de CACHE para", coachCode, "desde:", desde, "hasta:", hasta);
+          console.log(
+            "[PersonalMetrics] 📦 Usando datos de CACHE para",
+            coachCode,
+            "desde:",
+            desde,
+            "hasta:",
+            hasta,
+          );
           setLoading(false);
           setProgress(0);
           return;
@@ -76,7 +83,14 @@ export default function PersonalMetrics({
 
         setLoading(true);
         setProgress(0);
-        console.log("[PersonalMetrics] 🔄 Fetching métricas para", coachCode, "desde:", desde, "hasta:", hasta);
+        console.log(
+          "[PersonalMetrics] 🔄 Fetching métricas para",
+          coachCode,
+          "desde:",
+          desde,
+          "hasta:",
+          hasta,
+        );
         const res = await fetchMetrics(desde, hasta, coachCode);
         if (!active) return;
         const nextVm = (res?.data as any)?.teams ?? null;
@@ -219,7 +233,9 @@ export default function PersonalMetrics({
   // Derive summary for ResolutionAndRateCard from ticketsByEstado (source of truth)
   const avgResSummary = vm?.avgResolutionSummary ?? null;
   const resolutionBreakdown = useMemo(() => {
-    const byStatus: Array<{ estado: string; cantidad: number }> = Array.isArray(vm?.ticketsByEstado)
+    const byStatus: Array<{ estado: string; cantidad: number }> = Array.isArray(
+      vm?.ticketsByEstado,
+    )
       ? (vm.ticketsByEstado as any[])
       : [];
     const resolved = byStatus
