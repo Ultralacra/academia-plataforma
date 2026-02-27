@@ -102,7 +102,9 @@ export async function fetchMetrics(
   if (coachCode) params.set("coach", coachCode);
   const qs = params.toString() ? `?${params.toString()}` : "";
   const url = `/metrics/get/metrics-v2${qs}`;
+  console.log("[fetchMetrics] 🔵 Endpoint:", url);
   const json = await apiFetch<any>(url);
+  console.log("[fetchMetrics] 🟢 Response RAW:", JSON.parse(JSON.stringify(json)));
 
   const d = (json?.data as any) || {};
 
@@ -562,5 +564,6 @@ export async function fetchMetrics(
     ticketsByTeam: [] as any[],
   };
 
+  console.log("[fetchMetrics] 🟣 Processed teams object:", JSON.parse(JSON.stringify(teams)));
   return { code: json?.code ?? 200, status: json?.status ?? "success", data: { teams } };
 }

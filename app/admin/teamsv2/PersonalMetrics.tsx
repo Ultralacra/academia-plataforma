@@ -68,6 +68,7 @@ export default function PersonalMetrics({
         } catch {}
 
         if (hasFreshCache) {
+          console.log("[PersonalMetrics] 📦 Usando datos de CACHE para", coachCode, "desde:", desde, "hasta:", hasta);
           setLoading(false);
           setProgress(0);
           return;
@@ -75,9 +76,11 @@ export default function PersonalMetrics({
 
         setLoading(true);
         setProgress(0);
+        console.log("[PersonalMetrics] 🔄 Fetching métricas para", coachCode, "desde:", desde, "hasta:", hasta);
         const res = await fetchMetrics(desde, hasta, coachCode);
         if (!active) return;
         const nextVm = (res?.data as any)?.teams ?? null;
+        console.log("[PersonalMetrics] 📊 ViewModel recibido:", nextVm);
         setVm(nextVm);
         try {
           localStorage.setItem(
@@ -213,18 +216,38 @@ export default function PersonalMetrics({
   const aggState = useMemo(() => vm?.clientsByStateAgg ?? [], [vm]);
   const detailsState = useMemo(() => vm?.clientsByStateDetails ?? [], [vm]);
 
-  // Derive summary for ResolutionAndRateCard and correct total for rate
+  // Derive summary for ResolutionAndRateCard from ticketsByEstado (source of truth)
   const avgResSummary = vm?.avgResolutionSummary ?? null;
-  const totalTicketsForStatus = useMemo(() => {
-    const byStatus = Array.isArray(vm?.ticketsByEstado)
+  const resolutionBreakdown = useMemo(() => {
+    const byStatus: Array<{ estado: string; cantidad: number }> = Array.isArray(vm?.ticketsByEstado)
       ? (vm.ticketsByEstado as any[])
       : [];
-    const sum = byStatus.reduce(
-      (acc, it) => acc + (Number(it.cantidad ?? 0) || 0),
-      0,
-    );
-    const fallback = Number(vm?.ticketsTotal ?? 0) || 0;
-    return sum > 0 ? sum : fallback;
+    const resolved = byStatus
+      .filter((it) => it.estado === "RESUELTO")
+      .reduce((acc, it) => acc + (Number(it.cantidad ?? 0) || 0), 0);
+    const eliminated = byStatus
+      .filter((it) => it.estado === "ELIMINADO")
+      .reduce((acc, it) => acc + (Number(it.cantidad ?? 0) || 0), 0);
+    const inProgress = byStatus
+      .filter((it) => it.estado === "EN_PROGRESO")
+      .reduce((acc, it) => acc + (Number(it.cantidad ?? 0) || 0), 0);
+    const pendingDeEnvio = byStatus
+      .filter((it) => it.estado === "PENDIENTE_DE_ENVIO")
+      .reduce((acc, it) => acc + (Number(it.cantidad ?? 0) || 0), 0);
+    // Total excluye ELIMINADO para calcular la tasa de resolución real
+    const totalForRate = resolved + inProgress + pendingDeEnvio;
+
+    console.log("[PersonalMetrics] 🔶 ResolutionAndRateCard inputs:", {
+      avgResSummary: vm?.avgResolutionSummary,
+      ticketsByEstado: byStatus,
+      resolved,
+      inProgress,
+      pendingDeEnvio,
+      eliminated,
+      totalForRate,
+    });
+
+    return { resolved, eliminated, inProgress, pendingDeEnvio, totalForRate };
   }, [vm]);
 
   return (
@@ -290,8 +313,10 @@ export default function PersonalMetrics({
               <ResolutionAndRateCard
                 avgMinutes={avgResSummary?.avg_minutes}
                 avgHms={avgResSummary?.avg_time_hms}
-                resolved={avgResSummary?.tickets_resueltos}
-                total={totalTicketsForStatus}
+                resolved={resolutionBreakdown.resolved}
+                total={resolutionBreakdown.totalForRate}
+                inProgress={resolutionBreakdown.inProgress}
+                pendingDeEnvio={resolutionBreakdown.pendingDeEnvio}
               />
               {slowest ? (
                 <SlowestResponseCard ticket={slowest} />

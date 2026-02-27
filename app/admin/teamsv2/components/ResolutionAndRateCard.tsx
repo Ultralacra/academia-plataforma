@@ -1,25 +1,30 @@
 "use client";
 
-import { Timer, Percent, CheckCircle2, Clock } from "lucide-react";
+import { Timer, Percent, CheckCircle2, Clock, Send } from "lucide-react";
 
 export default function ResolutionAndRateCard({
   avgMinutes,
   avgHms,
   resolved,
   total,
+  inProgress,
+  pendingDeEnvio,
   className,
 }: {
   avgMinutes: number | null | undefined;
   avgHms: string | null | undefined;
   resolved: number | null | undefined;
   total: number | null | undefined;
+  inProgress?: number | null | undefined;
+  pendingDeEnvio?: number | null | undefined;
   className?: string;
 }) {
   const minutes = Number(avgMinutes ?? 0);
   const hms = avgHms ?? "—";
   const res = Number(resolved ?? 0);
   const tot = Number(total ?? 0);
-  const pending = Math.max(tot - res, 0);
+  const prog = Number(inProgress ?? 0);
+  const pendEnv = Number(pendingDeEnvio ?? 0);
   const rate = tot > 0 ? (res / tot) * 100 : 0;
 
   return (
@@ -66,12 +71,14 @@ export default function ResolutionAndRateCard({
         </div>
 
         <div className="mt-1 flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
             <CheckCircle2 className="h-3.5 w-3.5" /> RESUELTO: {res}
           </span>
-          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-            <Clock className="h-3.5 w-3.5" /> PENDIENTE: {pending}
-          </span>
+          {prog > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 dark:border-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+              <Clock className="h-3.5 w-3.5" /> EN PROGRESO: {prog}
+            </span>
+          )}
         </div>
       </div>
     </div>
