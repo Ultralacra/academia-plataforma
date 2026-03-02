@@ -34,9 +34,15 @@ function currentMonthRange() {
 export default function PersonalMetrics({
   coachCode,
   coachName,
+  externalDesde,
+  externalHasta,
+  hideDateControls = false,
 }: {
   coachCode?: string | null;
   coachName?: string | null;
+  externalDesde?: string | null;
+  externalHasta?: string | null;
+  hideDateControls?: boolean;
 }) {
   const [desde, setDesde] = useState<string>(currentMonthRange().first);
   const [hasta, setHasta] = useState<string>(currentMonthRange().today);
@@ -44,12 +50,17 @@ export default function PersonalMetrics({
   const [vm, setVm] = useState<any | null>(null);
   const [progress, setProgress] = useState<number>(0);
 
+  const rangeDesde =
+    typeof externalDesde === "string" ? externalDesde : desde;
+  const rangeHasta =
+    typeof externalHasta === "string" ? externalHasta : hasta;
+
   useEffect(() => {
     let active = true;
     (async () => {
       if (!coachCode) return;
       try {
-        const cacheKey = getMetricsCacheKey(coachCode, desde, hasta);
+        const cacheKey = getMetricsCacheKey(coachCode, rangeDesde, rangeHasta);
         let hasFreshCache = false;
 
         try {
@@ -72,9 +83,9 @@ export default function PersonalMetrics({
             "[PersonalMetrics] 📦 Usando datos de CACHE para",
             coachCode,
             "desde:",
-            desde,
+            rangeDesde,
             "hasta:",
-            hasta,
+            rangeHasta,
           );
           setLoading(false);
           setProgress(0);
@@ -87,11 +98,11 @@ export default function PersonalMetrics({
           "[PersonalMetrics] 🔄 Fetching métricas para",
           coachCode,
           "desde:",
-          desde,
+          rangeDesde,
           "hasta:",
-          hasta,
+          rangeHasta,
         );
-        const res = await fetchMetrics(desde, hasta, coachCode);
+        const res = await fetchMetrics(rangeDesde, rangeHasta, coachCode);
         if (!active) return;
         const nextVm = (res?.data as any)?.teams ?? null;
         console.log("[PersonalMetrics] 📊 ViewModel recibido:", nextVm);
@@ -115,7 +126,7 @@ export default function PersonalMetrics({
     return () => {
       active = false;
     };
-  }, [coachCode, desde, hasta]);
+  }, [coachCode, rangeDesde, rangeHasta]);
 
   // Simulación de progreso mientras carga (0→90%) y finalizar en 100%
   useEffect(() => {
@@ -270,22 +281,24 @@ export default function PersonalMetrics({
     <div className="space-y-4 w-full">
       <div className="flex items-center gap-3">
         <div className="flex-1 text-sm text-neutral-600">
-          Rango: <strong>{desde}</strong> → <strong>{hasta}</strong>
+          Rango: <strong>{rangeDesde}</strong> → <strong>{rangeHasta}</strong>
         </div>
-        <div className="flex gap-2">
-          <input
-            type="date"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-            className="border rounded px-2 py-1 text-sm"
-          />
-          <input
-            type="date"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-            className="border rounded px-2 py-1 text-sm"
-          />
-        </div>
+        {!hideDateControls && (
+          <div className="flex gap-2">
+            <input
+              type="date"
+              value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+            />
+            <input
+              type="date"
+              value={hasta}
+              onChange={(e) => setHasta(e.target.value)}
+              className="border rounded px-2 py-1 text-sm"
+            />
+          </div>
+        )}
       </div>
 
       {loading && (

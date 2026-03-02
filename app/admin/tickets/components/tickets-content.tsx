@@ -597,6 +597,9 @@ export default function TicketsContent() {
             <PersonalMetrics
               coachCode={selectedCoach.codigo}
               coachName={selectedCoach.nombre}
+              externalDesde={fechaDesde}
+              externalHasta={fechaHasta}
+              hideDateControls
             />
           </CardBody>
         </Card>

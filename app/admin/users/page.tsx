@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -65,6 +66,10 @@ function UsersContent() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+
+        <Button asChild variant="outline" size="sm">
+          <Link href="/admin/users/carga-masiva">Carga masiva HF</Link>
+        </Button>
 
         <CreateUserDialog
           onCreated={() => {

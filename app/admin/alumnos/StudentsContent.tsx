@@ -71,11 +71,33 @@ function getUniqueCoaches(students: StudentRow[]) {
   return Array.from(new Set(allCoaches)).filter(Boolean).sort();
 }
 
+function normalizeTagKey(tag?: string | null) {
+  return String(tag ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function canonicalTagLabel(tag?: string | null) {
+  const normalized = normalizeTagKey(tag);
+  if (!normalized) return "";
+  if (normalized === "hotselling foundation") return "Hotselling Foundation";
+  return String(tag ?? "").trim();
+}
+
 function getUniqueTags(students: StudentRow[]) {
-  const allTags = students
-    .map((s) => String(s.tag ?? "").trim())
-    .filter(Boolean);
-  return Array.from(new Set(allTags)).sort((a, b) =>
+  const byKey = new Map<string, string>();
+  for (const student of students) {
+    const normalized = normalizeTagKey(student.tag);
+    if (!normalized) continue;
+    if (!byKey.has(normalized)) {
+      byKey.set(normalized, canonicalTagLabel(student.tag));
+    }
+  }
+
+  return Array.from(byKey.values()).sort((a, b) =>
     a.localeCompare(b, "es", { sensitivity: "base" }),
   );
 }
@@ -973,7 +995,7 @@ export default function StudentsContent() {
 
       // tag
       if (filterTag) {
-        if (String(s.tag ?? "").trim() !== filterTag) return false;
+        if (normalizeTagKey(s.tag) !== normalizeTagKey(filterTag)) return false;
       }
 
       // bono
