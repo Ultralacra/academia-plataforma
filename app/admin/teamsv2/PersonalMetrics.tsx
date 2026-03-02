@@ -50,10 +50,8 @@ export default function PersonalMetrics({
   const [vm, setVm] = useState<any | null>(null);
   const [progress, setProgress] = useState<number>(0);
 
-  const rangeDesde =
-    typeof externalDesde === "string" ? externalDesde : desde;
-  const rangeHasta =
-    typeof externalHasta === "string" ? externalHasta : hasta;
+  const rangeDesde = typeof externalDesde === "string" ? externalDesde : desde;
+  const rangeHasta = typeof externalHasta === "string" ? externalHasta : hasta;
 
   useEffect(() => {
     let active = true;
