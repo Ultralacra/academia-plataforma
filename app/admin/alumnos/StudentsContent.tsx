@@ -87,6 +87,8 @@ function canonicalTagLabel(tag?: string | null) {
   return String(tag ?? "").trim();
 }
 
+const NO_TAG_FILTER = "Sin tag";
+
 function getUniqueTags(students: StudentRow[]) {
   const byKey = new Map<string, string>();
   for (const student of students) {
@@ -858,7 +860,9 @@ export default function StudentsContent() {
   // valores únicos de tags
   const uniqueTags = useMemo(() => {
     const source = all || [];
-    return getUniqueTags(source);
+    const tags = getUniqueTags(source);
+    const hasNoTag = source.some((s) => !normalizeTagKey(s.tag));
+    return hasNoTag ? [NO_TAG_FILTER, ...tags] : tags;
   }, [all]);
 
   // valores únicos de bonos
@@ -995,7 +999,11 @@ export default function StudentsContent() {
 
       // tag
       if (filterTag) {
-        if (normalizeTagKey(s.tag) !== normalizeTagKey(filterTag)) return false;
+        if (filterTag === NO_TAG_FILTER) {
+          if (normalizeTagKey(s.tag)) return false;
+        } else if (normalizeTagKey(s.tag) !== normalizeTagKey(filterTag)) {
+          return false;
+        }
       }
 
       // bono
@@ -1493,7 +1501,11 @@ export default function StudentsContent() {
       }
 
       if (filterTag) {
-        if (String(s.tag ?? "").trim() !== filterTag) return false;
+        if (filterTag === NO_TAG_FILTER) {
+          if (normalizeTagKey(s.tag)) return false;
+        } else if (normalizeTagKey(s.tag) !== normalizeTagKey(filterTag)) {
+          return false;
+        }
       }
 
       if (filterBono) {
