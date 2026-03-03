@@ -15,6 +15,37 @@ import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { isoDay, parseMaybe } from "./detail-utils";
 
+const DRY_RUN_METADATA_SAVE = false;
+
+type CurrencyCode = "USD" | "COP" | "ARS" | "EUR" | "MXN" | "PEN";
+
+const CURRENCY_OPTIONS: Array<{ code: CurrencyCode; label: string }> = [
+  { code: "USD", label: "Dólar (USD)" },
+  { code: "COP", label: "Peso colombiano (COP)" },
+  { code: "ARS", label: "Peso argentino (ARS)" },
+  { code: "EUR", label: "Euro (EUR)" },
+  { code: "MXN", label: "Peso mexicano (MXN)" },
+  { code: "PEN", label: "Sol peruano (PEN)" },
+];
+
+function normalizeCurrency(input: unknown): CurrencyCode {
+  const code = String(input ?? "USD")
+    .trim()
+    .toUpperCase();
+  if (["USD", "COP", "ARS", "EUR", "MXN", "PEN"].includes(code)) {
+    return code as CurrencyCode;
+  }
+  return "USD";
+}
+
+function formatRateLabel(code: CurrencyCode, rateToUsd: number | null) {
+  if (code === "USD") return "1 USD = 1 USD";
+  if (rateToUsd == null || rateToUsd <= 0) return "Sin tipo de cambio";
+  return `1 USD = ${new Intl.NumberFormat("es-CO", {
+    maximumFractionDigits: 6,
+  }).format(rateToUsd)} ${code}`;
+}
+
 function normPhaseId(v: unknown) {
   return String(v ?? "")
     .normalize("NFD")
@@ -58,12 +89,7 @@ async function fetchFase5StartDateISO(
 
 // Utilidades numéricas para formato en vista previa del formulario ADS
 function toNum(v?: string | number | null) {
-  if (v == null) return null;
-  if (typeof v === "number") return Number.isFinite(v) ? v : null;
-  const s = String(v).trim();
-  if (!s) return null;
-  const n = Number(s.replace(/\./g, "").replace(/,/g, "."));
-  return Number.isFinite(n) ? n : null;
+  return toNumFlexible(v);
 }
 function fmtNum(n?: string | number | null, digits?: number) {
   const v = toNum(n);
@@ -78,7 +104,8 @@ function fmtMoney(n?: string | number | null) {
   return new Intl.NumberFormat("es-CO", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(v);
 }
 function fmtPct(n?: string | number | null) {
@@ -86,6 +113,96 @@ function fmtPct(n?: string | number | null) {
   if (v == null) return "—";
   const pct = v <= 1 ? v * 100 : v;
   return `${pct.toFixed(1)}%`;
+}
+
+function toMoneyStorageString(v: number | null): string {
+  if (v == null || !Number.isFinite(v)) return "";
+  const rounded = Number(v.toFixed(2));
+  return String(rounded);
+}
+
+function toNumFlexible(v?: string | number | null) {
+  if (v == null) return null;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+
+  const s = String(v).trim();
+  if (!s) return null;
+
+  const cleaned = s.replace(/[^\d.,-]/g, "");
+  if (!cleaned) return null;
+
+  const dotThousands = /^-?\d{1,3}(\.\d{3})+(,\d+)?$/;
+  const commaThousands = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/;
+
+  let normalized = cleaned;
+
+  if (dotThousands.test(cleaned)) {
+    normalized = cleaned.replace(/\./g, "").replace(/,/g, ".");
+  } else if (commaThousands.test(cleaned)) {
+    normalized = cleaned.replace(/,/g, "");
+  } else {
+    const dotCount = (cleaned.match(/\./g) || []).length;
+    const commaCount = (cleaned.match(/,/g) || []).length;
+    const lastDot = cleaned.lastIndexOf(".");
+    const lastComma = cleaned.lastIndexOf(",");
+
+    if (dotCount > 0 && commaCount > 0) {
+      normalized =
+        lastDot > lastComma
+          ? cleaned.replace(/,/g, "")
+          : cleaned.replace(/\./g, "").replace(/,/g, ".");
+    } else if (commaCount > 0) {
+      if (commaCount > 1) {
+        normalized = cleaned.replace(/,/g, "");
+      } else {
+        const decimals = cleaned.split(",")[1] ?? "";
+        normalized =
+          decimals.length <= 6
+            ? cleaned.replace(",", ".")
+            : cleaned.replace(/,/g, "");
+      }
+    } else if (dotCount > 0) {
+      if (dotCount > 1) {
+        normalized = cleaned.replace(/\./g, "");
+      } else {
+        const decimals = cleaned.split(".")[1] ?? "";
+        normalized =
+          decimals.length <= 6 ? cleaned : cleaned.replace(/\./g, "");
+      }
+    }
+  }
+
+  const n = Number(normalized);
+  return Number.isFinite(n) ? n : null;
+}
+
+function convertLocalToUsd(
+  amountLocal: number | null,
+  currency: CurrencyCode,
+  rateToUsd: number | null,
+) {
+  if (amountLocal == null) return null;
+  if (currency === "USD") return amountLocal;
+  if (rateToUsd == null || rateToUsd <= 0) return null;
+  return amountLocal / rateToUsd;
+}
+
+function fmtMoneyByCurrency(n: number | null, currency: CurrencyCode) {
+  if (n == null || !Number.isFinite(n)) return "—";
+  const localeMap: Record<CurrencyCode, string> = {
+    USD: "en-US",
+    COP: "es-CO",
+    ARS: "es-AR",
+    EUR: "es-ES",
+    MXN: "es-MX",
+    PEN: "es-PE",
+  };
+  const fractionDigits = currency === "USD" || currency === "EUR" ? 2 : 0;
+  return new Intl.NumberFormat(localeMap[currency], {
+    style: "currency",
+    currency,
+    maximumFractionDigits: fractionDigits,
+  }).format(n);
 }
 
 export default function AdsMetricsForm({
@@ -104,8 +221,13 @@ export default function AdsMetricsForm({
     fecha_inicio?: string;
     fecha_asignacion?: string;
     fecha_fin?: string;
+    moneda?: CurrencyCode;
+    tipo_cambio_usd?: string;
+    fx_updated_at?: string;
     inversion?: string;
+    inversion_moneda?: string;
     facturacion?: string;
+    facturacion_moneda?: string;
     roas?: string;
     alcance?: string;
     clics?: string;
@@ -144,12 +266,15 @@ export default function AdsMetricsForm({
   };
 
   const [data, setData] = useState<Metrics>({
+    moneda: "USD",
+    tipo_cambio_usd: "1",
     auto_roas: true,
     auto_eff: true,
     pauta_activa: false,
     requiere_interv: false,
     adjuntos: [],
   });
+  const [fxLoading, setFxLoading] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
   const saveTimerRef = useRef<number | null>(null);
@@ -173,11 +298,65 @@ export default function AdsMetricsForm({
     useState<MetadataRecord<any> | null>(null);
   const [matchedMetadataCount, setMatchedMetadataCount] = useState<number>(0);
 
+  function syncMonetaryFields(next: Metrics): Metrics {
+    const currency = normalizeCurrency(next.moneda);
+    const rateToUsd =
+      currency === "USD" ? 1 : toNumFlexible(next.tipo_cambio_usd);
+
+    const hasLocalInputs =
+      next.inversion_moneda != null || next.facturacion_moneda != null;
+
+    const inversionLocal = toNumFlexible(
+      next.inversion_moneda ?? next.inversion,
+    );
+    const facturacionLocal = toNumFlexible(
+      next.facturacion_moneda ?? next.facturacion,
+    );
+
+    const inversionUsd = convertLocalToUsd(inversionLocal, currency, rateToUsd);
+    const facturacionUsd = convertLocalToUsd(
+      facturacionLocal,
+      currency,
+      rateToUsd,
+    );
+
+    const keepLegacyUsdValues =
+      currency === "USD" &&
+      !hasLocalInputs &&
+      next.inversion != null &&
+      next.facturacion != null;
+
+    return {
+      ...next,
+      moneda: currency,
+      tipo_cambio_usd:
+        currency === "USD"
+          ? "1"
+          : rateToUsd != null && rateToUsd > 0
+            ? String(Number(rateToUsd.toFixed(6)))
+            : "",
+      inversion_moneda:
+        next.inversion_moneda ??
+        next.inversion ??
+        (inversionLocal == null ? "" : String(inversionLocal)),
+      facturacion_moneda:
+        next.facturacion_moneda ??
+        next.facturacion ??
+        (facturacionLocal == null ? "" : String(facturacionLocal)),
+      inversion: keepLegacyUsdValues
+        ? String(next.inversion ?? "")
+        : toMoneyStorageString(inversionUsd),
+      facturacion: keepLegacyUsdValues
+        ? String(next.facturacion ?? "")
+        : toMoneyStorageString(facturacionUsd),
+    };
+  }
+
   function applyMetadataToForm(record: MetadataRecord<any> | null) {
     if (!record) return;
     const p = (record as any)?.payload;
     if (!p || typeof p !== "object") return;
-    setData((prev) => ({ ...prev, ...(p as any) }));
+    setData((prev) => syncMonetaryFields({ ...prev, ...(p as any) }));
   }
 
   const norm = (v: unknown) =>
@@ -474,6 +653,34 @@ export default function AdsMetricsForm({
       payload,
     };
 
+    if (DRY_RUN_METADATA_SAVE) {
+      const currentPayload = (matchedMetadata as any)?.payload ?? null;
+      const changedKeys = Object.keys(payload).filter(
+        (k) =>
+          JSON.stringify((currentPayload as any)?.[k]) !==
+          JSON.stringify((payload as any)?.[k]),
+      );
+
+      console.group(`[ADS][metadata][dry-run] ${studentCode}`);
+      console.log("Alumno:", {
+        alumno_id: alumnoId,
+        alumno_codigo: studentCode,
+        alumno_nombre: alumnoNombre,
+      });
+      console.log("Metadata actual:", matchedMetadata ?? null);
+      console.log("Payload candidato:", payload);
+      console.log("Body candidato:", body);
+      console.log("Keys con cambios:", changedKeys);
+      console.groupEnd();
+
+      toast({
+        title: "Simulación activa",
+        description:
+          "No se guardó metadata. Revisa la consola para ver el payload y cambios.",
+      });
+      return;
+    }
+
     setMetadataSaving(true);
     try {
       // 1) Listar SOLO lo del alumno (proxy interno) y filtrar el mejor registro
@@ -701,7 +908,7 @@ export default function AdsMetricsForm({
           const merged = { ...prev, ...(maybeForm ?? {}) } as Metrics;
           // Regla: fecha_inicio debe ser la fecha de entrada a Fase 5 si existe.
           if (fase5Start) merged.fecha_inicio = fase5Start;
-          return merged;
+          return syncMonetaryFields(merged);
         });
       } catch (e) {
         console.error("ADS metrics local load error", e);
@@ -745,6 +952,17 @@ export default function AdsMetricsForm({
     setData(next);
   }
 
+  function onMoneyFieldChange(
+    key:
+      | "inversion_moneda"
+      | "facturacion_moneda"
+      | "tipo_cambio_usd"
+      | "moneda",
+    value: string,
+  ) {
+    persist(syncMonetaryFields({ ...data, [key]: value } as Metrics));
+  }
+
   // Derivados automáticos
   const roasCalc = useMemo(() => {
     const inv = toNum(data.inversion);
@@ -783,6 +1001,52 @@ export default function AdsMetricsForm({
   function onChange<K extends keyof Metrics>(k: K, v: Metrics[K]) {
     persist({ ...data, [k]: v });
   }
+
+  useEffect(() => {
+    const currency = normalizeCurrency(data.moneda);
+    if (currency === "USD") {
+      if (data.tipo_cambio_usd !== "1") {
+        setData((prev) =>
+          syncMonetaryFields({ ...prev, tipo_cambio_usd: "1" }),
+        );
+      }
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        setFxLoading(true);
+        const res = await fetch(
+          `/api/ads-metrics/exchange-rate?currency=${encodeURIComponent(currency)}`,
+          { method: "GET", cache: "no-store" },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json().catch(() => null)) as any;
+        const rate = toNumFlexible(json?.rate_to_usd);
+        if (!active || rate == null || rate <= 0) return;
+
+        const fetchedAt =
+          String(json?.fetched_at || "").trim() || new Date().toISOString();
+        setData((prev) =>
+          syncMonetaryFields({
+            ...prev,
+            tipo_cambio_usd: String(rate),
+            fx_updated_at: fetchedAt,
+          }),
+        );
+      } catch (e) {
+        console.warn("[ADS][FX] no se pudo obtener tipo de cambio:", e);
+      } finally {
+        if (active) setFxLoading(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.moneda]);
 
   // Nota: se removió la caja de “Notas y adjuntos” en esta vista.
 
@@ -866,6 +1130,35 @@ export default function AdsMetricsForm({
     effPagoCalc,
     effCompraCalc,
     data.auto_eff,
+  ]);
+
+  useEffect(() => {
+    const currency = normalizeCurrency(data.moneda);
+    const rate = currency === "USD" ? 1 : toNumFlexible(data.tipo_cambio_usd);
+    const inversionLocal =
+      toNumFlexible(data.inversion_moneda ?? data.inversion) ?? null;
+    const facturacionLocal =
+      toNumFlexible(data.facturacion_moneda ?? data.facturacion) ?? null;
+    const inversionUsd = toNum(data.inversion) ?? null;
+    const facturacionUsd = toNum(data.facturacion) ?? null;
+
+    console.log("[ADS][FX] Estado conversión", {
+      moneda: currency,
+      tipo_cambio_usd: rate,
+      inversion_moneda: inversionLocal,
+      facturacion_moneda: facturacionLocal,
+      inversion_usd_guardado: inversionUsd,
+      facturacion_usd_guardado: facturacionUsd,
+      fx_updated_at: data.fx_updated_at ?? null,
+    });
+  }, [
+    data.moneda,
+    data.tipo_cambio_usd,
+    data.inversion_moneda,
+    data.facturacion_moneda,
+    data.inversion,
+    data.facturacion,
+    data.fx_updated_at,
   ]);
 
   // Helpers de presentación para porcentajes
@@ -972,28 +1265,87 @@ export default function AdsMetricsForm({
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm">Rendimiento</CardTitle>
                   </CardHeader>
-                  <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div className="space-y-1.5">
-                      <Label>Inversión (USD)</Label>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.inversion || ""}
-                        onChange={(e) => onChange("inversion", e.target.value)}
-                      />
+                      <Label>Moneda</Label>
+                      <select
+                        value={normalizeCurrency(data.moneda)}
+                        onChange={(e) =>
+                          onMoneyFieldChange("moneda", e.target.value)
+                        }
+                        className="w-full h-9 rounded-md border px-3 text-sm"
+                      >
+                        {CURRENCY_OPTIONS.map((opt) => (
+                          <option key={opt.code} value={opt.code}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Facturación (USD)</Label>
+                      <Label>
+                        Tipo de cambio{" "}
+                        {normalizeCurrency(data.moneda) === "USD"
+                          ? "(fijo)"
+                          : "(1 USD = ?)"}
+                      </Label>
+                      <Input
+                        inputMode="decimal"
+                        placeholder={
+                          normalizeCurrency(data.moneda) === "USD" ? "1" : "0"
+                        }
+                        disabled
+                        value={data.tipo_cambio_usd || ""}
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        {fxLoading
+                          ? "Actualizando tipo de cambio…"
+                          : formatRateLabel(
+                              normalizeCurrency(data.moneda),
+                              normalizeCurrency(data.moneda) === "USD"
+                                ? 1
+                                : toNumFlexible(data.tipo_cambio_usd),
+                            )}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>
+                        Inversión ({normalizeCurrency(data.moneda)})
+                      </Label>
                       <Input
                         inputMode="numeric"
                         placeholder="0"
-                        value={data.facturacion || ""}
+                        value={data.inversion_moneda ?? data.inversion ?? ""}
                         onChange={(e) =>
-                          onChange("facturacion", e.target.value)
+                          onMoneyFieldChange("inversion_moneda", e.target.value)
                         }
                       />
+                      <div className="text-[11px] text-muted-foreground">
+                        Se guarda en USD: {fmtMoney(data.inversion)}
+                      </div>
                     </div>
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
+                      <Label>
+                        Facturación ({normalizeCurrency(data.moneda)})
+                      </Label>
+                      <Input
+                        inputMode="numeric"
+                        placeholder="0"
+                        value={
+                          data.facturacion_moneda ?? data.facturacion ?? ""
+                        }
+                        onChange={(e) =>
+                          onMoneyFieldChange(
+                            "facturacion_moneda",
+                            e.target.value,
+                          )
+                        }
+                      />
+                      <div className="text-[11px] text-muted-foreground">
+                        Se guarda en USD: {fmtMoney(data.facturacion)}
+                      </div>
+                    </div>
+                    <div className="space-y-1 md:col-span-4">
                       <div className="flex items-center justify-between">
                         <Label>ROAS</Label>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1357,10 +1709,39 @@ export default function AdsMetricsForm({
                 ROAS: <b>{view.roas ?? "—"}</b>
               </div>
               <div>
-                Inversión: <b>{fmtMoney(data.inversion)}</b>
+                Inversión ({normalizeCurrency(data.moneda)}):{" "}
+                <b>
+                  {fmtMoneyByCurrency(
+                    toNumFlexible(data.inversion_moneda ?? data.inversion),
+                    normalizeCurrency(data.moneda),
+                  )}
+                </b>
               </div>
               <div>
-                Facturación: <b>{fmtMoney(data.facturacion)}</b>
+                Inversión (USD guardado): <b>{fmtMoney(data.inversion)}</b>
+              </div>
+              <div>
+                Facturación ({normalizeCurrency(data.moneda)}):{" "}
+                <b>
+                  {fmtMoneyByCurrency(
+                    toNumFlexible(data.facturacion_moneda ?? data.facturacion),
+                    normalizeCurrency(data.moneda),
+                  )}
+                </b>
+              </div>
+              <div>
+                Facturación (USD guardado): <b>{fmtMoney(data.facturacion)}</b>
+              </div>
+              <div>
+                Tipo de cambio:{" "}
+                <b>
+                  {formatRateLabel(
+                    normalizeCurrency(data.moneda),
+                    normalizeCurrency(data.moneda) === "USD"
+                      ? 1
+                      : toNumFlexible(data.tipo_cambio_usd),
+                  )}
+                </b>
               </div>
             </div>
 
@@ -1496,7 +1877,9 @@ export default function AdsMetricsForm({
             <div className="text-[11px] text-muted-foreground">
               {isReadOnly
                 ? "Datos cargados desde metadata del alumno."
-                : "Guardado local automáticamente. “Guardar” crea la metadata del alumno si no existe; si ya existe, la actualiza (PUT /metadata/:id) y luego la vuelve a consultar por id."}
+                : DRY_RUN_METADATA_SAVE
+                  ? "Guardado local automáticamente. Botón “Guardar” en modo simulación: no persiste metadata y muestra payload/cambios en consola."
+                  : "Guardado local automáticamente. “Guardar” crea la metadata del alumno si no existe; si ya existe, la actualiza (PUT /metadata/:id) y luego la vuelve a consultar por id."}
             </div>
           </CardContent>
         </Card>
