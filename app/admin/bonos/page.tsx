@@ -162,6 +162,22 @@ export default function AdminBonosPage() {
     return { total, activos, inactivos };
   }, [rows]);
 
+  /** Calcula el siguiente código correlativo BONO_XXX a partir de los existentes */
+  function nextBonoCodigo(): string {
+    let maxNum = 0;
+    for (const b of rows) {
+      const m = String(b.codigo).match(/^BONO_(\d+)$/i);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+    const next = maxNum + 1;
+    // Pad con ceros: mínimo 3 dígitos, pero si ya hay más, se ajusta
+    const padLen = Math.max(3, String(maxNum).length);
+    return `BONO_${String(next).padStart(padLen, "0")}`;
+  }
+
   function openEdit(b: alumnosApi.Bono) {
     setEditCodigo(String(b.codigo));
     setEditNombre(String(b.nombre ?? ""));
@@ -329,7 +345,13 @@ export default function AdminBonosPage() {
               </div>
             </div>
             {!readOnly && (
-              <Button onClick={() => setCreateOpen(true)} className="gap-2">
+              <Button
+                onClick={() => {
+                  setCreateCodigo(nextBonoCodigo());
+                  setCreateOpen(true);
+                }}
+                className="gap-2"
+              >
                 <Plus className="h-4 w-4" />
                 Nuevo bono
               </Button>
@@ -584,8 +606,7 @@ export default function AdminBonosPage() {
                   <Label>Código</Label>
                   <Input
                     value={createCodigo}
-                    onChange={(e) => setCreateCodigo(e.target.value)}
-                    placeholder="BONO_..."
+                    disabled
                   />
                 </div>
 
