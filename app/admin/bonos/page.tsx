@@ -604,10 +604,7 @@ export default function AdminBonosPage() {
               <div className="space-y-3">
                 <div className="space-y-2">
                   <Label>Código</Label>
-                  <Input
-                    value={createCodigo}
-                    disabled
-                  />
+                  <Input value={createCodigo} disabled />
                 </div>
 
                 <div className="space-y-2">
