@@ -21,6 +21,8 @@ export async function GET(req: NextRequest) {
   const currency = normalizeCurrency(req.nextUrl.searchParams.get("currency"));
 
   if (currency === "USD") {
+
+    
     return NextResponse.json(
       {
         base: "USD",
