@@ -14,9 +14,9 @@ export type Coach = {
 };
 
 export async function fetchCoachs(): Promise<Coach[]> {
-  const json = await apiFetch<any>(
-    "/team/get/team?page=1&pageSize=25"
-  );
+  const url = "/team/get/team?page=1&pageSize=1000";
+  console.log("[fetchCoachs] Endpoint:", url);
+  const json = await apiFetch<any>(url);
   return json.data as Coach[];
 }
 

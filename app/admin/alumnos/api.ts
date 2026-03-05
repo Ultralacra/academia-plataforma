@@ -511,7 +511,31 @@ export async function getAllStudentsPaged(params?: {
   if (coach) qs.set("coach", coach);
 
   const path = `/client/get/clients?${qs.toString()}`;
-  const json = await fetchJson<any>(path);
+  let json: any;
+  let effectivePageSize = pageSize;
+  try {
+    // Este endpoint puede tardar bastante con pageSize alto.
+    json = await fetchJson<any>(path, undefined, 120_000);
+  } catch (e: any) {
+    const msg = String(e?.message ?? "");
+    const isTimeout = /timeout/i.test(msg);
+    if (!isTimeout || pageSize <= 300) throw e;
+
+    // Fallback: reintentar con lote menor para evitar timeout y error fatal en UI.
+    effectivePageSize = 300;
+    const retryQs = new URLSearchParams();
+    retryQs.set("page", String(page));
+    retryQs.set("pageSize", String(effectivePageSize));
+    if (search) retryQs.set("search", search);
+    if (estado) retryQs.set("estado", estado);
+    if (coach) retryQs.set("coach", coach);
+    const retryPath = `/client/get/clients?${retryQs.toString()}`;
+    console.warn("[alumnos:getAllStudentsPaged] timeout, retry:", {
+      originalPath: path,
+      retryPath,
+    });
+    json = await fetchJson<any>(retryPath, undefined, 120_000);
+  }
 
   // Puede venir como { data: [...] } o { clients: { data: [...] } } o { getClients: { data: [...] } }
   const rows: any[] = Array.isArray(json?.data)
@@ -561,7 +585,7 @@ export async function getAllStudentsPaged(params?: {
     items,
     total: toNumOrNull(json?.total ?? json?.clients?.total ?? json?.getClients?.total),
     page: toNumOrNull(json?.page) ?? page,
-    pageSize: toNumOrNull(json?.pageSize) ?? pageSize,
+    pageSize: toNumOrNull(json?.pageSize) ?? effectivePageSize,
     totalPages: toNumOrNull(json?.totalPages),
   };
 

@@ -64,7 +64,7 @@ export default function TeamsMetricsContent() {
     const m = now.getMonth();
     const first = `${y}-${String(m + 1).padStart(2, "0")}-01`;
     const today = `${y}-${String(m + 1).padStart(2, "0")}-${String(
-      now.getDate()
+      now.getDate(),
     ).padStart(2, "0")}`;
     return { first, today };
   }
@@ -114,12 +114,13 @@ export default function TeamsMetricsContent() {
   const [loadingCoachStudents] = useState(false);
   const [loadingAllStudents] = useState(false);
   const [studentsChartMode, setStudentsChartMode] = useState<"estado" | "fase">(
-    "estado"
+    "estado",
   );
   const [tab, setTab] = useState<"general" | "ads">("general");
   const [adsFase3, setAdsFase3] = useState<any[]>([]);
   const [adsFase4, setAdsFase4] = useState<any[]>([]);
   const [loadingAdsStudents, setLoadingAdsStudents] = useState(false);
+  const [hasFilterInteraction, setHasFilterInteraction] = useState(false);
 
   // gating de consulta por fechas
   const bothEmpty = !desde && !hasta; // ahora normalmente será false
@@ -127,6 +128,21 @@ export default function TeamsMetricsContent() {
   const shouldFetch = bothEmpty || bothSet; // mantiene lógica existente
 
   const [loading, setLoading] = useState(true);
+
+  const handleCoachChange = (value: string) => {
+    setHasFilterInteraction(true);
+    setCoach(value);
+  };
+
+  const handleDesdeChange = (value: string) => {
+    setHasFilterInteraction(true);
+    setDesde(value);
+  };
+
+  const handleHastaChange = (value: string) => {
+    setHasFilterInteraction(true);
+    setHasta(value);
+  };
 
   const [vm, setVm] = useState<{
     meta?: {
@@ -445,6 +461,14 @@ export default function TeamsMetricsContent() {
   useEffect(() => {
     let alive = true;
 
+    // No ejecutar métricas al cargar la vista por primera vez.
+    if (!hasFilterInteraction) {
+      setLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+
     // si solo hay una fecha, no consultamos
     if (!bothSet) {
       setLoading(false);
@@ -481,7 +505,7 @@ export default function TeamsMetricsContent() {
             : [];
 
         const areasCount: { area: string; count: number }[] = Array.isArray(
-          teams.areasCount
+          teams.areasCount,
         )
           ? teams.areasCount.map((r: any) => ({
               area: String(r.area ?? "Sin área"),
@@ -549,7 +573,7 @@ export default function TeamsMetricsContent() {
               r.informante ?? r.name ?? r.informante_nombre ?? r.nombre ?? null,
             cantidad:
               Number(
-                r.cantidad ?? r.count ?? r.tickets ?? r.cantidad_tickets ?? 0
+                r.cantidad ?? r.count ?? r.tickets ?? r.cantidad_tickets ?? 0,
               ) || 0,
           }));
         } else if (rawInformanteSrc && typeof rawInformanteSrc === "object") {
@@ -616,7 +640,7 @@ export default function TeamsMetricsContent() {
                     Number(
                       r?.statusDist?.["En_Proceso"] ??
                         r?.statusDist?.["En Proceso"] ??
-                        0
+                        0,
                     ) || 0,
                   Cerrados: Number(r?.statusDist?.Cerrados ?? 0) || 0,
                 },
@@ -636,20 +660,20 @@ export default function TeamsMetricsContent() {
 
         // ticketsByName (v2): agrupar por nombre y sumar
         const ticketsByName: { name: string; count: number }[] = Array.isArray(
-          teams.ticketsByName
+          teams.ticketsByName,
         )
           ? (() => {
               const map = new Map<string, number>();
               (teams.ticketsByName as any[]).forEach((r) => {
                 const name = String(
-                  r.alumno ?? r.nombre ?? r.name ?? "Sin Alumno"
+                  r.alumno ?? r.nombre ?? r.name ?? "Sin Alumno",
                 );
                 const val =
                   Number(r.cantidad ?? r.tickets ?? r.count ?? 0) || 0;
                 map.set(name, (map.get(name) ?? 0) + val);
               });
               return Array.from(map, ([name, count]) => ({ name, count })).sort(
-                (a, b) => b.count - a.count
+                (a, b) => b.count - a.count,
               );
             })()
           : [];
@@ -675,7 +699,7 @@ export default function TeamsMetricsContent() {
             : [];
 
         const clientsByPhaseDetails = Array.isArray(
-          (teams as any).clientsByPhaseDetails
+          (teams as any).clientsByPhaseDetails,
         )
           ? (teams as any).clientsByPhaseDetails.map((r: any) => ({
               name: String(r.name ?? r.etapa ?? "Sin fase"),
@@ -690,7 +714,7 @@ export default function TeamsMetricsContent() {
           : [];
 
         const clientsByStateDetails = Array.isArray(
-          (teams as any).clientsByStateDetails
+          (teams as any).clientsByStateDetails,
         )
           ? (teams as any).clientsByStateDetails.map((r: any) => ({
               name: String(r.name ?? r.estado ?? "Sin estado"),
@@ -706,7 +730,7 @@ export default function TeamsMetricsContent() {
 
         // 2) Tickets por equipo — Tomar DIRECTO del API
         let ticketsByTeamApi: TicketsByTeamApiRow[] = Array.isArray(
-          teams.ticketsByTeam
+          teams.ticketsByTeam,
         )
           ? teams.ticketsByTeam.map((r: any) => ({
               etiqueta: String(r.etiqueta ?? r.team ?? "—"),
@@ -745,14 +769,14 @@ export default function TeamsMetricsContent() {
           ticketsByInformante,
           // ✅ Nuevo: se copia desde el payload normalizado
           ticketsByInformanteByDay: Array.isArray(
-            (teams as any).ticketsByInformanteByDay
+            (teams as any).ticketsByInformanteByDay,
           )
             ? (teams as any).ticketsByInformanteByDay
             : Array.isArray((teams as any).tickets_by_informante_by_day)
-            ? (teams as any).tickets_by_informante_by_day
-            : [],
+              ? (teams as any).tickets_by_informante_by_day
+              : [],
           avgResolutionByStudent: Array.isArray(
-            (teams as any).avgResolutionByStudent
+            (teams as any).avgResolutionByStudent,
           )
             ? (teams as any).avgResolutionByStudent
             : [],
@@ -764,7 +788,7 @@ export default function TeamsMetricsContent() {
             ? (teams as any).ticketsByType
             : [],
           clientsByCoachDetail: Array.isArray(
-            (teams as any).clientsByCoachDetail
+            (teams as any).clientsByCoachDetail,
           )
             ? (teams as any).clientsByCoachDetail
             : [],
@@ -772,7 +796,7 @@ export default function TeamsMetricsContent() {
             ? (teams as any).allClientsByCoach
             : [],
           allClientsByCoachFlat: Array.isArray(
-            (teams as any).allClientsByCoachFlat
+            (teams as any).allClientsByCoachFlat,
           )
             ? (teams as any).allClientsByCoachFlat
             : [],
@@ -783,23 +807,23 @@ export default function TeamsMetricsContent() {
           sessionsOverview: Array.isArray((teams as any).sessionsOverview)
             ? (teams as any).sessionsOverview
             : Array.isArray((teams as any).sessions_overview)
-            ? (teams as any).sessions_overview
-            : [],
+              ? (teams as any).sessions_overview
+              : [],
           sessionsByCoach: Array.isArray((teams as any).sessionsByCoach)
             ? (teams as any).sessionsByCoach
             : Array.isArray((teams as any).sessions_by_coach)
-            ? (teams as any).sessions_by_coach
-            : [],
+              ? (teams as any).sessions_by_coach
+              : [],
           sessionsByAlumno: Array.isArray((teams as any).sessionsByAlumno)
             ? (teams as any).sessionsByAlumno
             : Array.isArray((teams as any).sessions_by_alumno)
-            ? (teams as any).sessions_by_alumno
-            : [],
+              ? (teams as any).sessions_by_alumno
+              : [],
           sessionsTrends: Array.isArray((teams as any).sessionsTrends)
             ? (teams as any).sessionsTrends
             : Array.isArray((teams as any).sessions_trends)
-            ? (teams as any).sessions_trends
-            : [],
+              ? (teams as any).sessions_trends
+              : [],
           sessionsConversion:
             (teams as any).sessionsConversion ??
             (teams as any).sessions_conversion ??
@@ -807,8 +831,8 @@ export default function TeamsMetricsContent() {
           sessionsTopCoaches: Array.isArray((teams as any).sessionsTopCoaches)
             ? (teams as any).sessionsTopCoaches
             : Array.isArray((teams as any).sessions_top_coaches)
-            ? (teams as any).sessions_top_coaches
-            : [],
+              ? (teams as any).sessions_top_coaches
+              : [],
         });
       } catch (e) {
         console.error(e);
@@ -864,7 +888,7 @@ export default function TeamsMetricsContent() {
     return () => {
       alive = false;
     };
-  }, [desde, hasta, coach, bothSet]);
+  }, [desde, hasta, coach, bothSet, hasFilterInteraction]);
 
   // Consultar datos base de alumnos/tickets genéricos (para fallback de métricas derivadas)
   useEffect(() => {
@@ -921,17 +945,17 @@ export default function TeamsMetricsContent() {
 
     const targetName = coachName || coach;
     const baseRespByCoach = vm.respByCoach.filter(
-      (r) => r.coach === targetName
+      (r) => r.coach === targetName,
     );
     const prodByCoach = vm.prodByCoach.filter((r) => r.coach === targetName);
     const prodByCoachV2 = vm.prodByCoachV2.filter(
-      (r) => r.coach === targetName
+      (r) => r.coach === targetName,
     );
     const createdBlock = vm.createdBlock
       ? {
           ...vm.createdBlock,
           rows: vm.createdBlock.rows.filter(
-            (r) => r.nombre_coach === targetName
+            (r) => r.nombre_coach === targetName,
           ),
         }
       : null;
@@ -945,7 +969,7 @@ export default function TeamsMetricsContent() {
     }));
 
     const studentNames = new Set(
-      studentsOfCoach.map((s: any) => s.name?.toLowerCase())
+      studentsOfCoach.map((s: any) => s.name?.toLowerCase()),
     );
 
     const ticketsSeries: TicketsSeriesVM = vm.ticketsSeries;
@@ -979,14 +1003,14 @@ export default function TeamsMetricsContent() {
         createdRow?.avgResponse != null
           ? Number(createdRow.avgResponse) || 0
           : respEntry
-          ? respEntry.response ?? vm.totals.avgResponseMin
-          : vm.totals.avgResponseMin,
+            ? (respEntry.response ?? vm.totals.avgResponseMin)
+            : vm.totals.avgResponseMin,
       avgResolutionMin:
         createdRow?.avgResolution != null
           ? Number(createdRow.avgResolution) || 0
           : respEntry
-          ? respEntry.resolution ?? vm.totals.avgResolutionMin
-          : vm.totals.avgResolutionMin,
+            ? (respEntry.resolution ?? vm.totals.avgResolutionMin)
+            : vm.totals.avgResolutionMin,
     } as typeof vm.totals;
 
     return {
@@ -995,16 +1019,16 @@ export default function TeamsMetricsContent() {
       respByCoach: baseRespByCoach.length
         ? baseRespByCoach
         : createdRow
-        ? [
-            {
-              coach: targetName,
-              tickets:
-                Number(createdRow.tickets ?? vm.totals.ticketsTotal) || 0,
-              response: Number(createdRow.avgResponse ?? 0) || 0,
-              resolution: Number(createdRow.avgResolution ?? 0) || 0,
-            },
-          ]
-        : baseRespByCoach,
+          ? [
+              {
+                coach: targetName,
+                tickets:
+                  Number(createdRow.tickets ?? vm.totals.ticketsTotal) || 0,
+                response: Number(createdRow.avgResponse ?? 0) || 0,
+                resolution: Number(createdRow.avgResolution ?? 0) || 0,
+              },
+            ]
+          : baseRespByCoach,
       prodByCoach,
       prodByCoachV2,
       createdBlock,
@@ -1026,7 +1050,7 @@ export default function TeamsMetricsContent() {
             hours: 0,
           }))
         : vm.prodByCoach,
-    [vm.prodByCoachV2, vm.prodByCoach]
+    [vm.prodByCoachV2, vm.prodByCoach],
   );
 
   const displayVm = filteredVm; // alias para claridad
@@ -1040,7 +1064,7 @@ export default function TeamsMetricsContent() {
   const coachStatusDist = useMemo(() => {
     if (!coach) return null;
     const row = displayVm.createdBlock?.rows?.find(
-      (r) => r.nombre_coach === (coachName || coach)
+      (r) => r.nombre_coach === (coachName || coach),
     );
     if (!row?.statusDist) return null;
     const abiertos = row.statusDist.Abiertos ?? 0;
@@ -1132,7 +1156,7 @@ export default function TeamsMetricsContent() {
       const payload = buildMetricsExport();
       const txt = JSON.stringify(payload, null, 2);
       navigator.clipboard?.writeText(txt);
-            /* console.log("JSON copiado al portapapeles"); */
+      /* console.log("JSON copiado al portapapeles"); */
     } catch (e) {
       console.error("No se pudo copiar el JSON", e);
     }
@@ -1212,24 +1236,45 @@ export default function TeamsMetricsContent() {
           codigo: c.codigo,
           nombre: c.nombre,
           area: c.area ?? null,
+          puesto: c.puesto ?? null,
         }));
-        const onlyAds = list.filter(
-          (c) =>
-            /ads/i.test(String(c.area || "")) ||
-            /johan/i.test(String(c.nombre || ""))
-        );
-        const filtered =
-          tab === "ads" ? (onlyAds.length ? onlyAds : list) : list;
+        // Ocultar sólo registros sin area y sin puesto.
+        const filtered = list.filter((c) => {
+          const area = String(c.area ?? "").trim();
+          const puesto = String(c.puesto ?? "").trim();
+          return area.length > 0 || puesto.length > 0;
+        });
+
+        const sorted = [...filtered].sort((a, b) => {
+          const areaA = (a.area || "").trim();
+          const areaB = (b.area || "").trim();
+          const hasAreaA = areaA.length > 0;
+          const hasAreaB = areaB.length > 0;
+
+          if (hasAreaA && !hasAreaB) return -1;
+          if (!hasAreaA && hasAreaB) return 1;
+
+          if (hasAreaA && hasAreaB) {
+            const byArea = areaA.localeCompare(areaB, "es", {
+              sensitivity: "base",
+            });
+            if (byArea !== 0) return byArea;
+          }
+
+          return a.nombre.localeCompare(b.nombre, "es", {
+            sensitivity: "base",
+          });
+        });
         return (
           <Filters
-            coaches={filtered}
+            coaches={sorted}
             coach={coach}
             loadingCoaches={loadingCoachs}
-            onCoach={setCoach}
+            onCoach={handleCoachChange}
             desde={desde}
             hasta={hasta}
-            onDesde={setDesde}
-            onHasta={setHasta}
+            onDesde={handleDesdeChange}
+            onHasta={handleHastaChange}
           />
         );
       })()}
@@ -1370,7 +1415,7 @@ export default function TeamsMetricsContent() {
             total={
               displayVm.ticketsByName?.reduce(
                 (a, c) => a + (c.count || 0),
-                0
+                0,
               ) ?? 0
             }
           />
