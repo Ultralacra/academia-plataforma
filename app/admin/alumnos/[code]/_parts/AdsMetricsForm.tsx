@@ -1653,7 +1653,9 @@ export default function AdsMetricsForm({
                           </Badge>
                           <Badge
                             variant={
-                              optimizationPhaseSelected ? "secondary" : "outline"
+                              optimizationPhaseSelected
+                                ? "secondary"
+                                : "outline"
                             }
                           >
                             {optimizationPhaseSelected
@@ -1669,7 +1671,10 @@ export default function AdsMetricsForm({
                           <Select
                             value={data.fase || "sin-fase"}
                             onValueChange={(value) =>
-                              onChange("fase", value === "sin-fase" ? "" : value)
+                              onChange(
+                                "fase",
+                                value === "sin-fase" ? "" : value,
+                              )
                             }
                           >
                             <SelectTrigger className="h-11 rounded-xl border-border/70 bg-background/90 shadow-sm data-[placeholder]:text-muted-foreground">
@@ -1708,7 +1713,9 @@ export default function AdsMetricsForm({
                               />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="sin-subfase">Sin subfase</SelectItem>
+                              <SelectItem value="sin-subfase">
+                                Sin subfase
+                              </SelectItem>
                               {SUBPHASE_OPTIONS.map((subphase) => (
                                 <SelectItem key={subphase} value={subphase}>
                                   {subphase}
@@ -1744,8 +1751,8 @@ export default function AdsMetricsForm({
                             </SelectContent>
                           </Select>
                           <p className="text-[11px] leading-relaxed text-muted-foreground">
-                            Este campo queda editable siempre. La restricción aplica
-                            solo para la subfase.
+                            Este campo queda editable siempre. La restricción
+                            aplica solo para la subfase.
                           </p>
                         </div>
                       </div>
@@ -1763,8 +1770,8 @@ export default function AdsMetricsForm({
                         ) : (
                           <span>
                             Mientras la fase no sea optimización, subfase y
-                            trascendencia quedan bloqueadas y se limpian para evitar
-                            guardar datos inconsistentes.
+                            trascendencia quedan bloqueadas y se limpian para
+                            evitar guardar datos inconsistentes.
                           </span>
                         )}
                       </div>
