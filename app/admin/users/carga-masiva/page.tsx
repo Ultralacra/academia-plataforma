@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
@@ -1512,10 +1513,18 @@ function BulkUsersContent() {
 }
 
 export default function CargaMasivaUsersPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    router.replace("/admin/users");
+  }, [router]);
+
   return (
     <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
-        <BulkUsersContent />
+        <div className="p-4 text-sm text-muted-foreground">
+          Esta función fue deshabilitada. Redirigiendo...
+        </div>
       </DashboardLayout>
     </ProtectedRoute>
   );

@@ -219,6 +219,8 @@ export function StudentInactivityModal() {
           qs.set("search", searchValue);
           const json = await apiFetch<any>(
             `/client/get/clients?${qs.toString()}`,
+            undefined,
+            { background: true },
           );
           return extractRows(json);
         };
@@ -271,6 +273,8 @@ export function StudentInactivityModal() {
         if (resolvedCode) {
           const bonosJson = await apiFetch<any>(
             `/bonos/get/assignments/${encodeURIComponent(resolvedCode)}?page=1&pageSize=200`,
+            undefined,
+            { background: true },
           );
           bonosRows = Array.isArray(bonosJson?.data) ? bonosJson.data : [];
         }

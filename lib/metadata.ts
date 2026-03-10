@@ -58,8 +58,14 @@ export async function createMetadata<T = any>(data: CreateMetadataInput<T>): Pro
   return unwrap<MetadataRecord<T>>(res);
 }
 
-export async function listMetadata<T = any>(): Promise<ListMetadataResponse<T>> {
-  const res = await apiFetch<any>(endpoints.metadata.list, { method: "GET" });
+export async function listMetadata<T = any>(opts?: {
+  background?: boolean;
+}): Promise<ListMetadataResponse<T>> {
+  const res = await apiFetch<any>(
+    endpoints.metadata.list,
+    { method: "GET" },
+    { background: !!opts?.background }
+  );
   const items = coerceList<T>(res);
   if (items.length) return { items };
 

@@ -62,8 +62,11 @@ export function toQuery(params: Record<string, any>) {
 
 export async function apiFetch<T = unknown>(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  options?: { background?: boolean }
 ): Promise<T> {
+  const isBackground = !!options?.background;
+
   // Adjuntamos token si existe
   let authHeaders: Record<string, string> = {};
   try {
@@ -77,28 +80,50 @@ export async function apiFetch<T = unknown>(
     ? { ...authHeaders }
     : { "Content-Type": "application/json", ...authHeaders };
 
-  const res = await fetch(buildUrl(path), {
-    ...init,
-    headers: {
-      ...defaultHeaders,
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  const execute = async () => {
+    return fetch(buildUrl(path), {
+      ...init,
+      headers: {
+        ...defaultHeaders,
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+  };
+
+  let res = await execute();
+
+  if (res.status === 401 && typeof window !== "undefined") {
+    // Reintento único con token refrescado antes de forzar logout.
+    const refreshed = await authService.tryRefreshToken();
+    if (refreshed) {
+      const refreshedToken = getAuthToken();
+      if (refreshedToken) {
+        authHeaders["Authorization"] = `Bearer ${refreshedToken}`;
+      } else {
+        delete authHeaders["Authorization"];
+      }
+      res = await execute();
+    }
+  }
+
   if (!res.ok) {
     // Redirigir a login solo si NO autenticado (401). No forzar en 403.
     if (res.status === 401) {
-      try {
-        authService.logout();
-      } catch {}
-      if (typeof window !== "undefined") {
+      // En segundo plano no cerramos sesión global para evitar "expulsiones" espurias.
+      if (!isBackground) {
         try {
-          // Evitar loops si ya estamos en /login
-          const here = window.location?.pathname || "";
-          if (!here.startsWith("/login")) {
-            window.location.replace("/login");
-          }
+          authService.logout();
         } catch {}
+        if (typeof window !== "undefined") {
+          try {
+            // Evitar loops si ya estamos en /login
+            const here = window.location?.pathname || "";
+            if (!here.startsWith("/login")) {
+              window.location.replace("/login");
+            }
+          } catch {}
+        }
       }
     }
     const text = await res.text().catch(() => "");

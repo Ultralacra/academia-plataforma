@@ -26,6 +26,7 @@ class AuthService {
   private meCache:
     | { token: string | null; user: User; at: number }
     | null = null;
+  private refreshInFlight: Promise<boolean> | null = null;
   // TTL corto para evitar spameo sin dejar el usuario obsoleto
   private meCacheTtlMs = 30_000;
 
@@ -172,19 +173,30 @@ class AuthService {
 
     try {
       const { buildUrl } = await import("./api-config");
-      this.meInFlight = fetch(buildUrl("/auth/me"), {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: (() => {
-            return token ? `Bearer ${token}` : "";
-          })(),
-        },
-      })
+      const fetchMe = async (bearer: string | null) => {
+        return fetch(buildUrl("/auth/me"), {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: bearer ? `Bearer ${bearer}` : "",
+          },
+        });
+      };
+
+      this.meInFlight = fetchMe(token)
         .then(async (res) => {
+          if (!res.ok && res.status === 401) {
+            // Intentar refresh silencioso una sola vez antes de cerrar sesión.
+            const refreshed = await this.tryRefreshToken();
+            if (refreshed) {
+              const nextToken = this.getToken();
+              res = await fetchMe(nextToken);
+            }
+          }
+
           if (!res.ok) {
-            // 401: token inválido/expirado -> limpiar sesión y enviar a login
             if (res.status === 401) {
+              // 401 real luego de refrescar: limpiar sesión y enviar a login
               try {
                 this.logout();
               } catch {}
@@ -198,7 +210,7 @@ class AuthService {
               }
               throw new Error("No autorizado");
             }
-            // En 403 no redirigimos; devolvemos error genérico
+            // En 403/otros no redirigimos; devolvemos error genérico
             throw new Error("Error consultando usuario");
           }
 
@@ -215,7 +227,7 @@ class AuthService {
             created_at: payload?.created_at,
             updated_at: payload?.updated_at,
           };
-          this.meCache = { token, user, at: Date.now() };
+          this.meCache = { token: this.getToken(), user, at: Date.now() };
           return user;
         })
         .finally(() => {
@@ -265,6 +277,63 @@ class AuthService {
   getToken(): string | null {
     const st = this.getAuthState();
     return st.token ?? null;
+  }
+
+  async tryRefreshToken(): Promise<boolean> {
+    if (typeof window === "undefined") return false;
+    if (this.refreshInFlight) return this.refreshInFlight;
+
+    this.refreshInFlight = (async () => {
+      const st = this.getAuthState();
+      const currentToken = st.token ?? null;
+      if (!currentToken) return false;
+
+      try {
+        const { buildUrl } = await import("./api-config");
+
+        // Intentos conservadores para no romper compatibilidad entre entornos.
+        const candidates = ["/auth/refresh", "/auth/refresh-token"];
+
+        for (const path of candidates) {
+          const res = await fetch(buildUrl(path), {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${currentToken}`,
+            },
+            cache: "no-store",
+          }).catch(() => null);
+
+          if (!res || !res.ok) continue;
+
+          const json: any = await res.json().catch(() => null);
+          const payload: any = json?.data ?? json;
+          const nextToken =
+            (typeof json?.token === "string" && json.token) ||
+            (typeof payload?.token === "string" && payload.token) ||
+            (typeof json?.access_token === "string" && json.access_token) ||
+            (typeof payload?.access_token === "string" && payload.access_token) ||
+            null;
+
+          if (!nextToken) continue;
+
+          this.setAuthState({
+            ...st,
+            isAuthenticated: true,
+            token: nextToken,
+          });
+          return true;
+        }
+      } catch {}
+
+      return false;
+    })();
+
+    try {
+      return await this.refreshInFlight;
+    } finally {
+      this.refreshInFlight = null;
+    }
   }
 }
 

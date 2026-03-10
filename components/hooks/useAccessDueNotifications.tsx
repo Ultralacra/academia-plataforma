@@ -174,7 +174,7 @@ export function useAccessDueNotifications(opts: {
     try {
       const [students, metadataRes] = await Promise.all([
         fetchAllStudents(),
-        listMetadata<any>(),
+        listMetadata<any>({ background: true }),
       ]);
 
       const metadataItems = Array.isArray(metadataRes?.items)

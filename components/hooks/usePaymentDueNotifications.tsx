@@ -233,6 +233,7 @@ export function usePaymentDueNotifications(opts: {
         fechaHasta: range.fechaHasta,
         page: 1,
         pageSize,
+        background: true,
       });
 
       const all: PaymentCuotaRow[] = Array.isArray(first?.data)
@@ -247,6 +248,7 @@ export function usePaymentDueNotifications(opts: {
           fechaHasta: range.fechaHasta,
           page,
           pageSize,
+          background: true,
         });
         const rows = Array.isArray(next?.data) ? next.data : [];
         all.push(...rows);

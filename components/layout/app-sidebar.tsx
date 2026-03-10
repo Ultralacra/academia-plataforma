@@ -72,9 +72,8 @@ const adminItems: MenuItem[] = [
   { title: "Pagos", url: "/admin/payments", icon: CreditCard },
   { title: "Chat general", url: "/chat/beta", icon: MessageSquare },
   { title: "Usuarios sistema", url: "/admin/users", icon: Users },
-  { title: "Carga masiva HF", url: "/admin/users/carga-masiva", icon: Users },
   // { title: "Brevo", url: "/admin/brevo", icon: Mail },
-  { title: "Roles", url: "/admin/access/roles", icon: Settings },
+  { title: "Roles y permisos", url: "/admin/access/roles", icon: Settings },
   { title: "CRM", url: "/admin/crm", icon: Users },
   {
     title: "Estado correos",

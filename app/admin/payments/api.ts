@@ -94,8 +94,12 @@ export type PaymentCuotasEnvelope = {
   totalPages: number;
 };
 
-async function fetchJson<T>(pathOrUrl: string, init?: RequestInit): Promise<T> {
-  return apiFetch<T>(pathOrUrl, init);
+async function fetchJson<T>(
+  pathOrUrl: string,
+  init?: RequestInit,
+  options?: { background?: boolean }
+): Promise<T> {
+  return apiFetch<T>(pathOrUrl, init, options);
 }
 
 export async function getPayments(opts?: {
@@ -225,6 +229,7 @@ export async function getPaymentCuotas(opts: {
   fechaHasta: string;
   page?: number;
   pageSize?: number;
+  background?: boolean;
 }): Promise<PaymentCuotasEnvelope> {
   const q = new URLSearchParams();
   q.set("fechaDesde", String(opts?.fechaDesde ?? ""));
@@ -232,7 +237,9 @@ export async function getPaymentCuotas(opts: {
   if (opts?.page) q.set("page", String(opts.page));
   if (opts?.pageSize) q.set("pageSize", String(opts.pageSize));
 
-  return fetchJson<PaymentCuotasEnvelope>(`/payments/get/cuotas?${q.toString()}`);
+  return fetchJson<PaymentCuotasEnvelope>(`/payments/get/cuotas?${q.toString()}`, undefined, {
+    background: !!opts?.background,
+  });
 }
 
 // Estatus disponibles para el pago principal

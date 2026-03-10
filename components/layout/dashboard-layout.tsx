@@ -384,9 +384,15 @@ function TasksNotificationsBadge() {
             }
             return res.json().catch(() => null);
           })
-        : await apiFetch<any>("/metadata?entity=ads_metrics", {
-            method: "GET",
-          });
+        : await apiFetch<any>(
+            "/metadata?entity=ads_metrics",
+            {
+              method: "GET",
+            },
+            {
+              background: true,
+            },
+          );
 
       const rows: any[] = isStudent
         ? Array.isArray(json?.items)

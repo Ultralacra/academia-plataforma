@@ -29,7 +29,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search, Pencil, Trash2, Filter } from "lucide-react";
+import { Plus, Search, Pencil, Trash2 } from "lucide-react";
 import {
   getOptions,
   createOption,
@@ -266,8 +266,8 @@ export default function OpcionesPage() {
           </div>
         </div>
 
-        <Tabs value={active} onValueChange={(v) => setActive(v)}>
-          <TabsList>
+        <Tabs value={active} onValueChange={(v) => setActive(v)} className="mt-2">
+          <TabsList className="mb-4 mt-1 flex h-auto flex-wrap gap-1 p-1">
             {groupsTabs.map((g) => (
               <TabsTrigger
                 key={g}
@@ -280,7 +280,7 @@ export default function OpcionesPage() {
           </TabsList>
 
           {groupsTabs.map((g) => (
-            <TabsContent key={g} value={g}>
+            <TabsContent key={g} value={g} className="pt-1 pb-2">
               <div className="rounded-xl border border-gray-200 bg-white p-4">
                 <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="flex items-center gap-2 text-sm text-neutral-700">
@@ -389,19 +389,23 @@ export default function OpcionesPage() {
                             <TableCell className="px-3 py-2">
                               <div className="flex gap-2">
                                 <Button
-                                  size="sm"
-                                  variant="outline"
+                                  size="icon"
+                                  variant="ghost"
                                   onClick={() => openEdit(it)}
+                                  title="Editar opción"
+                                  aria-label="Editar opción"
                                 >
-                                  <Pencil className="mr-1.5 h-4 w-4" /> Editar
+                                  <Pencil className="h-4 w-4" />
                                 </Button>
                                 <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                                  size="icon"
+                                  variant="ghost"
+                                  className="text-rose-700 hover:bg-rose-50"
                                   onClick={() => handleDelete(it)}
+                                  title="Eliminar opción"
+                                  aria-label="Eliminar opción"
                                 >
-                                  <Trash2 className="mr-1.5 h-4 w-4" /> Eliminar
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
                               </div>
                             </TableCell>

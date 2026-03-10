@@ -26,9 +26,12 @@ export function useAuth() {
           const me = await authService.me()
           setAuthState({ user: me, isAuthenticated: true, token: currentAuthState.token })
         } catch (e) {
-          // Token inválido o expirado: limpiar sesión
-          authService.logout()
-          setAuthState({ user: null, isAuthenticated: false, token: null })
+          const message = String((e as any)?.message ?? "")
+          // Solo cerrar sesión si realmente es no autorizado.
+          if (message.toLowerCase().includes("no autorizado")) {
+            authService.logout()
+            setAuthState({ user: null, isAuthenticated: false, token: null })
+          }
         } finally {
           setIsLoading(false)
         }
