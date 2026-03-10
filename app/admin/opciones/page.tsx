@@ -126,13 +126,13 @@ export default function OpcionesPage() {
           const found = candidates.find(
             (c) =>
               c.opcion_key === editing.opcion_key &&
-              c.opcion_value === editing.opcion_value
+              c.opcion_value === editing.opcion_value,
           );
           codigoToUpdate = found?.codigo ?? undefined;
         }
         if (!codigoToUpdate) {
           throw new Error(
-            "No se pudo resolver el identificador (codigo) para actualizar. Usa crear si estás intentado añadir uno nuevo."
+            "No se pudo resolver el identificador (codigo) para actualizar. Usa crear si estás intentado añadir uno nuevo.",
           );
         }
         await updateOption(String(codigoToUpdate), form);
@@ -185,7 +185,7 @@ export default function OpcionesPage() {
           const found = candidates.find(
             (c) =>
               c.opcion_key === confirmDelete.item!.opcion_key &&
-              c.opcion_value === confirmDelete.item!.opcion_value
+              c.opcion_value === confirmDelete.item!.opcion_value,
           );
           codigoToDelete = found?.codigo ?? undefined;
         } catch (e) {
@@ -193,14 +193,14 @@ export default function OpcionesPage() {
         }
       }
       if (!codigoToDelete) {
-                /* console.log("[opciones] codigoToDelete RESOLVED: ", codigoToDelete); */
+        /* console.log("[opciones] codigoToDelete RESOLVED: ", codigoToDelete); */
         throw new Error(
-          "No se pudo resolver el identificador de la opción para eliminar."
+          "No se pudo resolver el identificador de la opción para eliminar.",
         );
       }
-            /* console.log("[opciones] Eliminando opción con codigo:", codigoToDelete); */
+      /* console.log("[opciones] Eliminando opción con codigo:", codigoToDelete); */
       const resp = await deleteOption(codigoToDelete);
-            /* console.log("[opciones] respuesta deleteOption:", resp); */
+      /* console.log("[opciones] respuesta deleteOption:", resp); */
       toast({
         title: "Eliminado",
         description: "La opción fue eliminada.",
@@ -241,7 +241,7 @@ export default function OpcionesPage() {
     return items.filter(
       (it) =>
         it.opcion_key.toLowerCase().includes(k) ||
-        it.opcion_value.toLowerCase().includes(k)
+        it.opcion_value.toLowerCase().includes(k),
     );
   }, [items, q]);
 
@@ -266,7 +266,11 @@ export default function OpcionesPage() {
           </div>
         </div>
 
-        <Tabs value={active} onValueChange={(v) => setActive(v)} className="mt-2">
+        <Tabs
+          value={active}
+          onValueChange={(v) => setActive(v)}
+          className="mt-2"
+        >
           <TabsList className="mb-4 mt-1 flex h-auto flex-wrap gap-1 p-1">
             {groupsTabs.map((g) => (
               <TabsTrigger
@@ -286,7 +290,7 @@ export default function OpcionesPage() {
                   <div className="flex items-center gap-2 text-sm text-neutral-700">
                     <span
                       className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${groupBadgeClass(
-                        g
+                        g,
                       )}`}
                     >
                       {g.replace(/_/g, " ")}
@@ -380,7 +384,7 @@ export default function OpcionesPage() {
                             <TableCell className="px-3 py-2">
                               <span
                                 className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${groupBadgeClass(
-                                  it.opcion_grupo
+                                  it.opcion_grupo,
                                 )}`}
                               >
                                 {it.opcion_grupo.replace(/_/g, " ")}
