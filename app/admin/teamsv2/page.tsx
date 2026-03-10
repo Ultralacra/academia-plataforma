@@ -31,6 +31,9 @@ import {
   ArrowUpDown,
   Download,
   Clipboard,
+  CheckCircle2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import Link from "next/link";
 import { CoachStudentsModal } from "./coach-students-modal";
@@ -40,6 +43,7 @@ import { getOptions, type OpcionItem } from "@/app/admin/opciones/api";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -199,6 +203,15 @@ export default function TeamsPage() {
   const [createNombre, setCreateNombre] = useState("");
   const [createEmail, setCreateEmail] = useState("");
   const [createPassword, setCreatePassword] = useState("");
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
+  const [createSuccessOpen, setCreateSuccessOpen] = useState(false);
+  const [createdCoachSummary, setCreatedCoachSummary] = useState<{
+    nombre: string;
+    email: string;
+    codigo?: string | null;
+    puesto?: string | null;
+    area?: string | null;
+  } | null>(null);
   // use sentinel value for "none" to avoid empty-string Select.Item error
   const NONE = "__NONE__";
   const [createPuesto, setCreatePuesto] = useState(NONE);
@@ -259,6 +272,15 @@ export default function TeamsPage() {
   useEffect(() => {
     fetchOptionsData();
   }, []);
+
+  function resetCreateCoachForm() {
+    setCreateNombre("");
+    setCreateEmail("");
+    setCreatePassword("");
+    setShowCreatePassword(false);
+    setCreatePuesto(NONE);
+    setCreateArea(NONE);
+  }
 
   // Cargar opciones 'puesto' y 'area' cuando se abre el modal de creación
   useEffect(() => {
@@ -801,7 +823,10 @@ export default function TeamsPage() {
         />
 
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-          <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogContent
+            className="sm:max-w-md rounded-2xl"
+            aria-describedby={undefined}
+          >
             <DialogHeader>
               <DialogTitle className="text-lg font-bold">
                 Crear nuevo coach
@@ -838,13 +863,31 @@ export default function TeamsPage() {
                 <Label className="text-xs font-medium text-muted-foreground">
                   Password
                 </Label>
-                <Input
-                  type="password"
-                  value={createPassword}
-                  onChange={(e) => setCreatePassword(e.target.value)}
-                  placeholder="ContraseñaSegura123!"
-                  className="rounded-xl border-border/60 shadow-sm"
-                />
+                <div className="relative">
+                  <Input
+                    type={showCreatePassword ? "text" : "password"}
+                    value={createPassword}
+                    onChange={(e) => setCreatePassword(e.target.value)}
+                    placeholder="ContraseñaSegura123!"
+                    className="rounded-xl border-border/60 pr-11 shadow-sm"
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showCreatePassword
+                        ? "Ocultar contraseña"
+                        : "Mostrar contraseña"
+                    }
+                    onClick={() => setShowCreatePassword((current) => !current)}
+                    className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center text-muted-foreground transition hover:text-foreground"
+                  >
+                    {showCreatePassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
@@ -936,20 +979,33 @@ export default function TeamsPage() {
                         name: createNombre.trim(),
                         email: createEmail.trim(),
                         password: createPassword,
-                        role: "manager",
+                        role: "equipo",
                         tipo: "equipo",
                         puesto:
                           createPuesto === NONE ? undefined : createPuesto,
                         area: createArea === NONE ? undefined : createArea,
                       };
                       const resp = await teamsApi.createCoach(payload);
-                      toast({ title: "Coach creado correctamente" });
+                      const createdCode = String(
+                        resp?.data?.codigo ??
+                          resp?.data?.code ??
+                          resp?.codigo ??
+                          resp?.code ??
+                          resp?.user?.codigo ??
+                          resp?.user?.code ??
+                          "",
+                      ).trim();
+
+                      setCreatedCoachSummary({
+                        nombre: payload.name,
+                        email: payload.email,
+                        codigo: createdCode || null,
+                        puesto: payload.puesto ?? null,
+                        area: payload.area ?? null,
+                      });
                       setCreateOpen(false);
-                      setCreateNombre("");
-                      setCreateEmail("");
-                      setCreatePassword("");
-                      setCreatePuesto(NONE);
-                      setCreateArea(NONE);
+                      resetCreateCoachForm();
+                      setCreateSuccessOpen(true);
                       await fetchData();
                     } catch (err: any) {
                       toast({
@@ -963,6 +1019,77 @@ export default function TeamsPage() {
                   Crear
                 </Button>
               </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={createSuccessOpen} onOpenChange={setCreateSuccessOpen}>
+          <DialogContent className="sm:max-w-lg rounded-3xl border-border/50 bg-gradient-to-br from-background via-background to-emerald-50/70 shadow-2xl">
+            <DialogHeader className="items-center text-center sm:items-center sm:text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700 shadow-sm">
+                <CheckCircle2 className="h-8 w-8" />
+              </div>
+              <DialogTitle className="text-2xl font-semibold tracking-tight">
+                Coach creado con éxito
+              </DialogTitle>
+              <DialogDescription className="max-w-md text-sm leading-relaxed">
+                El usuario ya fue registrado y el resumen de creación quedó
+                listo para revisar antes de cerrar este mensaje.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-3 rounded-2xl border border-border/50 bg-background/80 p-4 shadow-sm">
+              <div className="grid gap-1 rounded-xl bg-muted/40 px-4 py-3">
+                <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  Nombre
+                </span>
+                <span className="text-base font-semibold text-foreground">
+                  {createdCoachSummary?.nombre || "—"}
+                </span>
+              </div>
+              <div className="grid gap-1 rounded-xl bg-muted/40 px-4 py-3">
+                <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  Email
+                </span>
+                <span className="text-sm font-medium text-foreground">
+                  {createdCoachSummary?.email || "—"}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-xl bg-muted/40 px-4 py-3">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Código
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {createdCoachSummary?.codigo || "Pendiente en respuesta"}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-muted/40 px-4 py-3">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Puesto
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {createdCoachSummary?.puesto || "Sin puesto"}
+                  </div>
+                </div>
+                <div className="rounded-xl bg-muted/40 px-4 py-3">
+                  <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Área
+                  </div>
+                  <div className="mt-1 text-sm font-semibold text-foreground">
+                    {createdCoachSummary?.area || "Sin área"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                className="w-full rounded-2xl sm:w-auto"
+                onClick={() => setCreateSuccessOpen(false)}
+              >
+                Cerrar
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

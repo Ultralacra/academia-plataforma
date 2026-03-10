@@ -35,7 +35,7 @@ import {
   type CoachItem,
   getCoachStudents,
 } from "../api";
-import { changePassword } from "@/app/admin/users/api";
+import { changePassword, fetchUser, type SysUser } from "@/app/admin/users/api";
 import { getAuthToken } from "@/lib/auth";
 import { getOptions, type OpcionItem } from "@/app/admin/opciones/api";
 import {
@@ -115,6 +115,7 @@ export default function CoachDetailPage({
     Boolean(currentUserCode) && currentUserCode === viewedCoachCode;
   const canEditCoach = isAdmin || ((isEquipo || isCoach) && isOwnProfile);
   const [coach, setCoach] = useState<CoachItem | null>(null);
+  const [coachUser, setCoachUser] = useState<SysUser | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [nombre, setNombre] = useState("");
@@ -231,8 +232,14 @@ export default function CoachDetailPage({
       try {
         setLoading(true);
         setError(null);
-        const c = await getCoachByCode(code);
-        if (!ctrl.signal.aborted) setCoach(c);
+        const [c, userRecord] = await Promise.all([
+          getCoachByCode(code),
+          fetchUser(code).catch(() => null),
+        ]);
+        if (!ctrl.signal.aborted) {
+          setCoach(c);
+          setCoachUser(userRecord);
+        }
       } catch (e: any) {
         if (e?.name !== "AbortError")
           setError(e?.message ?? "Error al cargar coach");
@@ -1456,6 +1463,31 @@ export default function CoachDetailPage({
     setArea(coach.area ?? undefined);
   }, [coach]);
 
+  const coachEmail = String(
+    coachUser?.email ??
+      (coach as any)?.email ??
+      (coach as any)?.correo ??
+      (coach as any)?.mail ??
+      "",
+  ).trim();
+  const coachRole = String(
+    (coach as any)?.role ??
+      (coach as any)?.rol ??
+      coachUser?.role ??
+      (coach as any)?.tipo ??
+      "equipo",
+  ).trim();
+
+  useEffect(() => {
+    if (!coach) return;
+    console.log("[teamsv2][coach-detail][raw-coach]", coach);
+  }, [coach]);
+
+  useEffect(() => {
+    if (!coachUser) return;
+    console.log("[teamsv2][coach-detail][raw-user]", coachUser);
+  }, [coachUser]);
+
   async function handleSave() {
     if (!coach) return;
     try {
@@ -1696,37 +1728,64 @@ export default function CoachDetailPage({
                       : "—"}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-2 items-center mt-2">
-                  {coach?.puesto && (
-                    <Badge
-                      variant="outline"
-                      className="rounded-md border-sky-200 bg-sky-50 text-sky-700"
-                    >
-                      {coach.puesto}
-                    </Badge>
-                  )}
-                  {coach?.area && (
-                    <Badge
-                      variant="outline"
-                      className="rounded-md border-neutral-200 bg-neutral-50 text-neutral-700"
-                    >
-                      {coach.area}
-                    </Badge>
-                  )}
-                </div>
-                <div className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
-                  <span>Contraseña: ••••••••</span>
-                  {canEditCoach && (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setPasswordOpen(true)}
-                      aria-label="Editar contraseña"
-                      className="p-2"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  )}
+                <div className="mt-4 grid gap-2 rounded-xl border border-neutral-200 bg-white/80 px-4 py-3 text-sm text-neutral-700 shadow-sm">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <span className="font-medium text-neutral-500">Email:</span>
+                    <span className="break-all text-neutral-900">
+                      {coachEmail || "—"}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <span className="font-medium text-neutral-500">Rol:</span>
+                    <span className="text-neutral-900">{coachRole || "—"}</span>
+                  </div>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <span className="font-medium text-neutral-500">Área:</span>
+                    {coach?.area ? (
+                      <Badge
+                        variant="outline"
+                        className="w-fit rounded-md border-neutral-200 bg-neutral-50 text-neutral-700"
+                      >
+                        {coach.area}
+                      </Badge>
+                    ) : (
+                      <span className="text-neutral-900">—</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <span className="font-medium text-neutral-500">
+                      Puesto:
+                    </span>
+                    {coach?.puesto ? (
+                      <Badge
+                        variant="outline"
+                        className="w-fit rounded-md border-sky-200 bg-sky-50 text-sky-700"
+                      >
+                        {coach.puesto}
+                      </Badge>
+                    ) : (
+                      <span className="text-neutral-900">—</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                    <span className="font-medium text-neutral-500">
+                      Contraseña:
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-neutral-900">••••••••</span>
+                      {canEditCoach && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setPasswordOpen(true)}
+                          aria-label="Editar contraseña"
+                          className="h-7 px-2 text-neutral-600"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1751,13 +1810,43 @@ export default function CoachDetailPage({
             className="mt-2 flex flex-col flex-1 min-h-0"
           >
             {!isStandaloneChatRoute && (
-              <TabsList>
-                <TabsTrigger value="tickets">Tickets</TabsTrigger>
-                <TabsTrigger value="metricas">Métricas</TabsTrigger>
-                <TabsTrigger value="carga">Carga actual</TabsTrigger>
-                <TabsTrigger value="alumnos">Alumnos</TabsTrigger>
-                <TabsTrigger value="chat">Chat</TabsTrigger>
-                <TabsTrigger value="sesiones">Sesiones</TabsTrigger>
+              <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-2xl border border-slate-200/80 bg-gradient-to-r from-white via-slate-50 to-white p-2 shadow-sm">
+                <TabsTrigger
+                  value="tickets"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                >
+                  Tickets
+                </TabsTrigger>
+                <TabsTrigger
+                  value="metricas"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                >
+                  Métricas
+                </TabsTrigger>
+                <TabsTrigger
+                  value="carga"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                >
+                  Carga actual
+                </TabsTrigger>
+                <TabsTrigger
+                  value="alumnos"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                >
+                  Alumnos
+                </TabsTrigger>
+                <TabsTrigger
+                  value="chat"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                >
+                  Chat
+                </TabsTrigger>
+                <TabsTrigger
+                  value="sesiones"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                >
+                  Sesiones
+                </TabsTrigger>
               </TabsList>
             )}
 
@@ -1776,6 +1865,7 @@ export default function CoachDetailPage({
                       name: coach?.nombre ?? String(code),
                       teamMembers: [],
                     }}
+                    hideCreateButton
                   />
                 ) : (
                   <div className="text-sm text-neutral-500">

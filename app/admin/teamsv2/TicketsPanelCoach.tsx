@@ -276,9 +276,11 @@ function TicketTimer({ hours }: { hours: number }) {
 export default function TicketsPanelCoach({
   student,
   coachCode: coachCodeProp,
+  hideCreateButton = false,
 }: {
   student: StudentItem;
   coachCode?: string;
+  hideCreateButton?: boolean;
 }) {
   const coachCode = coachCodeProp ?? (student?.code as unknown as string);
   const todayYMDLocal = () => {
@@ -427,7 +429,7 @@ export default function TicketsPanelCoach({
   const [ticketDetail, setTicketDetail] = useState<any | null>(null);
   const [ticketDetailLoading, setTicketDetailLoading] = useState(false);
   const [ticketDetailError, setTicketDetailError] = useState<string | null>(
-    null
+    null,
   );
 
   const [editFilesLoading, setEditFilesLoading] = useState(false);
@@ -447,7 +449,7 @@ export default function TicketsPanelCoach({
   const [savingDesc, setSavingDesc] = useState(false);
   // Confirmación de eliminación de ticket
   const [deleteTicketCodigo, setDeleteTicketCodigo] = useState<string | null>(
-    null
+    null,
   );
   const [deletingTicket, setDeletingTicket] = useState(false);
 
@@ -616,7 +618,7 @@ export default function TicketsPanelCoach({
               try {
                 new URL(url);
                 setEditLinks((prev) =>
-                  Array.from(new Set([...prev, url])).slice(0, 10)
+                  Array.from(new Set([...prev, url])).slice(0, 10),
                 );
                 setEditLinkInput("");
               } catch {}
@@ -634,7 +636,7 @@ export default function TicketsPanelCoach({
           try {
             new URL(url);
             setEditLinks((prev) =>
-              Array.from(new Set([...prev, url])).slice(0, 10)
+              Array.from(new Set([...prev, url])).slice(0, 10),
             );
             setEditLinkInput("");
           } catch {}
@@ -783,7 +785,7 @@ export default function TicketsPanelCoach({
       setTicketDetailError(null);
       setTicketDetail(null);
       const url = buildUrl(
-        `/ticket/get/ticket/${encodeURIComponent(String(codigo))}`
+        `/ticket/get/ticket/${encodeURIComponent(String(codigo))}`,
       );
       const token = typeof window !== "undefined" ? getAuthToken() : null;
       const res = await fetch(url, {
@@ -803,7 +805,7 @@ export default function TicketsPanelCoach({
       loadInternalNotes(codigo);
     } catch (e: any) {
       setTicketDetailError(
-        String(e?.message || e || "Error al cargar detalle")
+        String(e?.message || e || "Error al cargar detalle"),
       );
     } finally {
       setTicketDetailLoading(false);
@@ -841,13 +843,13 @@ export default function TicketsPanelCoach({
     for (const rule of pairs) {
       if (rule.kw.some((k) => n.includes(normalize(k)))) {
         const hit = tipoList.find(
-          (t) => rule.match(t.value) || rule.match(t.key)
+          (t) => rule.match(t.value) || rule.match(t.key),
         );
         if (hit) return hit.raw.key;
       }
     }
     const exact = tipoList.find(
-      (t) => n.includes(t.value) || n.includes(t.key)
+      (t) => n.includes(t.value) || n.includes(t.key),
     );
     return exact ? exact.raw.key : "";
   }
@@ -870,7 +872,7 @@ export default function TicketsPanelCoach({
       (t) =>
         normalize(t.value) === areaN ||
         normalize(t.key) === areaN ||
-        normalize(t.value).includes(areaN)
+        normalize(t.value).includes(areaN),
     );
     if (match) setCreateTipo(match.key);
   }, [openCreate, coachArea, tipos]);
@@ -937,7 +939,7 @@ export default function TicketsPanelCoach({
     }
     let descripcion = createDescripcion.trim();
     const uniqueLinks = Array.from(
-      new Set(links.map((u) => u.trim()).filter(Boolean))
+      new Set(links.map((u) => u.trim()).filter(Boolean)),
     );
     if (uniqueLinks.length) {
       const urlsComma = uniqueLinks.join(", ");
@@ -974,7 +976,7 @@ export default function TicketsPanelCoach({
                 current: "CREADO",
                 at: new Date().toISOString(),
               },
-            })
+            }),
           );
         }
       } catch {}
@@ -1131,7 +1133,7 @@ export default function TicketsPanelCoach({
         const file = new File(
           [recordedBlob],
           `grabacion-${Date.now()}.${ext}`,
-          { type: recordedBlob.type || "audio/webm" }
+          { type: recordedBlob.type || "audio/webm" },
         );
         if (editOpen) {
           setEditFiles((prev) => [...prev, file]);
@@ -1163,7 +1165,7 @@ export default function TicketsPanelCoach({
         const file = new File(
           [recordedBlob],
           `grabacion-${Date.now()}.${ext}`,
-          { type: recordedBlob.type || "audio/webm" }
+          { type: recordedBlob.type || "audio/webm" },
         );
         setGeneralFiles((prev) => [...prev, file]);
         toast({ title: "Conversión a MP3 falló, adjuntado original" });
@@ -1214,7 +1216,7 @@ export default function TicketsPanelCoach({
     if (!code) return;
 
     const existing = rowsRef.current.find(
-      (t) => String(t.codigo || "").trim() === code
+      (t) => String(t.codigo || "").trim() === code,
     );
     if (existing) {
       setEditTicket(existing);
@@ -1318,7 +1320,7 @@ export default function TicketsPanelCoach({
     if (loading) return;
     if (didShowPausedToast.current) return;
     const pausedCount = rows.filter(
-      (t) => String(t.estado ?? "").toUpperCase() === "PAUSADO"
+      (t) => String(t.estado ?? "").toUpperCase() === "PAUSADO",
     ).length;
     if (pausedCount > 0) {
       didShowPausedToast.current = true;
@@ -1367,12 +1369,13 @@ export default function TicketsPanelCoach({
     }
     // Buscar en alumnos de este coach
     const s = coachStudents.find(
-      (st) => String(st.alumno || "").toLowerCase() === c.toLowerCase()
+      (st) => String(st.alumno || "").toLowerCase() === c.toLowerCase(),
     );
     if (s) return s.nombre || c;
     // Buscar en lista de coaches globales
     const coach = allCoaches.find(
-      (co) => String((co as any).codigo || "").toLowerCase() === c.toLowerCase()
+      (co) =>
+        String((co as any).codigo || "").toLowerCase() === c.toLowerCase(),
     );
     if (coach) return (coach as any).nombre || c;
     return c;
@@ -1401,7 +1404,7 @@ export default function TicketsPanelCoach({
         (t) =>
           (t.nombre || "").toLowerCase().includes(q) ||
           (t.alumno_nombre || "").toLowerCase().includes(q) ||
-          (t.codigo || "").toLowerCase().includes(q)
+          (t.codigo || "").toLowerCase().includes(q),
       );
     }
     // Filtro por estado
@@ -1418,7 +1421,7 @@ export default function TicketsPanelCoach({
 
   async function handleChangeEstado(
     ticketCodigo: string,
-    newEstado: StatusKey
+    newEstado: StatusKey,
   ) {
     if (newEstado === "PAUSADO" && !canPauseTickets) {
       return;
@@ -1441,7 +1444,7 @@ export default function TicketsPanelCoach({
                 current: newEstado,
                 at: new Date().toISOString(),
               },
-            })
+            }),
           );
         }
       } catch {}
@@ -1493,7 +1496,7 @@ export default function TicketsPanelCoach({
         } catch (err) {
           console.warn(
             "Fallo descarga directa (posible CORS), intentando vía API...",
-            err
+            err,
           );
         }
       }
@@ -1503,7 +1506,7 @@ export default function TicketsPanelCoach({
         try {
           const f = await getTicketFile(fileId);
           const b = Uint8Array.from(atob(f.contenido_base64), (c) =>
-            c.charCodeAt(0)
+            c.charCodeAt(0),
           );
           blob = new Blob([b], {
             type: f.mime_type || "application/octet-stream",
@@ -1622,7 +1625,7 @@ export default function TicketsPanelCoach({
       }
       const res = await getTicketFile(f.id);
       const b = Uint8Array.from(atob(res.contenido_base64), (c) =>
-        c.charCodeAt(0)
+        c.charCodeAt(0),
       );
       const blob = new Blob([b], {
         type: res.mime_type || f.mime_type || "application/octet-stream",
@@ -1673,7 +1676,7 @@ export default function TicketsPanelCoach({
           resolve(b);
         },
         "image/webp",
-        quality
+        quality,
       );
     });
     const webpFile = new File([blob], renameToWebp(file.name), {
@@ -1896,12 +1899,14 @@ export default function TicketsPanelCoach({
               </Button>
             )}
             <Dialog open={openCreate} onOpenChange={setOpenCreate}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="h-9 gap-2">
-                  <Plus className="h-4 w-4" />
-                  Nuevo ticket
-                </Button>
-              </DialogTrigger>
+              {!hideCreateButton ? (
+                <DialogTrigger asChild>
+                  <Button size="sm" className="h-9 gap-2">
+                    <Plus className="h-4 w-4" />
+                    Nuevo ticket
+                  </Button>
+                </DialogTrigger>
+              ) : null}
               <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Crear nuevo ticket</DialogTitle>
@@ -2244,7 +2249,7 @@ export default function TicketsPanelCoach({
             ] as StatusKey[]
           ).map((s) => {
             const count = filtered.filter(
-              (t) => String(t.estado).toUpperCase() === s
+              (t) => String(t.estado).toUpperCase() === s,
             ).length;
             return (
               <Badge
@@ -2376,7 +2381,7 @@ export default function TicketsPanelCoach({
               ] as StatusKey[]
             ).map((col) => {
               const items = filtered.filter(
-                (t) => String(t.estado ?? "").toUpperCase() === col
+                (t) => String(t.estado ?? "").toUpperCase() === col,
               );
               return (
                 <div
@@ -2394,8 +2399,8 @@ export default function TicketsPanelCoach({
 
                     setRows((prev) =>
                       prev.map((t) =>
-                        t.codigo === codigo ? { ...t, estado: col } : t
-                      )
+                        t.codigo === codigo ? { ...t, estado: col } : t,
+                      ),
                     );
                     await handleChangeEstado(codigo, col);
                   }}
@@ -2448,7 +2453,7 @@ export default function TicketsPanelCoach({
                               const saved = detailsById[t.id] || {};
                               // Resolver nombres humanos para informante/resuelto_por cuando tengamos códigos
                               const resolvePersonName = (
-                                code?: string | null
+                                code?: string | null,
                               ): string => {
                                 const c = (code ?? "").trim();
                                 if (!c) return "";
@@ -2460,14 +2465,14 @@ export default function TicketsPanelCoach({
                                 const s = coachStudents.find(
                                   (st) =>
                                     (st.alumno || "").toLowerCase() ===
-                                    c.toLowerCase()
+                                    c.toLowerCase(),
                                 );
                                 if (s) return s.nombre || c;
                                 // Buscar en lista de coaches globales por código
                                 const coach = allCoaches.find(
                                   (co) =>
                                     (co.codigo || "").toLowerCase() ===
-                                    c.toLowerCase()
+                                    c.toLowerCase(),
                                 );
                                 if (coach) return coach.nombre || c;
                                 // Devolver el valor original si no se puede resolver
@@ -2484,7 +2489,7 @@ export default function TicketsPanelCoach({
                                 informante:
                                   (t as any).informante_nombre ||
                                   (resolvePersonName(
-                                    saved.informante ?? (t as any).informante
+                                    saved.informante ?? (t as any).informante,
                                   ) ??
                                     ""),
                                 resolucion: saved.resolucion ?? "",
@@ -2492,7 +2497,7 @@ export default function TicketsPanelCoach({
                                   (t as any).resuelto_por_nombre ||
                                   (resolvePersonName(
                                     saved.resuelto_por ??
-                                      (t as any).resuelto_por
+                                      (t as any).resuelto_por,
                                   ) ??
                                     ""),
                                 revision: saved.revision ?? "",
@@ -3206,7 +3211,7 @@ export default function TicketsPanelCoach({
                             title?: string | null;
                           };
                           const raw = Array.isArray(
-                            (ticketDetail as any)?.links
+                            (ticketDetail as any)?.links,
                           )
                             ? (ticketDetail as any).links
                             : [];
@@ -3227,7 +3232,7 @@ export default function TicketsPanelCoach({
                             .filter((t) => !!t.url);
 
                           const onDeleteTask = async (
-                            id?: string | number | null
+                            id?: string | number | null,
                           ) => {
                             if (!id) return;
                             try {
@@ -3287,11 +3292,11 @@ export default function TicketsPanelCoach({
                                         try {
                                           await createTicketLink(
                                             editTicket.codigo!,
-                                            { url }
+                                            { url },
                                           );
                                           setNewAudioUrl("");
                                           await loadTicketDetail(
-                                            editTicket.codigo!
+                                            editTicket.codigo!,
                                           );
                                           toast({ title: "Tarea creada" });
                                         } catch (err) {
@@ -3314,11 +3319,11 @@ export default function TicketsPanelCoach({
                                       try {
                                         await createTicketLink(
                                           editTicket.codigo!,
-                                          { url }
+                                          { url },
                                         );
                                         setNewAudioUrl("");
                                         await loadTicketDetail(
-                                          editTicket.codigo!
+                                          editTicket.codigo!,
                                         );
                                         toast({ title: "Tarea creada" });
                                       } catch (err) {
@@ -3369,7 +3374,7 @@ export default function TicketsPanelCoach({
                                 hour: "2-digit",
                                 minute: "2-digit",
                                 timeZone: "UTC",
-                              }
+                              },
                             )
                           : "—"}
                       </div>
@@ -3383,7 +3388,7 @@ export default function TicketsPanelCoach({
                         {ticketDetail?.ultimo_estado?.estatus === "RESUELTO" &&
                         ticketDetail?.ultimo_estado?.fecha
                           ? new Date(
-                              ticketDetail.ultimo_estado.fecha
+                              ticketDetail.ultimo_estado.fecha,
                             ).toLocaleString("es-ES", {
                               day: "numeric",
                               month: "short",
@@ -3440,10 +3445,10 @@ export default function TicketsPanelCoach({
                                   0
                                     ? "text-red-600"
                                     : (ticketDetail?.plazo_info ||
-                                        editTicket?.plazo_info)!
-                                        .horas_restantes < 4
-                                    ? "text-amber-600"
-                                    : "text-emerald-600"
+                                          editTicket?.plazo_info)!
+                                          .horas_restantes < 4
+                                      ? "text-amber-600"
+                                      : "text-emerald-600"
                                 }`}
                               >
                                 <TicketTimer
@@ -3488,7 +3493,7 @@ export default function TicketsPanelCoach({
                           <DropdownMenuContent align="start">
                             {estados
                               .filter(
-                                (st) => st !== "PAUSADO" || canPauseTickets
+                                (st) => st !== "PAUSADO" || canPauseTickets,
                               )
                               .map((st) => (
                                 <DropdownMenuItem
@@ -3511,15 +3516,15 @@ export default function TicketsPanelCoach({
                                           prev.map((t) =>
                                             t.id === editTicket.id
                                               ? { ...t, estado: newStatus }
-                                              : t
-                                          )
+                                              : t,
+                                          ),
                                         );
                                         setLocalTickets((prev) =>
                                           prev.map((t) =>
                                             t.id === editTicket.id
                                               ? { ...t, estado: newStatus }
-                                              : t
-                                          )
+                                              : t,
+                                          ),
                                         );
 
                                         if (ticketDetail) {
@@ -3532,7 +3537,7 @@ export default function TicketsPanelCoach({
                                         setEditTicket((prev) =>
                                           prev
                                             ? { ...prev, estado: newStatus }
-                                            : null
+                                            : null,
                                         );
 
                                         toast({ title: "Estado actualizado" });
@@ -3576,7 +3581,7 @@ export default function TicketsPanelCoach({
                             className="h-7 text-xs"
                             onClick={() => {
                               setDescDraft(
-                                String(ticketDetail?.descripcion || "")
+                                String(ticketDetail?.descripcion || ""),
                               );
                               setDescEditing(true);
                             }}
@@ -3642,7 +3647,7 @@ export default function TicketsPanelCoach({
                       {(() => {
                         const urlList: string[] = [
                           ...extractUrlsFromDescription(
-                            ticketDetail?.descripcion
+                            ticketDetail?.descripcion,
                           ),
                           ...(
                             (Array.isArray((ticketDetail as any)?.links)
@@ -3652,7 +3657,7 @@ export default function TicketsPanelCoach({
                             .map((it: any) =>
                               typeof it === "string"
                                 ? it
-                                : it?.url || it?.link || it?.enlace || ""
+                                : it?.url || it?.link || it?.enlace || "",
                             )
                             .filter((s: string) => !!s),
                         ];
@@ -3791,7 +3796,7 @@ export default function TicketsPanelCoach({
                             <button
                               onClick={() =>
                                 setGeneralFiles((prev) =>
-                                  prev.filter((_, idx) => idx !== i)
+                                  prev.filter((_, idx) => idx !== i),
                                 )
                               }
                               className="text-blue-400 hover:text-blue-700"
@@ -3838,7 +3843,7 @@ export default function TicketsPanelCoach({
                             }
 
                             setGeneralFiles((prev) =>
-                              [...prev, ...processed].slice(0, 10)
+                              [...prev, ...processed].slice(0, 10),
                             );
                             e.currentTarget.value = "";
                           }}
@@ -3921,7 +3926,7 @@ export default function TicketsPanelCoach({
                               <button
                                 onClick={() =>
                                   setGeneralUrls((prev) =>
-                                    prev.filter((_, idx) => idx !== i)
+                                    prev.filter((_, idx) => idx !== i),
                                   )
                                 }
                               >
@@ -3975,18 +3980,18 @@ export default function TicketsPanelCoach({
                                 (f) =>
                                   new File([f], `[CTX] ${f.name}`, {
                                     type: f.type,
-                                  })
+                                  }),
                               );
                               await uploadTicketFiles(
                                 editTicket.codigo,
                                 renamedFiles,
-                                generalUrls
+                                generalUrls,
                               );
                               toast({ title: "Archivos subidos" });
                               setGeneralFiles([]);
                               setGeneralUrls([]);
                               const list = await getTicketFiles(
-                                editTicket.codigo
+                                editTicket.codigo,
                               );
                               setEditExistingFiles(list);
                             } catch (e) {
@@ -4037,7 +4042,7 @@ export default function TicketsPanelCoach({
                                     hour: "2-digit",
                                     minute: "2-digit",
                                     timeZone: "UTC",
-                                  }
+                                  },
                                 )}
                               </span>
                             </div>
@@ -4073,7 +4078,7 @@ export default function TicketsPanelCoach({
                               const picked = Array.from(e.target.files ?? []);
                               if (!picked.length) return;
                               setEditFiles((prev) =>
-                                [...prev, ...picked].slice(0, 10)
+                                [...prev, ...picked].slice(0, 10),
                               );
                               e.currentTarget.value = "";
                             }}
@@ -4103,7 +4108,7 @@ export default function TicketsPanelCoach({
                             if (!ticketDetail?.created_at || !f.created_at)
                               return false; // Si no hay fecha, asumimos que es original (General)
                             const ticketTime = new Date(
-                              ticketDetail.created_at
+                              ticketDetail.created_at,
                             ).getTime();
                             const fileTime = new Date(f.created_at).getTime();
                             const diffMinutes =
@@ -4185,7 +4190,7 @@ export default function TicketsPanelCoach({
                             <button
                               onClick={() =>
                                 setEditFiles((prev) =>
-                                  prev.filter((_, idx) => idx !== i)
+                                  prev.filter((_, idx) => idx !== i),
                                 )
                               }
                               className="text-blue-400 hover:text-blue-700"
@@ -4215,13 +4220,13 @@ export default function TicketsPanelCoach({
                                     try {
                                       const webp = await compressImageToWebp(
                                         f,
-                                        0.8
+                                        0.8,
                                       );
                                       processed.push(webp);
                                     } catch (err) {
                                       console.error(
                                         "[UploadButton] Error convirtiendo a WebP, usando original",
-                                        err
+                                        err,
                                       );
                                       processed.push(f);
                                     }
@@ -4241,12 +4246,12 @@ export default function TicketsPanelCoach({
 
                               await uploadTicketFiles(
                                 editTicket.codigo,
-                                renamedFiles
+                                renamedFiles,
                               );
                               toast({ title: "Archivos subidos" });
                               setEditFiles([]);
                               const list = await getTicketFiles(
-                                editTicket.codigo
+                                editTicket.codigo,
                               );
                               setEditExistingFiles(list);
                             } catch (e) {
@@ -4370,7 +4375,7 @@ export default function TicketsPanelCoach({
                                     <span className="text-[10px] text-slate-400">
                                       {c.created_at
                                         ? new Date(c.created_at).toLocaleString(
-                                            "es-ES"
+                                            "es-ES",
                                           )
                                         : ""}
                                     </span>
@@ -4492,7 +4497,7 @@ export default function TicketsPanelCoach({
                                     <span className="text-[10px] text-slate-500">
                                       {note.created_at
                                         ? new Date(
-                                            note.created_at
+                                            note.created_at,
                                           ).toLocaleDateString()
                                         : ""}
                                     </span>
@@ -4507,7 +4512,7 @@ export default function TicketsPanelCoach({
                                       onClick={() => {
                                         setEditingInternalNoteId(note.id);
                                         setEditingInternalNoteText(
-                                          note.contenido
+                                          note.contenido,
                                         );
                                       }}
                                     >
@@ -4656,13 +4661,13 @@ export default function TicketsPanelCoach({
                             current: "ELIMINADO",
                             at: new Date().toISOString(),
                           },
-                        })
+                        }),
                       );
                     }
                   } catch {}
                   // Quitar de la lista y cerrar drawer
                   setRows((prev) =>
-                    prev.filter((r) => r.codigo !== deleteTicketCodigo)
+                    prev.filter((r) => r.codigo !== deleteTicketCodigo),
                   );
                   setEditOpen(false);
                   toast({ title: "Ticket eliminado" });
