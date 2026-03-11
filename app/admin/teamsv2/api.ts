@@ -223,7 +223,7 @@ export async function getCoachTickets(params: {
 }): Promise<CoachTicketsResponse> {
   const q = new URLSearchParams();
   q.set("page", String(params.page ?? 1));
-  q.set("pageSize", String(params.pageSize ?? 50));
+  q.set("pageSize", String(params.pageSize ?? 500));
   q.set("coach", params.coach);
   if (params.fechaDesde) q.set("fechaDesde", params.fechaDesde);
   if (params.fechaHasta) q.set("fechaHasta", params.fechaHasta);
@@ -256,7 +256,7 @@ export async function getCoachTickets(params: {
     data,
     total: Number(json?.total ?? data.length),
     page: Number(json?.page ?? (params.page ?? 1)),
-    pageSize: Number(json?.pageSize ?? (params.pageSize ?? 50)),
+    pageSize: Number(json?.pageSize ?? (params.pageSize ?? 500)),
     totalPages: Number(json?.totalPages ?? 1),
   };
 }

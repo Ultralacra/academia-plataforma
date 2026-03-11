@@ -785,16 +785,22 @@ function PaymentsDueBadge() {
           )}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 p-3">
+      <PopoverContent className="w-[26rem] max-w-[calc(100vw-1.5rem)] p-3 sm:w-[28rem]">
         <div className="text-base font-semibold px-2 py-1">
           Pagos pendientes
         </div>
         <Tabs defaultValue="vencidas" className="mt-2">
-          <TabsList className="w-full grid grid-cols-2">
-            <TabsTrigger value="vencidas">
+          <TabsList className="h-auto w-full grid grid-cols-2 gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50/90 p-1.5">
+            <TabsTrigger
+              value="vencidas"
+              className="min-h-11 whitespace-normal rounded-lg px-3 py-2 text-center text-xs font-semibold leading-tight sm:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+            >
               Vencidas ({overdueItems.length})
             </TabsTrigger>
-            <TabsTrigger value="por-vencer">
+            <TabsTrigger
+              value="por-vencer"
+              className="min-h-11 whitespace-normal rounded-lg px-3 py-2 text-center text-xs font-semibold leading-tight sm:text-sm data-[state=active]:bg-white data-[state=active]:shadow-sm"
+            >
               Por vencer ({upcomingItems.length})
             </TabsTrigger>
           </TabsList>

@@ -358,7 +358,7 @@ export default function TicketsPanelCoach({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(500);
   const [total, setTotal] = useState(0);
   const [rows, setRows] = useState<CoachTicket[]>([]);
   const rowsRef = useRef<CoachTicket[]>([]);
@@ -2732,7 +2732,7 @@ export default function TicketsPanelCoach({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {[10, 25, 50, 100].map((n) => (
+                {[10, 25, 50, 100, 500].map((n) => (
                   <SelectItem key={n} value={String(n)}>
                     {n}/página
                   </SelectItem>
