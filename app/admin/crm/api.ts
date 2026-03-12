@@ -64,6 +64,26 @@ export interface LeadDetail extends Lead {
   monthly_budget?: number | null;
   lead_disposition?: string | null;
   program?: string | null;
+  pipeline_status?: string | null;
+  customer_type?: string | null;
+  product_presented?: string | null;
+  objection_type?: string | null;
+  objection_detail?: string | null;
+  lost_reason?: string | null;
+  won_recovered?: number | boolean | null;
+  followup_started_at?: string | null;
+  recovery_started_at?: string | null;
+  sleeping_started_at?: string | null;
+  next_contact_at?: string | null;
+  next_task_due_at?: string | null;
+  last_interaction_at?: string | null;
+  last_interaction_channel?: string | null;
+  conversation_status?: string | null;
+  protocol_name?: string | null;
+  protocol_step?: string | null;
+  protocol_paused?: number | boolean | null;
+  last_template_sent_name?: string | null;
+  last_resource_sent_name?: string | null;
 
   payment_status?: string | null;
   payment_mode?: string | null;

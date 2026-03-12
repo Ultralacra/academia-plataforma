@@ -491,6 +491,20 @@ function Content({ id }: { id: string }) {
     const ctx = buildSnapshotContext();
     if (!ctx) return;
 
+    const operationalPipeline = String((record as any)?.pipeline_status ?? "")
+      .trim()
+      .toLowerCase();
+    const customerType = String((record as any)?.customer_type ?? "").trim();
+    const productPresented = String(
+      (record as any)?.product_presented ?? "",
+    ).trim();
+    const objectionType = String((record as any)?.objection_type ?? "").trim();
+    const lostReason = String((record as any)?.lost_reason ?? "").trim();
+    const nextContactAt = String((record as any)?.next_contact_at ?? "").trim();
+    const recoveryStartedAt = String(
+      (record as any)?.recovery_started_at ?? "",
+    ).trim();
+
     // Validación: si está en Perdido, es obligatorio registrar un solo motivo.
     if (String(ctx.leadStatus || "").toLowerCase() === "lost") {
       const motive = String(ctx.leadDisposition || "").trim();
@@ -503,6 +517,50 @@ function Content({ id }: { id: string }) {
         });
         return;
       }
+    }
+
+    if (operationalPipeline === "seguimiento") {
+      if (!objectionType || !nextContactAt) {
+        toast({
+          title: "Faltan campos de seguimiento",
+          description:
+            "Para pasar a Seguimiento debes completar tipo de objeción y próxima fecha de contacto.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    if (operationalPipeline === "recuperacion" && !recoveryStartedAt) {
+      toast({
+        title: "Falta la fecha de recuperación",
+        description:
+          "Para pasar a Recuperación debes registrar cuándo comenzó ese protocolo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (operationalPipeline === "cerrado_ganado") {
+      if (!customerType || !productPresented) {
+        toast({
+          title: "Faltan datos de cierre",
+          description:
+            "Para marcar Cerrado ganado debes completar tipo de cliente y producto presentado.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    if (operationalPipeline === "cerrado_perdido" && !lostReason) {
+      toast({
+        title: "Falta el motivo de pérdida",
+        description:
+          "Para marcar Cerrado perdido debes seleccionar un motivo de pérdida.",
+        variant: "destructive",
+      });
+      return;
     }
 
     // Nota: algunos leads no traen source_entity_id/entity_id desde el backend.
@@ -1174,141 +1232,157 @@ function Content({ id }: { id: string }) {
   })();
 
   return (
-    <div className="p-6 space-y-6 min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-teal-50/40">
-      {/* Header con gradiente sutil */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between bg-white/70 backdrop-blur-sm rounded-xl p-5 border border-slate-200/60 shadow-sm">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-slate-800 truncate">
-            {p.name || salePayload?.name || "Detalle del lead"}
-          </h1>
-          <div className="text-sm text-slate-500 mt-1">
-            Lead • Código:{" "}
-            <span className="font-medium text-teal-600">{record.codigo}</span>
-            {record.record_id
-              ? ` • Record: ${record.record_entity || "—"} #${record.record_id}`
-              : ""}
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <StageBadge stage={leadStageLabel} />
-            {!!leadDispositionLabel && (
-              <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">
-                Estado: {leadDispositionLabel}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-teal-50/40 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-8">
+        {/* Header con gradiente sutil */}
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between rounded-2xl border border-slate-200/60 bg-white/75 p-5 sm:p-6 backdrop-blur-sm shadow-sm">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-slate-800 truncate">
+              {p.name || salePayload?.name || "Detalle del lead"}
+            </h1>
+            <div className="text-sm text-slate-500 mt-1">
+              Lead • Código:{" "}
+              <span className="font-medium text-teal-600">{record.codigo}</span>
+              {record.record_id
+                ? ` • Record: ${record.record_entity || "—"} #${record.record_id}`
+                : ""}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <StageBadge stage={leadStageLabel} />
+              {!!leadDispositionLabel && (
+                <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">
+                  Estado: {leadDispositionLabel}
+                </Badge>
+              )}
+              <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-50 capitalize">
+                Venta: {statusLabel}
               </Badge>
-            )}
-            <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-50 capitalize">
-              Venta: {statusLabel}
-            </Badge>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              asChild
+              variant="outline"
+              className="border-slate-300 hover:bg-slate-50 bg-transparent"
+            >
+              <Link href="/admin/crm" className="gap-2">
+                <ArrowLeft className="h-4 w-4" />
+                Volver al CRM
+              </Link>
+            </Button>
+            <Button
+              onClick={handleSaveChanges}
+              disabled={snapshotSaving}
+              className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-md shadow-teal-500/20 gap-2"
+            >
+              <Save className="h-4 w-4" />
+              {snapshotSaving ? "Guardando..." : "Guardar cambios"}
+            </Button>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            asChild
-            variant="outline"
-            className="border-slate-300 hover:bg-slate-50 bg-transparent"
-          >
-            <Link href="/admin/crm" className="gap-2">
-              <ArrowLeft className="h-4 w-4" />
-              Volver al CRM
-            </Link>
-          </Button>
-          <Button
-            onClick={handleSaveChanges}
-            disabled={snapshotSaving}
-            className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-md shadow-teal-500/20 gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {snapshotSaving ? "Guardando..." : "Guardar cambios"}
-          </Button>
-        </div>
-      </div>
+        <Tabs defaultValue="resumen" className="w-full space-y-6">
+          <div className="sticky top-0 z-30 rounded-2xl border border-slate-200/60 bg-white/80 p-2 sm:p-3 backdrop-blur shadow-sm">
+            <TabsList className="flex h-auto w-full justify-start gap-2 overflow-x-auto rounded-xl bg-transparent p-0">
+              <TabsTrigger
+                value="resumen"
+                className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm"
+              >
+                Resumen
+              </TabsTrigger>
+              <TabsTrigger
+                value="venta"
+                className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm"
+              >
+                Venta
+              </TabsTrigger>
+              <TabsTrigger
+                value="seguimiento"
+                className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm"
+              >
+                Seguimiento
+              </TabsTrigger>
+              <TabsTrigger
+                value="notas"
+                className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm"
+              >
+                Notas
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-      <Tabs defaultValue="resumen" className="w-full">
-        <TabsList className="sticky top-0 z-30 w-full justify-start rounded-xl border border-slate-200/60 bg-white/90 p-1.5 backdrop-blur shadow-sm overflow-x-auto">
-          <TabsTrigger
+          <TabsContent
             value="resumen"
-            className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg px-4"
+            className="mt-0 focus-visible:outline-none"
           >
-            Resumen
-          </TabsTrigger>
-          <TabsTrigger
+            <TabResumen
+              p={p}
+              user={user}
+              record={record}
+              salePayload={salePayload}
+              effectiveSalePayload={effectiveSalePayload}
+              draft={draft}
+              leadStatus={leadStatus}
+              leadDisposition={leadDisposition}
+              statusLabel={statusLabel}
+              planSummary={planSummary}
+              bonusesList={bonusesList}
+              fmtDate={fmtDate}
+              callOutcomeLabel={callOutcomeLabel}
+              paymentStatusLabel={paymentStatusLabel}
+              applyRecordPatch={applyRecordPatch}
+            />
+          </TabsContent>
+
+          <TabsContent
             value="venta"
-            className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg px-4"
+            className="mt-0 focus-visible:outline-none"
           >
-            Venta
-          </TabsTrigger>
-          <TabsTrigger
+            <TabVenta
+              id={id}
+              effectiveSalePayload={effectiveSalePayload}
+              draft={draft}
+              initial={initial}
+              hasReserva={hasReserva}
+              reserveAmountRaw={reserveAmountRaw}
+              lead={leadForUi}
+              setDraft={setDraft}
+              setSaleDraftPayload={setSaleDraftPayload}
+            />
+          </TabsContent>
+
+          <TabsContent
             value="seguimiento"
-            className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg px-4"
+            className="mt-0 focus-visible:outline-none"
           >
-            Seguimiento
-          </TabsTrigger>
-          <TabsTrigger
+            <TabSeguimiento id={id} p={p} applyRecordPatch={applyRecordPatch} />
+          </TabsContent>
+
+          <TabsContent
             value="notas"
-            className="text-xs sm:text-sm data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm rounded-lg px-4"
+            className="mt-0 focus-visible:outline-none"
           >
-            Notas
-          </TabsTrigger>
-        </TabsList>
+            <TabNotas p={p} user={user} applyRecordPatch={applyRecordPatch} />
+          </TabsContent>
+        </Tabs>
 
-        <TabsContent value="resumen" className="mt-6">
-          <TabResumen
-            p={p}
-            user={user}
-            record={record}
-            salePayload={salePayload}
-            effectiveSalePayload={effectiveSalePayload}
-            draft={draft}
-            leadStatus={leadStatus}
-            leadDisposition={leadDisposition}
-            statusLabel={statusLabel}
-            planSummary={planSummary}
-            bonusesList={bonusesList}
-            fmtDate={fmtDate}
-            callOutcomeLabel={callOutcomeLabel}
-            paymentStatusLabel={paymentStatusLabel}
-            applyRecordPatch={applyRecordPatch}
-          />
-        </TabsContent>
-
-        <TabsContent value="venta" className="mt-6">
-          <TabVenta
-            id={id}
-            effectiveSalePayload={effectiveSalePayload}
-            draft={draft}
-            initial={initial}
-            hasReserva={hasReserva}
-            reserveAmountRaw={reserveAmountRaw}
-            lead={leadForUi}
-            setDraft={setDraft}
-            setSaleDraftPayload={setSaleDraftPayload}
-          />
-        </TabsContent>
-
-        <TabsContent value="seguimiento" className="mt-6">
-          <TabSeguimiento id={id} p={p} applyRecordPatch={applyRecordPatch} />
-        </TabsContent>
-
-        <TabsContent value="notas" className="mt-6">
-          <TabNotas p={p} user={user} applyRecordPatch={applyRecordPatch} />
-        </TabsContent>
-      </Tabs>
-
-      {/* Footer sticky mejorado */}
-      <div className="sticky bottom-0 z-40 -mx-6 mt-8 border-t border-slate-200/60 bg-white/90 px-6 py-4 backdrop-blur shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)]">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-sm text-slate-500">
-            <div className="h-2 w-2 rounded-full bg-teal-400 animate-pulse" />
-            Los cambios se aplican al presionar "Guardar cambios".
+        {/* Footer sticky mejorado */}
+        <div className="sticky bottom-0 z-40 mt-8 rounded-2xl border border-slate-200/60 bg-white/90 px-5 py-4 sm:px-6 backdrop-blur shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.05)]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-sm text-slate-500">
+              <div className="h-2 w-2 rounded-full bg-teal-400 animate-pulse" />
+              Los cambios se aplican al presionar "Guardar cambios".
+            </div>
+            <Button
+              onClick={handleSaveChanges}
+              disabled={snapshotSaving}
+              className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-lg shadow-teal-500/25 gap-2"
+            >
+              <Save className="h-4 w-4" />
+              {snapshotSaving ? "Guardando..." : "Guardar cambios"}
+            </Button>
           </div>
-          <Button
-            onClick={handleSaveChanges}
-            disabled={snapshotSaving}
-            className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-lg shadow-teal-500/25 gap-2"
-          >
-            <Save className="h-4 w-4" />
-            {snapshotSaving ? "Guardando..." : "Guardar cambios"}
-          </Button>
         </div>
       </div>
     </div>
