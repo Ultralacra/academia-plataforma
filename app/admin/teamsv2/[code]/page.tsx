@@ -1865,7 +1865,6 @@ export default function CoachDetailPage({
                       name: coach?.nombre ?? String(code),
                       teamMembers: [],
                     }}
-                    hideCreateButton
                   />
                 ) : (
                   <div className="text-sm text-neutral-500">

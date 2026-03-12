@@ -82,6 +82,8 @@ import {
   getTicketFile,
   getOpciones,
   createTicket,
+  getAllStudents,
+  type StudentRow,
   deleteTicketFile,
   uploadTicketFiles,
   deleteTicket,
@@ -311,6 +313,8 @@ export default function TicketsPanelCoach({
       estatus?: string | null;
     }[]
   >([]);
+  const [searchedStudents, setSearchedStudents] = useState<StudentRow[]>([]);
+  const [studentSearchLoading, setStudentSearchLoading] = useState(false);
   const [selectedAlumno, setSelectedAlumno] = useState<string>("");
   const [studentQuery, setStudentQuery] = useState("");
   const [coachArea, setCoachArea] = useState<string | null>(null);
@@ -341,11 +345,37 @@ export default function TicketsPanelCoach({
 
   const selectedAlumnoRow = useMemo(() => {
     if (!selectedAlumno) return null;
-    return (
-      coachStudents.find((s) => String(s.alumno) === String(selectedAlumno)) ??
-      null
+    const coachMatch = coachStudents.find(
+      (s) => String(s.alumno) === String(selectedAlumno),
     );
-  }, [coachStudents, selectedAlumno]);
+    if (coachMatch) return coachMatch;
+
+    const searchMatch = searchedStudents.find(
+      (s) => String(s.code ?? s.id) === String(selectedAlumno),
+    );
+
+    if (!searchMatch) return null;
+
+    return {
+      alumno: String(searchMatch.code ?? searchMatch.id),
+      nombre: searchMatch.name,
+      fase: searchMatch.stage ?? null,
+      estatus: searchMatch.state ?? null,
+    };
+  }, [coachStudents, searchedStudents, selectedAlumno]);
+
+  const createStudentOptions = useMemo(() => {
+    const q = normalize(studentQuery);
+
+    if (!q) return coachStudents;
+
+    return searchedStudents.map((student) => ({
+      alumno: String(student.code ?? student.id),
+      nombre: student.name,
+      fase: student.stage ?? null,
+      estatus: student.state ?? null,
+    }));
+  }, [coachStudents, searchedStudents, studentQuery]);
 
   const estadoAlumno = useMemo(() => {
     return normalizeAlumnoEstado(selectedAlumnoRow?.estatus);
@@ -582,6 +612,42 @@ export default function TicketsPanelCoach({
       alive = false;
     };
   }, [coachCode]);
+
+  useEffect(() => {
+    let alive = true;
+    const query = String(studentQuery || "").trim();
+
+    if (!query) {
+      setSearchedStudents([]);
+      setStudentSearchLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+
+    const timer = window.setTimeout(async () => {
+      try {
+        setStudentSearchLoading(true);
+        const rows = await getAllStudents({
+          page: 1,
+          pageSize: 25,
+          search: query,
+        });
+        if (!alive) return;
+        setSearchedStudents(Array.isArray(rows) ? rows : []);
+      } catch {
+        if (!alive) return;
+        setSearchedStudents([]);
+      } finally {
+        if (alive) setStudentSearchLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [studentQuery]);
 
   useEffect(() => {
     const urls = createFiles.map((f) => ({
@@ -960,12 +1026,23 @@ export default function TicketsPanelCoach({
         // pero se ha solicitado centralizar el render basado en la descripción
         urls: [],
       });
+      const createdTicket = (result?.data ?? result) as any;
+      const createdTicketId = String(
+        createdTicket?.codigo ??
+          createdTicket?.id ??
+          createdTicket?.ticket_id ??
+          createdTicket?.ticketId ??
+          "",
+      ).trim();
+
+      if (coachCode && createdTicketId) {
+        await reassignTicket(createdTicketId, coachCode);
+      }
+
       // Ya no adjuntamos URLs como "archivos"; se leerán desde la descripción
       // Disparar notificación local para el header inmediatamente
       try {
-        const data = (result?.data ?? result) as any;
-        const ticketId =
-          data?.codigo || data?.id || data?.ticket_id || data?.ticketId;
+        const ticketId = createdTicketId;
         if (typeof window !== "undefined") {
           window.dispatchEvent(
             new CustomEvent("ticket:notify", {
@@ -1922,7 +1999,7 @@ export default function TicketsPanelCoach({
                         <Input
                           id="alumno-search"
                           className="h-10 pl-9"
-                          placeholder="Buscar por nombre o código…"
+                          placeholder="Buscar entre todos los alumnos por nombre o código…"
                           value={studentQuery}
                           onChange={(e) => setStudentQuery(e.target.value)}
                         />
@@ -1935,22 +2012,25 @@ export default function TicketsPanelCoach({
                           <SelectValue placeholder="Selecciona un alumno" />
                         </SelectTrigger>
                         <SelectContent>
-                          {(studentQuery
-                            ? coachStudents.filter((s) => {
-                                const q = normalize(studentQuery);
-                                return (
-                                  normalize(s.nombre).includes(q) ||
-                                  normalize(s.alumno).includes(q)
-                                );
-                              })
-                            : coachStudents
-                          ).map((s) => (
+                          {createStudentOptions.map((s) => (
                             <SelectItem key={s.alumno} value={s.alumno}>
                               {s.nombre}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
+                      {studentQuery && studentSearchLoading ? (
+                        <p className="text-xs text-slate-500">
+                          Buscando alumnos...
+                        </p>
+                      ) : null}
+                      {studentQuery &&
+                      !studentSearchLoading &&
+                      createStudentOptions.length === 0 ? (
+                        <p className="text-xs text-slate-500">
+                          No se encontraron alumnos para esa búsqueda.
+                        </p>
+                      ) : null}
                     </div>
                   </div>
 
