@@ -97,6 +97,35 @@ const PROTOCOL_OPTIONS = [
   { value: "reactivacion", label: "Reactivación" },
 ];
 
+const TEMPLATE_OPTIONS = [
+  { value: "bienvenida", label: "Bienvenida" },
+  { value: "recordatorio_24h", label: "Recordatorio 24h" },
+  { value: "recordatorio_12h", label: "Recordatorio 12h" },
+  { value: "recordatorio_1h", label: "Recordatorio 1h" },
+  { value: "post_llamada_d0", label: "Post llamada (Día 0)" },
+  { value: "seguimiento_d1", label: "Seguimiento (Día 1)" },
+  { value: "recurso_d2", label: "Recurso (Día 2)" },
+  { value: "seguimiento_d4", label: "Seguimiento (Día 4)" },
+  { value: "recurso_d6", label: "Recurso (Día 6)" },
+  { value: "decision_d7", label: "Mensaje decisión (Día 7)" },
+  { value: "reapertura_d10", label: "Reapertura (Día 10)" },
+  { value: "valor_d14", label: "Contenido valor (Día 14)" },
+  { value: "intento_d21", label: "Nuevo intento (Día 21)" },
+  { value: "cierre_d30", label: "Cierre seguimiento (Día 30)" },
+  { value: "reactivacion_60", label: "Reactivación 60 días" },
+  { value: "reactivacion_90", label: "Reactivación 90 días" },
+];
+
+const RESOURCE_OPTIONS = [
+  { value: "testimonios", label: "Testimonios alumnos" },
+  { value: "casos_exito", label: "Casos de éxito" },
+  { value: "video_programa", label: "Video explicación programa" },
+  { value: "video_inversion", label: "Video inversión" },
+  { value: "terminos_contrato", label: "Documento términos contrato" },
+  { value: "brochure", label: "Brochure comercial" },
+  { value: "faq", label: "FAQ comercial" },
+];
+
 function toDateTimeLocalValue(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -296,7 +325,6 @@ export function TabResumen({
                 <DataRow
                   label="Instagram"
                   value={p.instagram_user || p.instagramUser || "—"}
-                  accent="text-teal-600"
                 />
                 <DataRow
                   label="Programa"
@@ -315,7 +343,7 @@ export function TabResumen({
                       bonusesList.map((bonus) => (
                         <Badge
                           key={bonus}
-                          className="bg-gradient-to-r from-teal-50 to-cyan-50 text-teal-700 border-teal-200 text-xs"
+                          className="bg-slate-100 text-slate-700 border-slate-200 text-xs"
                         >
                           {bonus}
                         </Badge>
@@ -367,7 +395,7 @@ export function TabResumen({
                         )
                       : "—"
                   }
-                  accent="text-teal-600 font-semibold"
+                  accent="font-semibold"
                 />
                 <DataRow
                   label="Próximo cobro"
@@ -402,11 +430,11 @@ export function TabResumen({
 
       <div className="xl:col-span-2 space-y-8">
         <Card className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm">
-          <div className="h-1 bg-gradient-to-r from-cyan-500 to-teal-500" />
+          <div className="h-1 bg-slate-200" />
           <CardHeader className="pb-5">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-cyan-500 to-teal-500 flex items-center justify-center">
-                <Target className="h-5 w-5 text-white" />
+              <div className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center">
+                <Target className="h-5 w-5 text-slate-700" />
               </div>
               <div>
                 <CardTitle className="text-slate-800">
@@ -491,26 +519,30 @@ export function TabResumen({
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <TextField
+                <SelectField
                   label="Última plantilla enviada"
-                  value={lastTemplateSent}
-                  placeholder="Ej: Seguimiento día 1"
-                  onChange={(value) =>
-                    applyRecordPatch({ last_template_sent_name: value || null })
+                  value={lastTemplateSent || "__empty__"}
+                  onValueChange={(next) =>
+                    applyRecordPatch({
+                      last_template_sent_name: next === "__empty__" ? null : next,
+                    })
                   }
+                  options={TEMPLATE_OPTIONS}
                 />
-                <TextField
+                <SelectField
                   label="Último recurso enviado"
-                  value={lastResourceSent}
-                  placeholder="Ej: Caso de éxito premium"
-                  onChange={(value) =>
-                    applyRecordPatch({ last_resource_sent_name: value || null })
+                  value={lastResourceSent || "__empty__"}
+                  onValueChange={(next) =>
+                    applyRecordPatch({
+                      last_resource_sent_name: next === "__empty__" ? null : next,
+                    })
                   }
+                  options={RESOURCE_OPTIONS}
                 />
               </div>
 
-              <div className="rounded-2xl border border-teal-100 bg-gradient-to-r from-teal-50 to-cyan-50 px-4 py-4">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-teal-700">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
                   <Activity className="h-3.5 w-3.5" />
                   Estado legado compatible
                 </div>
@@ -750,8 +782,8 @@ export function TabResumen({
                 />
               </div>
             </div>
-            <div className="mt-4 p-3 rounded-lg bg-gradient-to-r from-teal-50 to-cyan-50 border border-teal-100">
-              <p className="text-xs text-teal-700 flex items-center gap-2">
+            <div className="mt-4 p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <p className="text-xs text-slate-700 flex items-center gap-2">
                 <TrendingUp className="h-3.5 w-3.5" />
                 Se guarda al presionar "Guardar cambios".
               </p>
@@ -814,7 +846,7 @@ export function TabResumen({
                       });
                       setNewActivityNote("");
                     }}
-                    className="gap-2 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white shadow-sm"
+                    className="gap-2 bg-slate-900 hover:bg-slate-800 text-white"
                   >
                     <Plus className="h-4 w-4" />
                     Agregar al historial
@@ -840,8 +872,8 @@ export function TabResumen({
                           key={`${item?.at || idx}-${idx}`}
                           className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-white hover:bg-slate-50 transition-colors"
                         >
-                          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-teal-100 to-emerald-100 flex items-center justify-center flex-shrink-0">
-                            <User className="h-4 w-4 text-teal-600" />
+                          <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                            <User className="h-4 w-4 text-slate-600" />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
@@ -855,7 +887,7 @@ export function TabResumen({
                               {item?.by?.name || item?.by?.email ? (
                                 <>
                                   <span>·</span>
-                                  <span className="font-medium text-teal-600">
+                                  <span className="font-medium text-slate-700">
                                     {String(item.by.name || item.by.email)}
                                   </span>
                                 </>
@@ -904,10 +936,10 @@ function InfoTile({
   accent: "teal" | "cyan";
 }) {
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-gradient-to-r from-slate-50 to-slate-100/50 border border-slate-200/60">
+    <div className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 bg-white">
       <div
         className={`h-9 w-9 rounded-lg flex items-center justify-center ${
-          accent === "teal" ? "bg-teal-100" : "bg-cyan-100"
+          accent === "teal" ? "bg-slate-100" : "bg-slate-100"
         }`}
       >
         {icon}
@@ -958,7 +990,7 @@ function SelectField({
     <div className="grid gap-2">
       <Label className="text-slate-600 font-medium">{label}</Label>
       <Select value={value} onValueChange={onValueChange}>
-        <SelectTrigger className="w-full bg-white border-slate-200 focus:border-teal-400 focus:ring-teal-400/20">
+        <SelectTrigger className="w-full bg-white border-slate-200 focus:border-slate-400 focus:ring-slate-300/30">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -994,7 +1026,7 @@ function TextField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="bg-white border-slate-200 focus-visible:border-teal-400 focus-visible:ring-teal-400/20"
+        className="bg-white border-slate-200 focus-visible:border-slate-400 focus-visible:ring-slate-300/30"
       />
     </div>
   );
@@ -1016,7 +1048,7 @@ function DateTimeField({
         type="datetime-local"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-white border-slate-200 focus-visible:border-teal-400 focus-visible:ring-teal-400/20"
+        className="bg-white border-slate-200 focus-visible:border-slate-400 focus-visible:ring-slate-300/30"
       />
     </div>
   );

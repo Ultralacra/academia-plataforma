@@ -56,13 +56,13 @@ export function TabVenta({
   const [contractOpen, setContractOpen] = React.useState(false);
 
   return (
-    <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
-      <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+    <Card className="bg-white/90 backdrop-blur border-slate-200 shadow-sm overflow-hidden">
+      <div className="h-1 bg-slate-200" />
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
-              <CreditCard className="h-5 w-5 text-white" />
+            <div className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center">
+              <CreditCard className="h-5 w-5 text-slate-700" />
             </div>
             <div>
               <CardTitle className="text-slate-800">Venta</CardTitle>
@@ -76,7 +76,7 @@ export function TabVenta({
               <DialogTrigger asChild>
                 <Button
                   variant="outline"
-                  className="gap-2 border-teal-200 text-teal-700 hover:bg-teal-50 hover:text-teal-800 hover:border-teal-300 bg-transparent"
+                  className="gap-2 border-slate-300 text-slate-700 hover:bg-slate-50 hover:text-slate-900 bg-transparent"
                 >
                   <Eye className="h-4 w-4" />
                   Vista previa
@@ -89,7 +89,7 @@ export function TabVenta({
                 <DialogHeader>
                   <DialogTitle className="flex items-center justify-between gap-3 text-slate-800">
                     <span className="flex items-center gap-2">
-                      <Eye className="h-5 w-5 text-teal-600" />
+                      <Eye className="h-5 w-5 text-slate-600" />
                       Vista previa / contrato
                     </span>
                     <ContractGenerator
@@ -120,8 +120,8 @@ export function TabVenta({
         <div
           className={`mb-5 rounded-xl border px-4 py-3 flex items-center gap-3 ${
             hasReserva
-              ? "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200"
-              : "bg-gradient-to-r from-slate-50 to-slate-100/50 border-slate-200"
+              ? "bg-emerald-50 border-emerald-200"
+              : "bg-slate-50 border-slate-200"
           }`}
         >
           <div
@@ -156,7 +156,7 @@ export function TabVenta({
         </div>
 
         {/* Formulario */}
-        <div className="rounded-xl border border-slate-200/60 bg-gradient-to-b from-white to-slate-50/50 p-5">
+        <div className="rounded-xl border border-slate-200 bg-white p-5">
           <CloseSaleForm
             mode="edit"
             leadCodigo={id}

@@ -1231,81 +1231,107 @@ function Content({ id }: { id: string }) {
     return type;
   })();
 
+  const displayName = (() => {
+    const raw = String(p.name || salePayload?.name || "Detalle del lead");
+    return raw
+      .replace(/\s+(none|null|undefined)$/i, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  })();
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-teal-50/40 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-white px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
-        {/* Header con gradiente sutil */}
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between rounded-2xl border border-slate-200/60 bg-white/75 p-5 sm:p-6 backdrop-blur-sm shadow-sm">
-          <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-slate-800 truncate">
-              {p.name || salePayload?.name || "Detalle del lead"}
-            </h1>
-            <div className="text-sm text-slate-500 mt-1">
-              Lead • Código:{" "}
-              <span className="font-medium text-teal-600">{record.codigo}</span>
-              {record.record_id
-                ? ` • Record: ${record.record_entity || "—"} #${record.record_id}`
-                : ""}
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-start sm:justify-between sm:p-6">
+          <div className="min-w-0 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
               <StageBadge stage={leadStageLabel} />
               {!!leadDispositionLabel && (
                 <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">
                   Estado: {leadDispositionLabel}
                 </Badge>
               )}
-              <Badge className="bg-cyan-50 text-cyan-700 border-cyan-200 hover:bg-cyan-50 capitalize">
+              <Badge className="border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-100 capitalize">
                 Venta: {statusLabel}
               </Badge>
             </div>
+
+            <div className="space-y-1.5 min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                Ficha del lead
+              </p>
+              <h1 className="truncate text-2xl font-semibold text-slate-900 sm:text-[30px]">
+                {displayName}
+              </h1>
+            </div>
+
+            <div className="flex flex-wrap gap-2 text-sm text-slate-600">
+              <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+                Lead
+              </div>
+              <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+                Código: <span className="ml-1 font-medium text-slate-900">{record.codigo || "—"}</span>
+              </div>
+              {record.record_id ? (
+                <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
+                  Record: <span className="ml-1 font-medium text-slate-900">{record.record_entity || "—"} #{record.record_id}</span>
+                </div>
+              ) : null}
+            </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-slate-50 p-1.5">
             <Button
               asChild
-              variant="outline"
-              className="border-slate-300 hover:bg-slate-50 bg-transparent"
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 rounded-lg text-slate-600 hover:bg-white hover:text-slate-900"
             >
-              <Link href="/admin/crm" className="gap-2">
+              <Link href="/admin/crm" aria-label="Volver al CRM" title="Volver al CRM">
                 <ArrowLeft className="h-4 w-4" />
-                Volver al CRM
               </Link>
             </Button>
             <Button
               onClick={handleSaveChanges}
               disabled={snapshotSaving}
-              className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-md shadow-teal-500/20 gap-2"
+              size="icon"
+              aria-label={snapshotSaving ? "Guardando cambios" : "Guardar cambios"}
+              title={snapshotSaving ? "Guardando cambios" : "Guardar cambios"}
+              className="h-10 w-10 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
             >
-              <Save className="h-4 w-4" />
-              {snapshotSaving ? "Guardando..." : "Guardar cambios"}
+              {snapshotSaving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
             </Button>
           </div>
         </div>
 
         <Tabs defaultValue="resumen" className="w-full space-y-6">
-          <div className="sticky top-0 z-30 rounded-2xl border border-slate-200/60 bg-white/80 p-2 sm:p-3 backdrop-blur shadow-sm">
-            <TabsList className="flex h-auto w-full justify-start gap-2 overflow-x-auto rounded-xl bg-transparent p-0">
+          <div className="sticky top-0 z-30 rounded-xl border border-slate-200 bg-white/95 p-1.5 sm:p-2 backdrop-blur shadow-sm">
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-lg bg-transparent p-0 sm:grid-cols-4">
               <TabsTrigger
                 value="resumen"
-                className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
               >
                 Resumen
               </TabsTrigger>
               <TabsTrigger
                 value="venta"
-                className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
               >
                 Venta
               </TabsTrigger>
               <TabsTrigger
                 value="seguimiento"
-                className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
               >
                 Seguimiento
               </TabsTrigger>
               <TabsTrigger
                 value="notas"
-                className="min-h-11 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-600 data-[state=active]:bg-gradient-to-r data-[state=active]:from-teal-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
               >
                 Notas
               </TabsTrigger>
@@ -1377,7 +1403,7 @@ function Content({ id }: { id: string }) {
             <Button
               onClick={handleSaveChanges}
               disabled={snapshotSaving}
-              className="bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-600 hover:to-cyan-600 text-white shadow-lg shadow-teal-500/25 gap-2"
+              className="bg-slate-900 hover:bg-slate-800 text-white gap-2"
             >
               <Save className="h-4 w-4" />
               {snapshotSaving ? "Guardando..." : "Guardar cambios"}

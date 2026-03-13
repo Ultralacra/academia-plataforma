@@ -27,6 +27,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import * as alumnosApi from "@/app/admin/alumnos/api";
 
 // Producto por defecto (si el lead no trae uno)
 const STATIC_PROGRAM = "HOTSELLING PRO";
@@ -106,6 +107,8 @@ export interface CloseSaleInput {
   }>;
   notes?: string;
 }
+
+type BonusOption = { key: string; title: string; description: string };
 
 type Mode = "create" | "edit";
 
@@ -441,6 +444,75 @@ export function CloseSaleForm({
   const [productConfigValue, setProductConfigValue] = useState<string>(
     String(form.program || STATIC_PROGRAM),
   );
+  const [bonosCatalog, setBonosCatalog] = useState<alumnosApi.Bono[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const rows = await alumnosApi.getAllBonos({ includeInactivos: true });
+        if (!active) return;
+        setBonosCatalog(Array.isArray(rows) ? rows : []);
+      } catch {
+        if (!active) return;
+        setBonosCatalog([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const { bonusContractuales, bonusExtras } = React.useMemo(() => {
+    if (!Array.isArray(bonosCatalog) || bonosCatalog.length === 0) {
+      return {
+        bonusContractuales: BONOS_CONTRACTUALES as BonusOption[],
+        bonusExtras: BONOS_EXTRA as BonusOption[],
+      };
+    }
+
+    const isInactive = (v: any) =>
+      v === true || v === 1 || String(v ?? "").toLowerCase() === "true";
+
+    const remote = bonosCatalog
+      .filter((b) => !isInactive((b as any)?.inactivado))
+      .map((b) => {
+        const key = String((b as any)?.codigo ?? "").trim();
+        const title =
+          String((b as any)?.nombre ?? "").trim() || key || "Bono";
+        const description = String((b as any)?.descripcion ?? "").trim();
+        const tipoRaw = String((b as any)?.metadata?.tipo ?? "")
+          .trim()
+          .toLowerCase();
+        const kind: "extra" | "contractual" =
+          tipoRaw.includes("extra") || tipoRaw.includes("adicional")
+            ? "extra"
+            : "contractual";
+        return { key, title, description, kind };
+      })
+      .filter((b) => b.key);
+
+    const mergedContractual = new Map<string, BonusOption>();
+    const mergedExtra = new Map<string, BonusOption>();
+
+    BONOS_CONTRACTUALES.forEach((b) => mergedContractual.set(b.key, b));
+    BONOS_EXTRA.forEach((b) => mergedExtra.set(b.key, b));
+
+    remote.forEach((b) => {
+      const item: BonusOption = {
+        key: b.key,
+        title: b.title,
+        description: b.description || "Sin descripción",
+      };
+      if (b.kind === "extra") mergedExtra.set(b.key, item);
+      else mergedContractual.set(b.key, item);
+    });
+
+    return {
+      bonusContractuales: Array.from(mergedContractual.values()),
+      bonusExtras: Array.from(mergedExtra.values()),
+    };
+  }, [bonosCatalog]);
 
   // Propagar cambios en vivo al padre para vista previa en tiempo real
   useEffect(() => {
@@ -1066,22 +1138,25 @@ export function CloseSaleForm({
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form
+      onSubmit={onSubmit}
+      className="space-y-4 [&_[data-slot='label']]:mb-2 [&_[data-slot='label']]:inline-flex [&_[data-slot='label']]:leading-snug"
+    >
       <Tabs defaultValue="datos" className="w-full gap-0">
-        <TabsList className="sticky top-0 z-20 w-full justify-start rounded-md border border-slate-200 bg-white/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-white/75 overflow-x-auto">
-          <TabsTrigger value="datos" className="text-xs sm:text-sm">
+        <TabsList className="sticky top-0 z-20 grid h-auto w-full grid-cols-2 rounded-xl border border-slate-200 bg-white/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-white/80 gap-1 sm:grid-cols-3 lg:grid-cols-5">
+          <TabsTrigger value="datos" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
             Datos
           </TabsTrigger>
-          <TabsTrigger value="bonos" className="text-xs sm:text-sm">
+          <TabsTrigger value="bonos" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
             Bonos
           </TabsTrigger>
-          <TabsTrigger value="pago" className="text-xs sm:text-sm">
+          <TabsTrigger value="pago" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
             Pago
           </TabsTrigger>
-          <TabsTrigger value="contrato" className="text-xs sm:text-sm">
+          <TabsTrigger value="contrato" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
             Contrato
           </TabsTrigger>
-          <TabsTrigger value="notas" className="text-xs sm:text-sm">
+          <TabsTrigger value="notas" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
             Notas
           </TabsTrigger>
         </TabsList>
@@ -1254,7 +1329,7 @@ export function CloseSaleForm({
                     {form.bonuses && form.bonuses.length > 0
                       ? ` (${
                           form.bonuses.filter((k) =>
-                            BONOS_CONTRACTUALES.some((b) => b.key === k),
+                            bonusContractuales.some((b) => b.key === k),
                           ).length
                         })`
                       : ""}
@@ -1265,7 +1340,7 @@ export function CloseSaleForm({
                   </p>
                 </div>
                 <div className="space-y-3">
-                  {BONOS_CONTRACTUALES.map((b) => {
+                  {bonusContractuales.map((b) => {
                     const isSel = (form.bonuses || []).includes(b.key);
                     return (
                       <Card
@@ -1286,15 +1361,13 @@ export function CloseSaleForm({
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={!!isSel}
                             onClick={(e) => e.stopPropagation()}
-                            onChange={(e) =>
-                              toggleBonus(b.key, e.target.checked)
+                            onCheckedChange={(checked) =>
+                              toggleBonus(b.key, checked === true)
                             }
                             aria-label={`Seleccionar ${b.title}`}
-                            className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-300"
                           />
                           <div className="space-y-1 pr-8">
                             <div className="text-sm font-medium text-slate-900">
@@ -1323,7 +1396,7 @@ export function CloseSaleForm({
                     {form.bonuses && form.bonuses.length > 0
                       ? ` (${
                           form.bonuses.filter((k) =>
-                            BONOS_EXTRA.some((b) => b.key === k),
+                            bonusExtras.some((b) => b.key === k),
                           ).length
                         })`
                       : ""}
@@ -1334,7 +1407,7 @@ export function CloseSaleForm({
                   </p>
                 </div>
                 <div className="space-y-3">
-                  {BONOS_EXTRA.map((b) => {
+                  {bonusExtras.map((b) => {
                     const isSel = (form.bonuses || []).includes(b.key);
                     return (
                       <Card
@@ -1355,15 +1428,13 @@ export function CloseSaleForm({
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <input
-                            type="checkbox"
+                          <Checkbox
                             checked={!!isSel}
                             onClick={(e) => e.stopPropagation()}
-                            onChange={(e) =>
-                              toggleBonus(b.key, e.target.checked)
+                            onCheckedChange={(checked) =>
+                              toggleBonus(b.key, checked === true)
                             }
                             aria-label={`Seleccionar ${b.title}`}
-                            className="h-4 w-4 rounded border-slate-300 text-slate-700 focus:ring-slate-300"
                           />
                           <div className="space-y-1 pr-8">
                             <div className="text-sm font-medium text-slate-900">
@@ -2444,28 +2515,26 @@ export function CloseSaleForm({
           </TabsContent>
 
           <TabsContent value="contrato" className="m-0">
-            <Card className="p-4 space-y-4 border-slate-200">
+            <Card className="p-5 space-y-5 border-slate-200 bg-white/95 shadow-sm">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-center gap-2">
-                  <input
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <Checkbox
                     id="thirdParty"
-                    type="checkbox"
                     checked={!!form.contractThirdParty}
-                    onChange={(e) =>
-                      setForm({ ...form, contractThirdParty: e.target.checked })
+                    onCheckedChange={(checked) =>
+                      setForm({ ...form, contractThirdParty: checked === true })
                     }
                   />
                   <Label htmlFor="thirdParty" className="select-none">
                     Contrato a nombre de otra persona
                   </Label>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
+                <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <Checkbox
                     id="isCompany"
-                    type="checkbox"
                     checked={!!form.contractIsCompany}
-                    onChange={(e) =>
-                      setForm({ ...form, contractIsCompany: e.target.checked })
+                    onCheckedChange={(checked) =>
+                      setForm({ ...form, contractIsCompany: checked === true })
                     }
                   />
                   <Label htmlFor="isCompany" className="select-none">
@@ -2731,16 +2800,19 @@ export function CloseSaleForm({
           </TabsContent>
 
           <TabsContent value="notas" className="m-0">
-            <div className="grid grid-cols-1 gap-4">
+            <Card className="p-5 border-slate-200 bg-white/95 shadow-sm">
+              <div className="grid grid-cols-1 gap-4">
               <div>
                 <Label>Notas</Label>
                 <Textarea
-                  className={inputAccent}
+                  className={`${inputAccent} min-h-36 resize-y bg-slate-50`}
+                  placeholder="Resumen comercial, acuerdos, objeciones, próximos pasos..."
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                 />
               </div>
-            </div>
+              </div>
+            </Card>
           </TabsContent>
         </div>
       </Tabs>
