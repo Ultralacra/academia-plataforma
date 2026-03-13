@@ -1183,7 +1183,8 @@ function CrmContent() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
                   <span>
-                    Mostrando {paginatedFiltrados.length} de {filtrados.length} leads
+                    Mostrando {paginatedFiltrados.length} de {filtrados.length}{" "}
+                    leads
                   </span>
                   <span className="hidden sm:inline text-slate-300">|</span>
                   <label className="inline-flex items-center gap-1">
@@ -1208,7 +1209,9 @@ function CrmContent() {
                   <div className="inline-flex items-center gap-1">
                     <button
                       type="button"
-                      onClick={() => setPipelinePage((prev) => Math.max(1, prev - 1))}
+                      onClick={() =>
+                        setPipelinePage((prev) => Math.max(1, prev - 1))
+                      }
                       disabled={pipelinePage <= 1}
                       className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Página anterior"
@@ -1563,9 +1566,7 @@ function CrmContent() {
                         }`}
                       >
                         <div className="p-3 flex items-start gap-3">
-                          <div
-                            className="h-10 w-10 rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center flex-shrink-0 text-xs font-semibold text-slate-700"
-                          >
+                          <div className="h-10 w-10 rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center flex-shrink-0 text-xs font-semibold text-slate-700">
                             {getInitials(user.name)}
                           </div>
                           <div className="flex-1 min-w-0">
