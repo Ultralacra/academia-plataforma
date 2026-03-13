@@ -145,16 +145,10 @@ const PIPELINE_STAGES: ProspectStage[] = [
   "Perdido",
 ];
 
-const gradients = [
-  "from-indigo-500 to-sky-500",
-  "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
-  "from-rose-500 to-pink-500",
-  "from-purple-500 to-violet-500",
-  "from-slate-500 to-slate-700",
-];
-
 const HOURS = Array.from({ length: 17 }, (_, idx) => 6 + idx);
+const MAX_LEADS_FETCH = 5000;
+const DEFAULT_PIPELINE_PAGE_SIZE = 25;
+const PIPELINE_PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const;
 
 const mapLeadStatusToEtapa = (status?: string | null): ProspectStage => {
   switch (String(status ?? "").toLowerCase()) {
@@ -210,14 +204,6 @@ const getInitials = (name: string) =>
     .map((part) => part.charAt(0).toUpperCase())
     .join("")
     .padEnd(2, "·");
-
-const getAvatarGradient = (name: string) => {
-  if (!name) return gradients[0];
-  const code = name
-    .split("")
-    .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  return gradients[code % gradients.length];
-};
 
 function mapUsersPayload(raw: any): UserSummary[] {
   const source = Array.isArray(raw?.data)
@@ -308,6 +294,10 @@ function CrmContent() {
   const [createdFrom, setCreatedFrom] = useState<string>("");
   const [createdTo, setCreatedTo] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("pipeline");
+  const [pipelinePage, setPipelinePage] = useState<number>(1);
+  const [pipelinePageSize, setPipelinePageSize] = useState<number>(
+    DEFAULT_PIPELINE_PAGE_SIZE,
+  );
 
   const showingMyLeads =
     Boolean(userCodigo) && ownerFilterRef.current === userCodigo;
@@ -370,8 +360,9 @@ function CrmContent() {
       setLoadingLeads(true);
       try {
         const response = await listLeads({
+          page: 1,
           owner: ownerCode ? String(ownerCode) : undefined,
-          pageSize: 500,
+          pageSize: MAX_LEADS_FETCH,
         });
         const items = response.items ?? [];
         setRows(items.map(mapLeadToProspect));
@@ -800,6 +791,24 @@ function CrmContent() {
     });
   }, [rows, q, etapaFiltro, canalFiltro, ownerFiltro, createdFrom, createdTo]);
 
+  const pipelineTotalPages = useMemo(
+    () => Math.max(1, Math.ceil(filtrados.length / pipelinePageSize)),
+    [filtrados.length, pipelinePageSize],
+  );
+
+  const paginatedFiltrados = useMemo(() => {
+    const start = (pipelinePage - 1) * pipelinePageSize;
+    return filtrados.slice(start, start + pipelinePageSize);
+  }, [filtrados, pipelinePage, pipelinePageSize]);
+
+  useEffect(() => {
+    setPipelinePage(1);
+  }, [q, etapaFiltro, canalFiltro, ownerFiltro, createdFrom, createdTo]);
+
+  useEffect(() => {
+    setPipelinePage((prev) => Math.min(prev, pipelineTotalPages));
+  }, [pipelineTotalPages]);
+
   const gmFromRows = useMemo<CrmGlobalMetrics>(() => {
     const byStage: CrmGlobalMetrics["byStage"] = {
       nuevo: 0,
@@ -1171,7 +1180,60 @@ function CrmContent() {
           externalTabs
           pipeline={
             <div className="flex flex-col gap-2 h-full">
-              <div className="flex items-center justify-end">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                  <span>
+                    Mostrando {paginatedFiltrados.length} de {filtrados.length} leads
+                  </span>
+                  <span className="hidden sm:inline text-slate-300">|</span>
+                  <label className="inline-flex items-center gap-1">
+                    <span>Por página</span>
+                    <select
+                      className="h-6 rounded-md border border-slate-200 bg-white px-1.5 text-[11px] text-slate-700 focus:outline-none"
+                      value={pipelinePageSize}
+                      onChange={(event) => {
+                        const size = Number(event.target.value);
+                        setPipelinePageSize(size);
+                        setPipelinePage(1);
+                      }}
+                    >
+                      {PIPELINE_PAGE_SIZE_OPTIONS.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <span className="hidden sm:inline text-slate-300">|</span>
+                  <div className="inline-flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setPipelinePage((prev) => Math.max(1, prev - 1))}
+                      disabled={pipelinePage <= 1}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Página anterior"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="min-w-[78px] text-center text-[11px] font-medium text-slate-700">
+                      Página {pipelinePage} / {pipelineTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPipelinePage((prev) =>
+                          Math.min(pipelineTotalPages, prev + 1),
+                        )
+                      }
+                      disabled={pipelinePage >= pipelineTotalPages}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Página siguiente"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
                 <div className="inline-flex overflow-hidden rounded-md border border-slate-200 bg-white">
                   <button
                     type="button"
@@ -1220,7 +1282,7 @@ function CrmContent() {
                         No hay leads para mostrar
                       </div>
                     ) : (
-                      filtrados.map((prospect) => (
+                      paginatedFiltrados.map((prospect) => (
                         <div
                           key={prospect.id}
                           className="grid grid-cols-11 gap-1 px-3 py-1 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
@@ -1228,7 +1290,7 @@ function CrmContent() {
                           <div className="col-span-3 min-w-0">
                             <div className="flex items-center gap-2 min-w-0">
                               <div
-                                className={`hidden sm:flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br ${getAvatarGradient(prospect.nombre)} text-[10px] font-semibold text-white shadow`}
+                                className="hidden sm:flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-700"
                                 aria-hidden
                               >
                                 {getInitials(prospect.nombre)}
@@ -1337,7 +1399,7 @@ function CrmContent() {
                 </div>
               ) : (
                 <ProspectKanban
-                  items={filtrados.map((p) => ({
+                  items={paginatedFiltrados.map((p) => ({
                     id: p.id,
                     nombre: p.nombre,
                     email: p.email,
@@ -1501,8 +1563,10 @@ function CrmContent() {
                         }`}
                       >
                         <div className="p-3 flex items-start gap-3">
-                          <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0">
-                            <User className="h-5 w-5 text-slate-600" />
+                          <div
+                            className="h-10 w-10 rounded-full border border-slate-200 bg-slate-100 flex items-center justify-center flex-shrink-0 text-xs font-semibold text-slate-700"
+                          >
+                            {getInitials(user.name)}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
