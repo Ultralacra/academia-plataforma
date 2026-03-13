@@ -478,8 +478,7 @@ export function CloseSaleForm({
       .filter((b) => !isInactive((b as any)?.inactivado))
       .map((b) => {
         const key = String((b as any)?.codigo ?? "").trim();
-        const title =
-          String((b as any)?.nombre ?? "").trim() || key || "Bono";
+        const title = String((b as any)?.nombre ?? "").trim() || key || "Bono";
         const description = String((b as any)?.descripcion ?? "").trim();
         const tipoRaw = String((b as any)?.metadata?.tipo ?? "")
           .trim()
@@ -1144,19 +1143,34 @@ export function CloseSaleForm({
     >
       <Tabs defaultValue="datos" className="w-full gap-0">
         <TabsList className="sticky top-0 z-20 grid h-auto w-full grid-cols-2 rounded-xl border border-slate-200 bg-white/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-white/80 gap-1 sm:grid-cols-3 lg:grid-cols-5">
-          <TabsTrigger value="datos" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+          <TabsTrigger
+            value="datos"
+            className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white"
+          >
             Datos
           </TabsTrigger>
-          <TabsTrigger value="bonos" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+          <TabsTrigger
+            value="bonos"
+            className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white"
+          >
             Bonos
           </TabsTrigger>
-          <TabsTrigger value="pago" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+          <TabsTrigger
+            value="pago"
+            className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white"
+          >
             Pago
           </TabsTrigger>
-          <TabsTrigger value="contrato" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+          <TabsTrigger
+            value="contrato"
+            className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white"
+          >
             Contrato
           </TabsTrigger>
-          <TabsTrigger value="notas" className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+          <TabsTrigger
+            value="notas"
+            className="h-9 w-full rounded-lg px-3 text-xs sm:text-sm text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white"
+          >
             Notas
           </TabsTrigger>
         </TabsList>
@@ -2802,15 +2816,17 @@ export function CloseSaleForm({
           <TabsContent value="notas" className="m-0">
             <Card className="p-5 border-slate-200 bg-white/95 shadow-sm">
               <div className="grid grid-cols-1 gap-4">
-              <div>
-                <Label>Notas</Label>
-                <Textarea
-                  className={`${inputAccent} min-h-36 resize-y bg-slate-50`}
-                  placeholder="Resumen comercial, acuerdos, objeciones, próximos pasos..."
-                  value={form.notes}
-                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                />
-              </div>
+                <div>
+                  <Label>Notas</Label>
+                  <Textarea
+                    className={`${inputAccent} min-h-36 resize-y bg-slate-50`}
+                    placeholder="Resumen comercial, acuerdos, objeciones, próximos pasos..."
+                    value={form.notes}
+                    onChange={(e) =>
+                      setForm({ ...form, notes: e.target.value })
+                    }
+                  />
+                </div>
               </div>
             </Card>
           </TabsContent>

@@ -1270,11 +1270,17 @@ function Content({ id }: { id: string }) {
                 Lead
               </div>
               <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-                Código: <span className="ml-1 font-medium text-slate-900">{record.codigo || "—"}</span>
+                Código:{" "}
+                <span className="ml-1 font-medium text-slate-900">
+                  {record.codigo || "—"}
+                </span>
               </div>
               {record.record_id ? (
                 <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-                  Record: <span className="ml-1 font-medium text-slate-900">{record.record_entity || "—"} #{record.record_id}</span>
+                  Record:{" "}
+                  <span className="ml-1 font-medium text-slate-900">
+                    {record.record_entity || "—"} #{record.record_id}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -1287,7 +1293,11 @@ function Content({ id }: { id: string }) {
               size="icon"
               className="h-10 w-10 rounded-lg text-slate-600 hover:bg-white hover:text-slate-900"
             >
-              <Link href="/admin/crm" aria-label="Volver al CRM" title="Volver al CRM">
+              <Link
+                href="/admin/crm"
+                aria-label="Volver al CRM"
+                title="Volver al CRM"
+              >
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
@@ -1295,7 +1305,9 @@ function Content({ id }: { id: string }) {
               onClick={handleSaveChanges}
               disabled={snapshotSaving}
               size="icon"
-              aria-label={snapshotSaving ? "Guardando cambios" : "Guardar cambios"}
+              aria-label={
+                snapshotSaving ? "Guardando cambios" : "Guardar cambios"
+              }
               title={snapshotSaving ? "Guardando cambios" : "Guardar cambios"}
               className="h-10 w-10 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
             >

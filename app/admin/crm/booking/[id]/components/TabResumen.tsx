@@ -524,7 +524,8 @@ export function TabResumen({
                   value={lastTemplateSent || "__empty__"}
                   onValueChange={(next) =>
                     applyRecordPatch({
-                      last_template_sent_name: next === "__empty__" ? null : next,
+                      last_template_sent_name:
+                        next === "__empty__" ? null : next,
                     })
                   }
                   options={TEMPLATE_OPTIONS}
@@ -534,7 +535,8 @@ export function TabResumen({
                   value={lastResourceSent || "__empty__"}
                   onValueChange={(next) =>
                     applyRecordPatch({
-                      last_resource_sent_name: next === "__empty__" ? null : next,
+                      last_resource_sent_name:
+                        next === "__empty__" ? null : next,
                     })
                   }
                   options={RESOURCE_OPTIONS}
