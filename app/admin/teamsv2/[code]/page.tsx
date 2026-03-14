@@ -2989,6 +2989,7 @@ function CoachStudentsInline({
   const [stageFilter, setStageFilter] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
   const [etapaOptions, setEtapaOptions] = useState<OpcionItem[]>([]);
+  const [reloadBump, setReloadBump] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -3064,7 +3065,7 @@ function CoachStudentsInline({
       }
     })();
     return () => ctrl.abort();
-  }, [coachCode]);
+  }, [coachCode, reloadBump]);
 
   // Progreso simulado durante carga
   useEffect(() => {
@@ -3206,8 +3207,10 @@ function CoachStudentsInline({
         <CoachStudentsTable
           rows={filteredRows}
           title="ALUMNOS"
+          coachCode={coachCode}
           stageOptions={etapaOptions.length ? etapaOptions : stagesOptions}
           onPatchRow={(code, patch) => patchItemByCode(code, patch)}
+          onTransferDone={() => setReloadBump((n) => n + 1)}
           onOffer={(row: any) => {
             const code = String(row.code || "").trim();
             if (!code) return;

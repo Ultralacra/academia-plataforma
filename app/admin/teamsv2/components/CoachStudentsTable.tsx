@@ -1,10 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronsUpDown, Eye, Pencil } from "lucide-react";
+import {
+  ArrowRightLeft,
+  Check,
+  CheckCircle2,
+  ChevronsUpDown,
+  Eye,
+  Loader2,
+  Pencil,
+  XCircle,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -16,6 +26,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -26,10 +37,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/api-config";
 
-import { updateClientEtapa, updateClientIngreso } from "../api";
+import {
+  assignCoachToStudent,
+  getStudentCoaches,
+  removeCoachFromStudent,
+  updateClientEtapa,
+  updateClientIngreso,
+} from "../api";
 
 type Row = {
   id: number | string;
@@ -155,20 +174,68 @@ function badgeForStage(value?: string | null) {
   } as const;
 }
 
+type CoachCandidate = {
+  key: string;
+  name: string;
+  teamCode: string;
+  puesto?: string | null;
+  area?: string | null;
+};
+
+type TransferStatus = "pending" | "running" | "success" | "error";
+type TransferAction = "replaced" | "assigned" | "unchanged";
+
+type TransferItem = {
+  code: string;
+  name: string;
+  status: TransferStatus;
+  error?: string;
+  action?: TransferAction;
+  detail?: string;
+};
+
+function transferActionBadge(action?: TransferAction) {
+  if (action === "replaced") {
+    return {
+      label: "Sustituido",
+      className: "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-200",
+    } as const;
+  }
+  if (action === "assigned") {
+    return {
+      label: "Asignado",
+      className:
+        "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200",
+    } as const;
+  }
+  if (action === "unchanged") {
+    return {
+      label: "Sin cambios",
+      className:
+        "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-200",
+    } as const;
+  }
+  return null;
+}
+
 export default function CoachStudentsTable({
   rows,
   title = "ALUMNOS DEL COACH",
+  coachCode,
   onOffer,
   onView,
   stageOptions,
   onPatchRow,
+  onTransferDone,
 }: {
   rows: Row[];
   title?: string;
+  coachCode?: string;
   onOffer?: (row: Row) => void;
   onView?: (row: Row) => void;
   stageOptions?: StageOptionLike[];
   onPatchRow?: (code: string, patch: Partial<Row>) => void;
+  onTransferDone?: () => void;
 }) {
   const { toast } = useToast();
   const fmt = useMemo(() => new Intl.DateTimeFormat("es-ES"), []);
@@ -286,6 +353,7 @@ export default function CoachStudentsTable({
     }
   };
 
+  // ─── Paginación ───
   const [page, setPage] = useState(1);
   const pageSize = 25;
   const total = data.length;
@@ -295,18 +363,267 @@ export default function CoachStudentsTable({
   const end = start + pageSize;
   const pageRows = data.slice(start, end);
 
+  // ─── Selección múltiple ───
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleSelect = (code: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
+  const allOnPageSelected = useMemo(() => {
+    const pageCodes = pageRows
+      .map((r) => (r.code ?? "").trim())
+      .filter(Boolean);
+    return pageCodes.length > 0 && pageCodes.every((c) => selected.has(c));
+  }, [pageRows, selected]);
+  const togglePageAll = () => {
+    const pageCodes = pageRows
+      .map((r) => (r.code ?? "").trim())
+      .filter(Boolean);
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allOnPageSelected) {
+        pageCodes.forEach((c) => next.delete(c));
+      } else {
+        pageCodes.forEach((c) => next.add(c));
+      }
+      return next;
+    });
+  };
+
+  // ─── Diálogo de sustitución ───
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [coachCandidates, setCoachCandidates] = useState<CoachCandidate[]>([]);
+  const [coachCandidatesLoading, setCoachCandidatesLoading] = useState(false);
+  const [coachQuery, setCoachQuery] = useState("");
+  const [targetCoach, setTargetCoach] = useState<CoachCandidate | null>(null);
+
+  // ─── Progreso de sustitución ───
+  const [transferring, setTransferring] = useState(false);
+  const [transferItems, setTransferItems] = useState<TransferItem[]>([]);
+  const [transferDone, setTransferDone] = useState(false);
+
+  // Cargar coaches cuando se abre el diálogo
+  useEffect(() => {
+    if (!transferOpen) return;
+    let alive = true;
+    (async () => {
+      setCoachCandidatesLoading(true);
+      try {
+        const j = await apiFetch<any>("/team/get/team?page=1&pageSize=50");
+        const rows = Array.isArray(j?.data) ? j.data : [];
+        if (!alive) return;
+        setCoachCandidates(
+          rows
+            .map((t: any, idx: number) => {
+              const name = t.nombre ?? t.name ?? "";
+              const teamCode = t.codigo ?? (t.id != null ? String(t.id) : "");
+              const key = String(teamCode || `${name}-${idx}`);
+              return {
+                key,
+                name,
+                teamCode,
+                puesto: t.puesto ?? null,
+                area: t.area ?? null,
+              };
+            })
+            .filter((c: CoachCandidate) => c.teamCode !== (coachCode ?? "")),
+        );
+      } catch {
+        if (alive) setCoachCandidates([]);
+      } finally {
+        if (alive) setCoachCandidatesLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [transferOpen, coachCode]);
+
+  const filteredCoaches = useMemo(() => {
+    const q = coachQuery.trim().toLowerCase();
+    if (!q) return coachCandidates;
+    return coachCandidates.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.teamCode.toLowerCase().includes(q),
+    );
+  }, [coachCandidates, coachQuery]);
+
+  const transferSummary = useMemo(() => {
+    return {
+      replaced: transferItems.filter((item) => item.action === "replaced")
+        .length,
+      assigned: transferItems.filter((item) => item.action === "assigned")
+        .length,
+      unchanged: transferItems.filter((item) => item.action === "unchanged")
+        .length,
+      errors: transferItems.filter((item) => item.status === "error").length,
+    };
+  }, [transferItems]);
+
+  const openTransferDialog = () => {
+    setTargetCoach(null);
+    setCoachQuery("");
+    setTransferring(false);
+    setTransferDone(false);
+    setTransferItems([]);
+    setTransferOpen(true);
+  };
+
+  const executeTransfer = async () => {
+    if (!targetCoach || !coachCode) return;
+    const selectedStudents = data.filter(
+      (r) => r.code && selected.has(r.code.trim()),
+    );
+    if (selectedStudents.length === 0) return;
+
+    const items: TransferItem[] = selectedStudents.map((s) => ({
+      code: (s.code ?? "").trim(),
+      name: s.name || s.code || "—",
+      status: "pending" as const,
+    }));
+    setTransferItems(items);
+    setTransferring(true);
+    setTransferDone(false);
+
+    for (let i = 0; i < items.length; i++) {
+      setTransferItems((prev) =>
+        prev.map((it, idx) => (idx === i ? { ...it, status: "running" } : it)),
+      );
+      try {
+        const currentCoaches = await getStudentCoaches(items[i].code);
+        // Verifica si YA tiene asignado el coach destino (independientemente del área)
+        const alreadyAssigned = currentCoaches.some(
+          (c) => String(c.coachCode) === String(targetCoach.teamCode),
+        );
+        if (alreadyAssigned) {
+          setTransferItems((prev) =>
+            prev.map((it, idx) =>
+              idx === i
+                ? {
+                    ...it,
+                    status: "success",
+                    action: "unchanged",
+                    detail: "Ya lo tiene asignado",
+                  }
+                : it,
+            ),
+          );
+          continue;
+        }
+
+        const targetArea = String(targetCoach.area ?? "")
+          .trim()
+          .toLowerCase();
+        const sameAreaCoach = currentCoaches.find((c) => {
+          const area = String(c.area ?? "")
+            .trim()
+            .toLowerCase();
+          if (!targetArea) return false;
+          return area === targetArea;
+        });
+
+        let detail = "";
+        let action: TransferAction = "assigned";
+        if (sameAreaCoach?.coachCode) {
+          await removeCoachFromStudent(items[i].code, sameAreaCoach.coachCode);
+          await assignCoachToStudent(items[i].code, targetCoach.teamCode);
+          detail = "Coach de área sustituido";
+          action = "replaced";
+        } else {
+          await assignCoachToStudent(items[i].code, targetCoach.teamCode);
+          detail = "No tenía coach del área, se asignó";
+          action = "assigned";
+        }
+
+        setTransferItems((prev) =>
+          prev.map((it, idx) =>
+            idx === i ? { ...it, status: "success", action, detail } : it,
+          ),
+        );
+      } catch (e: any) {
+        setTransferItems((prev) =>
+          prev.map((it, idx) =>
+            idx === i
+              ? {
+                  ...it,
+                  status: "error",
+                  error: e?.message ?? "Error desconocido",
+                }
+              : it,
+          ),
+        );
+      }
+    }
+
+    setTransferring(false);
+    setTransferDone(true);
+  };
+
+  const closeTransferAndCleanup = () => {
+    const successCodes = transferItems
+      .filter((it) => it.status === "success")
+      .map((it) => it.code);
+    if (successCodes.length > 0) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        successCodes.forEach((c) => next.delete(c));
+        return next;
+      });
+      onTransferDone?.();
+    }
+    setTransferOpen(false);
+    setTransferring(false);
+    setTransferDone(false);
+    setTransferItems([]);
+    setTargetCoach(null);
+  };
+
+  const colCount = (() => {
+    let cols = 8; // checkbox + 7 base cols
+    if (onView) cols += 1;
+    if (onOffer) cols += 1;
+    return cols;
+  })();
+
   return (
     <div className="rounded-2xl border border-border bg-card text-card-foreground overflow-hidden">
-      <div className="border-b border-border/60 px-5 py-4">
-        <h3 className="text-base font-bold text-foreground">{title}</h3>
-        <p className="text-sm text-muted-foreground">
-          Listado compacto · {total.toLocaleString("es-ES")} alumnos
-        </p>
+      <div className="border-b border-border/60 px-5 py-4 flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold text-foreground">{title}</h3>
+          <p className="text-sm text-muted-foreground">
+            Listado compacto · {total.toLocaleString("es-ES")} alumnos
+          </p>
+        </div>
+        {selected.size > 0 && coachCode && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-500/40 dark:text-blue-300 dark:hover:bg-blue-500/10"
+            onClick={openTransferDialog}
+          >
+            <ArrowRightLeft className="h-4 w-4" />
+            Sustituir ({selected.size})
+          </Button>
+        )}
       </div>
       <div className="overflow-x-auto pb-4">
         <table className="min-w-full text-sm">
           <thead>
             <tr className="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
+              {coachCode && (
+                <th className="px-3 py-2 text-center w-10">
+                  <Checkbox
+                    checked={allOnPageSelected}
+                    onCheckedChange={togglePageAll}
+                    aria-label="Seleccionar todos en esta página"
+                  />
+                </th>
+              )}
               <th className="px-3 py-2 text-left">Alumno</th>
               <th className="px-3 py-2 text-left">Estado</th>
               <th className="px-3 py-2 text-left">Fase</th>
@@ -322,12 +639,7 @@ export default function CoachStudentsTable({
             {pageRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={(() => {
-                    let cols = 7;
-                    if (onView) cols += 1;
-                    if (onOffer) cols += 1;
-                    return cols;
-                  })()}
+                  colSpan={colCount}
                   className="px-3 py-4 text-sm text-muted-foreground text-center"
                 >
                   Sin alumnos
@@ -340,8 +652,24 @@ export default function CoachStudentsTable({
                 return (
                   <tr
                     key={`${r.id}`}
-                    className="border-t border-border/60 hover:bg-muted/40"
+                    className={cn(
+                      "border-t border-border/60 hover:bg-muted/40",
+                      r.code &&
+                        selected.has(r.code.trim()) &&
+                        "bg-blue-50/60 dark:bg-blue-500/5",
+                    )}
                   >
+                    {coachCode && (
+                      <td className="px-3 py-2 text-center">
+                        {r.code?.trim() ? (
+                          <Checkbox
+                            checked={selected.has(r.code.trim())}
+                            onCheckedChange={() => toggleSelect(r.code!.trim())}
+                            aria-label={`Seleccionar ${r.name}`}
+                          />
+                        ) : null}
+                      </td>
+                    )}
                     <td className="px-3 py-2 text-foreground truncate">
                       {r.code ? (
                         <Link
@@ -604,6 +932,259 @@ export default function CoachStudentsTable({
               {savingIngreso ? "Guardando…" : "Guardar"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Diálogo de sustitución masiva ── */}
+      <Dialog
+        open={transferOpen}
+        onOpenChange={(o) => {
+          if (transferring) return; // no cerrar mientras se ejecuta
+          if (!o) closeTransferAndCleanup();
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-5 w-5 text-blue-600" />
+              Sustituir coach por área
+            </DialogTitle>
+            <DialogDescription>
+              {transferDone
+                ? "Resultado de la sustitución"
+                : `${selected.size} alumno(s) seleccionado(s). Se reemplaza el coach del área por el coach destino; si no existe coach de esa área, se asigna.`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!transferring && !transferDone ? (
+            <>
+              {/* Selector de coach destino */}
+              <div className="space-y-3 py-2">
+                <label className="text-sm font-medium">Coach destino</label>
+                {coachCandidatesLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Cargando coaches…
+                  </div>
+                ) : (
+                  <>
+                    <Input
+                      placeholder="Buscar coach…"
+                      value={coachQuery}
+                      onChange={(e) => setCoachQuery(e.target.value)}
+                    />
+                    <ScrollArea className="h-52 rounded-md border">
+                      <div className="p-1">
+                        {filteredCoaches.length === 0 ? (
+                          <div className="px-3 py-4 text-center text-sm text-muted-foreground">
+                            Sin resultados
+                          </div>
+                        ) : (
+                          filteredCoaches.map((c) => {
+                            const isSelected =
+                              targetCoach?.teamCode === c.teamCode;
+                            return (
+                              <button
+                                key={c.key}
+                                type="button"
+                                onClick={() => setTargetCoach(c)}
+                                className={cn(
+                                  "flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm transition-colors",
+                                  isSelected
+                                    ? "bg-blue-50 dark:bg-blue-500/10 ring-1 ring-blue-300 dark:ring-blue-500/40"
+                                    : "hover:bg-muted/60",
+                                )}
+                              >
+                                <div className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-500/20 dark:to-indigo-500/20 text-xs font-semibold text-blue-700 dark:text-blue-300 ring-1 ring-blue-200 dark:ring-blue-500/40">
+                                  {(c.name ?? "?")[0]?.toUpperCase()}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate font-medium">
+                                    {c.name}
+                                  </div>
+                                  {(c.puesto || c.area) && (
+                                    <div className="truncate text-xs text-muted-foreground">
+                                      {[c.puesto, c.area]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </div>
+                                  )}
+                                </div>
+                                {isSelected && (
+                                  <Check className="h-4 w-4 text-blue-600 flex-none" />
+                                )}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="secondary"
+                  onClick={() => setTransferOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={!targetCoach}
+                  onClick={executeTransfer}
+                  className="gap-2"
+                >
+                  <ArrowRightLeft className="h-4 w-4" />
+                  Sustituir {selected.size} alumno(s)
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            /* Progreso / Resultado */
+            <>
+              <ScrollArea className="h-64 rounded-md border">
+                <div className="divide-y divide-border">
+                  {transferItems.map((it) => (
+                    <div
+                      key={it.code}
+                      className="flex items-center gap-3 px-4 py-2.5"
+                    >
+                      {it.status === "pending" && (
+                        <div className="h-5 w-5 rounded-full border-2 border-muted-foreground/30 flex-none" />
+                      )}
+                      {it.status === "running" && (
+                        <Loader2 className="h-5 w-5 animate-spin text-blue-600 flex-none" />
+                      )}
+                      {it.status === "success" && (
+                        <CheckCircle2 className="h-5 w-5 text-emerald-600 flex-none" />
+                      )}
+                      {it.status === "error" && (
+                        <XCircle className="h-5 w-5 text-red-500 flex-none" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div
+                          className={cn(
+                            "truncate text-sm",
+                            it.status === "success" &&
+                              "text-emerald-700 dark:text-emerald-400",
+                            it.status === "error" &&
+                              "text-red-600 dark:text-red-400",
+                          )}
+                        >
+                          {it.name}
+                        </div>
+                        {it.status === "success" &&
+                          it.action &&
+                          (() => {
+                            const badge = transferActionBadge(it.action);
+                            if (!badge) return null;
+                            return (
+                              <div className="mt-1">
+                                <span
+                                  className={cn(
+                                    "inline-flex rounded-md px-2 py-0.5 text-[11px] font-medium",
+                                    badge.className,
+                                  )}
+                                >
+                                  {badge.label}
+                                </span>
+                              </div>
+                            );
+                          })()}
+                        {it.status === "error" && it.error && (
+                          <div className="truncate text-xs text-red-500">
+                            {it.error}
+                          </div>
+                        )}
+                        {it.status === "success" && it.detail && (
+                          <div className="truncate text-xs text-muted-foreground">
+                            {it.detail}
+                          </div>
+                        )}
+                      </div>
+                      {it.status === "success" && (
+                        <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex-none">
+                          OK
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+
+              {transferDone && (
+                <div className="space-y-3 rounded-lg border px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    {transferItems.every((it) => it.status === "success") ? (
+                      <>
+                        <CheckCircle2 className="h-6 w-6 text-emerald-600 flex-none" />
+                        <div>
+                          <div className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                            Sustitución completada
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {transferItems.length} alumno(s) procesado(s) para{" "}
+                            <strong>{targetCoach?.name}</strong>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="h-6 w-6 text-amber-500 flex-none" />
+                        <div>
+                          <div className="text-sm font-medium">
+                            Sustitución parcial
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {
+                              transferItems.filter(
+                                (i) => i.status === "success",
+                              ).length
+                            }{" "}
+                            éxito(s),{" "}
+                            {
+                              transferItems.filter((i) => i.status === "error")
+                                .length
+                            }{" "}
+                            error(es)
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {transferSummary.replaced > 0 && (
+                      <span className="inline-flex rounded-md bg-sky-100 px-2 py-1 text-xs font-medium text-sky-800 dark:bg-sky-500/15 dark:text-sky-200">
+                        Sustituidos: {transferSummary.replaced}
+                      </span>
+                    )}
+                    {transferSummary.assigned > 0 && (
+                      <span className="inline-flex rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-200">
+                        Asignados: {transferSummary.assigned}
+                      </span>
+                    )}
+                    {transferSummary.unchanged > 0 && (
+                      <span className="inline-flex rounded-md bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-200">
+                        Sin cambios: {transferSummary.unchanged}
+                      </span>
+                    )}
+                    {transferSummary.errors > 0 && (
+                      <span className="inline-flex rounded-md bg-rose-100 px-2 py-1 text-xs font-medium text-rose-800 dark:bg-rose-500/15 dark:text-rose-200">
+                        Errores: {transferSummary.errors}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <DialogFooter>
+                {transferDone && (
+                  <Button onClick={closeTransferAndCleanup}>Cerrar</Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

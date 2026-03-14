@@ -31,6 +31,13 @@ export type CoachStudent = {
   created_at?: string;
 };
 
+export type StudentCoachAssignment = {
+  coachCode: string;
+  coachName?: string;
+  area?: string | null;
+  puesto?: string | null;
+};
+
 async function fetchJson<T>(pathOrUrl: string, init?: RequestInit): Promise<T> {
   // Delegamos en apiFetch que ya adjunta el token Bearer automáticamente
   return apiFetch<T>(pathOrUrl, init);
@@ -40,6 +47,44 @@ async function fetchJson<T>(pathOrUrl: string, init?: RequestInit): Promise<T> {
 // Mutaciones de alumno (reutiliza endpoint de /client/update/client/:codigo)
 // Nota: el backend espera FormData para algunas keys (compatibilidad)
 // ======================
+
+/** Desvincular un coach de un alumno */
+export async function removeCoachFromStudent(
+  studentCode: string,
+  coachCode: string,
+): Promise<any> {
+  return apiFetch("/team/associate/team-client", {
+    method: "DELETE",
+    body: JSON.stringify({
+      codigo_cliente: studentCode,
+      codigo_equipo: coachCode,
+    }),
+  });
+}
+
+/** Asignar un coach a un alumno */
+export async function assignCoachToStudent(
+  studentCode: string,
+  coachCode: string,
+): Promise<any> {
+  return apiFetch("/team/associate/team-client", {
+    method: "POST",
+    body: JSON.stringify({
+      codigo_cliente: studentCode,
+      equipos: [coachCode],
+    }),
+  });
+}
+
+/** Transferir un alumno de un coach a otro (desvincular viejo + asignar nuevo) */
+export async function transferStudent(
+  studentCode: string,
+  fromCoachCode: string,
+  toCoachCode: string,
+): Promise<void> {
+  await removeCoachFromStudent(studentCode, fromCoachCode);
+  await assignCoachToStudent(studentCode, toCoachCode);
+}
 
 export async function updateClientEtapa(clientCode: string, etapa: string): Promise<any> {
   if (!clientCode) throw new Error("clientCode requerido");
@@ -134,6 +179,24 @@ export async function getCoachStudents(coachCode: string) {
     updated_at: r.updated_at ?? null,
     created_at: r.created_at ?? null,
   })) as CoachStudent[];
+}
+
+export async function getStudentCoaches(
+  studentCode: string,
+): Promise<StudentCoachAssignment[]> {
+  const url = `/client/get/clients-coaches?alumno=${encodeURIComponent(
+    studentCode,
+  )}`;
+  const json = await fetchJson<any>(url);
+  const rows: any[] = Array.isArray(json?.data) ? json.data : [];
+  return rows
+    .map((r) => ({
+      coachCode: String(r.id_coach ?? r.codigo_equipo ?? "").trim(),
+      coachName: r.coach_nombre ?? r.nombre ?? undefined,
+      area: r.area ?? null,
+      puesto: r.puesto ?? null,
+    }))
+    .filter((r) => r.coachCode);
 }
 
 export async function getCoachCurrentLoad(coachCode: string, pageSize = 100) {

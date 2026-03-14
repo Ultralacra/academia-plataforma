@@ -74,7 +74,7 @@ function chatDebug(): boolean {
 function dbg(...args: any[]) {
   try {
     if (!chatDebug()) return;
-        /* console.log("[Chat]", ...args); */
+    /* console.log("[Chat]", ...args); */
   } catch {}
 }
 
@@ -183,7 +183,7 @@ export default function StudentChatFriendly({
       const isCoachToCoach = !!isCoachToCoachChatRef.current;
 
       // DEBUG: Ver todos los valores
-            /* console.log("[mine] DEBUG:", {
+      /* console.log("[mine] DEBUG:", {
         isCoachToCoach,
         srcParticipantId: m.srcParticipantId,
         myParticipantId: myParticipantIdRef.current,
@@ -200,7 +200,7 @@ export default function StudentChatFriendly({
         if (m.srcParticipantId != null && myParticipantIdRef.current != null) {
           const result =
             String(m.srcParticipantId) === String(myParticipantIdRef.current);
-                    /* console.log("[mine] by srcParticipantId =>", result); */
+          /* console.log("[mine] by srcParticipantId =>", result); */
           return result;
         }
         // Opción 2: Comparar por srcEquipoId (id_equipo del emisor)
@@ -208,16 +208,16 @@ export default function StudentChatFriendly({
         const myEquipoId = String(socketio?.idEquipo ?? "").trim();
         if (msgEquipoId && myEquipoId) {
           const result = msgEquipoId === myEquipoId;
-                    /* console.log("[mine] by srcEquipoId =>", result); */
+          /* console.log("[mine] by srcEquipoId =>", result); */
           return result;
         }
         // Fallback: si no podemos determinar, asumimos que NO es mío
-                /* console.log("[mine] fallback => false"); */
+        /* console.log("[mine] fallback => false"); */
         return false;
       }
       // Fallback normal: comparar sender con role
       const result = (m.sender || "").toLowerCase() === role.toLowerCase();
-            /* console.log("[mine] by sender/role =>", result); */
+      /* console.log("[mine] by sender/role =>", result); */
       return result;
     },
     [role, socketio?.idEquipo],
@@ -281,7 +281,7 @@ export default function StudentChatFriendly({
   // Log selection changes
   React.useEffect(() => {
     if (selectedMessageIds.size > 0 || selectedAttachmentIds.size > 0) {
-            /* console.log(
+      /* console.log(
         JSON.stringify(
           {
             message_ids: Array.from(selectedMessageIds),
@@ -662,7 +662,7 @@ export default function StudentChatFriendly({
       try {
         const mensajes = Array.from(selectedMessageIds);
         const adjuntos = Array.from(selectedAttachmentIds);
-                /* console.log("[Chat] selección para ticket", {
+        /* console.log("[Chat] selección para ticket", {
           mensajes,
           adjuntos,
           vacio: mensajes.length === 0 && adjuntos.length === 0,
@@ -2033,7 +2033,7 @@ export default function StudentChatFriendly({
               !senderIsMeByOutbox &&
               !senderIsMeByRecent
             ) {
-                            /* console.log(
+              /* console.log(
                 "[StudentChatFriendly] Playing sound for incoming message",
               ); */
               playNotificationSound();
@@ -2186,10 +2186,10 @@ export default function StudentChatFriendly({
           } catch {}
         });
 
-                /* console.log("[SOCKET] 🔌 Registrando listener chat.typing"); */
+        /* console.log("[SOCKET] 🔌 Registrando listener chat.typing"); */
         sio.on("chat.typing", (data: any) => {
           try {
-                        /* console.log(
+            /* console.log(
               "[StudentChat TYPING] ✏️ Evento recibido:",
               JSON.stringify(data),
             ); */
@@ -2199,7 +2199,7 @@ export default function StudentChatFriendly({
               chatId != null &&
               String(idChat) !== String(chatId)
             ) {
-                            /* console.log("[StudentChat TYPING] ⏭️ Ignorado: chat diferente", {
+              /* console.log("[StudentChat TYPING] ⏭️ Ignorado: chat diferente", {
                 idChat,
                 chatId,
               }); */
@@ -2209,7 +2209,7 @@ export default function StudentChatFriendly({
               data?.client_session &&
               String(data.client_session) === String(clientSessionRef.current)
             ) {
-                            /* console.log(
+              /* console.log(
                 "[StudentChat TYPING] ⏭️ Ignorado: misma sesión cliente",
               ); */
               return;
@@ -2245,14 +2245,14 @@ export default function StudentChatFriendly({
 
             // Si es mi propio código, ignorar inmediatamente
             if (isMyOwnCode) {
-                            /* console.log(
+              /* console.log(
                 "[StudentChat TYPING] ⏭️ Ignorado: soy yo (mismo myUserCode)",
                 { myUserCode, userIdFromPayload },
               ); */
               return;
             }
 
-                        /* console.log("[StudentChat TYPING] 🔍 Detección:", {
+            /* console.log("[StudentChat TYPING] 🔍 Detección:", {
               emitter,
               myPidNow2,
               userFromPayload: userFromPayload
@@ -2274,7 +2274,7 @@ export default function StudentChatFriendly({
               myPidNow2 != null &&
               String(emitter) === String(myPidNow2)
             ) {
-                            /* console.log(
+              /* console.log(
                 "[StudentChat TYPING] ⏭️ Ignorado: soy yo el emisor",
                 { emitter, myPidNow2 },
               ); */
@@ -2292,7 +2292,7 @@ export default function StudentChatFriendly({
               hasClientDiff || isOtherByEmitter || isOtherByUser;
 
             if (!isDefinitelyOther) {
-                            /* console.log(
+              /* console.log(
                 "[StudentChat TYPING] ⏭️ Ignorado: no es otro usuario",
                 {
                   hasClientDiff,
@@ -2304,7 +2304,7 @@ export default function StudentChatFriendly({
             }
             const isOn = data?.typing === true || data?.on === true;
             const isOff = data?.typing === false || data?.on === false;
-                        /* console.log("[StudentChat TYPING] ✅ Procesando typing:", {
+            /* console.log("[StudentChat TYPING] ✅ Procesando typing:", {
               isOn,
               isOff,
               emitter,
@@ -2312,11 +2312,11 @@ export default function StudentChatFriendly({
               isOtherByUser,
             }); */
             if (isOff) {
-                            /* console.log("[StudentChat TYPING] ⬇️ Ocultando indicador"); */
+              /* console.log("[StudentChat TYPING] ⬇️ Ocultando indicador"); */
               return setOtherTyping(false);
             }
             if (!isOn) return;
-                        /* console.log(
+            /* console.log(
               "[StudentChat TYPING] ⬆️ Mostrando indicador 'escribiendo...'",
             ); */
             setOtherTyping(true);
@@ -2501,18 +2501,18 @@ export default function StudentChatFriendly({
               clientes === 0 && equipos >= 2 && arr.length <= 3;
 
             // DEBUG: Imprimir tipo de chat detectado
-                        /* console.log("========== TIPO DE CHAT DETECTADO =========="); */
-                        /* console.log("Participantes:", arr); */
-                        /* console.log("Tipos normalizados:", tipos); */
-                        /* console.log("Clientes:", clientes, "Equipos:", equipos); */
-                        /* console.log("isCoachToCoach:", isCoachToCoachChatRef.current); */
-                        /* console.log(
+            /* console.log("========== TIPO DE CHAT DETECTADO =========="); */
+            /* console.log("Participantes:", arr); */
+            /* console.log("Tipos normalizados:", tipos); */
+            /* console.log("Clientes:", clientes, "Equipos:", equipos); */
+            /* console.log("isCoachToCoach:", isCoachToCoachChatRef.current); */
+            /* console.log(
               "isTwoPartyAlumnoCoach:",
               isTwoPartyAlumnoCoachRef.current,
             ); */
-                        /* console.log("myParticipantId:", myParticipantIdRef.current); */
-                        /* console.log("socketio.idEquipo:", socketio?.idEquipo); */
-                        /* console.log("=============================================="); */
+            /* console.log("myParticipantId:", myParticipantIdRef.current); */
+            /* console.log("socketio.idEquipo:", socketio?.idEquipo); */
+            /* console.log("=============================================="); */
           } catch {}
           if (
             !myParticipantIdRef.current &&
@@ -2638,7 +2638,7 @@ export default function StudentChatFriendly({
             // Log completo solicitado: imprimir todos los mensajes de la conversación al hacer JOIN
             try {
               // console.log("[Chat] JOIN full messages", mapped);
-                            /* console.log(
+              /* console.log(
                 "[Chat] JOIN messages IDs & Attachments",
                 mapped.map((m) => ({
                   id: m.id,
@@ -2672,8 +2672,8 @@ export default function StudentChatFriendly({
                   }))
                 : [],
             }));
-                        /* console.log("[Alumno] Conversación activa", conversationInfo); */
-                        /* console.log("[Alumno] Mensajes (array)", messagesArray); */
+            /* console.log("[Alumno] Conversación activa", conversationInfo); */
+            /* console.log("[Alumno] Mensajes (array)", messagesArray); */
           } catch {}
 
           {
@@ -2807,7 +2807,7 @@ export default function StudentChatFriendly({
                 : meLabel === "equipo"
                   ? nameOf("equipo", meId)
                   : String(meId ?? "");
-                        /* console.log(
+            /* console.log(
               "[Chat] comversaciones del usuario —",
               meLabel + ":",
               meName,
@@ -2815,18 +2815,20 @@ export default function StudentChatFriendly({
               baseArr.length,
               ")",
             ); */
-            baseArr.forEach((it: any) => (/* console.log(" -", toLine(it)) */ void 0));
+            baseArr.forEach(
+              (it: any) => /* console.log(" -", toLine(it)) */ void 0,
+            );
           } catch {}
           if (ack && ack.success === false) return;
           const list = Array.isArray(ack?.data) ? ack.data : [];
           const baseList: any[] = Array.isArray(list) ? list : [];
 
           // DEBUG: Log completo de la lista de conversaciones recibida
-                    /* console.log(
+          /* console.log(
             "[Chat] Lista de conversaciones COMPLETA del WebSocket:",
             JSON.stringify(baseList, null, 2),
           ); */
-                    /* console.log(
+          /* console.log(
             "[Chat] Lista de conversaciones (resumen):",
             baseList.map((it: any) => ({
               id: it?.id_chat ?? it?.id,
@@ -2867,14 +2869,16 @@ export default function StudentChatFriendly({
                   ", ",
                 )}] | clientes=[${clientes.join(", ")}]`;
               };
-                            /* console.log(
+              /* console.log(
                 "[Chat] comversaciones del usuario — equipo:",
                 String(socketio?.idEquipo ?? ""),
                 "(enriquecido, total:",
                 baseList.length,
                 ")",
               ); */
-              baseList.forEach((it: any) => (/* console.log(" -", toLine2(it)) */ void 0));
+              baseList.forEach(
+                (it: any) => /* console.log(" -", toLine2(it)) */ void 0,
+              );
               const sample = baseList.length > 0 ? baseList[0] : null;
               const sampleObj = sample
                 ? {
@@ -2894,7 +2898,7 @@ export default function StudentChatFriendly({
                       : 0,
                   }
                 : null;
-                            /* console.log(
+              /* console.log(
                 "[Chat] resumen listado",
                 JSON.stringify(
                   { count: baseList.length, sample: sampleObj },
@@ -2973,14 +2977,16 @@ export default function StudentChatFriendly({
                 ", ",
               )}] | clientes=[${clientes.join(", ")}]`;
             };
-                        /* console.log(
+            /* console.log(
               "[Chat] comversaciones del usuario — equipo:",
               String(socketio?.idEquipo ?? ""),
               "(enriquecido, total:",
               merged.length,
               ")",
             ); */
-            merged.forEach((it: any) => (/* console.log(" -", toLine3(it)) */ void 0));
+            merged.forEach(
+              (it: any) => /* console.log(" -", toLine3(it)) */ void 0,
+            );
             const sample = merged.length > 0 ? merged[0] : null;
             const sampleObj = sample
               ? {
@@ -3000,7 +3006,7 @@ export default function StudentChatFriendly({
                     : 0,
                 }
               : null;
-                        /* console.log(
+            /* console.log(
               "[Chat] resumen listado",
               JSON.stringify(
                 { count: merged.length, sample: sampleObj },
@@ -3092,11 +3098,11 @@ export default function StudentChatFriendly({
           const list = Array.isArray(ack?.data) ? ack.data : [];
 
           // DEBUG: Log completo de conversaciones del WebSocket
-                    /* console.log(
+          /* console.log(
             "[Chat] 📋 LISTA COMPLETA DE CONVERSACIONES:",
             JSON.stringify(list, null, 2),
           ); */
-                    /* console.log(
+          /* console.log(
             "[Chat] 📋 Resumen de conversaciones:",
             list.map((it: any) => ({
               id: it?.id_chat ?? it?.id,
@@ -3132,14 +3138,16 @@ export default function StudentChatFriendly({
                 ", ",
               )}] | clientes=[${clientes.join(", ")}]`;
             };
-                        /* console.log(
+            /* console.log(
               "[Chat] comversaciones del usuario — equipo:",
               String(socketio?.idEquipo ?? ""),
               "(total:",
               list.length,
               ")",
             ); */
-            (list || []).forEach((it: any) => (/* console.log(" -", toLine(it)) */ void 0));
+            (list || []).forEach(
+              (it: any) => /* console.log(" -", toLine(it)) */ void 0,
+            );
           } catch {}
           onChatsList?.(list);
           if (!chatListsEqual(convListRef.current, list)) {
@@ -3238,46 +3246,46 @@ export default function StudentChatFriendly({
               }))
               .filter((x) => x.codigo);
 
-                        /* console.log(
+            /* console.log(
               "═══════════════════════════════════════════════════════",
             ); */
-                        /* console.log("🔍 [CHAT ALUMNO] RESOLUCIÓN DE EQUIPO ASIGNADO"); */
-                        /* console.log(
+            /* console.log("🔍 [CHAT ALUMNO] RESOLUCIÓN DE EQUIPO ASIGNADO"); */
+            /* console.log(
               "═══════════════════════════════════════════════════════",
             ); */
-                        /* console.log(`📋 Alumno: ${alumnoCode}`); */
-                        /* console.log(
+            /* console.log(`📋 Alumno: ${alumnoCode}`); */
+            /* console.log(
               `📊 Total coaches asignados encontrados: ${assigned.length}`,
             ); */
-                        /* console.log(""); */
-                        /* console.log("👥 COACHES ASIGNADOS:"); */
+            /* console.log(""); */
+            /* console.log("👥 COACHES ASIGNADOS:"); */
             assigned.forEach((c, idx) => {
               const esAC = isAC(c.area);
-                            /* console.log(
+              /* console.log(
                 `  ${idx + 1}. ${esAC ? "✅" : "❌"} Código: ${c.codigo}`,
               ); */
-                            /* console.log(`     Nombre: ${c.nombre || "N/A"}`); */
-                            /* console.log(`     Área: ${c.area || "N/A"}`); */
-                            /* console.log(`     Puesto: ${c.puesto || "N/A"}`); */
-                            /* console.log(
+              /* console.log(`     Nombre: ${c.nombre || "N/A"}`); */
+              /* console.log(`     Área: ${c.area || "N/A"}`); */
+              /* console.log(`     Puesto: ${c.puesto || "N/A"}`); */
+              /* console.log(
                 `     ${
                   esAC
                     ? "👉 ES ATENCIÓN AL CLIENTE"
                     : "No es Atención al Cliente"
                 }`,
               ); */
-                            /* console.log(""); */
+              /* console.log(""); */
             });
 
             const preferred = assigned.find((x) => isAC(x.area)) || assigned[0];
 
-                        /* console.log("🎯 COACH SELECCIONADO:"); */
+            /* console.log("🎯 COACH SELECCIONADO:"); */
             if (preferred) {
-                            /* console.log(`  ✅ Código: ${preferred.codigo}`); */
-                            /* console.log(`     Nombre: ${preferred.nombre || "N/A"}`); */
-                            /* console.log(`     Área: ${preferred.area || "N/A"}`); */
-                            /* console.log(`     Puesto: ${preferred.puesto || "N/A"}`); */
-                            /* console.log(
+              /* console.log(`  ✅ Código: ${preferred.codigo}`); */
+              /* console.log(`     Nombre: ${preferred.nombre || "N/A"}`); */
+              /* console.log(`     Área: ${preferred.area || "N/A"}`); */
+              /* console.log(`     Puesto: ${preferred.puesto || "N/A"}`); */
+              /* console.log(
                 `     Criterio: ${
                   isAC(preferred.area)
                     ? "Prioridad Atención al Cliente"
@@ -3285,9 +3293,9 @@ export default function StudentChatFriendly({
                 }`,
               ); */
             } else {
-                            /* console.log("  ❌ NO SE ENCONTRÓ NINGÚN COACH ASIGNADO"); */
+              /* console.log("  ❌ NO SE ENCONTRÓ NINGÚN COACH ASIGNADO"); */
             }
-                        /* console.log(
+            /* console.log(
               "═══════════════════════════════════════════════════════",
             ); */
 
@@ -3430,17 +3438,17 @@ export default function StudentChatFriendly({
                       clientes >= 1 && equipos >= 1 && arr.length <= 3;
                     isCoachToCoachChatRef.current =
                       clientes === 0 && equipos >= 2 && arr.length <= 3;
-                                        /* console.log(
+                    /* console.log(
                       "===== ensureChatReadyForSend: TIPO DE CHAT =====",
                     ); */
-                                        /* console.log(
+                    /* console.log(
                       "isCoachToCoach:",
                       isCoachToCoachChatRef.current,
                     ); */
-                                        /* console.log("myParticipantId:", myParticipantIdRef.current); */
-                                        /* console.log("socketio.idEquipo:", socketio?.idEquipo); */
-                                        /* console.log("participantes:", arr); */
-                                        /* console.log(
+                    /* console.log("myParticipantId:", myParticipantIdRef.current); */
+                    /* console.log("socketio.idEquipo:", socketio?.idEquipo); */
+                    /* console.log("participantes:", arr); */
+                    /* console.log(
                       "================================================",
                     ); */
                   } catch {}
@@ -3536,10 +3544,10 @@ export default function StudentChatFriendly({
                     clientes >= 1 && equipos >= 1 && arr.length <= 3;
                   isCoachToCoachChatRef.current =
                     clientes === 0 && equipos >= 2 && arr.length <= 3;
-                                    /* console.log("===== CREATE+JOIN: TIPO DE CHAT ====="); */
-                                    /* console.log("isCoachToCoach:", isCoachToCoachChatRef.current); */
-                                    /* console.log("myParticipantId:", myParticipantIdRef.current); */
-                                    /* console.log(
+                  /* console.log("===== CREATE+JOIN: TIPO DE CHAT ====="); */
+                  /* console.log("isCoachToCoach:", isCoachToCoachChatRef.current); */
+                  /* console.log("myParticipantId:", myParticipantIdRef.current); */
+                  /* console.log(
                     "================================================",
                   ); */
                 } catch {}
@@ -3575,7 +3583,7 @@ export default function StudentChatFriendly({
         it?.otros_participantes || it?.participants || it?.participantes || [];
 
       // DEBUG: Log cada item de la lista
-            /* console.log("[ChatListItem] Rendering item:", {
+      /* console.log("[ChatListItem] Rendering item:", {
         id,
         otros_participantes: it?.otros_participantes,
         participants: it?.participants,
@@ -3618,7 +3626,7 @@ export default function StudentChatFriendly({
             ? equipos.join(", ")
             : clientes.join(", ");
 
-            /* console.log("[ChatListItem] Title resolved:", {
+      /* console.log("[ChatListItem] Title resolved:", {
         id,
         title,
         directNames,
@@ -4080,23 +4088,23 @@ export default function StudentChatFriendly({
       if (myParticipantId != null)
         payload.id_chat_participante_emisor = myParticipantId;
       payload.client_session = clientSessionRef.current;
-            /* console.log("[TYPING] 📤 Emitiendo typing:", on, payload); */
+      /* console.log("[TYPING] 📤 Emitiendo typing:", on, payload); */
       sio.emit("chat.typing", payload);
     } catch {}
   }
 
   const notifyTyping = (on: boolean) => {
-        /* console.log("[NOTIFY_TYPING] Llamado con on=", on); */
+    /* console.log("[NOTIFY_TYPING] Llamado con on=", on); */
     try {
       const state = typingRef.current;
-            /* console.log(
+      /* console.log(
         "[NOTIFY_TYPING] Estado actual:",
         state.on,
         "timer:",
         !!state.timer,
       ); */
       if (on && !state.on) {
-                /* console.log("[NOTIFY_TYPING] ✅ Disparando emitTyping(true)"); */
+        /* console.log("[NOTIFY_TYPING] ✅ Disparando emitTyping(true)"); */
         emitTyping(true);
         state.on = true;
       }
@@ -5387,12 +5395,12 @@ export default function StudentChatFriendly({
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
-                                    /* console.log(
+                  /* console.log(
                     "[TEXTAREA] ✍️ onChange - texto:",
                     e.target.value.substring(0, 20),
                   ); */
                   if (e.target.value.trim()) {
-                                        /* console.log("[TEXTAREA] 📞 Llamando notifyTyping(true)"); */
+                    /* console.log("[TEXTAREA] 📞 Llamando notifyTyping(true)"); */
                     notifyTyping(true);
                   }
                   e.target.style.height = "auto";
