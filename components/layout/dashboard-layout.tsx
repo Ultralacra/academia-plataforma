@@ -1123,10 +1123,12 @@ export function DashboardLayout({
                   variant="ghost"
                   className="h-9 w-9 rounded-xl hover:bg-muted/60"
                 />
+                {/*
                 <PaymentsDueBadge />
                 <AccessDueBadge />
                 <TasksNotificationsBadge />
                 <NotificationsBadge />
+                */}
               </div>
 
               {/* Separator */}
