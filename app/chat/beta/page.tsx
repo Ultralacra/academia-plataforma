@@ -1479,7 +1479,9 @@ export default function AdminChatPage() {
                           className="w-full pl-9 pr-9 py-2 rounded-lg border-0 bg-[#f0f2f5] text-sm text-gray-800 placeholder:text-gray-500 focus:outline-none focus:bg-white focus:shadow-sm transition-all"
                           placeholder="Buscar conversación por nombre..."
                           value={conversationSearchText}
-                          onChange={(e) => setConversationSearchText(e.target.value)}
+                          onChange={(e) =>
+                            setConversationSearchText(e.target.value)
+                          }
                         />
                         {conversationSearchText && (
                           <button
