@@ -3103,6 +3103,7 @@ export default function CoachChatInline({
             success: !(ack && ack.success === false),
             count: Array.isArray(ack?.data) ? ack.data.length : 0,
           });
+          console.log("[CoachChatInline] chat.list completo:", ack?.data);
 
           if (Array.isArray(ack?.data)) {
                         /* console.log("--- LISTA DE CHATS RECIBIDA DEL SERVIDOR ---"); */
