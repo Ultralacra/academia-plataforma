@@ -110,7 +110,7 @@ export function LoginForm() {
               <div className="relative">
                 <div className="absolute -inset-1 rounded-2xl bg-gradient-to-br from-amber-400/30 via-orange-400/20 to-amber-500/30 blur-md" />
                 <img
-                  src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
+                  src="https://skylink-website-vert.vercel.app/logos/logos-clientes/logo-academia.jpg"
                   alt="Hotselling"
                   className="relative h-14 w-14 rounded-2xl object-cover shadow-lg"
                   loading="eager"

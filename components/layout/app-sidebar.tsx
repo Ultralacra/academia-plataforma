@@ -669,7 +669,7 @@ export function AppSidebar() {
           <div className="flex items-center gap-3 rounded-xl bg-sidebar-accent/30 px-3 py-3 backdrop-blur-sm border border-sidebar-border/20">
             <div className="relative shrink-0">
               <img
-                src="https://valinkgroup.com/wp-content/uploads/2025/09/LogoHAHL600x600px2.jpg"
+                src="https://skylink-website-vert.vercel.app/logos/logos-clientes/logo-academia.jpg"
                 alt="Logo"
                 className="h-10 w-10 rounded-xl object-cover ring-2 ring-sidebar-border/50 shadow-md"
                 loading="eager"
