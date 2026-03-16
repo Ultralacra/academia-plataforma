@@ -101,10 +101,11 @@ export async function fetchMetrics(
   if (fechaHasta) params.set("fechaHasta", fechaHasta);
   if (coachCode) params.set("coach", coachCode);
   const qs = params.toString() ? `?${params.toString()}` : "";
-  const url = `/metrics/get/metrics-v2${qs}`;
-  console.log("[fetchMetrics] 🔵 Endpoint:", url);
-  const json = await apiFetch<any>(url);
-  console.log("[fetchMetrics] 🟢 Response RAW:", JSON.parse(JSON.stringify(json)));
+  // const url = `/metrics/get/metrics-v2${qs}`;
+  // console.log("[fetchMetrics] 🔵 Endpoint:", url);
+  // const json = await apiFetch<any>(url);
+  // console.log("[fetchMetrics] 🟢 Response RAW:", JSON.parse(JSON.stringify(json)));
+  const json = { code: 204, status: "disabled", data: {} } as any;
 
   const d = (json?.data as any) || {};
 

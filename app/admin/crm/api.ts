@@ -7,6 +7,20 @@ import { apiFetch } from "@/lib/api-config";
 // Tipos básicos de Lead según los campos provistos y algunos adicionales comunes
 export type LeadStatus = "new" | "contacted" | "qualified" | "won" | "lost" | string;
 
+export interface HubspotQuestionAnswer {
+  pregunta_original?: string | null;
+  respuesta?: string | null;
+}
+
+export interface LeadHubspotQuestions {
+  main_obstacle?: HubspotQuestionAnswer | null;
+  monthly_budget?: HubspotQuestionAnswer | null;
+  instagram_user?: HubspotQuestionAnswer | null;
+  invite_others?: HubspotQuestionAnswer | null;
+  closer_name?: HubspotQuestionAnswer | null;
+  sale_notes?: HubspotQuestionAnswer | null;
+}
+
 export interface Lead {
   codigo: string; // identificador único (UUID / código)
   name: string;
@@ -17,6 +31,13 @@ export interface Lead {
   owner_codigo?: string | null; // asignado a (closer / vendedor)
   created_at?: string | null;
   updated_at?: string | null;
+  instagram_user?: string | null;
+  monthly_budget?: number | string | null;
+  main_obstacle?: string | null;
+  invite_others?: string | number | boolean | null;
+  closer_name?: string | null;
+  sale_notes?: string | null;
+  detalle_preguntas_hubspot?: LeadHubspotQuestions | null;
 }
 
 export interface LeadCreateInput {
@@ -53,6 +74,10 @@ export interface LeadDetail extends Lead {
   source_entity?: string;
 
   instagram_user?: string | null;
+  main_obstacle?: string | null;
+  invite_others?: string | number | boolean | null;
+  closer_name?: string | null;
+  detalle_preguntas_hubspot?: LeadHubspotQuestions | null;
   platform_call?: string | null;
   call_outcome?: string | null;
   call_result_at?: string | null;
@@ -182,6 +207,13 @@ function mapLead(raw: any): Lead {
     owner_codigo: raw?.owner_codigo ?? raw?.owner ?? raw?.vendedor ?? null,
     created_at: raw?.created_at ?? raw?.creado_at ?? null,
     updated_at: raw?.updated_at ?? raw?.actualizado_at ?? null,
+    instagram_user: raw?.instagram_user ?? null,
+    monthly_budget: raw?.monthly_budget ?? null,
+    main_obstacle: raw?.main_obstacle ?? null,
+    invite_others: raw?.invite_others ?? null,
+    closer_name: raw?.closer_name ?? null,
+    sale_notes: raw?.sale_notes ?? null,
+    detalle_preguntas_hubspot: raw?.detalle_preguntas_hubspot ?? null,
   };
 }
 

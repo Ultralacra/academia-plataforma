@@ -14,6 +14,10 @@ import { Search } from "lucide-react";
 export function ProspectFilters({
   q,
   setQ,
+  questionsQ,
+  setQuestionsQ,
+  closer,
+  setCloser,
   etapa,
   setEtapa,
   canal,
@@ -26,11 +30,16 @@ export function ProspectFilters({
   setCreatedTo,
   etapas,
   canales,
+  closers,
   owners,
   onClear,
 }: {
   q: string;
   setQ: (v: string) => void;
+  questionsQ: string;
+  setQuestionsQ: (v: string) => void;
+  closer: string;
+  setCloser: (v: string) => void;
   etapa: string;
   setEtapa: (v: string) => void;
   canal: string;
@@ -43,6 +52,7 @@ export function ProspectFilters({
   setCreatedTo: (v: string) => void;
   etapas: string[];
   canales: string[];
+  closers: string[];
   owners: Array<{ value: string; label: string }>;
   onClear: () => void;
 }) {
@@ -56,6 +66,33 @@ export function ProspectFilters({
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
+      </div>
+      <div className="relative flex-shrink-0">
+        <Search className="absolute left-1 sm:left-1.5 top-1/2 h-2 sm:h-2.5 w-2 sm:w-2.5 -translate-y-1/2 text-slate-400" />
+        <Input
+          className="h-5 sm:h-6 w-24 sm:w-32 pl-5 sm:pl-6 text-[9px] sm:text-[10px] bg-white placeholder:text-[9px] sm:placeholder:text-[10px]"
+          placeholder="Preguntas..."
+          value={questionsQ}
+          onChange={(e) => setQuestionsQ(e.target.value)}
+        />
+      </div>
+      <div className="flex items-center gap-0.5 flex-shrink-0">
+        <span className="hidden sm:inline text-[9px] text-slate-500 whitespace-nowrap">
+          Closer:
+        </span>
+        <Select value={closer} onValueChange={setCloser}>
+          <SelectTrigger className="h-5 sm:h-6 w-20 sm:w-28 text-[9px] sm:text-[10px] bg-white">
+            <SelectValue placeholder="Closer" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            {closers.map((item) => (
+              <SelectItem key={item} value={item}>
+                {item}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div className="flex items-center gap-0.5 flex-shrink-0">
         <span className="hidden sm:inline text-[9px] text-slate-500 whitespace-nowrap">

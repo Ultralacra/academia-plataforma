@@ -53,6 +53,7 @@ import { EventsOriginsManager } from "./components/EventsOriginsManager";
 import { MetricsOverview } from "./components/MetricsOverview";
 import { MetricsTabs } from "./components/MetricsTabs";
 import { ProspectFilters } from "./components/ProspectFilters";
+import { LeadQuestionsDrawer } from "./components/LeadQuestionsDrawer";
 import { ProspectKanban } from "./components/ProspectKanban";
 import { SalesPersonalMetrics } from "./components/SalesPersonalMetrics";
 import { SellerMetricsTable } from "./components/SellerMetricsTable";
@@ -78,40 +79,14 @@ interface Prospect {
   ciudad: string | null;
   creado: string | null;
   actualizado: string | null;
+  instagramUser: string | null;
+  monthlyBudget: string | null;
+  mainObstacle: string | null;
+  inviteOthers: string | null;
+  closerName: string | null;
+  saleNotes: string | null;
+  detallePreguntasHubspot: Lead["detalle_preguntas_hubspot"] | null;
   remote?: boolean;
-}
-
-interface CalendarAvailability {
-  google_email: string;
-  busy: Array<{ start: string; end: string }>;
-}
-
-interface CalendarStatus {
-  connected: boolean;
-  google_email?: string;
-  loading: boolean;
-}
-
-interface QuickStat {
-  label: string;
-  value: string;
-  icon: LucideIcon;
-  accent: string;
-}
-
-interface SellerMetricsRow {
-  ownerId: string | null;
-  ownerNombre: string;
-  total: number;
-  contacted: number;
-  qualified: number;
-  won: number;
-  lost: number;
-}
-
-interface SellerMetricsResult {
-  rows: SellerMetricsRow[];
-  totalOwners: number;
 }
 
 interface CrmGlobalMetrics {
@@ -193,8 +168,55 @@ const mapLeadToProspect = (lead: Lead): Prospect => ({
   ciudad: (lead as any)?.city ?? null,
   creado: lead.created_at ?? null,
   actualizado: lead.updated_at ?? null,
+  instagramUser:
+    lead.detalle_preguntas_hubspot?.instagram_user?.respuesta ??
+    (lead.instagram_user != null ? String(lead.instagram_user) : null),
+  monthlyBudget:
+    lead.detalle_preguntas_hubspot?.monthly_budget?.respuesta ??
+    (lead.monthly_budget != null ? String(lead.monthly_budget) : null),
+  mainObstacle:
+    lead.detalle_preguntas_hubspot?.main_obstacle?.respuesta ??
+    (lead.main_obstacle != null ? String(lead.main_obstacle) : null),
+  inviteOthers:
+    lead.detalle_preguntas_hubspot?.invite_others?.respuesta ??
+    (lead.invite_others != null ? String(lead.invite_others) : null),
+  closerName:
+    lead.detalle_preguntas_hubspot?.closer_name?.respuesta ??
+    (lead.closer_name != null ? String(lead.closer_name) : null),
+  saleNotes:
+    lead.detalle_preguntas_hubspot?.sale_notes?.respuesta ??
+    (lead.sale_notes != null ? String(lead.sale_notes) : null),
+  detallePreguntasHubspot: lead.detalle_preguntas_hubspot ?? null,
   remote: Boolean((lead as any)?.remote),
 });
+
+function normalizeQuestionText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  const trimmed = String(value).trim();
+  return trimmed ? trimmed : null;
+}
+
+function getProspectQuestionSearchText(prospect: Prospect): string {
+  return [
+    prospect.mainObstacle,
+    prospect.monthlyBudget,
+    prospect.instagramUser,
+    prospect.inviteOthers,
+    prospect.closerName,
+    prospect.saleNotes,
+    prospect.detallePreguntasHubspot?.main_obstacle?.pregunta_original,
+    prospect.detallePreguntasHubspot?.monthly_budget?.pregunta_original,
+    prospect.detallePreguntasHubspot?.instagram_user?.pregunta_original,
+    prospect.detallePreguntasHubspot?.invite_others?.pregunta_original,
+    prospect.detallePreguntasHubspot?.closer_name?.pregunta_original,
+    prospect.detallePreguntasHubspot?.sale_notes?.pregunta_original,
+  ]
+    .map((value) => normalizeQuestionText(value))
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
 
 const getInitials = (name: string) =>
   name
@@ -287,13 +309,18 @@ function CrmContent() {
   } | null>(null);
 
   const [q, setQ] = useState("");
+  const [questionsQ, setQuestionsQ] = useState("");
   const [view, setView] = useState<"lista" | "kanban">("lista");
+  const [closerFiltro, setCloserFiltro] = useState<string>("all");
   const [etapaFiltro, setEtapaFiltro] = useState<string>("all");
   const [canalFiltro, setCanalFiltro] = useState<string>("all");
   const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
   const [createdFrom, setCreatedFrom] = useState<string>("");
   const [createdTo, setCreatedTo] = useState<string>("");
   const [activeTab, setActiveTab] = useState<string>("pipeline");
+  const [selectedLeadQuestionsCode, setSelectedLeadQuestionsCode] = useState<
+    string | null
+  >(null);
   const [pipelinePage, setPipelinePage] = useState<number>(1);
   const [pipelinePageSize, setPipelinePageSize] = useState<number>(
     DEFAULT_PIPELINE_PAGE_SIZE,
@@ -757,13 +784,23 @@ function CrmContent() {
 
   const filtrados = useMemo(() => {
     return rows.filter((prospect) => {
+      const normalizedSearch = q.trim().toLowerCase();
+      const normalizedQuestionsSearch = questionsQ.trim().toLowerCase();
       const matchesSearch = q.trim()
         ? [prospect.nombre, prospect.email, prospect.telefono]
             .filter(Boolean)
             .some((value) =>
-              String(value).toLowerCase().includes(q.trim().toLowerCase()),
+              String(value).toLowerCase().includes(normalizedSearch),
             )
         : true;
+      const matchesQuestions = normalizedQuestionsSearch
+        ? getProspectQuestionSearchText(prospect).includes(
+            normalizedQuestionsSearch,
+          )
+        : true;
+      const matchesCloser =
+        closerFiltro === "all" ||
+        String(prospect.closerName ?? "") === closerFiltro;
       const matchesStage =
         etapaFiltro === "all" || prospect.etapa === etapaFiltro;
       const matchesChannel =
@@ -783,13 +820,25 @@ function CrmContent() {
 
       return (
         matchesSearch &&
+        matchesQuestions &&
+        matchesCloser &&
         matchesStage &&
         matchesChannel &&
         matchesOwner &&
         matchesDate
       );
     });
-  }, [rows, q, etapaFiltro, canalFiltro, ownerFiltro, createdFrom, createdTo]);
+  }, [
+    rows,
+    q,
+    questionsQ,
+    closerFiltro,
+    etapaFiltro,
+    canalFiltro,
+    ownerFiltro,
+    createdFrom,
+    createdTo,
+  ]);
 
   const pipelineTotalPages = useMemo(
     () => Math.max(1, Math.ceil(filtrados.length / pipelinePageSize)),
@@ -803,7 +852,16 @@ function CrmContent() {
 
   useEffect(() => {
     setPipelinePage(1);
-  }, [q, etapaFiltro, canalFiltro, ownerFiltro, createdFrom, createdTo]);
+  }, [
+    q,
+    questionsQ,
+    closerFiltro,
+    etapaFiltro,
+    canalFiltro,
+    ownerFiltro,
+    createdFrom,
+    createdTo,
+  ]);
 
   useEffect(() => {
     setPipelinePage((prev) => Math.min(prev, pipelineTotalPages));
@@ -920,6 +978,16 @@ function CrmContent() {
     }));
   }, [salesUsers, rows]);
 
+  const closers = useMemo(() => {
+    return Array.from(
+      new Set(
+        rows
+          .map((row) => normalizeQuestionText(row.closerName))
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ).sort((a, b) => a.localeCompare(b, "es"));
+  }, [rows]);
+
   const quickStats = useMemo<QuickStat[]>(() => {
     return [
       {
@@ -1022,6 +1090,10 @@ function CrmContent() {
               <ProspectFilters
                 q={q}
                 setQ={setQ}
+                questionsQ={questionsQ}
+                setQuestionsQ={setQuestionsQ}
+                closer={closerFiltro}
+                setCloser={setCloserFiltro}
                 etapa={etapaFiltro}
                 setEtapa={setEtapaFiltro}
                 canal={canalFiltro}
@@ -1034,9 +1106,12 @@ function CrmContent() {
                 setCreatedTo={setCreatedTo}
                 etapas={PIPELINE_STAGES}
                 canales={canales}
+                closers={closers}
                 owners={owners}
                 onClear={() => {
                   setQ("");
+                  setQuestionsQ("");
+                  setCloserFiltro("all");
                   setEtapaFiltro("all");
                   setCanalFiltro("all");
                   setOwnerFiltro("all");
@@ -1267,11 +1342,12 @@ function CrmContent() {
 
               {view === "lista" ? (
                 <div className="rounded-xl border border-slate-200/70 bg-white/90 shadow-sm flex-1 overflow-hidden">
-                  <div className="grid grid-cols-11 gap-1 px-3 py-1 text-[10px] font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
+                  <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-[10px] font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
                     <div className="col-span-3">Prospecto</div>
                     <div className="col-span-2">Contacto</div>
+                    <div className="col-span-2">Closer</div>
                     <div className="col-span-2">Canal</div>
-                    <div className="col-span-2">Etapa</div>
+                    <div className="col-span-1">Etapa</div>
                     <div className="col-span-2 text-right">Acción</div>
                   </div>
                   <div className="overflow-y-auto max-h-[calc(100vh-240px)]">
@@ -1288,7 +1364,7 @@ function CrmContent() {
                       paginatedFiltrados.map((prospect) => (
                         <div
                           key={prospect.id}
-                          className="grid grid-cols-11 gap-1 px-3 py-1 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
+                          className="grid grid-cols-12 gap-2 px-3 py-2 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
                         >
                           <div className="col-span-3 min-w-0">
                             <div className="flex items-center gap-2 min-w-0">
@@ -1339,6 +1415,20 @@ function CrmContent() {
                             </div>
                           </div>
 
+                          <div className="col-span-2 min-w-0 flex items-center">
+                            <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] text-slate-700 w-full">
+                              <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
+                                Closer
+                              </div>
+                              <div
+                                className="mt-0.5 truncate"
+                                title={prospect.closerName || "Sin closer"}
+                              >
+                                {prospect.closerName || "Sin closer"}
+                              </div>
+                            </div>
+                          </div>
+
                           <div className="col-span-2 text-[10px] flex items-center">
                             <Badge
                               variant="outline"
@@ -1349,7 +1439,7 @@ function CrmContent() {
                             </Badge>
                           </div>
 
-                          <div className="col-span-2">
+                          <div className="col-span-1 flex items-center">
                             <StageBadge stage={prospect.etapa} size="sm" />
                           </div>
 
@@ -1370,6 +1460,17 @@ function CrmContent() {
                                 className="inline-flex h-6 w-6 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-700"
                               >
                                 <UserPlus className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Ver respuestas de ${prospect.nombre}`}
+                                title="Ver respuestas"
+                                onClick={() =>
+                                  setSelectedLeadQuestionsCode(prospect.id)
+                                }
+                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                              >
+                                <User className="h-3.5 w-3.5" />
                               </button>
                               <Link
                                 href={`/admin/crm/booking/${encodeURIComponent(prospect.id)}`}
@@ -1491,6 +1592,14 @@ function CrmContent() {
         leadCodigo={deleteTarget?.id || ""}
         leadName={deleteTarget?.nombre || ""}
         onDeleted={() => reload(ownerFilterRef.current || undefined)}
+      />
+
+      <LeadQuestionsDrawer
+        open={!!selectedLeadQuestionsCode}
+        onOpenChange={(open) => {
+          if (!open) setSelectedLeadQuestionsCode(null);
+        }}
+        leadCode={selectedLeadQuestionsCode}
       />
 
       <Dialog open={availabilityOpen} onOpenChange={setAvailabilityOpen}>
