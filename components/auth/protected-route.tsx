@@ -140,6 +140,10 @@ export function ProtectedRoute({
       segments[0] === "admin" &&
       segments[1] === "metrics" &&
       segments[2] === "chat";
+    // Permitir chat general beta
+    const isChatGeneralPath =
+      segments[0] === "chat" &&
+      segments[1] === "beta";
     // Esperamos /admin/teamsv2/[code] como vista principal
     const isTeamDetail =
       segments[0] === "admin" &&
@@ -166,7 +170,8 @@ export function ProtectedRoute({
       !isPreguntasFrecuentesPath &&
       !isPlantillasMailsPath &&
       !isMensajesSeguimientoPath &&
-      !isMetricsChatPath
+      !isMetricsChatPath &&
+      !isChatGeneralPath
     ) {
       if (pathname !== target) {
         router.replace(target);

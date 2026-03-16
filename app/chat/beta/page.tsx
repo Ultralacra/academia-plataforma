@@ -72,6 +72,7 @@ export default function AdminChatPage() {
 
   // Filtros
   const [searchText, setSearchText] = useState("");
+  const [conversationSearchText, setConversationSearchText] = useState("");
   const [filterArea, setFilterArea] = useState<string | null>(null);
   const [filterPuesto, setFilterPuesto] = useState<string | null>(null);
   const [filterStage, setFilterStage] = useState<string | null>(null);
@@ -720,10 +721,19 @@ export default function AdminChatPage() {
   ].filter(Boolean).length;
 
   const visibleChats = useMemo(() => {
-    return [...adminChats].sort(
+    const q = conversationSearchText.trim().toLowerCase();
+    const sorted = [...adminChats].sort(
       (a, b) => getItemTimestamp(b) - getItemTimestamp(a),
     );
-  }, [adminChats]);
+    if (!q) return sorted;
+
+    return sorted.filter((it) => {
+      const { title, subtitle } = labelForChatItem(it);
+      return [title, subtitle]
+        .map((v) => String(v ?? "").toLowerCase())
+        .some((v) => v.includes(q));
+    });
+  }, [adminChats, conversationSearchText]);
 
   const selectedCoachCode = useMemo(() => {
     if (targetKind !== "coach" || !targetId) return null;
@@ -1029,7 +1039,7 @@ export default function AdminChatPage() {
   }, [selectedChatId]);
 
   return (
-    <ProtectedRoute allowedRoles={["admin"]}>
+    <ProtectedRoute allowedRoles={["admin", "equipo"]}>
       <DashboardLayout>
         <div className="flex flex-col h-screen overflow-hidden bg-[#f0f2f5]">
           <div className="bg-[#008069] text-white px-6 py-4 shadow-sm flex-shrink-0">
@@ -1460,6 +1470,27 @@ export default function AdminChatPage() {
                             }`}
                           />
                         </Button>
+                      </div>
+                    </div>
+                    <div className="mb-2 flex-shrink-0">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          className="w-full pl-9 pr-9 py-2 rounded-lg border-0 bg-[#f0f2f5] text-sm text-gray-800 placeholder:text-gray-500 focus:outline-none focus:bg-white focus:shadow-sm transition-all"
+                          placeholder="Buscar conversación por nombre..."
+                          value={conversationSearchText}
+                          onChange={(e) => setConversationSearchText(e.target.value)}
+                        />
+                        {conversationSearchText && (
+                          <button
+                            type="button"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                            onClick={() => setConversationSearchText("")}
+                            title="Limpiar búsqueda"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
                     <ul className="space-y-0 text-sm flex-1 overflow-auto">

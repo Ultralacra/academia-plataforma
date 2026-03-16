@@ -345,6 +345,11 @@ export function AppSidebar() {
                 icon: MessageSquare,
               },
               {
+                title: "Chat general",
+                url: "/chat/beta",
+                icon: MessageSquare,
+              },
+              {
                 title: "Tickets",
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
@@ -408,6 +413,11 @@ export function AppSidebar() {
                 ],
               },
               {
+                title: "Chat general",
+                url: "/chat/beta",
+                icon: MessageSquare,
+              },
+              {
                 title: "Tickets",
                 url: "/admin/tickets-board",
                 icon: MessageSquare,
@@ -454,7 +464,6 @@ export function AppSidebar() {
                     "Usuarios sistema",
                     "Estado correos",
                     "Plantillas de mails",
-                    "Chat general",
                     "Pagos",
                   ].includes(item.title),
               )
