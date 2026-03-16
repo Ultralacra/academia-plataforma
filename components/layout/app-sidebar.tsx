@@ -112,6 +112,11 @@ const adminItems: MenuItem[] = [
       { title: "Coachs", url: "/admin/teams", icon: Users },
       { title: "Tickets", url: "/admin/tickets", icon: MessageSquare },
       {
+        title: "Métrica Nueva",
+        url: "/admin/metrics/nueva",
+        icon: BarChart3,
+      },
+      {
         title: "Métricas Chat",
         url: "/admin/metrics/chat",
         icon: MessageSquare,
@@ -337,6 +342,11 @@ export function AppSidebar() {
                     url: "/admin/tickets",
                     icon: MessageSquare,
                   },
+                  {
+                    title: "Métrica Nueva",
+                    url: "/admin/metrics/nueva",
+                    icon: BarChart3,
+                  },
                 ],
               },
               {
@@ -409,6 +419,11 @@ export function AppSidebar() {
                     title: "Tickets",
                     url: "/admin/tickets",
                     icon: MessageSquare,
+                  },
+                  {
+                    title: "Métrica Nueva",
+                    url: "/admin/metrics/nueva",
+                    icon: BarChart3,
                   },
                 ],
               },
