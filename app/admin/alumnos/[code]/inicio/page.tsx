@@ -706,15 +706,16 @@ export default function StudentInicioPage() {
             />
           )}
 
-          {/* Ocultar Métricas ADS para alumnos */}
-          {!isStudent && (
-            <InternalCard
-              title="Métricas ADS"
-              description="Rendimiento de campañas"
-              href={`/admin/alumnos/${code}/ads`}
-              icon={BarChart3}
-            />
-          )}
+          <InternalCard
+            title="Métricas ADS"
+            description={
+              isStudent
+                ? "Revisa y edita tus métricas ADS"
+                : "Rendimiento de campañas"
+            }
+            href={`/admin/alumnos/${code}/ads`}
+            icon={BarChart3}
+          />
 
           <InternalCard
             title="Seguimiento de pagos"

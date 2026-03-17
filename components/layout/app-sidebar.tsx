@@ -554,6 +554,11 @@ export function AppSidebar() {
             icon: ThumbsUp,
           },
           {
+            title: "Métricas ADS",
+            url: `/admin/alumnos/${code}/ads`,
+            icon: BarChart3,
+          },
+          {
             title: "Bonos",
             url: `/admin/alumnos/${code}/bonos`,
             icon: Users,

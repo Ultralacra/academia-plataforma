@@ -50,11 +50,26 @@ const SUBPHASE_OPTIONS = [
   "Ads",
 ] as const;
 
-const SUBPHASE_COLOR_OPTIONS = [
-  "No aplica",
-  "Por definir",
-  "Realizado",
-] as const;
+const SUBPHASE_COLOR_OPTIONS = ["En proceso", "Ejecutado"] as const;
+
+function normalizeSubphaseColor(input: unknown): string {
+  const value = String(input ?? "").trim();
+  if (!value) return "";
+
+  switch (value.toLowerCase()) {
+    case "no aplica":
+    case "sin trascendencia":
+      return "";
+    case "por definir":
+    case "en proceso":
+      return "En proceso";
+    case "realizado":
+    case "ejecutado":
+      return "Ejecutado";
+    default:
+      return value;
+  }
+}
 
 function normalizeCurrency(input: unknown): CurrencyCode {
   const code = String(input ?? "USD")
@@ -253,6 +268,8 @@ export default function AdsMetricsForm({
 }) {
   const { user } = useAuth();
   const isReadOnly = Boolean(readOnly);
+  const canEditInterventionSwitch =
+    !isReadOnly && String((user as any)?.role ?? "") !== "student";
 
   type Metrics = {
     fecha_inicio?: string;
@@ -393,7 +410,15 @@ export default function AdsMetricsForm({
     if (!record) return;
     const p = (record as any)?.payload;
     if (!p || typeof p !== "object") return;
-    setData((prev) => syncMonetaryFields({ ...prev, ...(p as any) }));
+    setData((prev) =>
+      syncMonetaryFields({
+        ...prev,
+        ...(p as any),
+        subfase_color: normalizeSubphaseColor((p as any)?.subfase_color),
+        auto_roas: true,
+        auto_eff: true,
+      }),
+    );
   }
 
   const norm = (v: unknown) =>
@@ -660,7 +685,12 @@ export default function AdsMetricsForm({
       (user as any)?.email ??
       null;
 
-    const sanitizedData: any = { ...data };
+    const sanitizedData: any = {
+      ...data,
+      subfase_color: normalizeSubphaseColor(data.subfase_color),
+      auto_roas: true,
+      auto_eff: true,
+    };
     // Importante: al EDITAR, no queremos sobrescribir con vacío.
     // Si vienen vacíos, omitimos estas keys del payload.
     for (const k of ["fase", "subfase", "subfase_color"]) {
@@ -778,7 +808,7 @@ export default function AdsMetricsForm({
         /* console.log("[ADS][metadata] update body ->", updateBody); */
 
         const updateRes = await fetch(
-          `/api/metadata/${encodeURIComponent(String(best.id))}`,
+          `/api/alumnos/${encodeURIComponent(idForRoute)}/metadata/update-ads`,
           {
             method: "PUT",
             headers: {
@@ -808,14 +838,17 @@ export default function AdsMetricsForm({
 
       // 2) Crear metadata SOLO para este alumno
       /* console.log("[ADS][metadata] create body ->", body); */
-      const createRes = await fetch("/api/metadata", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      const createRes = await fetch(
+        `/api/alumnos/${encodeURIComponent(idForRoute)}/metadata/ensure-ads`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
         },
-        body: JSON.stringify(body),
-      });
+      );
       if (!createRes.ok) {
         const txt = await createRes.text().catch(() => "");
         throw new Error(txt || `HTTP ${createRes.status}`);
@@ -942,7 +975,13 @@ export default function AdsMetricsForm({
         }
 
         setData((prev) => {
-          const merged = { ...prev, ...(maybeForm ?? {}) } as Metrics;
+          const merged = {
+            ...prev,
+            ...(maybeForm ?? {}),
+            subfase_color: normalizeSubphaseColor(maybeForm?.subfase_color),
+            auto_roas: true,
+            auto_eff: true,
+          } as Metrics;
           // Regla: fecha_inicio debe ser la fecha de entrada a Fase 5 si existe.
           if (fase5Start) merged.fecha_inicio = fase5Start;
           return syncMonetaryFields(merged);
@@ -1027,12 +1066,10 @@ export default function AdsMetricsForm({
   }, [data.compra_carnada, data.visitas]);
 
   const view = {
-    roas: data.auto_roas ? (roasCalc ?? data.roas) : data.roas,
-    eff_ads: data.auto_eff ? (effAdsCalc ?? data.eff_ads) : data.eff_ads,
-    eff_pago: data.auto_eff ? (effPagoCalc ?? data.eff_pago) : data.eff_pago,
-    eff_compra: data.auto_eff
-      ? (effCompraCalc ?? data.eff_compra)
-      : data.eff_compra,
+    roas: roasCalc ?? data.roas,
+    eff_ads: effAdsCalc ?? data.eff_ads,
+    eff_pago: effPagoCalc ?? data.eff_pago,
+    eff_compra: effCompraCalc ?? data.eff_compra,
   } as const;
 
   const optimizationPhaseSelected = isOptimizationPhase(data.fase);
@@ -1168,7 +1205,6 @@ export default function AdsMetricsForm({
     effAdsCalc,
     effPagoCalc,
     effCompraCalc,
-    data.auto_eff,
   ]);
 
   useEffect(() => {
@@ -1205,22 +1241,6 @@ export default function AdsMetricsForm({
     const v = toNum(x);
     if (v == null) return "";
     return (v * 100).toFixed(1).replace(/\.0$/, "");
-  }
-  function fmtManualPercent(x?: string | number | null): string {
-    const v = toNum(x);
-    if (v == null) return "";
-    return v.toFixed(1).replace(/\.0$/, "");
-  }
-  function sanitizePercentInput(s: string): string {
-    try {
-      const t = s.replace(/%/g, "").trim();
-      const norm = t.replace(/,/g, ".").replace(/[^0-9.\-]/g, "");
-      const parts = norm.split(".");
-      if (parts.length <= 2) return norm;
-      return parts[0] + "." + parts.slice(1).join("").replace(/\./g, "");
-    } catch {
-      return s;
-    }
   }
 
   return (
@@ -1385,71 +1405,135 @@ export default function AdsMetricsForm({
                       </div>
                     </div>
                     <div className="space-y-1 md:col-span-4">
-                      <div className="flex items-center justify-between">
-                        <Label>ROAS</Label>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>Auto</span>
-                          <Switch
-                            checked={!!data.auto_roas}
-                            onCheckedChange={(v) => onChange("auto_roas", v)}
-                          />
-                        </div>
-                      </div>
+                      <Label>ROAS</Label>
                       <Input
                         inputMode="decimal"
                         placeholder="0.00"
-                        disabled={data.auto_roas}
-                        value={
-                          data.auto_roas ? view.roas || "" : data.roas || ""
-                        }
-                        onChange={(e) => onChange("roas", e.target.value)}
+                        disabled
+                        value={view.roas || ""}
                       />
                     </div>
                   </CardContent>
                 </Card>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm">Embudo</CardTitle>
                   </CardHeader>
-                  <CardContent className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label>Alcance</Label>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.alcance || ""}
-                        onChange={(e) => onChange("alcance", e.target.value)}
-                      />
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label>Alcance</Label>
+                        <Input
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={data.alcance || ""}
+                          onChange={(e) => onChange("alcance", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Clics</Label>
+                        <Input
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={data.clics || ""}
+                          onChange={(e) => onChange("clics", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Visitas</Label>
+                        <Input
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={data.visitas || ""}
+                          onChange={(e) => onChange("visitas", e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Pagos iniciados</Label>
+                        <Input
+                          inputMode="numeric"
+                          placeholder="0"
+                          value={data.pagos || ""}
+                          onChange={(e) => onChange("pagos", e.target.value)}
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label>Clics</Label>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.clics || ""}
-                        onChange={(e) => onChange("clics", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Visitas</Label>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.visitas || ""}
-                        onChange={(e) => onChange("visitas", e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Pagos iniciados</Label>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.pagos || ""}
-                        onChange={(e) => onChange("pagos", e.target.value)}
-                      />
+
+                    <div className="space-y-2 rounded-xl border border-border/60 bg-muted/20 p-3">
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        Compras
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                        <div className="space-y-1.5">
+                          <Label>Carnada</Label>
+                          <Input
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={data.compra_carnada || ""}
+                            onChange={(e) =>
+                              onChange("compra_carnada", e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Bump 1</Label>
+                          <Input
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={data.compra_bump1 || ""}
+                            onChange={(e) =>
+                              onChange("compra_bump1", e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Bump 2</Label>
+                          <Input
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={data.compra_bump2 || ""}
+                            onChange={(e) =>
+                              onChange("compra_bump2", e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>OTO 1</Label>
+                          <Input
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={data.compra_oto1 || ""}
+                            onChange={(e) =>
+                              onChange("compra_oto1", e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>OTO 2</Label>
+                          <Input
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={data.compra_oto2 || ""}
+                            onChange={(e) =>
+                              onChange("compra_oto2", e.target.value)
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>Downsell</Label>
+                          <Input
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={data.compra_downsell || ""}
+                            onChange={(e) =>
+                              onChange("compra_downsell", e.target.value)
+                            }
+                          />
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1485,18 +1569,8 @@ export default function AdsMetricsForm({
                       <Input
                         inputMode="decimal"
                         placeholder="0%"
-                        disabled={data.auto_eff}
-                        value={`${
-                          data.auto_eff
-                            ? fmtRatioToPercent(view.eff_pago)
-                            : fmtManualPercent(data.eff_pago)
-                        }%`}
-                        onChange={(e) =>
-                          onChange(
-                            "eff_pago",
-                            sanitizePercentInput(e.target.value),
-                          )
-                        }
+                        disabled
+                        value={`${fmtRatioToPercent(view.eff_pago)}%`}
                       />
                     </div>
                     <div className="space-y-1">
@@ -1504,113 +1578,54 @@ export default function AdsMetricsForm({
                       <Input
                         inputMode="decimal"
                         placeholder="0%"
-                        disabled={data.auto_eff}
-                        value={`${
-                          data.auto_eff
-                            ? fmtRatioToPercent(view.eff_compra)
-                            : fmtManualPercent(data.eff_compra)
-                        }%`}
-                        onChange={(e) =>
-                          onChange(
-                            "eff_compra",
-                            sanitizePercentInput(e.target.value),
-                          )
-                        }
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="py-3">
-                    <CardTitle className="text-sm">Compras</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <div className="space-y-1.5">
-                      <Label>Carnada</Label>
-                      <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.compra_carnada || ""}
-                        onChange={(e) =>
-                          onChange("compra_carnada", e.target.value)
-                        }
+                        disabled
+                        value={`${fmtRatioToPercent(view.eff_compra)}%`}
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Bump 1</Label>
+                      <Label>Bump 1 (vs. carnada)</Label>
                       <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.compra_bump1 || ""}
-                        onChange={(e) =>
-                          onChange("compra_bump1", e.target.value)
-                        }
+                        inputMode="decimal"
+                        placeholder="0%"
+                        disabled
+                        value={pctOf(data.compra_bump1, data.compra_carnada)}
                       />
-                      <div className="text-[11px] text-muted-foreground">
-                        Efectividad:{" "}
-                        {pctOf(data.compra_bump1, data.compra_carnada)}
-                      </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Bump 2</Label>
+                      <Label>Bump 2 (vs. carnada)</Label>
                       <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.compra_bump2 || ""}
-                        onChange={(e) =>
-                          onChange("compra_bump2", e.target.value)
-                        }
+                        inputMode="decimal"
+                        placeholder="0%"
+                        disabled
+                        value={pctOf(data.compra_bump2, data.compra_carnada)}
                       />
-                      <div className="text-[11px] text-muted-foreground">
-                        Efectividad:{" "}
-                        {pctOf(data.compra_bump2, data.compra_carnada)}
-                      </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>OTO 1</Label>
+                      <Label>OTO 1 (vs. carnada)</Label>
                       <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.compra_oto1 || ""}
-                        onChange={(e) =>
-                          onChange("compra_oto1", e.target.value)
-                        }
+                        inputMode="decimal"
+                        placeholder="0%"
+                        disabled
+                        value={pctOf(data.compra_oto1, data.compra_carnada)}
                       />
-                      <div className="text-[11px] text-muted-foreground">
-                        Efectividad:{" "}
-                        {pctOf(data.compra_oto1, data.compra_carnada)}
-                      </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>OTO 2</Label>
+                      <Label>OTO 2 (vs. carnada)</Label>
                       <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.compra_oto2 || ""}
-                        onChange={(e) =>
-                          onChange("compra_oto2", e.target.value)
-                        }
+                        inputMode="decimal"
+                        placeholder="0%"
+                        disabled
+                        value={pctOf(data.compra_oto2, data.compra_carnada)}
                       />
-                      <div className="text-[11px] text-muted-foreground">
-                        Efectividad:{" "}
-                        {pctOf(data.compra_oto2, data.compra_carnada)}
-                      </div>
                     </div>
                     <div className="space-y-1.5">
-                      <Label>Downsell</Label>
+                      <Label>Downsell (vs. carnada)</Label>
                       <Input
-                        inputMode="numeric"
-                        placeholder="0"
-                        value={data.compra_downsell || ""}
-                        onChange={(e) =>
-                          onChange("compra_downsell", e.target.value)
-                        }
+                        inputMode="decimal"
+                        placeholder="0%"
+                        disabled
+                        value={pctOf(data.compra_downsell, data.compra_carnada)}
                       />
-                      <div className="text-[11px] text-muted-foreground">
-                        Efectividad:{" "}
-                        {pctOf(data.compra_downsell, data.compra_carnada)}
-                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1633,6 +1648,7 @@ export default function AdsMetricsForm({
                       <Label>¿Requiere intervención?</Label>
                       <Switch
                         checked={!!data.requiere_interv}
+                        disabled={!canEditInterventionSwitch}
                         onCheckedChange={(v) => onChange("requiere_interv", v)}
                       />
                     </div>
