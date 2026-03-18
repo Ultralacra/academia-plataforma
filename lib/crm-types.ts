@@ -298,6 +298,157 @@ export const VENTA_ESTADOS_ORDER: VentaEstadoId[] = [
   "cierre_operativo",
 ];
 
+/* ======================================================================
+   FLUJO COMERCIAL DE VENTAS (Protocolo Closer)
+   Mapeo completo del proceso: Pre-llamada → Llamada → Seguimiento → Recuperación → Reactivación
+====================================================================== */
+
+/** Tipo de producto/oferta del cierre */
+export type TipoVentaOferta =
+  | "hotselling_pro"      // VENTA HOTSELLING PRO
+  | "hotselling_starter"  // VENTA HOTSELLING STARTER (reserva cupo)
+  | "downsell";           // CIERRE DOWNSELL
+
+/** Tipo de objeción clasificada durante la llamada */
+export type TipoObjecion =
+  | "financiera"    // no tiene el dinero / necesita cuotas
+  | "momento"       // no es el momento adecuado
+  | "confianza"     // no confía en el programa / resultado
+  | "falta_claridad" // no entiende bien la propuesta
+  | "contractual"   // dudas sobre contrato / compromiso
+  | "consulta_socio"; // necesita consultar con pareja / socio
+
+/** Resultado de la llamada de venta */
+export type ResultadoLlamada =
+  | "no_show"         // NO SHOW — cliente no asistió y no respondió
+  | "cancelada"       // CANCELADA — cliente respondió que no asistirá
+  | "asistio"         // Asistencia confirmada — se realizó la llamada
+  | "pendiente";      // Aún sin resultado
+
+/** Resultado final del proceso de cierre */
+export type ResultadoCierre =
+  | "ganado_hpro"       // CIERRE HPRO EN LLAMADA
+  | "ganado_starter"    // CIERRE — CLIENTE HOTSELLING STARTER
+  | "ganado_downsell"   // CIERRA DOWNSELL
+  | "pendiente_pago"    // Agreed fecha de pago restante (Starter)
+  | "objecion_activa"   // Está en negociación con objeción
+  | "perdido"           // Cliente perdido definitivo
+  | null;               // Sin cierre aún
+
+/** Record de un mensaje de seguimiento enviado */
+export interface SeguimientoMensaje {
+  id: ID;
+  dia: number;          // Día del protocolo (0,1,2,4,6,7,10,14,21,30,60,90)
+  tipo:
+    | "conexion"
+    | "recurso"
+    | "cierre"
+    | "reagenda_noshow" // mensajes de no-show
+    | "prellamada"
+    | "template_inicio" // template para iniciar contacto (fase recuperación)
+    | "largo_plazo";    // fase 5 reactivación
+  contenido?: string | null;
+  enviadoAt: string;    // ISO cuándo se marcó como enviado
+  estado: "pendiente" | "enviado" | "respondido";
+  notas?: string | null;
+}
+
+/** Seguimiento estratégico con clasificación de objeción */
+export interface SeguimientoEstrategico {
+  activo: boolean;
+  inicioAt?: string | null;         // cuándo se activó el seguimiento (72h sin resultado)
+  tipoObjecion?: TipoObjecion | null;
+  recursosEnviados?: string[];      // lista de recursos enviados según tipo de objeción
+  diasCompletados?: number[];       // días del protocolo ya ejecutados [0,1,2,4,6,7]
+  respuestaRecibida?: boolean;
+  fechaRespuesta?: string | null;
+}
+
+/** Estado completo del flujo comercial de un lead */
+export interface SalesFlowState {
+  // ─── FASE 1: PRE-LLAMADA ─────────────────────────────────────────────
+  fase: 1 | 2 | 3 | 4 | 5;         // fase actual del proceso
+  registroAt?: string | null;        // REGISTRO DE LEAD EN CRM
+  agendaCalendlyAt?: string | null;  // fecha/hora de la llamada agendada via Calendly
+  precallReminderEnviado24h?: boolean;
+  precallReminderEnviado1h?: boolean;
+  precallReminderEnviadoManual?: boolean;
+  leadAgendoLlamada?: boolean;       // ¿Lead agendó llamada mediante Calendly?
+  primerContactoRespondido?: boolean; // ¿Lead respondió primer contacto?
+
+  // ─── FASE 2: LLAMADA DE VENTA ────────────────────────────────────────
+  resultadoLlamada?: ResultadoLlamada | null;
+  noShowMensajes?: {                // mensajes de reagenda automáticos tras no-show
+    enviado10m?: boolean;
+    enviado1h?: boolean;
+    enviado24h?: boolean;
+  };
+  canceladaFechaReagenda?: string | null;   // fecha propuesta de reagenda tras cancelación
+  // datos de calificación en llamada
+  dolorIdentificado?: string | null;
+  objetivoIdentificado?: string | null;
+  situacionActual?: string | null;
+  califica?: boolean | null;              // ¿lead califica?
+  // cierre
+  ofertaPresentada?: TipoVentaOferta | null;
+  resultadoCierre?: ResultadoCierre | null;
+  tipoObjecion?: TipoObjecion | null;      // objeción clasificada en llamada
+  fechaPagoRestanteAcordada?: string | null; // fecha acordada para pago del restante (Starter)
+  montoReserva?: number | null;             // monto de la reserva (si aplica)
+  ventaIngresadaCrm?: boolean;              // ¿se registró la venta en el CRM?
+  ventaIngresadaAt?: string | null;
+
+  // ─── FASE 3: SEGUIMIENTO ACTIVO ──────────────────────────────────────
+  seguimientoActivo?: SeguimientoEstrategico | null;
+  mensajes?: SeguimientoMensaje[];          // historial de todos los mensajes del protocolo
+  conversacionActiva?: boolean;             // ¿existe conversación activa?
+  leadRespondioSeguimiento?: boolean;
+
+  // ─── FASE 4: RECUPERACIÓN ────────────────────────────────────────────
+  recuperacionActiva?: boolean;
+  templatesInicioEnviados?: boolean;        // Envío de Templates para iniciar contacto
+  leadPidioRecontactoFuturo?: boolean;      // lead pidió recontacto en el futuro
+  fechaRecontactoFuturo?: string | null;
+  recuperacionTerminoSinRespuesta?: boolean;
+
+  // ─── FASE 5: REACTIVACIÓN A LARGO PLAZO ─────────────────────────────
+  reactivacionActiva?: boolean;
+  retargetingActivo?: boolean;
+  eventoInmersionL2H?: boolean;            // invitado a Evento Inmersión L2H
+  diasReactivacion?: number[];             // [30, 60, 90] días completados
+
+  // metadatos
+  updatedAt: string;                        // ISO última actualización
+  notas?: string | null;                    // notas libres del closer
+}
+
+/** Helpers de utilidad para el flujo */
+export const PROTOCOL_DAYS_FASE3 = [0, 1, 2, 4, 6, 7] as const;
+export const PROTOCOL_DAYS_FASE4 = [10, 14, 21, 30] as const;
+export const PROTOCOL_DAYS_FASE5 = [30, 60, 90] as const;
+
+export const TIPO_OBJECION_LABELS: Record<TipoObjecion, string> = {
+  financiera: "Financiera",
+  momento: "Momento",
+  confianza: "Confianza",
+  falta_claridad: "Falta de claridad",
+  contractual: "Contractual",
+  consulta_socio: "Consulta con socio",
+};
+
+export const RESULTADO_LLAMADA_LABELS: Record<ResultadoLlamada, string> = {
+  no_show: "NO SHOW",
+  cancelada: "Cancelada",
+  asistio: "Asistencia",
+  pendiente: "Pendiente",
+};
+
+export const TIPO_VENTA_LABELS: Record<TipoVentaOferta, string> = {
+  hotselling_pro: "Hotselling PRO",
+  hotselling_starter: "Hotselling Starter",
+  downsell: "Downsell",
+};
+
 export const AUTOMATION_TRIGGERS_HUMAN: Record<AutomationTriggerId, string> = {
   registro_inicial: "Registro inicial creado",
   validacion_pago: "Validación de pago",

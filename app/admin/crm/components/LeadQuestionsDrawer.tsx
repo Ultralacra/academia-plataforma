@@ -8,21 +8,16 @@ import {
   ExternalLink,
   Instagram,
   Loader2,
+  Mail,
   MessageSquareQuote,
+  Phone,
   ShieldQuestion,
   UserRound,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { getLead, type LeadDetail } from "../api";
 
 const QUESTION_CONFIG = [
@@ -103,11 +98,28 @@ function getQuestionItems(lead: LeadDetail | null) {
 
 function statusLabel(value: string | null | undefined) {
   const normalized = String(value ?? "new").toLowerCase();
-  if (normalized === "contacted") return "Contactado";
-  if (normalized === "qualified") return "Calificado";
-  if (normalized === "won") return "Ganado";
-  if (normalized === "lost") return "Perdido";
-  return "Nuevo";
+  if (normalized === "contacted")
+    return { label: "Contactado", color: "bg-blue-100 text-blue-700" };
+  if (normalized === "qualified")
+    return { label: "Calificado", color: "bg-violet-100 text-violet-700" };
+  if (normalized === "won")
+    return { label: "Ganado", color: "bg-emerald-100 text-emerald-700" };
+  if (normalized === "lost")
+    return { label: "Perdido", color: "bg-rose-100 text-rose-700" };
+  return { label: "Nuevo", color: "bg-slate-100 text-slate-600" };
+}
+
+function Initials({ name }: { name: string }) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const letters = parts
+    .slice(0, 2)
+    .map((p) => p[0].toUpperCase())
+    .join("");
+  return (
+    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white text-base font-bold shadow">
+      {letters || "?"}
+    </div>
+  );
 }
 
 export function LeadQuestionsDrawer({
@@ -159,39 +171,66 @@ export function LeadQuestionsDrawer({
 
   const questionItems = React.useMemo(() => getQuestionItems(lead), [lead]);
   const answeredCount = questionItems.filter((item) => item.response).length;
+  const status = statusLabel(lead?.status);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-2xl overflow-y-auto"
+        className="w-full sm:max-w-lg flex flex-col p-0 overflow-hidden"
       >
-        <SheetHeader className="space-y-2 pr-8">
+        {/* Header fijo */}
+        <div className="flex-shrink-0 border-b bg-gradient-to-r from-indigo-50 via-white to-violet-50 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <SheetTitle className="truncate">Detalle del contacto</SheetTitle>
-              <SheetDescription className="truncate">
-                {lead?.name || "Lead CRM"}
-              </SheetDescription>
+            <div className="flex items-center gap-3 min-w-0">
+              <Initials name={lead?.name || "?"} />
+              <div className="min-w-0">
+                <h2 className="text-base font-bold text-slate-900 truncate">
+                  {lead?.name || "Lead CRM"}
+                </h2>
+                {lead && (
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${status.color}`}
+                    >
+                      {status.label}
+                    </span>
+                    <span className="text-[11px] text-slate-400 font-mono">
+                      #{lead.codigo}
+                    </span>
+                    {answeredCount > 0 && (
+                      <span className="text-[11px] text-slate-500">
+                        {answeredCount}/{questionItems.length} respuestas
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-            {leadCode ? (
-              <Button asChild variant="outline" size="sm" className="shrink-0">
+            {leadCode && (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="shrink-0 text-xs h-8"
+              >
                 <Link
                   href={`/admin/crm/booking/${encodeURIComponent(leadCode)}`}
                 >
-                  Abrir ficha
-                  <ExternalLink className="ml-2 h-4 w-4" />
+                  Ver ficha
+                  <ExternalLink className="ml-1.5 h-3.5 w-3.5" />
                 </Link>
               </Button>
-            ) : null}
+            )}
           </div>
-        </SheetHeader>
+        </div>
 
-        <div className="mt-6 space-y-5">
+        {/* Contenido scrolleable */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {loading ? (
-            <div className="flex items-center justify-center py-12 text-slate-500">
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Cargando detalle del contacto...
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400 gap-3">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="text-sm">Cargando contacto...</span>
             </div>
           ) : error ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -199,91 +238,97 @@ export function LeadQuestionsDrawer({
             </div>
           ) : lead ? (
             <>
-              <section className="rounded-2xl border bg-white p-4 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <div className="text-lg font-semibold text-slate-900">
-                      {lead.name || "Sin nombre"}
+              {/* Tarjeta de contacto */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 bg-slate-50 border-b">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Información de contacto
+                  </span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <Mail className="h-4 w-4 text-indigo-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">
+                        Email
+                      </div>
+                      <div className="text-sm text-slate-800 truncate">
+                        {lead.email || "—"}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 text-xs text-slate-600">
-                      <Badge variant="outline">
-                        {statusLabel(lead.status)}
+                  </div>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <Phone className="h-4 w-4 text-emerald-400 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[10px] text-slate-400 uppercase tracking-wide">
+                        Teléfono
+                      </div>
+                      <div className="text-sm text-slate-800">
+                        {lead.phone || "—"}
+                      </div>
+                    </div>
+                  </div>
+                  {lead.source && (
+                    <div className="flex items-center gap-3 px-4 py-3">
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] bg-sky-50 text-sky-700 border-sky-200"
+                      >
+                        {lead.source}
                       </Badge>
-                      <Badge variant="secondary">Código: {lead.codigo}</Badge>
                     </div>
-                  </div>
-                  <Badge variant="outline" className="text-xs">
-                    {answeredCount} de {questionItems.length} respuestas
-                  </Badge>
+                  )}
                 </div>
+              </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-slate-500">
-                      Email
-                    </div>
-                    <div className="mt-1 text-slate-900">
-                      {lead.email || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs uppercase tracking-wide text-slate-500">
-                      Teléfono
-                    </div>
-                    <div className="mt-1 text-slate-900">
-                      {lead.phone || "—"}
-                    </div>
-                  </div>
+              {/* Preguntas */}
+              <div className="rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                <div className="px-4 py-2.5 bg-slate-50 border-b">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Respuestas del formulario
+                  </span>
                 </div>
-              </section>
-
-              <section className="rounded-2xl border bg-white p-4 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900">
-                      Preguntas HubSpot
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Respuestas capturadas en el contacto para contexto
-                      comercial.
-                    </p>
-                  </div>
-                </div>
-
-                <Separator className="my-4" />
-
-                <div className="space-y-3">
+                <div className="divide-y divide-slate-100">
                   {questionItems.map((item) => {
                     const Icon = item.icon;
+                    const hasAnswer = Boolean(item.response);
                     return (
-                      <div
-                        key={item.key}
-                        className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                      >
+                      <div key={item.key} className="px-4 py-3">
                         <div className="flex items-start gap-3">
-                          <div className="rounded-lg bg-white p-2 text-slate-600 shadow-sm">
-                            <Icon className="h-4 w-4" />
+                          <div
+                            className={`mt-0.5 flex-shrink-0 rounded-lg p-1.5 ${hasAnswer ? "bg-indigo-50 text-indigo-500" : "bg-slate-100 text-slate-400"}`}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium text-slate-900">
-                              {item.title}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] font-semibold text-slate-700">
+                                {item.title}
+                              </span>
+                              {!hasAnswer && (
+                                <span className="text-[10px] text-slate-400 italic">
+                                  Sin respuesta
+                                </span>
+                              )}
                             </div>
-                            <div className="mt-1 text-xs leading-5 text-slate-500">
+                            {hasAnswer && (
+                              <p className="mt-1 text-sm text-slate-800 leading-relaxed break-words">
+                                {item.response}
+                              </p>
+                            )}
+                            <p className="mt-0.5 text-[10px] text-slate-400 leading-snug">
                               {item.question}
-                            </div>
-                            <div className="mt-3 rounded-lg bg-white px-3 py-2 text-sm text-slate-800 shadow-sm">
-                              {item.response || "Sin respuesta"}
-                            </div>
+                            </p>
                           </div>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-              </section>
+              </div>
             </>
           ) : (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-500 text-center">
               Selecciona un contacto para ver su detalle.
             </div>
           )}

@@ -274,8 +274,6 @@ function CrmContent() {
 
   const [salesUsers, setSalesUsers] = useState<UserSummary[]>([]);
   const [salesUsersLoading, setSalesUsersLoading] = useState(false);
-  const [selectedSalesUserFilter, setSelectedSalesUserFilter] =
-    useState<string>("");
 
   const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -1084,67 +1082,8 @@ function CrmContent() {
             hasCampanas={true}
           />
 
-          {/* Filtros (solo visible en Pipeline) */}
-          {activeTab === "pipeline" && (
-            <div className="flex-1 min-w-0">
-              <ProspectFilters
-                q={q}
-                setQ={setQ}
-                questionsQ={questionsQ}
-                setQuestionsQ={setQuestionsQ}
-                closer={closerFiltro}
-                setCloser={setCloserFiltro}
-                etapa={etapaFiltro}
-                setEtapa={setEtapaFiltro}
-                canal={canalFiltro}
-                setCanal={setCanalFiltro}
-                owner={ownerFiltro}
-                setOwner={setOwnerFiltro}
-                createdFrom={createdFrom}
-                setCreatedFrom={setCreatedFrom}
-                createdTo={createdTo}
-                setCreatedTo={setCreatedTo}
-                etapas={PIPELINE_STAGES}
-                canales={canales}
-                closers={closers}
-                owners={owners}
-                onClear={() => {
-                  setQ("");
-                  setQuestionsQ("");
-                  setCloserFiltro("all");
-                  setEtapaFiltro("all");
-                  setCanalFiltro("all");
-                  setOwnerFiltro("all");
-                  setCreatedFrom("");
-                  setCreatedTo("");
-                }}
-              />
-            </div>
-          )}
-
           {/* Acciones */}
           <div className="flex items-center gap-1 sm:gap-2 ml-auto">
-            {isAdmin && (
-              <select
-                className="h-5 sm:h-6 rounded-md border border-slate-200 bg-white px-1 sm:px-1.5 text-[9px] sm:text-[11px] text-slate-700 focus:outline-none"
-                value={selectedSalesUserFilter}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  setSelectedSalesUserFilter(value);
-                  ownerFilterRef.current = value;
-                  void reload(value || undefined);
-                }}
-                disabled={salesUsersLoading}
-              >
-                <option value="">{salesUsersLoading ? "..." : "Todos"}</option>
-                {salesUsers.map((user) => (
-                  <option key={user.codigo} value={user.codigo}>
-                    {user.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
             <CreateLeadDialog
               onCreated={() => {
                 void reload(ownerFilterRef.current || undefined);
@@ -1254,273 +1193,306 @@ function CrmContent() {
           onValueChange={setActiveTab}
           externalTabs
           pipeline={
-            <div className="flex flex-col gap-2 h-full">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                  <span>
-                    Mostrando {paginatedFiltrados.length} de {filtrados.length}{" "}
-                    leads
-                  </span>
-                  <span className="hidden sm:inline text-slate-300">|</span>
-                  <label className="inline-flex items-center gap-1">
-                    <span>Por página</span>
-                    <select
-                      className="h-6 rounded-md border border-slate-200 bg-white px-1.5 text-[11px] text-slate-700 focus:outline-none"
-                      value={pipelinePageSize}
-                      onChange={(event) => {
-                        const size = Number(event.target.value);
-                        setPipelinePageSize(size);
-                        setPipelinePage(1);
-                      }}
-                    >
-                      {PIPELINE_PAGE_SIZE_OPTIONS.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <span className="hidden sm:inline text-slate-300">|</span>
-                  <div className="inline-flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPipelinePage((prev) => Math.max(1, prev - 1))
-                      }
-                      disabled={pipelinePage <= 1}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Página anterior"
-                    >
-                      <ChevronLeft className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="min-w-[78px] text-center text-[11px] font-medium text-slate-700">
-                      Página {pipelinePage} / {pipelineTotalPages}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPipelinePage((prev) =>
-                          Math.min(pipelineTotalPages, prev + 1),
-                        )
-                      }
-                      disabled={pipelinePage >= pipelineTotalPages}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                      aria-label="Página siguiente"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="inline-flex overflow-hidden rounded-md border border-slate-200 bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setView("lista")}
-                    className={`px-2 py-1 text-slate-600 hover:bg-slate-50 ${
-                      view === "lista"
-                        ? "bg-blue-600 text-white hover:bg-blue-600"
-                        : ""
-                    }`}
-                    title="Vista de lista"
-                  >
-                    <List className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setView("kanban")}
-                    className={`px-2 py-1 text-slate-600 hover:bg-slate-50 border-l border-slate-200 ${
-                      view === "kanban"
-                        ? "bg-blue-600 text-white hover:bg-blue-600"
-                        : ""
-                    }`}
-                    title="Vista Kanban"
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+            <div className="flex gap-3 h-full min-h-0">
+              {/* Sidebar de filtros */}
+              <div className="w-52 flex-shrink-0 overflow-y-auto">
+                <ProspectFilters
+                  q={q}
+                  setQ={setQ}
+                  questionsQ={questionsQ}
+                  setQuestionsQ={setQuestionsQ}
+                  closer={closerFiltro}
+                  setCloser={setCloserFiltro}
+                  etapa={etapaFiltro}
+                  setEtapa={setEtapaFiltro}
+                  canal={canalFiltro}
+                  setCanal={setCanalFiltro}
+                  owner={ownerFiltro}
+                  setOwner={(value) => {
+                    setOwnerFiltro(value);
+                    if (isAdmin) {
+                      const code = value === "all" ? "" : value;
+                      ownerFilterRef.current = code;
+                      void reload(code || undefined);
+                    }
+                  }}
+                  createdFrom={createdFrom}
+                  setCreatedFrom={setCreatedFrom}
+                  createdTo={createdTo}
+                  setCreatedTo={setCreatedTo}
+                  etapas={PIPELINE_STAGES}
+                  canales={canales}
+                  closers={closers}
+                  owners={owners}
+                  onClear={() => {
+                    setQ("");
+                    setQuestionsQ("");
+                    setCloserFiltro("all");
+                    setEtapaFiltro("all");
+                    setCanalFiltro("all");
+                    setOwnerFiltro("all");
+                    setCreatedFrom("");
+                    setCreatedTo("");
+                  }}
+                />
               </div>
-
-              {view === "lista" ? (
-                <div className="rounded-xl border border-slate-200/70 bg-white/90 shadow-sm flex-1 overflow-hidden">
-                  <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-[10px] font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
-                    <div className="col-span-3">Prospecto</div>
-                    <div className="col-span-2">Contacto</div>
-                    <div className="col-span-2">Closer</div>
-                    <div className="col-span-2">Canal</div>
-                    <div className="col-span-1">Etapa</div>
-                    <div className="col-span-2 text-right">Acción</div>
+              {/* Contenido principal */}
+              <div className="flex-1 min-w-0 flex flex-col gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    <span>
+                      Mostrando {paginatedFiltrados.length} de{" "}
+                      {filtrados.length} leads
+                    </span>
+                    <span className="hidden sm:inline text-slate-300">|</span>
+                    <label className="inline-flex items-center gap-1">
+                      <span>Por página</span>
+                      <select
+                        className="h-6 rounded-md border border-slate-200 bg-white px-1.5 text-[11px] text-slate-700 focus:outline-none"
+                        value={pipelinePageSize}
+                        onChange={(event) => {
+                          const size = Number(event.target.value);
+                          setPipelinePageSize(size);
+                          setPipelinePage(1);
+                        }}
+                      >
+                        {PIPELINE_PAGE_SIZE_OPTIONS.map((size) => (
+                          <option key={size} value={size}>
+                            {size}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <span className="hidden sm:inline text-slate-300">|</span>
+                    <div className="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPipelinePage((prev) => Math.max(1, prev - 1))
+                        }
+                        disabled={pipelinePage <= 1}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Página anterior"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="min-w-[78px] text-center text-[11px] font-medium text-slate-700">
+                        Página {pipelinePage} / {pipelineTotalPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPipelinePage((prev) =>
+                            Math.min(pipelineTotalPages, prev + 1),
+                          )
+                        }
+                        disabled={pipelinePage >= pipelineTotalPages}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Página siguiente"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="overflow-y-auto max-h-[calc(100vh-240px)]">
-                    {loadingLeads ? (
-                      <div className="flex items-center justify-center py-6 text-xs text-slate-500">
-                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                        Cargando leads...
-                      </div>
-                    ) : filtrados.length === 0 ? (
-                      <div className="p-6 text-center text-xs text-slate-500">
-                        No hay leads para mostrar
-                      </div>
-                    ) : (
-                      paginatedFiltrados.map((prospect) => (
-                        <div
-                          key={prospect.id}
-                          className="grid grid-cols-12 gap-2 px-3 py-2 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
-                        >
-                          <div className="col-span-3 min-w-0">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div
-                                className="hidden sm:flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-700"
-                                aria-hidden
-                              >
-                                {getInitials(prospect.nombre)}
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1">
-                                  <span
-                                    className="text-xs font-medium truncate text-slate-800"
-                                    title={prospect.nombre}
-                                  >
-                                    {prospect.nombre}
-                                  </span>
-                                  {prospect.remote ? (
-                                    <Badge
-                                      variant="secondary"
-                                      className="text-[9px] px-1 py-0 bg-indigo-50 text-indigo-600 border-indigo-200"
+
+                  <div className="inline-flex overflow-hidden rounded-md border border-slate-200 bg-white">
+                    <button
+                      type="button"
+                      onClick={() => setView("lista")}
+                      className={`px-2 py-1 text-slate-600 hover:bg-slate-50 ${
+                        view === "lista"
+                          ? "bg-blue-600 text-white hover:bg-blue-600"
+                          : ""
+                      }`}
+                      title="Vista de lista"
+                    >
+                      <List className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setView("kanban")}
+                      className={`px-2 py-1 text-slate-600 hover:bg-slate-50 border-l border-slate-200 ${
+                        view === "kanban"
+                          ? "bg-blue-600 text-white hover:bg-blue-600"
+                          : ""
+                      }`}
+                      title="Vista Kanban"
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {view === "lista" ? (
+                  <div className="rounded-xl border border-slate-200/70 bg-white/90 shadow-sm flex-1 overflow-hidden">
+                    <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-[10px] font-semibold text-slate-600 border-b bg-gradient-to-r from-slate-50 via-blue-50/60 to-slate-50 uppercase tracking-wide">
+                      <div className="col-span-4">Prospecto</div>
+                      <div className="col-span-3">Contacto</div>
+                      <div className="col-span-3">Closer</div>
+                      {/* <div className="col-span-2">Canal</div> */}
+                      {/* <div className="col-span-1">Etapa</div> */}
+                      <div className="col-span-2 text-right">Acción</div>
+                    </div>
+                    <div className="overflow-y-auto max-h-[calc(100vh-240px)]">
+                      {loadingLeads ? (
+                        <div className="flex items-center justify-center py-6 text-xs text-slate-500">
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          Cargando leads...
+                        </div>
+                      ) : filtrados.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-slate-500">
+                          No hay leads para mostrar
+                        </div>
+                      ) : (
+                        paginatedFiltrados.map((prospect) => (
+                          <div
+                            key={prospect.id}
+                            className="grid grid-cols-12 gap-2 px-3 py-1 border-b last:border-b-0 bg-white/80 even:bg-slate-50/70 hover:bg-blue-50/50 transition-colors"
+                          >
+                            <div className="col-span-4 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div
+                                  className="hidden sm:flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-[10px] font-semibold text-slate-700"
+                                  aria-hidden
+                                >
+                                  {getInitials(prospect.nombre)}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1">
+                                    <span
+                                      className="text-xs font-medium truncate text-slate-800"
+                                      title={prospect.nombre}
                                     >
-                                      Sync
-                                    </Badge>
-                                  ) : null}
-                                </div>
-                                <div className="text-[10px] text-slate-500 truncate">
-                                  {[prospect.pais, prospect.ciudad]
-                                    .filter(Boolean)
-                                    .join(" · ")}
+                                      {prospect.nombre}
+                                    </span>
+                                    {prospect.remote ? (
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-[9px] px-1 py-0 bg-indigo-50 text-indigo-600 border-indigo-200"
+                                      >
+                                        Sync
+                                      </Badge>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 truncate">
+                                    {[prospect.pais, prospect.ciudad]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
 
-                          <div className="col-span-2 min-w-0 text-[10px] space-y-0.5">
-                            <div className="flex items-center gap-1 truncate text-slate-600">
-                              <Mail className="h-3 w-3 text-indigo-400" />
-                              <span className="truncate">
-                                {prospect.email || "—"}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1 truncate text-slate-600">
-                              <Phone className="h-3 w-3 text-emerald-400" />
-                              <span className="truncate">
-                                {prospect.telefono || "—"}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="col-span-2 min-w-0 flex items-center">
-                            <div className="min-w-0 rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-[10px] text-slate-700 w-full">
-                              <div className="text-[9px] font-semibold uppercase tracking-wide text-slate-500">
-                                Closer
+                            <div className="col-span-3 min-w-0 text-[10px] space-y-0.5">
+                              <div className="flex items-center gap-1 truncate text-slate-600">
+                                <Mail className="h-3 w-3 text-indigo-400 flex-shrink-0" />
+                                <span className="truncate">
+                                  {prospect.email || "—"}
+                                </span>
                               </div>
+                              <div className="flex items-center gap-1 truncate text-slate-600">
+                                <Phone className="h-3 w-3 text-emerald-400 flex-shrink-0" />
+                                <span className="truncate">
+                                  {prospect.telefono || "—"}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="col-span-3 min-w-0 flex items-center">
                               <div
-                                className="mt-0.5 truncate"
+                                className="truncate text-[10px] text-slate-700 w-full"
                                 title={prospect.closerName || "Sin closer"}
                               >
-                                {prospect.closerName || "Sin closer"}
+                                {prospect.closerName || (
+                                  <span className="text-slate-400 italic">
+                                    Sin closer
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* <div className="col-span-2 text-[10px] flex items-center">Canal</div> */}
+                            {/* <div className="col-span-1 flex items-center">Etapa</div> */}
+
+                            <div className="col-span-2 flex items-center justify-end">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  aria-label={`Asignar lead ${prospect.nombre}`}
+                                  title="Asignar a usuario"
+                                  onClick={() => {
+                                    setLeadToAssign({
+                                      codigo: prospect.id,
+                                      nombre: prospect.nombre,
+                                    });
+                                    setAssignModalOpen(true);
+                                    void loadAllUsers();
+                                  }}
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                                >
+                                  <UserPlus className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  aria-label={`Ver respuestas de ${prospect.nombre}`}
+                                  title="Ver respuestas"
+                                  onClick={() =>
+                                    setSelectedLeadQuestionsCode(prospect.id)
+                                  }
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
+                                >
+                                  <User className="h-3.5 w-3.5" />
+                                </button>
+                                <Link
+                                  href={`/admin/crm/booking/${encodeURIComponent(prospect.id)}`}
+                                  aria-label={`Ver detalle de ${prospect.nombre}`}
+                                  title="Ver detalle"
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                >
+                                  <Eye className="h-3.5 w-3.5" />
+                                </Link>
+                                <button
+                                  type="button"
+                                  aria-label={`Eliminar lead ${prospect.nombre}`}
+                                  title="Eliminar lead"
+                                  onClick={() =>
+                                    setDeleteTarget({
+                                      id: prospect.id,
+                                      nombre: prospect.nombre,
+                                    })
+                                  }
+                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-red-600 hover:bg-red-50 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
                               </div>
                             </div>
                           </div>
-
-                          <div className="col-span-2 text-[10px] flex items-center">
-                            <Badge
-                              variant="outline"
-                              className="max-w-full truncate text-[10px] px-1.5 py-0 bg-sky-50 text-sky-700 border-sky-200"
-                              title={getOriginName(prospect.canal)}
-                            >
-                              {getOriginName(prospect.canal)}
-                            </Badge>
-                          </div>
-
-                          <div className="col-span-1 flex items-center">
-                            <StageBadge stage={prospect.etapa} size="sm" />
-                          </div>
-
-                          <div className="col-span-2 flex items-center justify-end">
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                aria-label={`Asignar lead ${prospect.nombre}`}
-                                title="Asignar a usuario"
-                                onClick={() => {
-                                  setLeadToAssign({
-                                    codigo: prospect.id,
-                                    nombre: prospect.nombre,
-                                  });
-                                  setAssignModalOpen(true);
-                                  void loadAllUsers();
-                                }}
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                              >
-                                <UserPlus className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={`Ver respuestas de ${prospect.nombre}`}
-                                title="Ver respuestas"
-                                onClick={() =>
-                                  setSelectedLeadQuestionsCode(prospect.id)
-                                }
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700"
-                              >
-                                <User className="h-3.5 w-3.5" />
-                              </button>
-                              <Link
-                                href={`/admin/crm/booking/${encodeURIComponent(prospect.id)}`}
-                                aria-label={`Ver detalle de ${prospect.nombre}`}
-                                title="Ver detalle"
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                              >
-                                <Eye className="h-3.5 w-3.5" />
-                              </Link>
-                              <button
-                                type="button"
-                                aria-label={`Eliminar lead ${prospect.nombre}`}
-                                title="Eliminar lead"
-                                onClick={() =>
-                                  setDeleteTarget({
-                                    id: prospect.id,
-                                    nombre: prospect.nombre,
-                                  })
-                                }
-                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-red-600 hover:bg-red-50 hover:text-red-700"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <ProspectKanban
-                  items={paginatedFiltrados.map((p) => ({
-                    id: p.id,
-                    nombre: p.nombre,
-                    email: p.email,
-                    telefono: p.telefono,
-                    canalFuente: p.canal,
-                    ownerNombre: undefined,
-                    etapa: p.etapa,
-                    saleStatus: p.saleStatus,
-                  }))}
-                  onOpenDetail={(p) =>
-                    router.push(
-                      `/admin/crm/booking/${encodeURIComponent(p.id)}`,
-                    )
-                  }
-                  allowStageChange={false}
-                />
-              )}
+                ) : (
+                  <ProspectKanban
+                    items={paginatedFiltrados.map((p) => ({
+                      id: p.id,
+                      nombre: p.nombre,
+                      email: p.email,
+                      telefono: p.telefono,
+                      canalFuente: p.canal,
+                      ownerNombre: undefined,
+                      etapa: p.etapa,
+                      saleStatus: p.saleStatus,
+                    }))}
+                    onOpenDetail={(p) =>
+                      router.push(
+                        `/admin/crm/booking/${encodeURIComponent(p.id)}`,
+                      )
+                    }
+                    allowStageChange={false}
+                  />
+                )}
+              </div>
             </div>
           }
           metrics={
