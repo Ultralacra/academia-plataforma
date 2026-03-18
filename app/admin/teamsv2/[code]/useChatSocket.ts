@@ -55,6 +55,8 @@ export function useChatSocket({
       });
       sioRef.current = sio;
 
+      console.log("[useChatSocket] Token de conexión chat:", token);
+
       sio.on("connect", () => {
         if (alive) setConnected(true);
       });

@@ -20,6 +20,16 @@ import { type MetadataRecord } from "@/lib/metadata";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { isoDay, parseMaybe } from "./detail-utils";
 
 const DRY_RUN_METADATA_SAVE = false;
@@ -351,6 +361,17 @@ export default function AdsMetricsForm({
   const [matchedMetadata, setMatchedMetadata] =
     useState<MetadataRecord<any> | null>(null);
   const [matchedMetadataCount, setMatchedMetadataCount] = useState<number>(0);
+  const [matchedMetadataAllIds, setMatchedMetadataAllIds] = useState<
+    (string | number)[]
+  >([]);
+  const [matchedMetadataAllItems, setMatchedMetadataAllItems] = useState<
+    MetadataRecord<any>[]
+  >([]);
+  const [showDuplicatesDialog, setShowDuplicatesDialog] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<
+    string | number | null
+  >(null);
+  const [metadataDeleting, setMetadataDeleting] = useState(false);
 
   function syncMonetaryFields(next: Metrics): Metrics {
     const currency = normalizeCurrency(next.moneda);
@@ -614,14 +635,25 @@ export default function AdsMetricsForm({
       return bT - aT;
     })[0] as MetadataRecord<any> | undefined;
 
-    return { best: best ?? null, count: matches.length };
+    return {
+      best: best ?? null,
+      count: matches.length,
+      allIds: matches
+        .map((m) => (m as any)?.id)
+        .filter((id: any) => id != null),
+      allMatches: matches,
+    };
   }
 
-  async function reloadStudentMetadata() {
+  async function reloadStudentMetadata(preferredId?: string | number | null) {
     const alumnoId = studentInfo?.id ?? null;
     setMetadataLoading(true);
     try {
-      const idForRoute = String(alumnoId ?? studentCode);
+      // Para estudiantes, siempre usar el código (no el ID numérico del cliente)
+      // porque los routes validan ownership comparando con meCode de /auth/me.
+      const userRole = String((user as any)?.role ?? "");
+      const idForRoute =
+        userRole === "student" ? studentCode : String(alumnoId ?? studentCode);
       const token = getAuthToken();
       const res = await fetch(
         `/api/alumnos/${encodeURIComponent(idForRoute)}/metadata?entity=${encodeURIComponent(
@@ -641,27 +673,33 @@ export default function AdsMetricsForm({
       }
       const json = (await res.json().catch(() => null)) as any;
       const items = Array.isArray(json?.items) ? json.items : [];
-      const { best, count } = pickBestMetadataForStudent(items, {
-        studentCode,
-        alumnoId,
-        entity: "ads_metrics",
-        tag: "admin_alumnos_ads_metrics",
-      });
-      setMatchedMetadata(best);
+      const { best, count, allIds, allMatches } = pickBestMetadataForStudent(
+        items,
+        {
+          studentCode,
+          alumnoId,
+          entity: "ads_metrics",
+          tag: "admin_alumnos_ads_metrics",
+        },
+      );
+      // Si se proporcionó un preferredId, intentar usarlo en vez de "best".
+      const preferred =
+        preferredId != null
+          ? (allMatches.find(
+              (m) => String((m as any)?.id) === String(preferredId),
+            ) ?? best)
+          : best;
+      setMatchedMetadata(preferred);
       setMatchedMetadataCount(count);
-      if (best) applyMetadataToForm(best);
-      /* console.log(
-        "[ADS][metadata] list -> total:",
-        items.length,
-        "matches:",
-        count,
-        "best:",
-        best,
-      ); */
+      setMatchedMetadataAllIds(allIds);
+      setMatchedMetadataAllItems(allMatches);
+      if (preferred) applyMetadataToForm(preferred);
     } catch (e) {
       console.warn("[ADS][metadata] no se pudo listar metadata:", e);
       setMatchedMetadata(null);
       setMatchedMetadataCount(0);
+      setMatchedMetadataAllIds([]);
+      setMatchedMetadataAllItems([]);
     } finally {
       setMetadataLoading(false);
     }
@@ -751,7 +789,10 @@ export default function AdsMetricsForm({
     setMetadataSaving(true);
     try {
       // 1) Listar SOLO lo del alumno (proxy interno) y filtrar el mejor registro
-      const idForRoute = String(alumnoId ?? studentCode);
+      // Para estudiantes, usar el código para que el ownership check funcione.
+      const userRole = String((user as any)?.role ?? "");
+      const idForRoute =
+        userRole === "student" ? studentCode : String(alumnoId ?? studentCode);
       const token = getAuthToken();
       const res = await fetch(
         `/api/alumnos/${encodeURIComponent(idForRoute)}/metadata?entity=${encodeURIComponent(
@@ -771,14 +812,26 @@ export default function AdsMetricsForm({
       }
       const listJson = (await res.json().catch(() => null)) as any;
       const items = Array.isArray(listJson?.items) ? listJson.items : [];
-      const { best, count } = pickBestMetadataForStudent(items, {
-        studentCode,
-        alumnoId,
-        entity: body.entity,
-        tag: "admin_alumnos_ads_metrics",
-      });
+      const { best, count, allIds, allMatches } = pickBestMetadataForStudent(
+        items,
+        {
+          studentCode,
+          alumnoId,
+          entity: body.entity,
+          tag: "admin_alumnos_ads_metrics",
+        },
+      );
 
-      if (best?.id != null) {
+      // Si el usuario seleccionó manualmente un registro, usarlo en lugar del "best" automático.
+      const currentSelectedId =
+        matchedMetadata?.id != null ? String(matchedMetadata.id) : null;
+      const userSelected = currentSelectedId
+        ? (allMatches.find(
+            (m) => String((m as any)?.id) === currentSelectedId,
+          ) ?? best)
+        : best;
+
+      if (userSelected?.id != null) {
         // Ya existe: actualizar (PUT) y luego consultar por id
         /* console.log(
           "[ADS][metadata] ya existe para este alumno, actualizando por id:",
@@ -786,7 +839,7 @@ export default function AdsMetricsForm({
         ); */
 
         // Preservamos creado_por_* si ya existe, para no modificar creador.
-        const existingPayload = (best as any)?.payload ?? {};
+        const existingPayload = (userSelected as any)?.payload ?? {};
         const mergedPayload = {
           ...existingPayload,
           ...payload,
@@ -799,9 +852,9 @@ export default function AdsMetricsForm({
         };
 
         const updateBody = {
-          id: (best as any)?.id,
-          entity: (best as any)?.entity,
-          entity_id: (best as any)?.entity_id,
+          id: (userSelected as any)?.id,
+          entity: (userSelected as any)?.entity,
+          entity_id: (userSelected as any)?.entity_id,
           payload: mergedPayload,
         };
 
@@ -823,16 +876,9 @@ export default function AdsMetricsForm({
           throw new Error(txt || `HTTP ${updateRes.status}`);
         }
 
-        const updatedLocal: MetadataRecord<any> = {
-          ...(best as any),
-          payload: mergedPayload,
-          updated_at: new Date().toISOString(),
-        };
-        setMatchedMetadata(updatedLocal);
-        setMatchedMetadataCount(count || 1);
-        applyMetadataToForm(updatedLocal);
-        /* console.log("[ADS][metadata] updated local ->", updatedLocal); */
         toast({ title: "Guardado", description: "Métricas ADS actualizadas" });
+        // Re-fetch desde el servidor para reflejar datos reales
+        await reloadStudentMetadata(userSelected.id);
         return;
       }
 
@@ -855,19 +901,9 @@ export default function AdsMetricsForm({
       }
       const createdJson = (await createRes.json().catch(() => null)) as any;
       const createdId = createdJson?.id ?? null;
-      const createdLocal: MetadataRecord<any> = {
-        id: createdId ?? `tmp_${Date.now()}`,
-        entity: body.entity,
-        entity_id: body.entity_id,
-        payload: body.payload,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-      setMatchedMetadata(createdLocal);
-      setMatchedMetadataCount(1);
-      applyMetadataToForm(createdLocal);
-      /* console.log("[ADS][metadata] created local ->", createdLocal); */
       toast({ title: "Guardado", description: "Métricas ADS guardadas" });
+      // Re-fetch desde el servidor para reflejar datos reales
+      await reloadStudentMetadata(createdId);
     } catch (e: unknown) {
       console.error("[ADS][metadata] error guardando/consultando:", e);
       try {
@@ -1243,6 +1279,46 @@ export default function AdsMetricsForm({
     return (v * 100).toFixed(1).replace(/\.0$/, "");
   }
 
+  const userRole = String((user as any)?.role ?? "");
+  const canDeleteMetadata = userRole === "admin" || userRole === "equipo";
+
+  async function handleDeleteMetadata(metaId: string | number) {
+    setMetadataDeleting(true);
+    try {
+      const token = getAuthToken();
+      const res = await fetch(
+        `/api/metadata/${encodeURIComponent(String(metaId))}`,
+        {
+          method: "DELETE",
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        },
+      );
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+      toast({
+        title: "Eliminado",
+        description: `Metadata #${metaId} eliminada correctamente`,
+      });
+      setDeleteConfirmId(null);
+      setShowDuplicatesDialog(false);
+      // Recargar metadata
+      await reloadStudentMetadata();
+    } catch (e: unknown) {
+      const desc = e instanceof Error ? e.message : String(e ?? "Error");
+      toast({
+        title: "Error al eliminar",
+        description: desc,
+        variant: "destructive",
+      });
+    } finally {
+      setMetadataDeleting(false);
+    }
+  }
+
   return (
     <>
       <div className="space-y-6">
@@ -1260,12 +1336,43 @@ export default function AdsMetricsForm({
             {metadataLoading ? (
               <Badge variant="secondary">metadata…</Badge>
             ) : matchedMetadata?.id != null ? (
-              <Badge variant="secondary">
-                metadata #{String(matchedMetadata.id)}
-                {matchedMetadataCount > 1
-                  ? ` (+${matchedMetadataCount - 1})`
-                  : ""}
-              </Badge>
+              <>
+                <Badge variant="secondary">
+                  metadata #{String(matchedMetadata.id)}
+                  {matchedMetadataCount > 1
+                    ? ` (+${matchedMetadataCount - 1})`
+                    : ""}
+                </Badge>
+                {matchedMetadataCount > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    title="Ver registros duplicados"
+                    onClick={() => setShowDuplicatesDialog(true)}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                      <path d="M12 11h4" />
+                      <path d="M12 16h4" />
+                      <path d="M8 11h.01" />
+                      <path d="M8 16h.01" />
+                    </svg>
+                  </Button>
+                )}
+              </>
             ) : (
               <Badge variant="outline">sin metadata</Badge>
             )}
@@ -2021,6 +2128,161 @@ export default function AdsMetricsForm({
           </CardContent>
         </Card>
       </div>
+
+      {/* Dialog de registros duplicados */}
+      <AlertDialog
+        open={showDuplicatesDialog && deleteConfirmId == null}
+        onOpenChange={setShowDuplicatesDialog}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Registros de metadata ADS ({matchedMetadataCount})
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se encontraron {matchedMetadataCount} registros de métricas ADS
+              para este alumno. Selecciona uno para cargar su información en el
+              formulario.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="max-h-60 overflow-y-auto space-y-2">
+            {matchedMetadataAllItems
+              .sort(
+                (a, b) =>
+                  Number((b as any)?.id ?? 0) - Number((a as any)?.id ?? 0),
+              )
+              .map((item) => {
+                const id = (item as any)?.id;
+                const isBest = String(id) === String(matchedMetadata?.id);
+                const savedAt = (item as any)?.payload?._saved_at;
+                const createdAt = (item as any)?.created_at;
+                const displayDate = savedAt || createdAt || "";
+                const formattedDate = displayDate
+                  ? new Date(displayDate).toLocaleString("es", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : "Sin fecha";
+                const entityId = String((item as any)?.entity_id ?? "");
+                return (
+                  <div
+                    key={String(id)}
+                    className={`flex items-center justify-between rounded-md border p-2 text-sm cursor-pointer transition-colors hover:bg-muted/50 ${
+                      isBest ? "border-primary bg-primary/5" : ""
+                    }`}
+                    onClick={() => {
+                      setMatchedMetadata(item);
+                      applyMetadataToForm(item);
+                      setShowDuplicatesDialog(false);
+                      toast({
+                        title: "Registro cargado",
+                        description: `Metadata #${id} cargada en el formulario`,
+                      });
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <span className="font-medium">#{String(id)}</span>
+                      {isBest && (
+                        <Badge
+                          variant="default"
+                          className="ml-2 text-[10px] px-1.5 py-0"
+                        >
+                          activo
+                        </Badge>
+                      )}
+                      <div className="text-xs text-muted-foreground truncate">
+                        {formattedDate} · entity_id: {entityId}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant={isBest ? "secondary" : "outline"}
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMatchedMetadata(item);
+                          applyMetadataToForm(item);
+                          setShowDuplicatesDialog(false);
+                          toast({
+                            title: "Registro cargado",
+                            description: `Metadata #${id} cargada en el formulario`,
+                          });
+                        }}
+                      >
+                        {isBest ? "Seleccionado" : "Seleccionar"}
+                      </Button>
+                      {canDeleteMetadata && (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={metadataDeleting}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteConfirmId(id);
+                          }}
+                        >
+                          Eliminar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cerrar</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Dialog de confirmación de borrado */}
+      <AlertDialog
+        open={deleteConfirmId != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteConfirmId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Eliminar metadata #{String(deleteConfirmId)}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará únicamente el registro #
+              {String(deleteConfirmId)} de forma permanente.
+              {String(deleteConfirmId) === String(matchedMetadata?.id) && (
+                <>
+                  {" "}
+                  Este es el registro activo. Al eliminarlo se usará el
+                  siguiente disponible.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={metadataDeleting}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={metadataDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteConfirmId != null)
+                  handleDeleteMetadata(deleteConfirmId);
+              }}
+            >
+              {metadataDeleting ? "Eliminando…" : "Sí, eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

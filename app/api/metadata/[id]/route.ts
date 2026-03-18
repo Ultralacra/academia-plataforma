@@ -108,3 +108,42 @@ export async function PUT(
   // Respuesta mínima para no exponer el registro completo
   return NextResponse.json({ ok: true }, { status: 200 });
 }
+
+export async function DELETE(
+  req: NextRequest,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const { id } = await ctx.params;
+  const auth = req.headers.get("authorization") ?? "";
+  if (!auth.trim()) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  const me = await fetchMe(auth);
+  if (me) {
+    const role = normalizeRole(me.role, me.tipo);
+    // Solo admin y equipo pueden borrar metadata.
+    if (role !== "admin" && role !== "equipo") {
+      return NextResponse.json({ error: "Prohibido" }, { status: 403 });
+    }
+  }
+
+  const upstream = await fetch(buildUrl(`/metadata/${encodeURIComponent(id)}`), {
+    method: "DELETE",
+    headers: {
+      Authorization: auth,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+  });
+
+  if (!upstream.ok) {
+    const text = await upstream.text().catch(() => "");
+    return NextResponse.json(
+      { error: text || `HTTP ${upstream.status}` },
+      { status: upstream.status },
+    );
+  }
+
+  return NextResponse.json({ ok: true }, { status: 200 });
+}

@@ -176,8 +176,10 @@ export function CoachChatNotifier() {
     });
     socketRef.current = socket;
 
+    console.log("[CoachChatNotifier] Token de conexión chat:", token);
+
     socket.on("connect", () => {
-            /* console.log("[CoachChatNotifier] Connected"); */
+      /* console.log("[CoachChatNotifier] Connected"); */
 
       // Reset local membership caches on each fresh connection
       joinedChatIds.current = new Set();
@@ -198,13 +200,13 @@ export function CoachChatNotifier() {
       // List chats to join them
       socket.emit("chat.list", payload, (ack: any) => {
         if (ack && ack.success && Array.isArray(ack.data)) {
-                    /* console.log("[CoachChatNotifier] Joining chats:", ack.data.length); */
+          /* console.log("[CoachChatNotifier] Joining chats:", ack.data.length); */
           // DEBUG: Ver estructura de los datos
-                    /* console.log(
+          /* console.log(
             "[CoachChatNotifier] 📋 Lista completa de conversaciones:",
             JSON.stringify(ack.data, null, 2),
           ); */
-                    /* console.log(
+          /* console.log(
             "[CoachChatNotifier] 📋 Resumen:",
             ack.data.map((c: any) => ({
               id: c?.id_chat ?? c?.id,
@@ -353,7 +355,7 @@ export function CoachChatNotifier() {
               0,
               140,
             );
-                        /* console.log("[CoachChatNotifier] ← Mensaje de alumno", {
+            /* console.log("[CoachChatNotifier] ← Mensaje de alumno", {
               id_chat: msg?.id_chat,
               id_mensaje: msg?.id_mensaje ?? msg?.id,
               texto_preview: preview,
@@ -366,7 +368,7 @@ export function CoachChatNotifier() {
             }); */
           }
         } catch {}
-                /* console.log(
+        /* console.log(
           "[CoachChatNotifier] Notification triggered for message:",
           msg,
           "User:",
@@ -512,7 +514,7 @@ export function CoachChatNotifier() {
               }),
             );
 
-                        /* console.log("[CoachChatNotifier] Eventos disparados:", {
+            /* console.log("[CoachChatNotifier] Eventos disparados:", {
               unread_count_updated: true,
               list_refresh: true,
               chatId: msg.id_chat,
