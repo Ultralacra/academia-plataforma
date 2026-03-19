@@ -254,7 +254,8 @@ function getNextPipelineStage(
       if (resultadoLlamada === "asistio" || resultadoLlamada === "cancelada") {
         return { value: "llamada_realizada", label: "Llamada realizada" };
       }
-      return null;
+      // Fallback: Fase 1 completada, avanzar a fase de llamada
+      return { value: "llamada_realizada", label: "Llamada realizada" };
     case "no_show":
       return { value: "seguimiento", label: "Seguimiento" };
     case "llamada_realizada":
@@ -278,13 +279,16 @@ function getNextPipelineStage(
       if (leadRespondioSeguimiento === false) {
         return { value: "recuperacion", label: "Recuperación" };
       }
+      if (leadRespondioSeguimiento === true) {
+        return { value: "decision", label: "Decisión" };
+      }
       return null;
     case "recuperacion":
       if (recuperacionTerminoSinRespuesta) {
         return { value: "lead_dormido", label: "Lead dormido" };
       }
       if (leadPidioRecontactoFuturo === true) {
-        return null;
+        return { value: "lead_dormido", label: "Lead dormido" };
       }
       return null;
     default:

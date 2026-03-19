@@ -135,6 +135,19 @@ function Content({ id }: { id: string }) {
       contractPartyCity: any;
       contractPartyCountry: any;
       capturedAt: string;
+      // Nuevos: datos completos de pago y closer
+      paymentMode: any;
+      paymentAmount: any;
+      paymentPlatform: any;
+      paymentHasReserve: any;
+      paymentReserveAmount: any;
+      paymentInstallmentsCount: any;
+      paymentInstallmentAmount: any;
+      paymentInstallmentsSchedule: any;
+      paymentCustomInstallments: any;
+      paymentExceptionNotes: any;
+      nextChargeDate: any;
+      closerInfo: any;
     }) => {
       const {
         leadBase,
@@ -150,6 +163,18 @@ function Content({ id }: { id: string }) {
         contractPartyCity,
         contractPartyCountry,
         capturedAt,
+        paymentMode,
+        paymentAmount,
+        paymentPlatform,
+        paymentHasReserve,
+        paymentReserveAmount,
+        paymentInstallmentsCount,
+        paymentInstallmentAmount,
+        paymentInstallmentsSchedule,
+        paymentCustomInstallments,
+        paymentExceptionNotes,
+        nextChargeDate,
+        closerInfo,
       } = args;
 
       const routePathname =
@@ -159,22 +184,68 @@ function Content({ id }: { id: string }) {
       const userAgent =
         typeof navigator !== "undefined" ? navigator.userAgent : undefined;
 
+      const r = record as any;
+      const lb = leadBase as any;
+      const pick = (key: string) => lb?.[key] ?? r?.[key] ?? null;
+
       return {
+        // Base: record completo (garantiza que ningún campo se pierda)
+        ...(r || {}),
+        // Overlay con leadForUi (tiene call/sale derivados)
         ...(leadBase || {}),
         ...(patch || {}),
         ...(snapshotSale ? { sale: snapshotSale } : {}),
         ...(draftNotes !== undefined ? { sale_notes: draftNotes } : {}),
+
+        // ── Datos básicos del lead ──────────────────────────────────
+        name: patch?.name ?? pick("name"),
+        email: patch?.email ?? pick("email"),
+        phone: patch?.phone ?? pick("phone"),
+        program: patch?.program ?? pick("program"),
+        codigo: pick("codigo"),
+        source: pick("source"),
+
+        // ── Pago completo ───────────────────────────────────────────
         ...(paymentPaidAmount !== null
           ? { payment_paid_amount: paymentPaidAmount }
           : {}),
         ...(paymentPlanType !== null
           ? { payment_plan_type: paymentPlanType }
           : {}),
+        ...(paymentMode !== null ? { payment_mode: paymentMode } : {}),
+        ...(paymentAmount !== null ? { payment_amount: paymentAmount } : {}),
+        ...(paymentPlatform !== null
+          ? { payment_platform: paymentPlatform }
+          : {}),
+        payment_has_reserve: paymentHasReserve ?? pick("payment_has_reserve"),
+        ...(paymentReserveAmount !== null
+          ? { payment_reserve_amount: paymentReserveAmount }
+          : {}),
+        ...(paymentInstallmentsCount !== null
+          ? { payment_installments_count: paymentInstallmentsCount }
+          : {}),
+        ...(paymentInstallmentAmount !== null
+          ? { payment_installment_amount: paymentInstallmentAmount }
+          : {}),
+        ...(paymentInstallmentsSchedule !== null
+          ? { payment_installments_schedule: paymentInstallmentsSchedule }
+          : {}),
+        ...(paymentCustomInstallments !== null
+          ? { payment_custom_installments: paymentCustomInstallments }
+          : {}),
+        ...(paymentExceptionNotes !== null
+          ? { payment_exception_notes: paymentExceptionNotes }
+          : {}),
         ...(paymentAttachments !== null
           ? { payment_attachments: paymentAttachments }
           : {}),
         ...(paymentProof !== null ? { payment_proof: paymentProof } : {}),
         ...(paymentPlans !== null ? { payment_plans_json: paymentPlans } : {}),
+        ...(nextChargeDate !== null
+          ? { next_charge_date: nextChargeDate }
+          : {}),
+
+        // ── Contrato ────────────────────────────────────────────────
         ...(contractPartyAddress !== null
           ? { contract_party_address: contractPartyAddress }
           : {}),
@@ -184,64 +255,73 @@ function Content({ id }: { id: string }) {
         ...(contractPartyCountry !== null
           ? { contract_party_country: contractPartyCountry }
           : {}),
-        sales_flow:
-          (leadBase as any)?.sales_flow ?? (record as any)?.sales_flow ?? null,
-        activity_log:
-          (leadBase as any)?.activity_log ??
-          (record as any)?.activity_log ??
-          [],
-        followup_started_at:
-          (leadBase as any)?.followup_started_at ??
-          (record as any)?.followup_started_at ??
-          null,
-        recovery_started_at:
-          (leadBase as any)?.recovery_started_at ??
-          (record as any)?.recovery_started_at ??
-          null,
-        sleeping_started_at:
-          (leadBase as any)?.sleeping_started_at ??
-          (record as any)?.sleeping_started_at ??
-          null,
-        next_contact_at:
-          (leadBase as any)?.next_contact_at ??
-          (record as any)?.next_contact_at ??
-          null,
-        next_task_due_at:
-          (leadBase as any)?.next_task_due_at ??
-          (record as any)?.next_task_due_at ??
-          null,
-        last_interaction_at:
-          (leadBase as any)?.last_interaction_at ??
-          (record as any)?.last_interaction_at ??
-          null,
-        last_interaction_channel:
-          (leadBase as any)?.last_interaction_channel ??
-          (record as any)?.last_interaction_channel ??
-          null,
-        conversation_status:
-          (leadBase as any)?.conversation_status ??
-          (record as any)?.conversation_status ??
-          null,
-        protocol_name:
-          (leadBase as any)?.protocol_name ??
-          (record as any)?.protocol_name ??
-          null,
-        protocol_step:
-          (leadBase as any)?.protocol_step ??
-          (record as any)?.protocol_step ??
-          null,
-        protocol_paused:
-          (leadBase as any)?.protocol_paused ??
-          (record as any)?.protocol_paused ??
-          null,
-        last_template_sent_name:
-          (leadBase as any)?.last_template_sent_name ??
-          (record as any)?.last_template_sent_name ??
-          null,
-        last_resource_sent_name:
-          (leadBase as any)?.last_resource_sent_name ??
-          (record as any)?.last_resource_sent_name ??
-          null,
+
+        // ── Closer / usuario responsable ────────────────────────────
+        ...(closerInfo ? { closer: closerInfo } : {}),
+        closer_name: closerInfo?.name ?? pick("closer_name"),
+
+        // ── Estado del lead y pago ────────────────────────────────
+        status: pick("status"),
+        payment_status: pick("payment_status"),
+
+        // ── Pipeline operativo y clasificación ─────────────────────
+        pipeline_status: pick("pipeline_status"),
+        customer_type: pick("customer_type"),
+        product_presented: pick("product_presented"),
+        objection_type: pick("objection_type"),
+        objection_detail: pick("objection_detail"),
+        lost_reason: pick("lost_reason"),
+        won_recovered: pick("won_recovered"),
+        lead_disposition: pick("lead_disposition"),
+
+        // ── Llamada ─────────────────────────────────────────────────
+        call_outcome: pick("call_outcome"),
+        call_result_at: pick("call_result_at"),
+        call_reschedule_date: pick("call_reschedule_date"),
+        call_reschedule_time: pick("call_reschedule_time"),
+        call_negotiation_active: pick("call_negotiation_active"),
+        call_negotiation_until: pick("call_negotiation_until"),
+        text_messages: pick("text_messages"),
+
+        // ── Flujo comercial y actividades del closer ───────────────
+        sales_flow: pick("sales_flow"),
+        activity_log: pick("activity_log") ?? [],
+        reminders: pick("reminders") ?? [],
+
+        // ── Llamada (objeto completo) ────────────────────────────
+        call: pick("call"),
+
+        // ── Contrato completo ───────────────────────────────────────
+        contract_status: pick("contract_status"),
+        contract_third_party: pick("contract_third_party"),
+        contract_is_company: pick("contract_is_company"),
+        contract_parties: pick("contract_parties") ?? [],
+        contract_company_name: pick("contract_company_name"),
+        contract_company_tax_id: pick("contract_company_tax_id"),
+        contract_company_address: pick("contract_company_address"),
+        contract_company_city: pick("contract_company_city"),
+        contract_company_country: pick("contract_company_country"),
+
+        // ── Seguimiento / recuperación ──────────────────────────────
+        followup_started_at: pick("followup_started_at"),
+        recovery_started_at: pick("recovery_started_at"),
+        sleeping_started_at: pick("sleeping_started_at"),
+        next_contact_at: pick("next_contact_at"),
+        next_task_due_at: pick("next_task_due_at"),
+        last_interaction_at: pick("last_interaction_at"),
+        last_interaction_channel: pick("last_interaction_channel"),
+        conversation_status: pick("conversation_status"),
+        protocol_name: pick("protocol_name"),
+        protocol_step: pick("protocol_step"),
+        protocol_paused: pick("protocol_paused"),
+        last_template_sent_name: pick("last_template_sent_name"),
+        last_resource_sent_name: pick("last_resource_sent_name"),
+
+        // ── Bonos ───────────────────────────────────────────────────
+        bonuses:
+          patch?.bonuses ?? snapshotSale?.bonuses ?? pick("bonuses") ?? [],
+
+        // ── Traza de ruta ───────────────────────────────────────────
         route_pathname:
           (leadBase as any)?.route_pathname ?? routePathname ?? null,
         route_url: (leadBase as any)?.route_url ?? routeUrl ?? null,
@@ -339,12 +419,119 @@ function Content({ id }: { id: string }) {
     };
   }, [record]);
 
+  // Campos del flujo del closer / seguimiento que el backend no almacena
+  // en la tabla leads pero sí en el snapshot. Los preservamos del localStorage.
+  const SNAPSHOT_ONLY_KEYS = [
+    "sales_flow",
+    "activity_log",
+    "reminders",
+    "pipeline_status",
+    "customer_type",
+    "product_presented",
+    "objection_type",
+    "objection_detail",
+    "lost_reason",
+    "won_recovered",
+    "lead_disposition",
+    "conversation_status",
+    "last_interaction_channel",
+    "last_interaction_at",
+    "next_contact_at",
+    "next_task_due_at",
+    "followup_started_at",
+    "recovery_started_at",
+    "sleeping_started_at",
+    "protocol_name",
+    "protocol_step",
+    "protocol_paused",
+    "last_template_sent_name",
+    "last_resource_sent_name",
+    "call_outcome",
+    "call_result_at",
+    "call_reschedule_date",
+    "call_reschedule_time",
+    "call_negotiation_active",
+    "call_negotiation_until",
+    "text_messages",
+    "call",
+    "payment_paid_amount",
+    "payment_plan_type",
+    "payment_mode",
+    "payment_amount",
+    "payment_platform",
+    "payment_has_reserve",
+    "payment_reserve_amount",
+    "payment_installments_count",
+    "payment_installment_amount",
+    "payment_installments_schedule",
+    "payment_custom_installments",
+    "payment_exception_notes",
+    "payment_attachments",
+    "payment_proof",
+    "payment_plans_json",
+    "next_charge_date",
+    "payment_status",
+    "contract_status",
+    "contract_third_party",
+    "contract_is_company",
+    "contract_parties",
+    "contract_party_address",
+    "contract_party_city",
+    "contract_party_country",
+    "contract_company_name",
+    "contract_company_tax_id",
+    "contract_company_address",
+    "contract_company_city",
+    "contract_company_country",
+    "closer",
+    "closer_name",
+    "bonuses",
+    "sale_notes",
+    "status",
+  ];
+
+  /** Mergea datos frescos del backend con campos del snapshot/localStorage que
+   * el backend no devuelve (sales_flow, pipeline_status, activity_log, etc.)  */
+  const mergeWithPreserved = React.useCallback(
+    (fresh: any, source: Record<string, any> | null | undefined): any => {
+      if (!fresh || !source) return fresh;
+      const preserved: Record<string, any> = {};
+      for (const k of SNAPSHOT_ONLY_KEYS) {
+        const backendVal = fresh[k];
+        const srcVal = source[k];
+        // Si el backend no lo devuelve (o lo devuelve vacío) pero existía en la fuente, preservar
+        if (
+          (backendVal === undefined || backendVal === null) &&
+          srcVal !== undefined &&
+          srcVal !== null
+        ) {
+          preserved[k] = srcVal;
+        }
+      }
+      if (Object.keys(preserved).length === 0) return fresh;
+      return { ...fresh, ...preserved };
+    },
+    [],
+  );
+
   const load = React.useCallback(
     async ({ silent }: { silent?: boolean } = {}) => {
       if (!silent) setLoading(true);
       try {
         const lead = await getLead(id);
-        setRecord(lead as any);
+        // Leer campos del último snapshot guardado en localStorage
+        let snapshotFields: Record<string, any> | null = null;
+        try {
+          const raw = localStorage.getItem(localStorageKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            // Tomar payload_current del último snapshot O el record guardado
+            snapshotFields =
+              parsed?.last_snapshot?.payload_current ?? parsed?.record ?? null;
+          }
+        } catch {}
+        const merged = mergeWithPreserved(lead, snapshotFields);
+        setRecord(merged as any);
       } catch (e) {
         if (!silent) {
           // Si falla el backend, intentamos usar el borrador local.
@@ -360,7 +547,7 @@ function Content({ id }: { id: string }) {
         if (!silent) setLoading(false);
       }
     },
-    [hydrateFromLocalStorage, id],
+    [hydrateFromLocalStorage, id, localStorageKey, mergeWithPreserved],
   );
 
   const toLeadIsoDateOrNull = (v?: string | null) => {
@@ -389,6 +576,8 @@ function Content({ id }: { id: string }) {
 
         payment_mode: d.paymentMode ?? undefined,
         payment_amount: d.paymentAmount ?? undefined,
+        payment_paid_amount: (d as any).paymentPaidAmount ?? undefined,
+        payment_plan_type: (d as any).paymentPlanType ?? undefined,
         payment_platform: (d as any).paymentPlatform ?? undefined,
         next_charge_date: toLeadIsoDateOrNull(
           (d as any).nextChargeDate ?? null,
@@ -397,6 +586,21 @@ function Content({ id }: { id: string }) {
         payment_reserve_amount: (d as any).paymentHasReserve
           ? (d as any).paymentReserveAmount || null
           : null,
+        payment_installments_count:
+          (d as any).paymentInstallmentsCount ?? undefined,
+        payment_installment_amount:
+          (d as any).paymentInstallmentAmount ?? undefined,
+        payment_installments_schedule: Array.isArray(
+          (d as any).paymentInstallmentsSchedule,
+        )
+          ? (d as any).paymentInstallmentsSchedule
+          : undefined,
+        payment_custom_installments: Array.isArray(
+          (d as any).paymentCustomInstallments,
+        )
+          ? (d as any).paymentCustomInstallments
+          : undefined,
+        payment_exception_notes: (d as any).paymentExceptionNotes ?? undefined,
 
         sale_notes: (d as any).notes ?? undefined,
 
@@ -738,11 +942,6 @@ function Content({ id }: { id: string }) {
       : draftNotes !== undefined
         ? { notes: draftNotes }
         : undefined;
-    const draftPaymentPaidAmount = (draft as any)?.paymentPaidAmount;
-    const draftPaymentPlanType = (draft as any)?.paymentPlanType;
-    const draftPaymentAttachments = (draft as any)?.paymentAttachments;
-    const draftPaymentProof = (draft as any)?.paymentProof;
-    const draftPaymentPlans = (draft as any)?.paymentPlans;
     const pickValue = (...vals: Array<any>) => {
       for (const v of vals) {
         if (v === undefined || v === null) continue;
@@ -751,54 +950,143 @@ function Content({ id }: { id: string }) {
       }
       return null;
     };
+
+    // ── Pago: extraer todos los campos del draft / salePayload / record ──
+    const sp = snapshotSale?.payment ?? {};
+    const lui = (leadForUi as any) ?? {};
+    const rec = (record as any) ?? {};
+
     const paymentPaidAmount = pickValue(
-      draftPaymentPaidAmount,
-      snapshotSale?.payment?.paid_amount,
-      (leadForUi as any)?.payment_paid_amount,
-      (record as any)?.payment_paid_amount,
+      (draft as any)?.paymentPaidAmount,
+      sp?.paid_amount,
+      lui?.payment_paid_amount,
+      rec?.payment_paid_amount,
     );
     const paymentPlanType = pickValue(
-      draftPaymentPlanType,
-      snapshotSale?.payment?.plan_type,
-      (leadForUi as any)?.payment_plan_type,
-      (record as any)?.payment_plan_type,
+      (draft as any)?.paymentPlanType,
+      sp?.plan_type,
+      lui?.payment_plan_type,
+      rec?.payment_plan_type,
+    );
+    const paymentMode = pickValue(
+      (draft as any)?.paymentMode,
+      sp?.mode,
+      lui?.payment_mode,
+      rec?.payment_mode,
+    );
+    const paymentAmount = pickValue(
+      (draft as any)?.paymentAmount,
+      sp?.amount,
+      lui?.payment_amount,
+      rec?.payment_amount,
+    );
+    const paymentPlatform = pickValue(
+      (draft as any)?.paymentPlatform,
+      sp?.platform,
+      lui?.payment_platform,
+      rec?.payment_platform,
+    );
+    const paymentHasReserve = pickValue(
+      (draft as any)?.paymentHasReserve,
+      sp?.hasReserve,
+      lui?.payment_has_reserve,
+      rec?.payment_has_reserve,
+    );
+    const paymentReserveAmount = pickValue(
+      (draft as any)?.paymentReserveAmount,
+      sp?.reserveAmount,
+      lui?.payment_reserve_amount,
+      rec?.payment_reserve_amount,
+    );
+    const paymentInstallmentsCount = pickValue(
+      (draft as any)?.paymentInstallmentsCount,
+      sp?.installments?.count,
+      lui?.payment_installments_count,
+      rec?.payment_installments_count,
+    );
+    const paymentInstallmentAmount = pickValue(
+      (draft as any)?.paymentInstallmentAmount,
+      sp?.installments?.amount,
+      lui?.payment_installment_amount,
+      rec?.payment_installment_amount,
+    );
+    const paymentInstallmentsSchedule = pickValue(
+      (draft as any)?.paymentInstallmentsSchedule,
+      sp?.installments_schedule ?? sp?.installments?.schedule,
+      lui?.payment_installments_schedule,
+      rec?.payment_installments_schedule,
+    );
+    const paymentCustomInstallments = pickValue(
+      (draft as any)?.paymentCustomInstallments,
+      sp?.custom_installments,
+      lui?.payment_custom_installments,
+      rec?.payment_custom_installments,
+    );
+    const paymentExceptionNotes = pickValue(
+      (draft as any)?.paymentExceptionNotes,
+      sp?.exception_2_installments?.notes,
+      lui?.payment_exception_notes,
+      rec?.payment_exception_notes,
     );
     const paymentAttachments = pickValue(
-      draftPaymentAttachments,
-      snapshotSale?.payment?.attachments,
-      (leadForUi as any)?.payment_attachments,
-      (record as any)?.payment_attachments,
+      (draft as any)?.paymentAttachments,
+      sp?.attachments,
+      lui?.payment_attachments,
+      rec?.payment_attachments,
     );
     const paymentProof = pickValue(
-      draftPaymentProof,
-      snapshotSale?.payment?.proof,
-      (leadForUi as any)?.payment_proof,
-      (record as any)?.payment_proof,
+      (draft as any)?.paymentProof,
+      sp?.proof,
+      lui?.payment_proof,
+      rec?.payment_proof,
     );
     const paymentPlans = pickValue(
-      draftPaymentPlans,
-      snapshotSale?.payment?.plans,
-      (leadForUi as any)?.payment_plans_json,
-      (record as any)?.payment_plans_json,
+      (draft as any)?.paymentPlans,
+      sp?.plans,
+      lui?.payment_plans_json,
+      rec?.payment_plans_json,
     );
+    const nextChargeDate = pickValue(
+      (draft as any)?.nextChargeDate,
+      sp?.nextChargeDate,
+      lui?.next_charge_date,
+      rec?.next_charge_date,
+    );
+
+    // ── Contrato ──
     const contractPartyAddress = pickValue(
       (draft as any)?.contractPartyAddress,
       snapshotSale?.contract?.party?.address,
-      (leadForUi as any)?.contract_party_address,
-      (record as any)?.contract_party_address,
+      lui?.contract_party_address,
+      rec?.contract_party_address,
     );
     const contractPartyCity = pickValue(
       (draft as any)?.contractPartyCity,
       snapshotSale?.contract?.party?.city,
-      (leadForUi as any)?.contract_party_city,
-      (record as any)?.contract_party_city,
+      lui?.contract_party_city,
+      rec?.contract_party_city,
     );
     const contractPartyCountry = pickValue(
       (draft as any)?.contractPartyCountry,
       snapshotSale?.contract?.party?.country,
-      (leadForUi as any)?.contract_party_country,
-      (record as any)?.contract_party_country,
+      lui?.contract_party_country,
+      rec?.contract_party_country,
     );
+
+    // ── Closer info (del sale payload o del usuario actual) ──
+    const closerInfo = pickValue(
+      snapshotSale?.closer,
+      lui?.closer,
+      rec?.closer,
+      user
+        ? {
+            id: (user as any)?.id ?? user.email ?? null,
+            name: (user as any)?.name ?? null,
+            email: (user as any)?.email ?? null,
+          }
+        : null,
+    );
+
     const snapshotPayloadCurrent = buildSnapshotPayloadCurrent({
       leadBase: leadForUi || record,
       patch,
@@ -813,6 +1101,18 @@ function Content({ id }: { id: string }) {
       contractPartyCity,
       contractPartyCountry,
       capturedAt,
+      paymentMode,
+      paymentAmount,
+      paymentPlatform,
+      paymentHasReserve,
+      paymentReserveAmount,
+      paymentInstallmentsCount,
+      paymentInstallmentAmount,
+      paymentInstallmentsSchedule,
+      paymentCustomInstallments,
+      paymentExceptionNotes,
+      nextChargeDate,
+      closerInfo,
     });
     setSnapshotSaving(true);
     try {
@@ -858,10 +1158,51 @@ function Content({ id }: { id: string }) {
           sale: {
             status_raw: ctx.statusRaw,
             status_label: ctx.statusLabel,
-            payment_mode: ctx.salePayload?.payment?.mode ?? "",
+            payment_mode: paymentMode ?? ctx.salePayload?.payment?.mode ?? "",
+            payment_amount:
+              paymentAmount ?? ctx.salePayload?.payment?.amount ?? "",
+            payment_paid_amount: paymentPaidAmount ?? "",
+            payment_plan_type: paymentPlanType ?? "",
+            payment_platform:
+              paymentPlatform ?? ctx.salePayload?.payment?.platform ?? "",
             has_reserva: ctx.hasReserva,
             reserve_amount_raw: String(ctx.reserveAmountRaw ?? ""),
+            installments_count: paymentInstallmentsCount ?? null,
+            installment_amount: paymentInstallmentAmount ?? null,
+            next_charge_date: nextChargeDate ?? null,
           },
+          closer: closerInfo ?? null,
+          pipeline: {
+            status: String((record as any)?.pipeline_status ?? ""),
+            customer_type: String((record as any)?.customer_type ?? ""),
+            product_presented: String((record as any)?.product_presented ?? ""),
+            objection_type: String((record as any)?.objection_type ?? ""),
+            lost_reason: String((record as any)?.lost_reason ?? ""),
+            won_recovered: String((record as any)?.won_recovered ?? ""),
+          },
+          sales_flow: {
+            fase: snapshotPayloadCurrent?.sales_flow?.fase ?? null,
+            updatedAt: snapshotPayloadCurrent?.sales_flow?.updatedAt ?? null,
+            resultadoLlamada:
+              snapshotPayloadCurrent?.sales_flow?.resultadoLlamada ?? null,
+            resultadoCierre:
+              snapshotPayloadCurrent?.sales_flow?.resultadoCierre ?? null,
+            tipoObjecion:
+              snapshotPayloadCurrent?.sales_flow?.tipoObjecion ?? null,
+            ofertaPresentada:
+              snapshotPayloadCurrent?.sales_flow?.ofertaPresentada ?? null,
+            seguimientoActivo:
+              !!snapshotPayloadCurrent?.sales_flow?.seguimientoActivo,
+            recuperacionActiva:
+              !!snapshotPayloadCurrent?.sales_flow?.recuperacionActiva,
+            reactivacionActiva:
+              !!snapshotPayloadCurrent?.sales_flow?.reactivacionActiva,
+            ventaIngresadaCrm:
+              !!snapshotPayloadCurrent?.sales_flow?.ventaIngresadaCrm,
+          },
+          activity_count: Array.isArray(snapshotPayloadCurrent?.activity_log)
+            ? snapshotPayloadCurrent.activity_log.length
+            : 0,
         },
         options: {
           lead_stage_options: ctx.leadStageOptions,
@@ -892,8 +1233,15 @@ function Content({ id }: { id: string }) {
         localStorage.setItem(localStorageKey, JSON.stringify(next));
       } catch {}
 
+      // Reload desde backend y preservar campos del snapshot
       try {
+        const savedPayloadCurrent = snapshotPayloadCurrent;
         await load({ silent: true });
+        // Re-inyectar campos que load() pudo no restaurar si localStorage
+        // aún no tenía el nuevo snapshot al momento del reload
+        setRecord((fresh: any) =>
+          fresh ? mergeWithPreserved(fresh, savedPayloadCurrent) : fresh,
+        );
       } catch {}
 
       toast({
@@ -931,6 +1279,7 @@ function Content({ id }: { id: string }) {
     leadForUi,
     load,
     localStorageKey,
+    mergeWithPreserved,
     record,
     saleDraftPayload,
     snapshotSaving,

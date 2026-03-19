@@ -29,6 +29,8 @@ function Content({ id }: { id: string }) {
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
     null,
   );
+  const [frozenInitial, setFrozenInitial] =
+    React.useState<Partial<CloseSaleInput> | null>(null);
   const router = useRouter();
 
   const load = async () => {
@@ -44,6 +46,8 @@ function Content({ id }: { id: string }) {
   };
 
   React.useEffect(() => {
+    setFrozenInitial(null);
+    setDraft(null);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -118,7 +122,7 @@ function Content({ id }: { id: string }) {
         ]
       : [];
 
-  const initial: Partial<CloseSaleInput> = {
+  const initialBase: Partial<CloseSaleInput> = {
     fullName: salePayload?.name || "",
     email: salePayload?.email || "",
     phone: salePayload?.phone || "",
@@ -149,6 +153,13 @@ function Content({ id }: { id: string }) {
     status: salePayload?.status || undefined,
   } as any;
 
+  React.useEffect(() => {
+    if (frozenInitial) return;
+    setFrozenInitial(initialBase);
+  }, [frozenInitial, initialBase]);
+
+  const initial = frozenInitial ?? initialBase;
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
@@ -171,7 +182,17 @@ function Content({ id }: { id: string }) {
           entity={isSale ? "sale" : "booking"}
           initial={initial}
           autoSave
-          onChange={(f) => setDraft({ ...f })}
+          onChange={(f) =>
+            setDraft((prev) => {
+              try {
+                const next = { ...f };
+                if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
+                return next;
+              } catch {
+                return { ...f };
+              }
+            })
+          }
           onDone={() => router.refresh()}
         />
       </Card>

@@ -445,6 +445,9 @@ export function CloseSaleForm({
     String(form.program || STATIC_PROGRAM),
   );
   const [bonosCatalog, setBonosCatalog] = useState<alumnosApi.Bono[]>([]);
+  const lastInitialHashRef = React.useRef<string | null>(null);
+  const lastOnChangeHashRef = React.useRef<string | null>(null);
+  const lastPayloadHashRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -516,10 +519,12 @@ export function CloseSaleForm({
   // Propagar cambios en vivo al padre para vista previa en tiempo real
   useEffect(() => {
     try {
+      const nextHash = JSON.stringify(form);
+      if (lastOnChangeHashRef.current === nextHash) return;
+      lastOnChangeHashRef.current = nextHash;
       onChange?.(form);
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(form)]);
+  }, [form, onChange]);
 
   // Helper para construir payload compatible con metadata
   const buildSalePayload = () => {
@@ -834,10 +839,13 @@ export function CloseSaleForm({
 
   useEffect(() => {
     try {
-      onSalePayloadChange?.(buildSalePayload());
+      const payload = buildSalePayload();
+      const nextHash = JSON.stringify(payload);
+      if (lastPayloadHashRef.current === nextHash) return;
+      lastPayloadHashRef.current = nextHash;
+      onSalePayloadChange?.(payload);
     } catch {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(form)]);
+  }, [form, onSalePayloadChange]);
 
   // Autosave: persistir cambios en modo edición sin recargar
   useEffect(() => {
@@ -876,6 +884,50 @@ export function CloseSaleForm({
   }, [autoSave, autoSaveDelay, mode, recordId, entity, JSON.stringify(form)]);
 
   useEffect(() => {
+    const nextInitial = {
+      fullName: initial?.fullName,
+      email: initial?.email,
+      phone: initial?.phone,
+      program: initial?.program,
+      bonuses: (initial?.bonuses as string[] | undefined) ?? null,
+      paymentMode: initial?.paymentMode,
+      paymentAmount: initial?.paymentAmount,
+      paymentPaidAmount: (initial as any)?.paymentPaidAmount,
+      paymentPlanType: (initial as any)?.paymentPlanType,
+      paymentPricingPreset: (initial as any)?.paymentPricingPreset,
+      paymentInstallmentsCount: (initial as any)?.paymentInstallmentsCount,
+      paymentInstallmentAmount: (initial as any)?.paymentInstallmentAmount,
+      paymentFirstInstallmentAmount: (initial as any)
+        ?.paymentFirstInstallmentAmount,
+      paymentSecondInstallmentAmount: (initial as any)
+        ?.paymentSecondInstallmentAmount,
+      paymentSecondInstallmentDate: (initial as any)
+        ?.paymentSecondInstallmentDate,
+      paymentExceptionNotes: (initial as any)?.paymentExceptionNotes,
+      reservePaidDate: (initial as any)?.reservePaidDate,
+      reserveRemainingDueDate: (initial as any)?.reserveRemainingDueDate,
+      reserveNotes: (initial as any)?.reserveNotes,
+      paymentAttachments: Array.isArray((initial as any)?.paymentAttachments)
+        ? ((initial as any).paymentAttachments as any)
+        : null,
+      paymentHasReserve: (initial as any)?.paymentHasReserve,
+      paymentReserveAmount: (initial as any)?.paymentReserveAmount,
+      paymentPlatform: initial?.paymentPlatform,
+      nextChargeDate: initial?.nextChargeDate,
+      contractThirdParty: initial?.contractThirdParty,
+      contractPartyName: initial?.contractPartyName,
+      contractPartyEmail: initial?.contractPartyEmail,
+      contractPartyPhone: initial?.contractPartyPhone,
+      contractParties: (initial?.contractParties as any) ?? null,
+      notes: initial?.notes,
+    };
+
+    try {
+      const nextInitialHash = JSON.stringify(nextInitial);
+      if (lastInitialHashRef.current === nextInitialHash) return;
+      lastInitialHashRef.current = nextInitialHash;
+    } catch {}
+
     // Evitar actualizaciones redundantes que puedan generar loops
     setForm((prev) => {
       const next: CloseSaleInput = {
@@ -1375,14 +1427,15 @@ export function CloseSaleForm({
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <Checkbox
-                            checked={!!isSel}
-                            onClick={(e) => e.stopPropagation()}
-                            onCheckedChange={(checked) =>
-                              toggleBonus(b.key, checked === true)
-                            }
-                            aria-label={`Seleccionar ${b.title}`}
-                          />
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={!!isSel}
+                              onCheckedChange={(checked) =>
+                                toggleBonus(b.key, checked === true)
+                              }
+                              aria-label={`Seleccionar ${b.title}`}
+                            />
+                          </div>
                           <div className="space-y-1 pr-8">
                             <div className="text-sm font-medium text-slate-900">
                               {b.title}
@@ -1442,14 +1495,15 @@ export function CloseSaleForm({
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <Checkbox
-                            checked={!!isSel}
-                            onClick={(e) => e.stopPropagation()}
-                            onCheckedChange={(checked) =>
-                              toggleBonus(b.key, checked === true)
-                            }
-                            aria-label={`Seleccionar ${b.title}`}
-                          />
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <Checkbox
+                              checked={!!isSel}
+                              onCheckedChange={(checked) =>
+                                toggleBonus(b.key, checked === true)
+                              }
+                              aria-label={`Seleccionar ${b.title}`}
+                            />
+                          </div>
                           <div className="space-y-1 pr-8">
                             <div className="text-sm font-medium text-slate-900">
                               {b.title}

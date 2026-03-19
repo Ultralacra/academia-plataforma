@@ -51,9 +51,52 @@ export function TabVenta({
   setSaleDraftPayload,
 }: TabVentaProps) {
   const [previewOpen, setPreviewOpen] = React.useState(false);
+  const lastDraftHashRef = React.useRef<string | null>(null);
+  const lastSalePayloadHashRef = React.useRef<string | null>(null);
 
   // Modal-stack: ocultar dialog padre visualmente cuando ContractGenerator abre su dialog
   const [contractOpen, setContractOpen] = React.useState(false);
+
+  const handleDraftChange = React.useCallback(
+    (nextDraft: CloseSaleInput) => {
+      setDraft((prev) => {
+        try {
+          const next = { ...nextDraft };
+          const nextHash = JSON.stringify(next);
+          if (lastDraftHashRef.current === nextHash) return prev;
+          if (JSON.stringify(prev) === nextHash) {
+            lastDraftHashRef.current = nextHash;
+            return prev;
+          }
+          lastDraftHashRef.current = nextHash;
+          return next;
+        } catch {
+          return { ...nextDraft };
+        }
+      });
+    },
+    [setDraft],
+  );
+
+  const handleSalePayloadChange = React.useCallback(
+    (nextPayload: any) => {
+      setSaleDraftPayload((prev: any) => {
+        try {
+          const nextHash = JSON.stringify(nextPayload ?? null);
+          if (lastSalePayloadHashRef.current === nextHash) return prev;
+          if (JSON.stringify(prev ?? null) === nextHash) {
+            lastSalePayloadHashRef.current = nextHash;
+            return prev;
+          }
+          lastSalePayloadHashRef.current = nextHash;
+          return nextPayload;
+        } catch {
+          return nextPayload;
+        }
+      });
+    },
+    [setSaleDraftPayload],
+  );
 
   return (
     <Card className="bg-white/90 backdrop-blur border-slate-200 shadow-sm overflow-hidden">
@@ -164,8 +207,8 @@ export function TabVenta({
             initial={initial}
             autoSave={false}
             persistMode="local"
-            onChange={(f: CloseSaleInput) => setDraft({ ...f })}
-            onSalePayloadChange={setSaleDraftPayload}
+            onChange={handleDraftChange}
+            onSalePayloadChange={handleSalePayloadChange}
             onDone={() => {
               toast({
                 title: "Listo para guardar",
