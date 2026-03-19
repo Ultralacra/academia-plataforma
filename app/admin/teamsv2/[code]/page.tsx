@@ -465,6 +465,16 @@ export default function CoachDetailPage({
     }
   }
 
+  function getDuplicateChatSignature(it: any): string | null {
+    const otherTeam = chatOtherTeamCode(it, code);
+    if (otherTeam) return `team:${String(otherTeam).toLowerCase()}`;
+
+    const otherStudent = chatOtherStudentCode(it);
+    if (otherStudent) return `student:${String(otherStudent).toLowerCase()}`;
+
+    return null;
+  }
+
   // Obtener info del último mensaje desde localStorage (guardada por CoachChatInline)
   function getStoredLastMsgInfo(chatId: any): {
     text: string;
@@ -706,6 +716,95 @@ export default function CoachDetailPage({
       minute: "2-digit",
     });
   };
+
+  useEffect(() => {
+    const list = Array.isArray(chatList) ? chatList : [];
+    if (list.length === 0) {
+      setDuplicateChatIds([]);
+      console.log("[CoachDetailPage] No hay chats para revisar duplicados.");
+      return;
+    }
+
+    const byId = new Map<string, any[]>();
+    const bySignature = new Map<string, any[]>();
+
+    for (const chat of list) {
+      const chatId = String(chat?.id_chat ?? chat?.id ?? "").trim();
+      if (chatId) {
+        if (!byId.has(chatId)) byId.set(chatId, []);
+        byId.get(chatId)!.push(chat);
+      }
+
+      const signature = getDuplicateChatSignature(chat);
+      if (signature) {
+        if (!bySignature.has(signature)) bySignature.set(signature, []);
+        bySignature.get(signature)!.push(chat);
+      }
+    }
+
+    const duplicatedById = Array.from(byId.entries()).filter(
+      ([, chats]) => chats.length > 1,
+    );
+    const duplicatedBySignature = Array.from(bySignature.entries()).filter(
+      ([, chats]) => chats.length > 1,
+    );
+
+    const nextDuplicateIds = Array.from(
+      new Set(
+        [...duplicatedById, ...duplicatedBySignature].flatMap(([, chats]) =>
+          chats
+            .map((chat) => chat?.id_chat ?? chat?.id ?? null)
+            .filter(Boolean),
+        ),
+      ),
+    );
+
+    setDuplicateChatIds(nextDuplicateIds as (string | number)[]);
+
+    const summarizeChat = (chat: any) => ({
+      id_chat: String(chat?.id_chat ?? chat?.id ?? ""),
+      firma: getDuplicateChatSignature(chat),
+      estudiante: chatOtherStudentCode(chat),
+      equipo: chatOtherTeamCode(chat, code),
+      fecha_creacion:
+        chat?.fecha_creacion_local ??
+        chat?.fecha_creacion ??
+        chat?.created_at ??
+        null,
+      ultimo_mensaje:
+        chat?.last_message?.fecha_envio_local ??
+        chat?.last_message?.fecha_envio ??
+        chat?.last_message_at ??
+        null,
+      unread: typeof chat?.unread === "number" ? chat.unread : null,
+      participante:
+        chat?.otros_participantes?.[0]?.nombre_participante ??
+        chat?.last_message?.participante_emisor_nombre ??
+        null,
+    });
+
+    if (duplicatedById.length === 0 && duplicatedBySignature.length === 0) {
+      console.log("[CoachDetailPage] No se detectaron chats duplicados.", {
+        totalChats: list.length,
+      });
+      return;
+    }
+
+    console.log("[CoachDetailPage] Chats duplicados detectados", {
+      totalChats: list.length,
+      duplicateChatIds: nextDuplicateIds,
+      duplicatedById: duplicatedById.map(([chatId, chats]) => ({
+        chatId,
+        total: chats.length,
+        chats: chats.map(summarizeChat),
+      })),
+      duplicatedByTarget: duplicatedBySignature.map(([signature, chats]) => ({
+        signature,
+        total: chats.length,
+        chats: chats.map(summarizeChat),
+      })),
+    });
+  }, [chatList, code]);
 
   // Handler para eventos de typing desde el chat
   const handleTypingChange = useMemo(() => {

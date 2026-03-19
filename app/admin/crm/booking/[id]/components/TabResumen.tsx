@@ -20,7 +20,11 @@ import {
 } from "@/components/ui/select";
 import {
   Activity,
+  AlertTriangle,
+  ArrowRight,
   Calendar,
+  CheckCircle2,
+  Circle,
   Mail,
   MessageSquare,
   Phone,
@@ -56,13 +60,12 @@ const PRODUCT_PRESENTED_OPTIONS = [
 ];
 
 const OBJECTION_OPTIONS = [
-  { value: "precio", label: "Precio" },
-  { value: "tiempo", label: "Tiempo" },
-  { value: "prioridad", label: "Prioridad" },
+  { value: "financiera", label: "Financiera" },
+  { value: "momento", label: "Momento" },
   { value: "confianza", label: "Confianza" },
-  { value: "decision_tercero", label: "Decisión de tercero" },
-  { value: "liquidez", label: "Liquidez" },
-  { value: "no_califica", label: "No califica" },
+  { value: "falta_claridad", label: "Falta de claridad" },
+  { value: "contractual", label: "Contractual" },
+  { value: "consulta_socio", label: "Consulta con socio" },
   { value: "otro", label: "Otro" },
 ];
 
@@ -126,6 +129,575 @@ const RESOURCE_OPTIONS = [
   { value: "faq", label: "FAQ comercial" },
 ];
 
+/* ── Helpers de fase — determina qué secciones se muestran ────────── */
+
+/** Nivel numérico del pipeline para comparación ≥ */
+function pipelineLevel(status: string): number {
+  switch (status) {
+    case "agendado":
+      return 1;
+    case "confirmado":
+      return 2;
+    case "no_show":
+      return 3;
+    case "llamada_realizada":
+      return 3;
+    case "decision":
+      return 4;
+    case "seguimiento":
+      return 5;
+    case "recuperacion":
+      return 6;
+    case "lead_dormido":
+      return 7;
+    case "cerrado_ganado":
+      return 8;
+    case "cerrado_perdido":
+      return 8;
+    default:
+      return 0;
+  }
+}
+
+const CLOSER_PHASE_META = {
+  1: {
+    label: "Fase 1 · Pre-llamada",
+    defaultStatus: "agendado",
+  },
+  2: {
+    label: "Fase 2 · Llamada de venta",
+    defaultStatus: "llamada_realizada",
+  },
+  3: {
+    label: "Fase 3 · Seguimiento activo",
+    defaultStatus: "seguimiento",
+  },
+  4: {
+    label: "Fase 4 · Recuperación",
+    defaultStatus: "recuperacion",
+  },
+  5: {
+    label: "Fase 5 · Reactivación",
+    defaultStatus: "lead_dormido",
+  },
+} as const;
+
+function getCloserPhase(status: string, salesFlow: any): 1 | 2 | 3 | 4 | 5 {
+  switch (status) {
+    case "agendado":
+    case "confirmado":
+      return 1;
+    case "no_show":
+    case "llamada_realizada":
+    case "decision":
+    case "cerrado_ganado":
+    case "cerrado_perdido":
+      return 2;
+    case "seguimiento":
+      return 3;
+    case "recuperacion":
+      return 4;
+    case "lead_dormido":
+      return 5;
+    default: {
+      const fallback = Number(salesFlow?.fase);
+      return fallback >= 1 && fallback <= 5
+        ? (fallback as 1 | 2 | 3 | 4 | 5)
+        : 1;
+    }
+  }
+}
+
+function getCloserPhaseContext(status: string, salesFlow: any) {
+  const phase = getCloserPhase(status, salesFlow);
+  const meta = CLOSER_PHASE_META[phase];
+  return {
+    phase,
+    phaseLabel: meta.label,
+    statusForChecklist: status || meta.defaultStatus,
+  };
+}
+
+/** Item del checklist del closer */
+interface ChecklistItem {
+  label: string;
+  done: boolean;
+  sublabel?: string;
+  /** Clave en sales_flow para toggle inline (tareas de confirmación) */
+  actionKey?: string;
+  /** Texto del botón de acción */
+  actionLabel?: string;
+  required?: boolean;
+  /** ID del elemento HTML al que navegar */
+  scrollTo?: string;
+}
+
+/** Siguiente fase del pipeline */
+function getNextPipelineStage(
+  current: string,
+  p: any,
+): { value: string; label: string } | null {
+  const resultadoLlamada = p?.sales_flow?.resultadoLlamada;
+  const resultadoCierre = p?.sales_flow?.resultadoCierre;
+  const leadRespondioSeguimiento = p?.sales_flow?.leadRespondioSeguimiento;
+  const leadPidioRecontactoFuturo = p?.sales_flow?.leadPidioRecontactoFuturo;
+  const recuperacionTerminoSinRespuesta =
+    p?.sales_flow?.recuperacionTerminoSinRespuesta;
+
+  switch (current) {
+    case "agendado":
+      return { value: "confirmado", label: "Confirmado" };
+    case "confirmado":
+      if (resultadoLlamada === "no_show") {
+        return { value: "no_show", label: "No Show" };
+      }
+      if (resultadoLlamada === "asistio" || resultadoLlamada === "cancelada") {
+        return { value: "llamada_realizada", label: "Llamada realizada" };
+      }
+      return null;
+    case "no_show":
+      return { value: "seguimiento", label: "Seguimiento" };
+    case "llamada_realizada":
+    case "decision":
+      if (
+        resultadoCierre === "ganado_hpro" ||
+        resultadoCierre === "ganado_starter" ||
+        resultadoCierre === "ganado_downsell" ||
+        resultadoCierre === "pendiente_pago"
+      ) {
+        return { value: "cerrado_ganado", label: "Cerrado ganado" };
+      }
+      if (resultadoCierre === "perdido") {
+        return { value: "cerrado_perdido", label: "Cerrado perdido" };
+      }
+      if (resultadoCierre === "objecion_activa") {
+        return { value: "seguimiento", label: "Seguimiento" };
+      }
+      return null;
+    case "seguimiento":
+      if (leadRespondioSeguimiento === false) {
+        return { value: "recuperacion", label: "Recuperación" };
+      }
+      return null;
+    case "recuperacion":
+      if (recuperacionTerminoSinRespuesta) {
+        return { value: "lead_dormido", label: "Lead dormido" };
+      }
+      if (leadPidioRecontactoFuturo === true) {
+        return null;
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
+/** Checklist de actividades por fase del pipeline */
+function getCloserChecklist(pipelineStatus: string, p: any): ChecklistItem[] {
+  const ps = pipelineStatus;
+  const items: ChecklistItem[] = [];
+
+  // FASE 1: PRE-LLAMADA (agendado / confirmado)
+  if (ps === "agendado" || ps === "confirmado" || !ps) {
+    items.push(
+      {
+        label: "Registro de lead en CRM",
+        done: true,
+        sublabel: "Automático al agendar",
+      },
+      {
+        label: "¿Lead respondió primer contacto?",
+        done: !!p.sales_flow?.primerContactoRespondido,
+        actionKey: "sales_flow.primerContactoRespondido",
+        actionLabel: "Sí, respondió",
+        scrollTo: "seccion-conversacion",
+        required: true,
+      },
+      {
+        label: "Envío de templates para iniciar contacto",
+        done: !!p.sales_flow?.templatesInicioEnviados,
+        actionKey: "sales_flow.templatesInicioEnviados",
+        actionLabel: "Templates enviados",
+        scrollTo: "seccion-plantillas",
+        required: true,
+      },
+      {
+        label: "Mensaje pre-llamada 24hrs antes",
+        done: !!p.sales_flow?.precallReminderEnviado24h,
+        actionKey: "sales_flow.precallReminderEnviado24h",
+        actionLabel: "Enviado",
+        scrollTo: "seccion-conversacion",
+        required: true,
+      },
+      {
+        label: "Mensaje pre-llamada 1hr antes",
+        done: !!p.sales_flow?.precallReminderEnviado1h,
+        actionKey: "sales_flow.precallReminderEnviado1h",
+        actionLabel: "Enviado",
+        scrollTo: "seccion-conversacion",
+      },
+      {
+        label: "Lead agendó llamada mediante Calendly",
+        done: !!p.sales_flow?.leadAgendoLlamada,
+        actionKey: "sales_flow.leadAgendoLlamada",
+        scrollTo: "seccion-conversacion",
+        actionLabel: "Ir a confirmar",
+        required: true,
+      },
+      {
+        label: "Recordatorio automático (Calendly)",
+        done: !!p.sales_flow?.leadAgendoLlamada,
+        sublabel: "Automático al existir agenda confirmada",
+      },
+    );
+    return items;
+  }
+
+  // FASE 2: LLAMADA DE VENTA
+  if (ps === "no_show" || ps === "llamada_realizada" || ps === "decision") {
+    if (ps === "no_show") {
+      items.push(
+        {
+          label: "Resultado: NO SHOW",
+          done: true,
+          sublabel: "Cliente no asistió",
+        },
+        {
+          label: "Mensaje Reagenda: 10 min después",
+          done: !!p.sales_flow?.noShowMensajes?.enviado10m,
+          actionKey: "sales_flow.noShowMensajes.enviado10m",
+          actionLabel: "Enviado",
+          scrollTo: "seccion-conversacion",
+          required: true,
+        },
+        {
+          label: "Mensaje Reagenda: 1hr después",
+          done: !!p.sales_flow?.noShowMensajes?.enviado1h,
+          actionKey: "sales_flow.noShowMensajes.enviado1h",
+          actionLabel: "Enviado",
+          scrollTo: "seccion-conversacion",
+          required: true,
+        },
+        {
+          label: "Mensaje Reagenda: 24hrs después",
+          done: !!p.sales_flow?.noShowMensajes?.enviado24h,
+          actionKey: "sales_flow.noShowMensajes.enviado24h",
+          actionLabel: "Enviado",
+          scrollTo: "seccion-conversacion",
+        },
+      );
+    } else {
+      items.push(
+        {
+          label: "Resultado de asistencia registrado",
+          done: p.sales_flow?.resultadoLlamada === "asistio",
+          scrollTo: "seccion-conversacion",
+          actionLabel: "Ir a llamada",
+          required: true,
+        },
+        {
+          label: "Identificar dolor y objetivo",
+          done:
+            !!p.sales_flow?.dolorIdentificado &&
+            !!p.sales_flow?.objetivoIdentificado,
+          scrollTo: "seccion-notas",
+          actionLabel: "Ir a completar",
+          required: true,
+          sublabel: "Registrar en notas del lead",
+        },
+        {
+          label: "Explorar situación actual",
+          done: !!p.sales_flow?.situacionActual,
+          scrollTo: "seccion-notas",
+          actionLabel: "Ir a completar",
+          required: true,
+          sublabel: "Registrar en notas del lead",
+        },
+        {
+          label: "¿Lead califica?",
+          done:
+            p.sales_flow?.califica !== undefined &&
+            p.sales_flow?.califica !== null,
+          scrollTo: "seccion-tipo-cliente",
+          actionLabel: "Ir a llamada",
+          required: true,
+        },
+        {
+          label: "Calificar lead (tipo de cliente)",
+          done: !!p.customer_type,
+          scrollTo: "seccion-tipo-cliente",
+          actionLabel: "Ir a clasificar",
+          required: true,
+        },
+        {
+          label: "Presentar solución — Pitch",
+          done: !!p.sales_flow?.ofertaPresentada,
+          scrollTo: "seccion-producto",
+          actionLabel: "Ir a completar",
+          required: true,
+          sublabel: "Seleccionar producto presentado",
+        },
+        {
+          label: "Clasificar tipo de objeción",
+          done: !!p.objection_type,
+          scrollTo: "seccion-objecion",
+          actionLabel: "Ir a objeción",
+          required: true,
+        },
+        {
+          label: "Rebatir objeciones — enviar recurso",
+          done: !!p.last_resource_sent_name,
+          scrollTo: "seccion-plantillas",
+          actionLabel: "Ir a recursos",
+          sublabel: "Seleccionar recurso enviado según tipo de objeción",
+        },
+        {
+          label: "Registrar resultado de cierre",
+          done: !!p.sales_flow?.resultadoCierre,
+          scrollTo: "gestion-lead",
+          actionLabel: "Ir a completar",
+          required: true,
+          sublabel: "Avanzar pipeline según resultado",
+        },
+      );
+    }
+    return items;
+  }
+
+  // FASE 3: SEGUIMIENTO ACTIVO (7 días)
+  if (ps === "seguimiento") {
+    const dias = p.sales_flow?.seguimientoActivo?.diasCompletados ?? [];
+    items.push(
+      {
+        label: "Día 0: Conexión — mensaje post-llamada",
+        done: dias.includes(0),
+        actionKey: "sales_flow.seguimientoActivo.dia0",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-conversacion",
+        required: true,
+        sublabel: "Enviar mensaje y registrar interacción",
+      },
+      {
+        label: "Día 1: Seguimiento",
+        done: dias.includes(1),
+        actionKey: "sales_flow.seguimientoActivo.dia1",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-conversacion",
+        required: true,
+      },
+      {
+        label: "Día 2: Enviar recurso según objeción",
+        done: dias.includes(2),
+        actionKey: "sales_flow.seguimientoActivo.dia2",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-plantillas",
+        sublabel: p.sales_flow?.tipoObjecion
+          ? `Objeción: ${p.sales_flow.tipoObjecion}`
+          : "Seleccionar recurso según objeción",
+      },
+      {
+        label: "Día 4: Seguimiento",
+        done: dias.includes(4),
+        actionKey: "sales_flow.seguimientoActivo.dia4",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-conversacion",
+      },
+      {
+        label: "Día 6: Enviar segundo recurso",
+        done: dias.includes(6),
+        actionKey: "sales_flow.seguimientoActivo.dia6",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-plantillas",
+      },
+      {
+        label: "Día 7: Cierre de seguimiento",
+        done: dias.includes(7),
+        actionKey: "sales_flow.seguimientoActivo.dia7",
+        actionLabel: "Hecho",
+        scrollTo: "gestion-lead",
+        required: true,
+        sublabel: "Si no hay respuesta → cambiar a Recuperación",
+      },
+      {
+        label: "Respuesta del lead registrada",
+        done:
+          p.sales_flow?.leadRespondioSeguimiento !== undefined &&
+          p.sales_flow?.leadRespondioSeguimiento !== null,
+        scrollTo: "seccion-conversacion",
+        actionLabel: "Ir a seguimiento",
+        required: true,
+      },
+    );
+    return items;
+  }
+
+  // FASE 4: RECUPERACIÓN (días 10-30)
+  if (ps === "recuperacion") {
+    const msgs = (p.sales_flow?.mensajes ?? []) as any[];
+    const enviados = msgs
+      .filter((m: any) => m.tipo === "template_inicio")
+      .map((m: any) => m.dia);
+    items.push(
+      {
+        label: "Envío de templates para iniciar contacto",
+        done: !!p.sales_flow?.templatesInicioEnviados,
+        actionKey: "sales_flow.templatesInicioEnviados",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-plantillas",
+        required: true,
+      },
+      {
+        label: "Acción Día 10: Reapertura conversación",
+        done: enviados.includes(10),
+        actionKey: "sales_flow.recuperacion.dia10",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-conversacion",
+        required: true,
+      },
+      {
+        label: "Acción Día 14: Contenido de valor",
+        done: enviados.includes(14),
+        actionKey: "sales_flow.recuperacion.dia14",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-plantillas",
+      },
+      {
+        label: "Acción Día 21: Nuevo intento",
+        done: enviados.includes(21),
+        actionKey: "sales_flow.recuperacion.dia21",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-conversacion",
+      },
+      {
+        label: "Acción Día 30: Cierre seguimiento",
+        done: enviados.includes(30),
+        actionKey: "sales_flow.recuperacion.dia30",
+        actionLabel: "Hecho",
+        scrollTo: "gestion-lead",
+        required: true,
+        sublabel: "Si no responde → cambiar a Lead dormido",
+      },
+      {
+        label: "Resultado de recuperación registrado",
+        done:
+          p.sales_flow?.leadPidioRecontactoFuturo === true ||
+          !!p.sales_flow?.recuperacionTerminoSinRespuesta,
+        scrollTo: "seccion-conversacion",
+        actionLabel: "Ir a recuperación",
+        required: true,
+      },
+      {
+        label: "Fecha de recontacto futuro",
+        done:
+          p.sales_flow?.leadPidioRecontactoFuturo === true
+            ? !!p.sales_flow?.fechaRecontactoFuturo
+            : true,
+        scrollTo: "seccion-conversacion",
+        actionLabel: "Ir a recuperación",
+      },
+    );
+    return items;
+  }
+
+  // FASE 5: REACTIVACIÓN LARGO PLAZO
+  if (ps === "lead_dormido") {
+    const diasR = p.sales_flow?.diasReactivacion ?? [];
+    items.push(
+      {
+        label: "Día 30: Primer contacto reactivación",
+        done: diasR.includes(30),
+        actionKey: "sales_flow.reactivacion.dia30",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-conversacion",
+        required: true,
+      },
+      {
+        label: "Día 60: Mensaje reactivación",
+        done: diasR.includes(60),
+        actionKey: "sales_flow.reactivacion.dia60",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-conversacion",
+      },
+      {
+        label: "Día 90: Invitación nueva llamada — Retargeting",
+        done: diasR.includes(90),
+        actionKey: "sales_flow.reactivacion.dia90",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-conversacion",
+        required: true,
+      },
+      {
+        label: "Retargeting activado",
+        done: !!p.sales_flow?.retargetingActivo,
+        actionKey: "sales_flow.retargetingActivo",
+        actionLabel: "Activar",
+        scrollTo: "seccion-conversacion",
+      },
+      {
+        label: "Evento Inmersión L2H",
+        done: !!p.sales_flow?.eventoInmersionL2H,
+        actionKey: "sales_flow.eventoInmersionL2H",
+        actionLabel: "Hecho",
+        scrollTo: "seccion-notas",
+      },
+    );
+    return items;
+  }
+
+  // CERRADO GANADO
+  if (ps === "cerrado_ganado") {
+    items.push(
+      { label: "Venta cerrada", done: true },
+      {
+        label: "Ingreso de venta a CRM",
+        done: !!p.sales_flow?.ventaIngresadaCrm,
+        actionKey: "sales_flow.ventaIngresadaCrm",
+        actionLabel: "Hecho",
+        scrollTo: "gestion-lead",
+        required: true,
+      },
+      {
+        label: "Closer acuerda fecha de pago del restante",
+        done: !!p.next_charge_date,
+        scrollTo: "seccion-conversacion",
+        actionLabel: "Ir a fechas",
+        required: true,
+      },
+      {
+        label: "Seguimiento de pago restante",
+        done: !!p.payment_status && p.payment_status !== "pending",
+        scrollTo: "gestion-lead",
+        actionLabel: "Ver estado de pago",
+        sublabel: "A cargo del closer",
+      },
+    );
+    return items;
+  }
+
+  // CERRADO PERDIDO
+  if (ps === "cerrado_perdido") {
+    items.push(
+      {
+        label: "Motivo de pérdida registrado",
+        done: !!p.lost_reason,
+        scrollTo: "gestion-lead",
+        actionLabel: "Ir a motivo",
+        required: true,
+      },
+      {
+        label: "Clasificación completada",
+        done: !!p.lost_reason && !!p.customer_type,
+        scrollTo: "gestion-lead",
+        actionLabel: "Ir a clasificación",
+        required: true,
+      },
+    );
+    return items;
+  }
+
+  return items;
+}
+
 function toDateTimeLocalValue(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -140,6 +712,20 @@ function toIsoOrNull(value: string) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function ensureSalesFlowBase(current: any) {
+  const salesFlow = current && typeof current === "object" ? current : {};
+  return {
+    fase:
+      typeof salesFlow.fase === "number" &&
+      salesFlow.fase >= 1 &&
+      salesFlow.fase <= 5
+        ? salesFlow.fase
+        : 1,
+    mensajes: Array.isArray(salesFlow.mensajes) ? salesFlow.mensajes : [],
+    ...salesFlow,
+  };
 }
 
 interface TabResumenProps {
@@ -158,6 +744,11 @@ interface TabResumenProps {
   callOutcomeLabel: (raw?: any) => string;
   paymentStatusLabel: (raw?: any) => string;
   applyRecordPatch: (patch: Record<string, any>) => void;
+  onNavigate?: (target: {
+    tab: "resumen" | "venta" | "seguimiento" | "notas";
+    sectionId?: string;
+    seguimientoTab?: "flujo_ventas" | "llamada";
+  }) => void;
 }
 
 export function TabResumen({
@@ -176,10 +767,19 @@ export function TabResumen({
   callOutcomeLabel,
   paymentStatusLabel,
   applyRecordPatch,
+  onNavigate,
 }: TabResumenProps) {
   const [newActivityNote, setNewActivityNote] = React.useState("");
 
+  /* ── Pipeline status y nivel de fase ─────────────────────────────── */
   const crmPipelineStatus = String(p.pipeline_status ?? "").trim();
+  const closerPhaseContext = React.useMemo(
+    () => getCloserPhaseContext(crmPipelineStatus, p.sales_flow),
+    [crmPipelineStatus, p.sales_flow],
+  );
+  const effectiveChecklistStatus = closerPhaseContext.statusForChecklist;
+  const closerPhaseLabel = closerPhaseContext.phaseLabel;
+  const level = pipelineLevel(crmPipelineStatus || effectiveChecklistStatus);
   const customerType = String(p.customer_type ?? "").trim();
   const productPresented = String(p.product_presented ?? "").trim();
   const objectionType = String(p.objection_type ?? "").trim();
@@ -206,30 +806,278 @@ export function TabResumen({
     ? (p.activity_log as any[])
     : [];
 
+  /* ── Checklist del closer ────────────────────────────────────────── */
+  const checklist = React.useMemo(
+    () => getCloserChecklist(effectiveChecklistStatus, p),
+    [effectiveChecklistStatus, p],
+  );
+  const checklistDone = checklist.filter((c) => c.done).length;
+  const requiredMissing = checklist.filter((c) => c.required && !c.done);
+  const nextStage = getNextPipelineStage(effectiveChecklistStatus, p);
+  const allPhaseDone = checklist.length > 0 && checklist.every((c) => c.done);
+  const canAdvance = allPhaseDone && nextStage !== null;
+
+  /* ── Acción rápida del checklist ─────────────────────────────────── */
+  /** Navega a la sección donde se completa la tarea */
+  const handleScrollTo = React.useCallback((target: string) => {
+    const el = document.getElementById(target);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const getSeguimientoSectionId = React.useCallback(
+    (target: string) => {
+      if (target === "seccion-notas") return "sales-flow-notas";
+      if (
+        target !== "seccion-conversacion" &&
+        target !== "seccion-plantillas"
+      ) {
+        return undefined;
+      }
+
+      switch (crmPipelineStatus) {
+        case "":
+          switch (closerPhaseContext.phase) {
+            case 3:
+              return "sales-flow-fase-3";
+            case 4:
+              return "sales-flow-fase-4";
+            case 5:
+              return "sales-flow-fase-5";
+            case 2:
+              return "sales-flow-fase-2";
+            case 1:
+            default:
+              return "sales-flow-fase-1";
+          }
+        case "seguimiento":
+          return "sales-flow-fase-3";
+        case "recuperacion":
+          return "sales-flow-fase-4";
+        case "lead_dormido":
+          return "sales-flow-fase-5";
+        case "no_show":
+        case "llamada_realizada":
+        case "decision":
+        case "cerrado_ganado":
+        case "cerrado_perdido":
+          return "sales-flow-fase-2";
+        case "agendado":
+        case "confirmado":
+        default:
+          return "sales-flow-fase-1";
+      }
+    },
+    [closerPhaseContext.phase, crmPipelineStatus],
+  );
+
+  const handleActionNavigation = React.useCallback(
+    (target: string) => {
+      if (target === "gestion-lead") {
+        handleScrollTo(target);
+        onNavigate?.({ tab: "resumen", sectionId: target });
+        return;
+      }
+
+      const sectionId = getSeguimientoSectionId(target);
+      if (sectionId) {
+        onNavigate?.({
+          tab: "seguimiento",
+          seguimientoTab: "flujo_ventas",
+          sectionId,
+        });
+        return;
+      }
+
+      handleScrollTo(target);
+    },
+    [getSeguimientoSectionId, handleScrollTo, onNavigate],
+  );
+
+  /** Marca/desmarca un item de confirmación en sales_flow */
+  const handleToggle = React.useCallback(
+    (actionKey: string) => {
+      const baseSalesFlow = ensureSalesFlowBase(p.sales_flow);
+
+      // Acciones de día de seguimiento
+      const seguimientoDayMatch = actionKey.match(
+        /^sales_flow\.seguimientoActivo\.dia(\d+)$/,
+      );
+      if (seguimientoDayMatch) {
+        const day = Number(seguimientoDayMatch[1]);
+        const current = baseSalesFlow.seguimientoActivo?.diasCompletados ?? [];
+        const next = current.includes(day)
+          ? current.filter((d: number) => d !== day)
+          : [...current, day];
+        applyRecordPatch({
+          sales_flow: {
+            ...baseSalesFlow,
+            seguimientoActivo: {
+              ...baseSalesFlow.seguimientoActivo,
+              diasCompletados: next,
+            },
+          },
+        });
+        return;
+      }
+
+      // Acciones de día de recuperación
+      const recuperacionMatch = actionKey.match(
+        /^sales_flow\.recuperacion\.dia(\d+)$/,
+      );
+      if (recuperacionMatch) {
+        const day = Number(recuperacionMatch[1]);
+        const msgs = (baseSalesFlow.mensajes ?? []) as any[];
+        const exists = msgs.some((m: any) => m.dia === day);
+        applyRecordPatch({
+          sales_flow: {
+            ...baseSalesFlow,
+            mensajes: exists
+              ? msgs.filter((m: any) => m.dia !== day)
+              : [
+                  ...msgs,
+                  {
+                    tipo: "template_inicio",
+                    dia: day,
+                    at: new Date().toISOString(),
+                  },
+                ],
+          },
+        });
+        return;
+      }
+
+      // Acciones de día de reactivación
+      const reactivacionMatch = actionKey.match(
+        /^sales_flow\.reactivacion\.dia(\d+)$/,
+      );
+      if (reactivacionMatch) {
+        const day = Number(reactivacionMatch[1]);
+        const current = baseSalesFlow.diasReactivacion ?? [];
+        const next = current.includes(day)
+          ? current.filter((d: number) => d !== day)
+          : [...current, day];
+        applyRecordPatch({
+          sales_flow: {
+            ...baseSalesFlow,
+            diasReactivacion: next,
+          },
+        });
+        return;
+      }
+
+      // Acciones de nested sales_flow (e.g. sales_flow.noShowMensajes.enviado10m)
+      const parts = actionKey.split(".");
+      if (parts[0] === "sales_flow" && parts.length >= 2) {
+        const sf = { ...baseSalesFlow } as any;
+        if (parts.length === 2) {
+          sf[parts[1]] = !sf[parts[1]];
+        } else if (parts.length === 3) {
+          const current = sf[parts[1]]?.[parts[2]];
+          sf[parts[1]] = { ...sf[parts[1]], [parts[2]]: !current };
+        }
+        applyRecordPatch({ sales_flow: sf });
+      }
+    },
+    [p, applyRecordPatch],
+  );
+
+  const handleAdvancePhase = React.useCallback(() => {
+    if (!canAdvance || !nextStage) return;
+    const phaseByPipeline: Record<string, number> = {
+      agendado: 1,
+      confirmado: 1,
+      no_show: 2,
+      llamada_realizada: 2,
+      decision: 2,
+      seguimiento: 3,
+      recuperacion: 4,
+      lead_dormido: 5,
+    };
+    applyRecordPatch({
+      pipeline_status: nextStage.value,
+      ...(phaseByPipeline[nextStage.value]
+        ? {
+            sales_flow: {
+              ...ensureSalesFlowBase(p.sales_flow),
+              fase: phaseByPipeline[nextStage.value] as 1 | 2 | 3 | 4 | 5,
+            },
+          }
+        : {}),
+    });
+  }, [canAdvance, nextStage, applyRecordPatch, p.sales_flow]);
+
+  const autoAdvancedStatusRef = React.useRef<string | null>(null);
+  const autoAdvanceReadyRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!autoAdvanceReadyRef.current) {
+      autoAdvanceReadyRef.current = true;
+      return;
+    }
+
+    if (!canAdvance || !nextStage) return;
+
+    const key = `${effectiveChecklistStatus}->${nextStage.value}`;
+    if (autoAdvancedStatusRef.current === key) return;
+
+    autoAdvancedStatusRef.current = key;
+    handleAdvancePhase();
+  }, [canAdvance, effectiveChecklistStatus, nextStage, handleAdvancePhase]);
+
+  /* ── Campos HubSpot / preguntas de cualificación ─────────────────── */
+  const hubspot = p.detalle_preguntas_hubspot;
+  const hsInstagram =
+    p.instagram_user ?? hubspot?.instagram_user?.respuesta ?? null;
+  const hsBudget =
+    p.monthly_budget ?? hubspot?.monthly_budget?.respuesta ?? null;
+  const hsObstacle =
+    p.main_obstacle ?? hubspot?.main_obstacle?.respuesta ?? null;
+  const hsInvite = p.invite_others ?? hubspot?.invite_others?.respuesta ?? null;
+  const hsCloser = p.closer_name ?? hubspot?.closer_name?.respuesta ?? null;
+  const hsSaleNotes = p.sale_notes ?? hubspot?.sale_notes?.respuesta ?? null;
+  const hsWhatsapp = p.whatsapp ?? p.phone ?? null;
+  const hsArea = p.area_contacto ?? hubspot?.area_contacto?.respuesta ?? null;
+  const hsAtendidoPor =
+    p.atendido_por ?? hubspot?.atendido_por?.respuesta ?? null;
+  const hsTipoEvento = p.tipo_evento ?? hubspot?.tipo_evento?.respuesta ?? null;
+  const hsAvatar = p.avatar ?? hubspot?.avatar?.respuesta ?? null;
+
+  /* ── Indicadores rápidos (adaptados a fase) ──────────────────────── */
+  const pipelineLabel =
+    CRM_PIPELINE_OPTIONS.find((item) => item.value === crmPipelineStatus)
+      ?.label || "Sin definir";
+
   const topStats = [
-    {
-      label: "Pipeline CRM",
-      value:
-        CRM_PIPELINE_OPTIONS.find((item) => item.value === crmPipelineStatus)
-          ?.label || "Sin definir",
-    },
-    {
-      label: "Conversación",
-      value:
-        CONVERSATION_STATUS_OPTIONS.find(
-          (item) => item.value === conversationStatus,
-        )?.label || "Sin definir",
-    },
-    {
-      label: "Última interacción",
-      value: lastInteractionAt
-        ? fmtDate(p.last_interaction_at)
-        : "Sin registro",
-    },
-    {
-      label: "Próximo contacto",
-      value: nextContactAt ? fmtDate(p.next_contact_at) : "Sin agenda",
-    },
+    { label: "Pipeline CRM", value: pipelineLabel },
+    ...(level >= 3
+      ? [
+          {
+            label: "Conversación",
+            value:
+              CONVERSATION_STATUS_OPTIONS.find(
+                (item) => item.value === conversationStatus,
+              )?.label || "Sin definir",
+          },
+        ]
+      : []),
+    ...(level >= 1
+      ? [
+          {
+            label: "Última interacción",
+            value: lastInteractionAt
+              ? fmtDate(p.last_interaction_at)
+              : "Sin registro",
+          },
+        ]
+      : []),
+    ...(level >= 2
+      ? [
+          {
+            label: "Próximo contacto",
+            value: nextContactAt ? fmtDate(p.next_contact_at) : "Sin agenda",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -301,6 +1149,61 @@ export function TabResumen({
                   Detalle completo
                 </span>
               </div>
+
+              {/* ── Preguntas HubSpot / Cualificación ──────────────── */}
+              {(hsInstagram ||
+                hsBudget ||
+                hsObstacle ||
+                hsInvite ||
+                hsWhatsapp) && (
+                <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Datos de cualificación (HubSpot)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                    {hsInstagram && (
+                      <DataRow label="Instagram" value={String(hsInstagram)} />
+                    )}
+                    {hsWhatsapp && (
+                      <DataRow label="WhatsApp" value={String(hsWhatsapp)} />
+                    )}
+                    {hsBudget && (
+                      <DataRow
+                        label="Meta facturación mensual (USD)"
+                        value={String(hsBudget)}
+                      />
+                    )}
+                    {hsObstacle && (
+                      <DataRow
+                        label="Mayor obstáculo"
+                        value={String(hsObstacle)}
+                      />
+                    )}
+                    {hsInvite && (
+                      <DataRow
+                        label="¿Consulta con alguien para inversiones?"
+                        value={String(hsInvite)}
+                      />
+                    )}
+                    {hsCloser && (
+                      <DataRow
+                        label="Closer asignado"
+                        value={String(hsCloser)}
+                      />
+                    )}
+                    {hsSaleNotes && (
+                      <DataRow
+                        label="Observaciones"
+                        value={String(hsSaleNotes)}
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
                 <DataRow
                   label="Evento"
@@ -323,105 +1226,108 @@ export function TabResumen({
                   }
                 />
                 <DataRow
-                  label="Instagram"
-                  value={p.instagram_user || p.instagramUser || "—"}
+                  label="Plataforma llamada"
+                  value={p.platform_call || p.platformCall || "—"}
                 />
-                <DataRow
-                  label="Programa"
-                  value={
-                    draft?.program ||
-                    effectiveSalePayload?.program ||
-                    p.program ||
-                    salePayload?.program ||
-                    "—"
-                  }
-                />
-                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
-                  <span className="text-slate-500">Bonos</span>
-                  <span className="flex flex-wrap justify-end gap-1">
-                    {bonusesList.length ? (
-                      bonusesList.map((bonus) => (
+
+                {/* Solo desde llamada_realizada / no_show (nivel ≥ 3) */}
+                {level >= 3 && (
+                  <DataRow
+                    label="Resultado llamada"
+                    value={callOutcomeLabel(
+                      p.call_outcome || p.callOutcome || p.call?.outcome,
+                    )}
+                  />
+                )}
+
+                {/* Programa: solo cuando hay producto presentado */}
+                {level >= 3 && (
+                  <DataRow
+                    label="Programa"
+                    value={
+                      draft?.program ||
+                      effectiveSalePayload?.program ||
+                      p.program ||
+                      salePayload?.program ||
+                      "—"
+                    }
+                  />
+                )}
+
+                {/* Bonos: solo cuando hay decisión o cierre */}
+                {level >= 4 && bonusesList.length > 0 && (
+                  <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                    <span className="text-slate-500">Bonos</span>
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {bonusesList.map((bonus) => (
                         <Badge
                           key={bonus}
                           className="bg-slate-100 text-slate-700 border-slate-200 text-xs"
                         >
                           {bonus}
                         </Badge>
-                      ))
-                    ) : (
-                      <span className="text-slate-400">—</span>
-                    )}
-                  </span>
-                </div>
-                <DataRow
-                  label="Presupuesto mensual"
-                  value={
-                    p.monthly_budget === null || p.monthly_budget === undefined
-                      ? p.monthlyBudget === null ||
-                        p.monthlyBudget === undefined
-                        ? "—"
-                        : String(p.monthlyBudget)
-                      : String(p.monthly_budget)
-                  }
-                />
-                <DataRow
-                  label="Plataforma llamada"
-                  value={p.platform_call || p.platformCall || "—"}
-                />
-                <DataRow
-                  label="Resultado llamada"
-                  value={callOutcomeLabel(
-                    p.call_outcome || p.callOutcome || p.call?.outcome,
-                  )}
-                />
-                <DataRow
-                  label="Pago"
-                  value={
-                    p.payment_status
-                      ? paymentStatusLabel(p.payment_status)
-                      : statusLabel
-                  }
-                />
-                <DataRow
-                  label="Monto"
-                  value={
-                    (draft?.paymentAmount ??
-                    p.payment_amount ??
-                    effectiveSalePayload?.payment?.amount)
-                      ? String(
-                          draft?.paymentAmount ??
-                            p.payment_amount ??
-                            effectiveSalePayload?.payment?.amount,
-                        )
-                      : "—"
-                  }
-                  accent="font-semibold"
-                />
-                <DataRow
-                  label="Próximo cobro"
-                  value={
-                    draft?.nextChargeDate ||
-                    p.next_charge_date ||
-                    effectiveSalePayload?.payment?.nextChargeDate
-                      ? fmtDate(
-                          draft?.nextChargeDate ||
-                            p.next_charge_date ||
-                            effectiveSalePayload?.payment?.nextChargeDate,
-                        )
-                      : "—"
-                  }
-                />
-                <DataRow label="Plan" value={planSummary} />
-                <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
-                  <span className="text-slate-500">Recordatorios</span>
-                  <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200">
-                    {Array.isArray(p.reminders)
-                      ? p.reminders.length
-                      : Array.isArray(p.call?.reminders)
-                        ? p.call.reminders.length
-                        : 0}
-                  </Badge>
-                </div>
+                      ))}
+                    </span>
+                  </div>
+                )}
+
+                {/* Pago, monto, cobro: solo en cerrado_ganado */}
+                {level >= 8 && crmPipelineStatus === "cerrado_ganado" && (
+                  <>
+                    <DataRow
+                      label="Pago"
+                      value={
+                        p.payment_status
+                          ? paymentStatusLabel(p.payment_status)
+                          : statusLabel
+                      }
+                    />
+                    <DataRow
+                      label="Monto"
+                      value={
+                        (draft?.paymentAmount ??
+                        p.payment_amount ??
+                        effectiveSalePayload?.payment?.amount)
+                          ? String(
+                              draft?.paymentAmount ??
+                                p.payment_amount ??
+                                effectiveSalePayload?.payment?.amount,
+                            )
+                          : "—"
+                      }
+                      accent="font-semibold"
+                    />
+                    <DataRow
+                      label="Próximo cobro"
+                      value={
+                        draft?.nextChargeDate ||
+                        p.next_charge_date ||
+                        effectiveSalePayload?.payment?.nextChargeDate
+                          ? fmtDate(
+                              draft?.nextChargeDate ||
+                                p.next_charge_date ||
+                                effectiveSalePayload?.payment?.nextChargeDate,
+                            )
+                          : "—"
+                      }
+                    />
+                    <DataRow label="Plan" value={planSummary} />
+                  </>
+                )}
+
+                {/* Recordatorios: solo desde seguimiento */}
+                {level >= 5 && (
+                  <div className="flex items-center justify-between gap-3 py-2 px-3 rounded-md hover:bg-slate-50 transition-colors">
+                    <span className="text-slate-500">Recordatorios</span>
+                    <Badge className="bg-cyan-100 text-cyan-700 border-cyan-200">
+                      {Array.isArray(p.reminders)
+                        ? p.reminders.length
+                        : Array.isArray(p.call?.reminders)
+                          ? p.call.reminders.length
+                          : 0}
+                    </Badge>
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>
@@ -429,7 +1335,174 @@ export function TabResumen({
       </div>
 
       <div className="xl:col-span-2 space-y-8">
+        {/* ── CHECKLIST DEL CLOSER ──────────────────────────────────── */}
         <Card className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm">
+          <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
+          <CardHeader className="pb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <CardTitle className="text-slate-800">
+                  Actividades del Closer
+                </CardTitle>
+                <CardDescription className="text-slate-500">
+                  {closerPhaseLabel} · Estado CRM: {pipelineLabel} ·{" "}
+                  {checklistDone}/{checklist.length} completadas
+                </CardDescription>
+              </div>
+              <Badge
+                className={
+                  checklistDone === checklist.length
+                    ? "bg-emerald-100 text-emerald-700 border-emerald-200"
+                    : "bg-amber-100 text-amber-700 border-amber-200"
+                }
+              >
+                {checklistDone === checklist.length
+                  ? "Completado"
+                  : `${Math.round((checklistDone / (checklist.length || 1)) * 100)}%`}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {/* Barra de progreso */}
+            <div className="mb-4 h-2 rounded-full bg-slate-100 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-500"
+                style={{
+                  width: `${(checklistDone / (checklist.length || 1)) * 100}%`,
+                }}
+              />
+            </div>
+            <div className="space-y-2">
+              {checklist.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 ${
+                    item.done
+                      ? "border-emerald-200 bg-emerald-50/50"
+                      : item.required
+                        ? "border-amber-200 bg-amber-50/30"
+                        : "border-slate-200 bg-white"
+                  }`}
+                >
+                  {/* Checkbox interactivo para items con actionKey */}
+                  {item.actionKey && !item.done ? (
+                    <button
+                      type="button"
+                      className="shrink-0 h-4 w-4 rounded border border-slate-300 hover:border-amber-400 hover:bg-amber-50 flex items-center justify-center transition-colors"
+                      title="Marcar como hecho"
+                      onClick={() => handleToggle(item.actionKey!)}
+                    >
+                      <span className="sr-only">Marcar</span>
+                    </button>
+                  ) : item.actionKey && item.done ? (
+                    <button
+                      type="button"
+                      className="shrink-0"
+                      title="Desmarcar"
+                      onClick={() => handleToggle(item.actionKey!)}
+                    >
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    </button>
+                  ) : item.done ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                  ) : item.required ? (
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                  ) : (
+                    <Circle className="h-4 w-4 shrink-0 text-slate-300" />
+                  )}
+
+                  <div className="min-w-0 flex-1">
+                    <div
+                      className={`text-xs font-semibold ${
+                        item.done
+                          ? "text-emerald-700"
+                          : item.required
+                            ? "text-amber-800"
+                            : "text-slate-700"
+                      }`}
+                    >
+                      {item.label}
+                      {item.required && !item.done && (
+                        <span className="ml-1.5 text-[10px] font-bold text-amber-600">
+                          OBLIGATORIO
+                        </span>
+                      )}
+                    </div>
+                    {item.sublabel && (
+                      <div className="text-[11px] text-slate-500">
+                        {item.sublabel}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Botón de navegación → lleva a la sección */}
+                  {item.scrollTo && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className={`shrink-0 h-7 px-2.5 text-[11px] gap-1 ${
+                        item.done
+                          ? "border-slate-200 text-slate-500 hover:bg-slate-50"
+                          : "border-amber-300 text-amber-700 hover:bg-amber-50"
+                      }`}
+                      onClick={() => handleActionNavigation(item.scrollTo!)}
+                    >
+                      <ArrowRight className="h-3 w-3" />
+                      {item.actionLabel || "Ir"}
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Resumen obligatorios pendientes */}
+            {requiredMissing.length > 0 && (
+              <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                <span className="text-xs text-amber-800">
+                  <strong>{requiredMissing.length}</strong> tarea
+                  {requiredMissing.length > 1 ? "s" : ""} obligatoria
+                  {requiredMissing.length > 1 ? "s" : ""} pendiente
+                  {requiredMissing.length > 1 ? "s" : ""} para avanzar de fase
+                </span>
+              </div>
+            )}
+
+            {/* Botón avanzar de fase */}
+            {nextStage && (
+              <div className="mt-4">
+                <Button
+                  type="button"
+                  className={`w-full gap-2 ${
+                    canAdvance
+                      ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+                      : "bg-slate-100 text-slate-400 cursor-not-allowed"
+                  }`}
+                  disabled={!canAdvance}
+                  onClick={handleAdvancePhase}
+                >
+                  <ArrowRight className="h-4 w-4" />
+                  Avanzar a: {nextStage.label}
+                </Button>
+                {!canAdvance && (
+                  <p className="mt-1.5 text-center text-[11px] text-slate-500">
+                    Completa las tareas obligatorias para desbloquear
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── CONTROL COMERCIAL — Condicional por fase ──────────────── */}
+        <Card
+          id="gestion-lead"
+          className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm scroll-mt-4"
+        >
           <div className="h-1 bg-slate-200" />
           <CardHeader className="pb-5">
             <div className="flex items-center gap-3">
@@ -438,10 +1511,10 @@ export function TabResumen({
               </div>
               <div>
                 <CardTitle className="text-slate-800">
-                  Control comercial
+                  Gestión del Lead
                 </CardTitle>
                 <CardDescription className="text-slate-500">
-                  Campos clave para seguimiento, recuperación y cierre
+                  Campos disponibles para esta fase
                 </CardDescription>
               </div>
             </div>
@@ -459,17 +1532,71 @@ export function TabResumen({
                 options={CRM_PIPELINE_OPTIONS}
               />
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* Tipo de cliente + Producto → solo desde llamada (nivel ≥ 3) */}
+              {level >= 3 && (
+                <div
+                  id="seccion-tipo-cliente"
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+                >
+                  <SelectField
+                    label="Tipo de cliente"
+                    value={customerType || "__empty__"}
+                    onValueChange={(next) =>
+                      applyRecordPatch({
+                        customer_type: next === "__empty__" ? null : next,
+                      })
+                    }
+                    options={CUSTOMER_TYPE_OPTIONS}
+                  />
+                  <div id="seccion-producto">
+                    <SelectField
+                      label="Producto presentado"
+                      value={productPresented || "__empty__"}
+                      onValueChange={(next) =>
+                        applyRecordPatch({
+                          product_presented: next === "__empty__" ? null : next,
+                        })
+                      }
+                      options={PRODUCT_PRESENTED_OPTIONS}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Objeción → desde llamada realizada (nivel ≥ 3) */}
+              {level >= 3 && (
+                <div id="seccion-objecion">
+                  <SelectField
+                    label="Tipo de objeción"
+                    value={objectionType || "__empty__"}
+                    onValueChange={(next) =>
+                      applyRecordPatch({
+                        objection_type: next === "__empty__" ? null : next,
+                      })
+                    }
+                    options={OBJECTION_OPTIONS}
+                  />
+                </div>
+              )}
+
+              {/* Motivo pérdida → solo cerrado_perdido */}
+              {crmPipelineStatus === "cerrado_perdido" && (
                 <SelectField
-                  label="Tipo de cliente"
-                  value={customerType || "__empty__"}
+                  label="Motivo de pérdida"
+                  value={lostReason || "__empty__"}
                   onValueChange={(next) =>
                     applyRecordPatch({
-                      customer_type: next === "__empty__" ? null : next,
+                      lost_reason: next === "__empty__" ? null : next,
                     })
                   }
-                  options={CUSTOMER_TYPE_OPTIONS}
+                  options={LOST_REASON_OPTIONS}
                 />
+              )}
+
+              {/* Venta recuperada → solo recuperación+ o cerrado ganado */}
+              {(crmPipelineStatus === "recuperacion" ||
+                crmPipelineStatus === "lead_dormido" ||
+                crmPipelineStatus === "cerrado_ganado") && (
                 <SelectField
                   label="Venta recuperada"
                   value={wonRecovered ? "si" : "no"}
@@ -482,71 +1609,43 @@ export function TabResumen({
                   ]}
                   allowEmpty={false}
                 />
-              </div>
+              )}
 
-              <SelectField
-                label="Producto presentado"
-                value={productPresented || "__empty__"}
-                onValueChange={(next) =>
-                  applyRecordPatch({
-                    product_presented: next === "__empty__" ? null : next,
-                  })
-                }
-                options={PRODUCT_PRESENTED_OPTIONS}
-              />
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <SelectField
-                  label="Tipo de objeción"
-                  value={objectionType || "__empty__"}
-                  onValueChange={(next) =>
-                    applyRecordPatch({
-                      objection_type: next === "__empty__" ? null : next,
-                    })
-                  }
-                  options={OBJECTION_OPTIONS}
-                />
-                <SelectField
-                  label="Motivo de pérdida"
-                  value={lostReason || "__empty__"}
-                  onValueChange={(next) =>
-                    applyRecordPatch({
-                      lost_reason: next === "__empty__" ? null : next,
-                    })
-                  }
-                  options={LOST_REASON_OPTIONS}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <SelectField
-                  label="Última plantilla enviada"
-                  value={lastTemplateSent || "__empty__"}
-                  onValueChange={(next) =>
-                    applyRecordPatch({
-                      last_template_sent_name:
-                        next === "__empty__" ? null : next,
-                    })
-                  }
-                  options={TEMPLATE_OPTIONS}
-                />
-                <SelectField
-                  label="Último recurso enviado"
-                  value={lastResourceSent || "__empty__"}
-                  onValueChange={(next) =>
-                    applyRecordPatch({
-                      last_resource_sent_name:
-                        next === "__empty__" ? null : next,
-                    })
-                  }
-                  options={RESOURCE_OPTIONS}
-                />
-              </div>
+              {/* Templates y recursos → desde llamada realizada (nivel ≥ 3) */}
+              {level >= 3 && (
+                <div
+                  id="seccion-plantillas"
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-2 scroll-mt-4"
+                >
+                  <SelectField
+                    label="Última plantilla enviada"
+                    value={lastTemplateSent || "__empty__"}
+                    onValueChange={(next) =>
+                      applyRecordPatch({
+                        last_template_sent_name:
+                          next === "__empty__" ? null : next,
+                      })
+                    }
+                    options={TEMPLATE_OPTIONS}
+                  />
+                  <SelectField
+                    label="Último recurso enviado"
+                    value={lastResourceSent || "__empty__"}
+                    onValueChange={(next) =>
+                      applyRecordPatch({
+                        last_resource_sent_name:
+                          next === "__empty__" ? null : next,
+                      })
+                    }
+                    options={RESOURCE_OPTIONS}
+                  />
+                </div>
+              )}
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
                   <Activity className="h-3.5 w-3.5" />
-                  Estado legado compatible
+                  Etapa del lead
                 </div>
                 <div className="mt-4 grid gap-5">
                   <SelectField
@@ -568,99 +1667,107 @@ export function TabResumen({
                     allowEmpty={false}
                   />
 
-                  <SelectField
-                    label="Estado comercial actual"
-                    value={leadDisposition || "__empty__"}
-                    onValueChange={(next) =>
-                      applyRecordPatch({
-                        lead_disposition: next === "__empty__" ? null : next,
-                      })
-                    }
-                    options={[
-                      {
-                        value: "conversation_started",
-                        label: "Contactado · Conversación iniciada",
-                      },
-                      {
-                        value: "appointment_scheduled",
-                        label: "Contactado · Cita agendada",
-                      },
-                      {
-                        value: "appointment_cancelled",
-                        label: "Contactado · Cita cancelada",
-                      },
-                      {
-                        value: "appointment_rescheduled",
-                        label: "Contactado · Cita reprogramada",
-                      },
-                      {
-                        value: "no_response",
-                        label: "Contactado · No responde",
-                      },
-                      { value: "no_show", label: "Contactado · No show" },
-                      {
-                        value: "diagnosis_done",
-                        label: "Cita atendida · Diagnóstico realizado",
-                      },
-                      {
-                        value: "offer_not_presented",
-                        label: "Cita atendida · Oferta no presentada",
-                      },
-                      {
-                        value: "offer_presented",
-                        label: "Cita atendida · Oferta presentada",
-                      },
-                      {
-                        value: "interested_evaluating",
-                        label: "Seguimiento · Interesado (evaluando)",
-                      },
-                      {
-                        value: "waiting_response",
-                        label: "Seguimiento · Esperando respuesta",
-                      },
-                      {
-                        value: "waiting_approval",
-                        label: "Seguimiento · Esperando aprobación",
-                      },
-                      { value: "cold", label: "Seguimiento · Frío" },
-                      {
-                        value: "reserve",
-                        label: "Pendiente de pago · Reserva",
-                      },
-                      {
-                        value: "card_unlocking",
-                        label: "Pendiente de pago · Gestión de tarjetas/límite",
-                      },
-                      {
-                        value: "getting_money",
-                        label: "Pendiente de pago · Consiguiendo el dinero",
-                      },
-                      {
-                        value: "lost_price_too_high",
-                        label: "Perdido · Precio muy alto",
-                      },
-                      {
-                        value: "lost_no_urgency",
-                        label: "Perdido · No tiene urgencia",
-                      },
-                      { value: "lost_trust", label: "Perdido · Confianza" },
-                      {
-                        value: "lost_external_decision",
-                        label: "Perdido · Decisión externa",
-                      },
-                      {
-                        value: "lost_no_response_exhausted",
-                        label: "Perdido · No respondió (proceso agotado)",
-                      },
-                    ]}
-                  />
+                  {/* Estado comercial solo si nivel >= 3 */}
+                  {level >= 3 && (
+                    <SelectField
+                      label="Estado comercial actual"
+                      value={leadDisposition || "__empty__"}
+                      onValueChange={(next) =>
+                        applyRecordPatch({
+                          lead_disposition: next === "__empty__" ? null : next,
+                        })
+                      }
+                      options={[
+                        {
+                          value: "conversation_started",
+                          label: "Contactado · Conversación iniciada",
+                        },
+                        {
+                          value: "appointment_scheduled",
+                          label: "Contactado · Cita agendada",
+                        },
+                        {
+                          value: "appointment_cancelled",
+                          label: "Contactado · Cita cancelada",
+                        },
+                        {
+                          value: "appointment_rescheduled",
+                          label: "Contactado · Cita reprogramada",
+                        },
+                        {
+                          value: "no_response",
+                          label: "Contactado · No responde",
+                        },
+                        { value: "no_show", label: "Contactado · No show" },
+                        {
+                          value: "diagnosis_done",
+                          label: "Cita atendida · Diagnóstico realizado",
+                        },
+                        {
+                          value: "offer_not_presented",
+                          label: "Cita atendida · Oferta no presentada",
+                        },
+                        {
+                          value: "offer_presented",
+                          label: "Cita atendida · Oferta presentada",
+                        },
+                        {
+                          value: "interested_evaluating",
+                          label: "Seguimiento · Interesado (evaluando)",
+                        },
+                        {
+                          value: "waiting_response",
+                          label: "Seguimiento · Esperando respuesta",
+                        },
+                        {
+                          value: "waiting_approval",
+                          label: "Seguimiento · Esperando aprobación",
+                        },
+                        { value: "cold", label: "Seguimiento · Frío" },
+                        {
+                          value: "reserve",
+                          label: "Pendiente de pago · Reserva",
+                        },
+                        {
+                          value: "card_unlocking",
+                          label:
+                            "Pendiente de pago · Gestión de tarjetas/límite",
+                        },
+                        {
+                          value: "getting_money",
+                          label: "Pendiente de pago · Consiguiendo el dinero",
+                        },
+                        {
+                          value: "lost_price_too_high",
+                          label: "Perdido · Precio muy alto",
+                        },
+                        {
+                          value: "lost_no_urgency",
+                          label: "Perdido · No tiene urgencia",
+                        },
+                        { value: "lost_trust", label: "Perdido · Confianza" },
+                        {
+                          value: "lost_external_decision",
+                          label: "Perdido · Decisión externa",
+                        },
+                        {
+                          value: "lost_no_response_exhausted",
+                          label: "Perdido · No respondió (proceso agotado)",
+                        },
+                      ]}
+                    />
+                  )}
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm">
+        {/* ── CONVERSACIÓN Y PROTOCOLO ────────────────────────────── */}
+        <Card
+          id="seccion-conversacion"
+          className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm scroll-mt-4"
+        >
           <div className="h-1 bg-gradient-to-r from-sky-500 to-cyan-500" />
           <CardHeader className="pb-5">
             <div className="flex items-center gap-3">
@@ -722,78 +1829,90 @@ export function TabResumen({
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <SelectField
-                  label="Protocolo activo"
-                  value={protocolName || "__empty__"}
-                  onValueChange={(next) =>
-                    applyRecordPatch({
-                      protocol_name: next === "__empty__" ? null : next,
-                    })
-                  }
-                  options={PROTOCOL_OPTIONS}
-                />
-                <TextField
-                  label="Paso actual del protocolo"
-                  value={protocolStep}
-                  placeholder="Ej: Día 4 · seguimiento"
-                  onChange={(value) =>
-                    applyRecordPatch({ protocol_step: value || null })
-                  }
-                />
-              </div>
+              {/* Protocolo solo desde seguimiento (nivel ≥ 5) */}
+              {level >= 5 && (
+                <>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <SelectField
+                      label="Protocolo activo"
+                      value={protocolName || "__empty__"}
+                      onValueChange={(next) =>
+                        applyRecordPatch({
+                          protocol_name: next === "__empty__" ? null : next,
+                        })
+                      }
+                      options={PROTOCOL_OPTIONS}
+                    />
+                    <TextField
+                      label="Paso actual del protocolo"
+                      value={protocolStep}
+                      placeholder="Ej: Día 4 · seguimiento"
+                      onChange={(value) =>
+                        applyRecordPatch({ protocol_step: value || null })
+                      }
+                    />
+                  </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <DateTimeField
-                  label="Inicio seguimiento"
-                  value={followupStartedAt}
-                  onChange={(value) =>
-                    applyRecordPatch({
-                      followup_started_at: toIsoOrNull(value),
-                    })
-                  }
-                />
-                <DateTimeField
-                  label="Inicio recuperación"
-                  value={recoveryStartedAt}
-                  onChange={(value) =>
-                    applyRecordPatch({
-                      recovery_started_at: toIsoOrNull(value),
-                    })
-                  }
-                />
-                <DateTimeField
-                  label="Inicio lead dormido"
-                  value={sleepingStartedAt}
-                  onChange={(value) =>
-                    applyRecordPatch({
-                      sleeping_started_at: toIsoOrNull(value),
-                    })
-                  }
-                />
-              </div>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <DateTimeField
+                      label="Inicio seguimiento"
+                      value={followupStartedAt}
+                      onChange={(value) =>
+                        applyRecordPatch({
+                          followup_started_at: toIsoOrNull(value),
+                        })
+                      }
+                    />
+                    {level >= 6 && (
+                      <DateTimeField
+                        label="Inicio recuperación"
+                        value={recoveryStartedAt}
+                        onChange={(value) =>
+                          applyRecordPatch({
+                            recovery_started_at: toIsoOrNull(value),
+                          })
+                        }
+                      />
+                    )}
+                    {level >= 7 && (
+                      <DateTimeField
+                        label="Inicio lead dormido"
+                        value={sleepingStartedAt}
+                        onChange={(value) =>
+                          applyRecordPatch({
+                            sleeping_started_at: toIsoOrNull(value),
+                          })
+                        }
+                      />
+                    )}
+                  </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <MiniInfoCard
-                  label="Plantilla reciente"
-                  value={lastTemplateSent || "Sin registro"}
-                />
-                <MiniInfoCard
-                  label="Recurso reciente"
-                  value={lastResourceSent || "Sin registro"}
-                />
-              </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <MiniInfoCard
+                      label="Plantilla reciente"
+                      value={lastTemplateSent || "Sin registro"}
+                    />
+                    <MiniInfoCard
+                      label="Recurso reciente"
+                      value={lastResourceSent || "Sin registro"}
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <div className="mt-4 p-3 rounded-lg bg-slate-50 border border-slate-200">
               <p className="text-xs text-slate-700 flex items-center gap-2">
                 <TrendingUp className="h-3.5 w-3.5" />
-                Se guarda al presionar "Guardar cambios".
+                Se guarda al presionar &quot;Guardar cambios&quot;.
               </p>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm">
+        <Card
+          id="seccion-notas"
+          className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm scroll-mt-4"
+        >
           <div className="h-1 bg-gradient-to-r from-teal-500 to-emerald-500" />
           <CardHeader className="pb-5">
             <div className="flex items-center gap-3">
@@ -825,7 +1944,7 @@ export function TabResumen({
                 />
                 <div className="flex items-center justify-between mt-3">
                   <div className="text-xs text-slate-500">
-                    Se guarda al presionar "Guardar cambios".
+                    Se guarda al presionar &quot;Guardar cambios&quot;.
                   </div>
                   <Button
                     type="button"

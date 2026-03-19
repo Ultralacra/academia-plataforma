@@ -18,13 +18,24 @@ interface TabSeguimientoProps {
   id: string;
   p: any;
   applyRecordPatch: (patch: Record<string, any>) => void;
+  navigationTarget?: {
+    tab: "seguimiento";
+    sectionId?: string;
+    seguimientoTab?: "flujo_ventas" | "llamada";
+    requestKey: number;
+  } | null;
 }
 
 export function TabSeguimiento({
   id,
   p,
   applyRecordPatch,
+  navigationTarget,
 }: TabSeguimientoProps) {
+  const [activeTab, setActiveTab] = React.useState<"flujo_ventas" | "llamada">(
+    "flujo_ventas",
+  );
+
   /* ── Estado del flujo comercial (guardado en payload.sales_flow) ── */
   const salesFlow: SalesFlowState | null = (p as any)?.sales_flow ?? null;
 
@@ -55,6 +66,23 @@ export function TabSeguimiento({
     },
   ];
 
+  React.useEffect(() => {
+    if (!navigationTarget) return;
+
+    const nextTab = navigationTarget.seguimientoTab ?? "flujo_ventas";
+    setActiveTab(nextTab);
+
+    const timer = window.setTimeout(() => {
+      const targetId = navigationTarget.sectionId ?? `seguimiento-${nextTab}`;
+      const element = document.getElementById(targetId);
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 80);
+
+    return () => window.clearTimeout(timer);
+  }, [navigationTarget]);
+
   return (
     <div className="space-y-6">
       {/* Resumen rápido */}
@@ -75,7 +103,12 @@ export function TabSeguimiento({
       </div>
 
       {/* Tabs: Flujo de Ventas | Flujo de Llamada (legacy) */}
-      <Tabs defaultValue="flujo_ventas">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as "flujo_ventas" | "llamada")
+        }
+      >
         <TabsList className="mb-4">
           <TabsTrigger value="flujo_ventas" className="gap-2">
             <GitBranch className="h-4 w-4" />
@@ -89,18 +122,26 @@ export function TabSeguimiento({
 
         {/* ── TAB: FLUJO DE VENTAS (5 fases) ── */}
         <TabsContent value="flujo_ventas">
-          <div className="rounded-2xl border border-slate-200/60 bg-gradient-to-b from-white to-slate-50/30 p-5 backdrop-blur">
+          <div
+            id="seguimiento-flujo-ventas"
+            className="rounded-2xl border border-slate-200/60 bg-gradient-to-b from-white to-slate-50/30 p-5 backdrop-blur"
+          >
             <SalesFlowPanel
               leadNombre={(p as any)?.name ?? (p as any)?.nombre ?? id}
               state={salesFlow}
               onChange={handleFlowChange}
+              focusSectionId={navigationTarget?.sectionId}
+              focusRequestKey={navigationTarget?.requestKey}
             />
           </div>
         </TabsContent>
 
         {/* ── TAB: DETALLE LLAMADA (CallFlowManager legacy) ── */}
         <TabsContent value="llamada">
-          <Card className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm">
+          <Card
+            id="seguimiento-llamada"
+            className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm"
+          >
             <div className="h-1 bg-gradient-to-r from-blue-500 to-cyan-500" />
             <CardHeader className="pb-5">
               <div className="flex items-center gap-3">

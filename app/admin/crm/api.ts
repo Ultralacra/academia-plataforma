@@ -638,7 +638,15 @@ export async function createLeadSnapshot(input: CreateLeadSnapshotInput) {
 
   const entity: CrmLeadSnapshotEntity = "crm_lead_snapshot";
   const capturedAt = input.snapshot.captured_at || new Date().toISOString();
-  const entityId = `${String(input.source.entity)}:${String(input.source.record_id)}:${capturedAt}`;
+  const leadCodigo = String(
+    (input as any)?.codigo ??
+      input.source.entity_id ??
+      (input as any)?.snapshot?.payload_current?.codigo ??
+      (input as any)?.snapshot?.payload_current?.source_entity_id ??
+      (input as any)?.snapshot?.record?.entity_id ??
+      "",
+  ).trim();
+  const entityId = leadCodigo || String(input.source.entity_id).trim();
 
   const payload = {
     ...input.snapshot,
@@ -653,14 +661,8 @@ export async function createLeadSnapshot(input: CreateLeadSnapshotInput) {
 
   // Nuevo endpoint: /v1/leads/snapshot (apiFetch ya apunta a /v1)
   // Body esperado (tal cual): { entity, entity_id, payload }
-  // Nota: algunos backends también aceptan/requieren `codigo` (lead).
-  const leadCodigo = String(
-    (input as any)?.codigo ??
-      (input as any)?.snapshot?.payload_current?.codigo ??
-      (input as any)?.snapshot?.payload_current?.source_entity_id ??
-      (input as any)?.snapshot?.record?.entity_id ??
-      "",
-  ).trim();
+  // Nota: este endpoint necesita un entity_id estable del lead para poder
+  // actualizar el registro base; el timestamp queda dentro del payload.
   const body: Record<string, any> = leadCodigo
     ? { entity, codigo: leadCodigo, entity_id: entityId, payload }
     : { entity, entity_id: entityId, payload };

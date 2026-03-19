@@ -188,12 +188,33 @@ function defaultFlowState(): SalesFlowState {
   };
 }
 
+function normalizeFlowState(
+  state: SalesFlowState | Partial<SalesFlowState> | null | undefined,
+): SalesFlowState {
+  const base = defaultFlowState();
+  const merged = {
+    ...base,
+    ...(state ?? {}),
+  } as SalesFlowState;
+
+  if (!(merged.fase in FASE_CONFIG)) {
+    merged.fase = base.fase;
+  }
+
+  merged.mensajes = Array.isArray(merged.mensajes) ? merged.mensajes : [];
+  merged.updatedAt = merged.updatedAt || base.updatedAt;
+
+  return merged;
+}
+
 /* ─── Props ─────────────────────────────────────────────────────────── */
 export interface SalesFlowPanelProps {
   leadNombre: string;
   state: SalesFlowState | null | undefined;
   onChange: (next: SalesFlowState) => void;
   readOnly?: boolean;
+  focusSectionId?: string;
+  focusRequestKey?: number;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -204,8 +225,10 @@ export function SalesFlowPanel({
   state,
   onChange,
   readOnly = false,
+  focusSectionId,
+  focusRequestKey,
 }: SalesFlowPanelProps) {
-  const flow: SalesFlowState = state ?? defaultFlowState();
+  const flow = React.useMemo(() => normalizeFlowState(state), [state]);
 
   /* Actualiza el estado y notifica hacia arriba */
   const update = React.useCallback(
@@ -272,6 +295,19 @@ export function SalesFlowPanel({
       next.has(n) ? next.delete(n) : next.add(n);
       return next;
     });
+
+  React.useEffect(() => {
+    if (!focusSectionId) return;
+    const match = focusSectionId.match(/^sales-flow-fase-(\d)$/);
+    if (!match) return;
+
+    const fase = Number(match[1]);
+    setOpenFases((prev) => {
+      const next = new Set(prev);
+      next.add(fase);
+      return next;
+    });
+  }, [focusSectionId, focusRequestKey]);
 
   /* Texto del estado del cierre */
   const cierreLabel: Record<NonNullable<ResultadoCierre>, string> = {
@@ -427,6 +463,19 @@ export function SalesFlowPanel({
             </div>
           )}
         </StepRow>
+
+        <StepRow
+          done={!!flow.templatesInicioEnviados}
+          label="Envío de templates para iniciar contacto"
+          sublabel={
+            flow.templatesInicioEnviados
+              ? "Templates de inicio enviados al lead"
+              : "Enviar templates de apertura antes de la llamada"
+          }
+          icon={<MessageSquare className="h-4 w-4" />}
+          onMark={() => update({ templatesInicioEnviados: true })}
+          readOnly={readOnly}
+        />
 
         {/* Recordatorios pre-llamada */}
         {flow.leadAgendoLlamada && (
@@ -1749,11 +1798,13 @@ export function SalesFlowPanel({
       <QuickStats />
 
       {/* Notas del closer */}
-      <NotasCloser
-        value={flow.notas ?? ""}
-        onChange={(v) => !readOnly && update({ notas: v })}
-        readOnly={readOnly}
-      />
+      <div id="sales-flow-notas">
+        <NotasCloser
+          value={flow.notas ?? ""}
+          onChange={(v) => !readOnly && update({ notas: v })}
+          readOnly={readOnly}
+        />
+      </div>
 
       {/* Fases como colapsables */}
       {([1, 2, 3, 4, 5] as const).map((n) => {
@@ -1763,61 +1814,65 @@ export function SalesFlowPanel({
         const isCurrent = n === faseActual;
 
         return (
-          <Collapsible key={n} open={isOpen} onOpenChange={() => toggleFase(n)}>
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className={`w-full flex items-center justify-between rounded-2xl border px-5 py-4 transition-all ${
-                  isCurrent
-                    ? `${cfg2.bg} ${cfg2.border} shadow-sm`
-                    : "border-slate-200 bg-white/80 hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`h-9 w-9 rounded-full bg-gradient-to-br ${cfg2.gradient} flex items-center justify-center`}
-                  >
-                    <FIcon className="h-4 w-4 text-white" />
-                  </div>
-                  <div className="text-left">
+          <div key={n} id={`sales-flow-fase-${n}`}>
+            <Collapsible open={isOpen} onOpenChange={() => toggleFase(n)}>
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className={`w-full flex items-center justify-between rounded-2xl border px-5 py-4 transition-all ${
+                    isCurrent
+                      ? `${cfg2.bg} ${cfg2.border} shadow-sm`
+                      : "border-slate-200 bg-white/80 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
                     <div
-                      className={`text-sm font-bold ${
-                        isCurrent ? cfg2.text : "text-slate-700"
-                      }`}
+                      className={`h-9 w-9 rounded-full bg-gradient-to-br ${cfg2.gradient} flex items-center justify-center`}
                     >
-                      FASE {n}: {cfg2.label.toUpperCase()}
+                      <FIcon className="h-4 w-4 text-white" />
                     </div>
-                    {isCurrent && (
-                      <div className="text-[11px] text-slate-500">
-                        Fase actual del proceso
+                    <div className="text-left">
+                      <div
+                        className={`text-sm font-bold ${
+                          isCurrent ? cfg2.text : "text-slate-700"
+                        }`}
+                      >
+                        FASE {n}: {cfg2.label.toUpperCase()}
                       </div>
+                      {isCurrent && (
+                        <div className="text-[11px] text-slate-500">
+                          Fase actual del proceso
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isCurrent && (
+                      <Badge
+                        className={`${cfg2.bg} ${cfg2.text} ${cfg2.border}`}
+                      >
+                        Activa
+                      </Badge>
+                    )}
+                    {isOpen ? (
+                      <ChevronDown className="h-4 w-4 text-slate-400" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
                     )}
                   </div>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-3 rounded-2xl border border-slate-200/60 bg-white/80 p-5 backdrop-blur">
+                  {n === 1 && <Fase1 />}
+                  {n === 2 && <Fase2 />}
+                  {n === 3 && <Fase3 />}
+                  {n === 4 && <Fase4 />}
+                  {n === 5 && <Fase5 />}
                 </div>
-                <div className="flex items-center gap-2">
-                  {isCurrent && (
-                    <Badge className={`${cfg2.bg} ${cfg2.text} ${cfg2.border}`}>
-                      Activa
-                    </Badge>
-                  )}
-                  {isOpen ? (
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-slate-400" />
-                  )}
-                </div>
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="mt-3 rounded-2xl border border-slate-200/60 bg-white/80 p-5 backdrop-blur">
-                {n === 1 && <Fase1 />}
-                {n === 2 && <Fase2 />}
-                {n === 3 && <Fase3 />}
-                {n === 4 && <Fase4 />}
-                {n === 5 && <Fase5 />}
-              </div>
-            </CollapsibleContent>
-          </Collapsible>
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
         );
       })}
 

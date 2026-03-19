@@ -30,6 +30,9 @@ export default function LeadDetailPage({ params }: { params: { id: string } }) {
 
 function Content({ id }: { id: string }) {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = React.useState<
+    "resumen" | "venta" | "seguimiento" | "notas"
+  >("resumen");
   const [loading, setLoading] = React.useState(true);
   const [record, setRecord] = React.useState<any | null>(null);
   const [draft, setDraft] = React.useState<Partial<CloseSaleInput> | null>(
@@ -45,6 +48,12 @@ function Content({ id }: { id: string }) {
   );
   const [previewOpen, setPreviewOpen] = React.useState(false);
   const [snapshotSaving, setSnapshotSaving] = React.useState(false);
+  const [navigationTarget, setNavigationTarget] = React.useState<{
+    tab: "resumen" | "venta" | "seguimiento" | "notas";
+    sectionId?: string;
+    seguimientoTab?: "flujo_ventas" | "llamada";
+    requestKey: number;
+  } | null>(null);
 
   // Guardado en navegador (localStorage) como fallback.
   const localStorageKey = React.useMemo(() => `crm:booking:${id}`, [id]);
@@ -98,6 +107,151 @@ function Content({ id }: { id: string }) {
       };
     });
   }, []);
+
+  const handleNavigate = React.useCallback(
+    (target: {
+      tab: "resumen" | "venta" | "seguimiento" | "notas";
+      sectionId?: string;
+      seguimientoTab?: "flujo_ventas" | "llamada";
+    }) => {
+      setActiveTab(target.tab);
+      setNavigationTarget({ ...target, requestKey: Date.now() });
+    },
+    [],
+  );
+
+  const buildSnapshotPayloadCurrent = React.useCallback(
+    (args: {
+      leadBase: any;
+      patch: Record<string, any> | null;
+      snapshotSale?: any;
+      draftNotes?: any;
+      paymentPaidAmount: any;
+      paymentPlanType: any;
+      paymentAttachments: any;
+      paymentProof: any;
+      paymentPlans: any;
+      contractPartyAddress: any;
+      contractPartyCity: any;
+      contractPartyCountry: any;
+      capturedAt: string;
+    }) => {
+      const {
+        leadBase,
+        patch,
+        snapshotSale,
+        draftNotes,
+        paymentPaidAmount,
+        paymentPlanType,
+        paymentAttachments,
+        paymentProof,
+        paymentPlans,
+        contractPartyAddress,
+        contractPartyCity,
+        contractPartyCountry,
+        capturedAt,
+      } = args;
+
+      const routePathname =
+        typeof window !== "undefined" ? window.location?.pathname : undefined;
+      const routeUrl =
+        typeof window !== "undefined" ? window.location?.href : undefined;
+      const userAgent =
+        typeof navigator !== "undefined" ? navigator.userAgent : undefined;
+
+      return {
+        ...(leadBase || {}),
+        ...(patch || {}),
+        ...(snapshotSale ? { sale: snapshotSale } : {}),
+        ...(draftNotes !== undefined ? { sale_notes: draftNotes } : {}),
+        ...(paymentPaidAmount !== null
+          ? { payment_paid_amount: paymentPaidAmount }
+          : {}),
+        ...(paymentPlanType !== null
+          ? { payment_plan_type: paymentPlanType }
+          : {}),
+        ...(paymentAttachments !== null
+          ? { payment_attachments: paymentAttachments }
+          : {}),
+        ...(paymentProof !== null ? { payment_proof: paymentProof } : {}),
+        ...(paymentPlans !== null ? { payment_plans_json: paymentPlans } : {}),
+        ...(contractPartyAddress !== null
+          ? { contract_party_address: contractPartyAddress }
+          : {}),
+        ...(contractPartyCity !== null
+          ? { contract_party_city: contractPartyCity }
+          : {}),
+        ...(contractPartyCountry !== null
+          ? { contract_party_country: contractPartyCountry }
+          : {}),
+        sales_flow:
+          (leadBase as any)?.sales_flow ?? (record as any)?.sales_flow ?? null,
+        activity_log:
+          (leadBase as any)?.activity_log ??
+          (record as any)?.activity_log ??
+          [],
+        followup_started_at:
+          (leadBase as any)?.followup_started_at ??
+          (record as any)?.followup_started_at ??
+          null,
+        recovery_started_at:
+          (leadBase as any)?.recovery_started_at ??
+          (record as any)?.recovery_started_at ??
+          null,
+        sleeping_started_at:
+          (leadBase as any)?.sleeping_started_at ??
+          (record as any)?.sleeping_started_at ??
+          null,
+        next_contact_at:
+          (leadBase as any)?.next_contact_at ??
+          (record as any)?.next_contact_at ??
+          null,
+        next_task_due_at:
+          (leadBase as any)?.next_task_due_at ??
+          (record as any)?.next_task_due_at ??
+          null,
+        last_interaction_at:
+          (leadBase as any)?.last_interaction_at ??
+          (record as any)?.last_interaction_at ??
+          null,
+        last_interaction_channel:
+          (leadBase as any)?.last_interaction_channel ??
+          (record as any)?.last_interaction_channel ??
+          null,
+        conversation_status:
+          (leadBase as any)?.conversation_status ??
+          (record as any)?.conversation_status ??
+          null,
+        protocol_name:
+          (leadBase as any)?.protocol_name ??
+          (record as any)?.protocol_name ??
+          null,
+        protocol_step:
+          (leadBase as any)?.protocol_step ??
+          (record as any)?.protocol_step ??
+          null,
+        protocol_paused:
+          (leadBase as any)?.protocol_paused ??
+          (record as any)?.protocol_paused ??
+          null,
+        last_template_sent_name:
+          (leadBase as any)?.last_template_sent_name ??
+          (record as any)?.last_template_sent_name ??
+          null,
+        last_resource_sent_name:
+          (leadBase as any)?.last_resource_sent_name ??
+          (record as any)?.last_resource_sent_name ??
+          null,
+        route_pathname:
+          (leadBase as any)?.route_pathname ?? routePathname ?? null,
+        route_url: (leadBase as any)?.route_url ?? routeUrl ?? null,
+        trace_user_agent:
+          (leadBase as any)?.trace_user_agent ?? userAgent ?? null,
+        trace_ts: (leadBase as any)?.trace_ts ?? capturedAt,
+      };
+    },
+    [record],
+  );
 
   const leadForUi = React.useMemo(() => {
     if (!record) return null;
@@ -645,33 +799,21 @@ function Content({ id }: { id: string }) {
       (leadForUi as any)?.contract_party_country,
       (record as any)?.contract_party_country,
     );
-    const snapshotPayloadCurrent = {
-      ...(leadForUi || record),
-      ...(patch || {}),
-      ...(snapshotSale ? { sale: snapshotSale } : {}),
-      ...(draftNotes !== undefined ? { sale_notes: draftNotes } : {}),
-      ...(paymentPaidAmount !== null
-        ? { payment_paid_amount: paymentPaidAmount }
-        : {}),
-      ...(paymentPlanType !== null
-        ? { payment_plan_type: paymentPlanType }
-        : {}),
-      ...(paymentAttachments !== null
-        ? { payment_attachments: paymentAttachments }
-        : {}),
-      ...(paymentProof !== null ? { payment_proof: paymentProof } : {}),
-      ...(paymentPlans !== null ? { payment_plans_json: paymentPlans } : {}),
-      ...(contractPartyAddress !== null
-        ? { contract_party_address: contractPartyAddress }
-        : {}),
-      ...(contractPartyCity !== null
-        ? { contract_party_city: contractPartyCity }
-        : {}),
-      ...(contractPartyCountry !== null
-        ? { contract_party_country: contractPartyCountry }
-        : {}),
-    };
-
+    const snapshotPayloadCurrent = buildSnapshotPayloadCurrent({
+      leadBase: leadForUi || record,
+      patch,
+      snapshotSale,
+      draftNotes,
+      paymentPaidAmount,
+      paymentPlanType,
+      paymentAttachments,
+      paymentProof,
+      paymentPlans,
+      contractPartyAddress,
+      contractPartyCity,
+      contractPartyCountry,
+      capturedAt,
+    });
     setSnapshotSaving(true);
     try {
       const snapshot = {
@@ -782,15 +924,17 @@ function Content({ id }: { id: string }) {
     }
   }, [
     buildSnapshotContext,
-    load,
+    buildSnapshotPayloadCurrent,
     draft,
     draftToLeadPatch,
     id,
     leadForUi,
+    load,
     localStorageKey,
     record,
     saleDraftPayload,
     snapshotSaving,
+    toast,
     user,
   ]);
 
@@ -1320,7 +1464,13 @@ function Content({ id }: { id: string }) {
           </div>
         </div>
 
-        <Tabs defaultValue="resumen" className="w-full space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) =>
+            setActiveTab(value as "resumen" | "venta" | "seguimiento" | "notas")
+          }
+          className="w-full space-y-6"
+        >
           <div className="sticky top-0 z-30 rounded-xl border border-slate-200 bg-white/95 p-1.5 sm:p-2 backdrop-blur shadow-sm">
             <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-lg bg-transparent p-0 sm:grid-cols-4">
               <TabsTrigger
@@ -1370,6 +1520,7 @@ function Content({ id }: { id: string }) {
               callOutcomeLabel={callOutcomeLabel}
               paymentStatusLabel={paymentStatusLabel}
               applyRecordPatch={applyRecordPatch}
+              onNavigate={handleNavigate}
             />
           </TabsContent>
 
@@ -1394,7 +1545,16 @@ function Content({ id }: { id: string }) {
             value="seguimiento"
             className="mt-0 focus-visible:outline-none"
           >
-            <TabSeguimiento id={id} p={p} applyRecordPatch={applyRecordPatch} />
+            <TabSeguimiento
+              id={id}
+              p={p}
+              applyRecordPatch={applyRecordPatch}
+              navigationTarget={
+                navigationTarget?.tab === "seguimiento"
+                  ? navigationTarget
+                  : null
+              }
+            />
           </TabsContent>
 
           <TabsContent

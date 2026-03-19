@@ -218,6 +218,18 @@ export default function CoachChatInline({
   const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
   const [connected, setConnected] = React.useState(false);
+  React.useEffect(() => {
+    if (String(role || "").toLowerCase() !== "coach") return;
+
+    const connectionToken =
+      socketio?.token ??
+      (typeof window !== "undefined" ? getAuthToken() : null);
+
+    if (!connectionToken) return;
+
+    console.log("[CoachChatInline] Token de conexión chat:", connectionToken);
+  }, [role, socketio?.token, socketio?.url, normRoom]);
+
   const [items, setItems] = React.useState<Message[]>([]);
   const itemsRef = React.useRef<Message[]>([]);
   React.useEffect(() => {
