@@ -15,8 +15,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
-import { FileText, Bell, Clock, AlertTriangle } from "lucide-react";
+import {
+  FileText,
+  Bell,
+  Clock,
+  AlertTriangle,
+  History,
+  User,
+} from "lucide-react";
 
 interface TabNotasProps {
   p: any;
@@ -24,7 +30,65 @@ interface TabNotasProps {
   applyRecordPatch?: (patch: Record<string, any>) => void;
 }
 
+const PROFILE_FIELDS = [
+  {
+    key: "current_context" as const,
+    label: "Contexto actual",
+    placeholder:
+      "Situacion actual del cliente, punto en el que esta, urgencia y contexto personal o profesional.",
+  },
+  {
+    key: "program_interest" as const,
+    label: "Que le intereso del programa",
+    placeholder:
+      "Que parte del programa, propuesta, metodologia o acompanamiento le llamo la atencion.",
+  },
+  {
+    key: "objectives" as const,
+    label: "Objetivos",
+    placeholder:
+      "Resultados esperados, metas, plazos y transformacion que busca conseguir.",
+  },
+  {
+    key: "niche_project" as const,
+    label: "Nicho - proyecto",
+    placeholder:
+      "Nicho, proyecto, negocio actual, estado de su oferta o tipo de cliente con el que trabaja.",
+  },
+  {
+    key: "relevant_crm_data" as const,
+    label: "Datos relevantes en el CRM",
+    placeholder:
+      "Objeciones, senales de compra, restricciones, antecedentes y cualquier detalle util para el seguimiento.",
+  },
+] as const;
+
 export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
+  const customerProfile = React.useMemo(() => {
+    const raw =
+      p?.customer_profile && typeof p.customer_profile === "object"
+        ? p.customer_profile
+        : {};
+
+    return {
+      current_context: String(raw.current_context ?? ""),
+      program_interest: String(raw.program_interest ?? ""),
+      objectives: String(raw.objectives ?? ""),
+      niche_project: String(raw.niche_project ?? ""),
+      relevant_crm_data: String(raw.relevant_crm_data ?? ""),
+      updated_at: raw.updated_at ?? null,
+      updated_by: raw.updated_by ?? null,
+    };
+  }, [p?.customer_profile]);
+
+  const customerProfileHistory = React.useMemo(
+    () =>
+      Array.isArray(p?.customer_profile_history)
+        ? p.customer_profile_history
+        : [],
+    [p?.customer_profile_history],
+  );
+
   const motives = React.useMemo(
     () =>
       [
@@ -39,11 +103,11 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
         { value: "lost_trust", label: "Confianza" },
         {
           value: "lost_external_decision",
-          label: "Decisión externa (socio o familia)",
+          label: "Decision externa (socio o familia)",
         },
         {
           value: "lost_no_response_exhausted",
-          label: "No respondió (proceso agotado)",
+          label: "No respondio (proceso agotado)",
         },
       ] as const,
     [],
@@ -92,9 +156,22 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
   const reagendaTime =
     p.call_reschedule_time || p.call?.reschedule?.time || null;
 
+  const updateCustomerProfile = React.useCallback(
+    (field: (typeof PROFILE_FIELDS)[number]["key"], value: string) => {
+      applyRecordPatch?.({
+        customer_profile: {
+          ...(p?.customer_profile && typeof p.customer_profile === "object"
+            ? p.customer_profile
+            : {}),
+          [field]: value,
+        },
+      });
+    },
+    [applyRecordPatch, p?.customer_profile],
+  );
+
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      {/* Notas Card */}
       <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
         <CardHeader className="pb-4">
@@ -103,9 +180,11 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
               <FileText className="h-5 w-5 text-white" />
             </div>
             <div>
-              <CardTitle className="text-slate-800">Notas</CardTitle>
+              <CardTitle className="text-slate-800">
+                Perfil de cliente
+              </CardTitle>
               <CardDescription className="text-slate-500">
-                Notas de venta y mensajes
+                Contexto comercial editable con registro en el snapshot del lead
               </CardDescription>
             </div>
           </div>
@@ -120,10 +199,10 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
                   </div>
                   <div className="flex-1">
                     <div className="text-sm font-semibold text-amber-800">
-                      Motivo (obligatorio)
+                      Motivo de perdida
                     </div>
                     <div className="text-xs text-amber-700 mt-0.5">
-                      En esta etapa se tipifica un solo motivo.
+                      En esta etapa se tipifica un solo motivo antes de guardar.
                     </div>
                   </div>
                 </div>
@@ -136,7 +215,7 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
                     }}
                   >
                     <SelectTrigger className="h-11 bg-white border-amber-200 focus:border-amber-400 focus:ring-amber-400/20">
-                      <SelectValue placeholder="Selecciona un motivo…" />
+                      <SelectValue placeholder="Selecciona un motivo..." />
                     </SelectTrigger>
                     <SelectContent>
                       {motives.map((m) => (
@@ -156,29 +235,68 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
               </div>
             ) : null}
 
-            <div>
-              <div className="flex items-center gap-2 mb-2">
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-5">
+              <div className="flex items-center gap-2 mb-4">
                 <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Notas de venta
+                  Perfil editable
                 </span>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4 whitespace-pre-wrap text-sm text-slate-700">
-                {String(p.sale_notes ?? p.saleNotes ?? "").trim() || (
-                  <span className="text-slate-400">Sin notas</span>
-                )}
+
+              <div className="space-y-4">
+                {PROFILE_FIELDS.map((field) => (
+                  <div key={field.key} className="space-y-2">
+                    <Label className="text-sm font-medium text-slate-700">
+                      {field.label}
+                    </Label>
+                    <textarea
+                      value={customerProfile[field.key]}
+                      onChange={(e) =>
+                        updateCustomerProfile(field.key, e.target.value)
+                      }
+                      placeholder={field.placeholder}
+                      className="min-h-[104px] w-full rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 outline-none transition-all resize-y focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 rounded-xl border border-amber-100 bg-gradient-to-r from-amber-50 to-orange-50 p-4 text-xs text-amber-800">
+                Este perfil se confirma al presionar "Guardar cambios". El
+                estado guardado queda dentro del snapshot del lead para mantener
+                trazabilidad.
               </div>
             </div>
+
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <div className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                <div className="h-1.5 w-1.5 rounded-full bg-slate-500" />
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Mensajes / notas de llamada
+                  Ultima actualizacion confirmada
                 </span>
               </div>
               <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4 whitespace-pre-wrap text-sm text-slate-700">
-                {String(p.text_messages ?? p.textMessages ?? "").trim() || (
-                  <span className="text-slate-400">Sin mensajes</span>
+                {customerProfile.updated_at ? (
+                  <div className="space-y-1">
+                    <div>
+                      {String(customerProfile.updated_at)
+                        .replace("T", " ")
+                        .slice(0, 19)}
+                    </div>
+                    <div className="text-slate-500">
+                      {String(
+                        customerProfile.updated_by?.name ||
+                          customerProfile.updated_by?.email ||
+                          user?.name ||
+                          user?.email ||
+                          "Sin usuario",
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <span className="text-slate-400">
+                    Todavia no hay un guardado confirmado del perfil.
+                  </span>
                 )}
               </div>
             </div>
@@ -186,7 +304,6 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
         </CardContent>
       </Card>
 
-      {/* Recordatorios Card */}
       <Card className="bg-white/80 backdrop-blur border-slate-200/60 shadow-sm overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-500" />
         <CardHeader className="pb-4">
@@ -196,16 +313,93 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
             </div>
             <div>
               <CardTitle className="text-slate-800">
-                Recordatorios y reagenda
+                Historial y recordatorios
               </CardTitle>
               <CardDescription className="text-slate-500">
-                Resumen rápido del seguimiento
+                Registro de cambios del perfil y resumen rapido del seguimiento
               </CardDescription>
             </div>
           </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-5">
+            <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <History className="h-4 w-4 text-violet-600" />
+                <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Historial del perfil
+                </span>
+              </div>
+              {customerProfileHistory.length ? (
+                <ul className="space-y-3">
+                  {customerProfileHistory
+                    .slice()
+                    .reverse()
+                    .slice(0, 6)
+                    .map((entry: any, idx: number) => {
+                      const profile =
+                        entry?.profile && typeof entry.profile === "object"
+                          ? entry.profile
+                          : {};
+                      const summary = [
+                        profile.current_context,
+                        profile.program_interest,
+                        profile.objectives,
+                        profile.niche_project,
+                        profile.relevant_crm_data,
+                      ]
+                        .map((value) => String(value ?? "").trim())
+                        .filter(Boolean)
+                        .join("\n\n");
+
+                      return (
+                        <li
+                          key={`${entry?.at || idx}-${idx}`}
+                          className="rounded-xl border border-slate-100 bg-white p-3"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="h-8 w-8 rounded-full bg-violet-100 border border-violet-200 flex items-center justify-center flex-shrink-0">
+                              <User className="h-4 w-4 text-violet-600" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mb-2">
+                                <span>
+                                  {entry?.at
+                                    ? String(entry.at)
+                                        .replace("T", " ")
+                                        .slice(0, 19)
+                                    : "—"}
+                                </span>
+                                {entry?.by?.name || entry?.by?.email ? (
+                                  <>
+                                    <span>·</span>
+                                    <span className="font-medium text-slate-700">
+                                      {String(entry.by.name || entry.by.email)}
+                                    </span>
+                                  </>
+                                ) : null}
+                              </div>
+                              <div className="text-sm whitespace-pre-wrap text-slate-700">
+                                {summary || "Perfil vaciado"}
+                              </div>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  {customerProfileHistory.length > 6 ? (
+                    <li className="text-xs text-slate-500 text-center pt-1">
+                      +{customerProfileHistory.length - 6} registros mas
+                    </li>
+                  ) : null}
+                </ul>
+              ) : (
+                <div className="text-sm text-slate-500">
+                  Aun no hay historial guardado del perfil.
+                </div>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="rounded-xl border border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100/50 p-4">
                 <div className="flex items-center gap-2 text-slate-500 mb-1">
@@ -261,7 +455,7 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
                   ))}
                   {reminders.length > 6 ? (
                     <li className="text-xs text-slate-500 pl-10">
-                      +{reminders.length - 6} más…
+                      +{reminders.length - 6} mas...
                     </li>
                   ) : null}
                 </ul>
@@ -278,7 +472,7 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
             </div>
             <div className="p-3 rounded-lg bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100">
               <p className="text-xs text-violet-700">
-                Para editar seguimiento/recordatorios, usa la pestaña
+                Para editar seguimiento y recordatorios, usa la pestana
                 "Seguimiento".
               </p>
             </div>

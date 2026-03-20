@@ -21,6 +21,27 @@ export interface LeadHubspotQuestions {
   sale_notes?: HubspotQuestionAnswer | null;
 }
 
+export interface LeadCustomerProfile {
+  current_context?: string | null;
+  program_interest?: string | null;
+  objectives?: string | null;
+  niche_project?: string | null;
+  relevant_crm_data?: string | null;
+  updated_at?: string | null;
+  updated_by?: {
+    id?: string | number | null;
+    name?: string | null;
+    email?: string | null;
+    role?: string | null;
+  } | null;
+}
+
+export interface LeadCustomerProfileHistoryEntry {
+  at?: string | null;
+  by?: LeadCustomerProfile["updated_by"];
+  profile?: LeadCustomerProfile | null;
+}
+
 export interface Lead {
   codigo: string; // identificador único (UUID / código)
   name: string;
@@ -38,6 +59,8 @@ export interface Lead {
   closer_name?: string | null;
   sale_notes?: string | null;
   detalle_preguntas_hubspot?: LeadHubspotQuestions | null;
+  customer_profile?: LeadCustomerProfile | null;
+  customer_profile_history?: LeadCustomerProfileHistoryEntry[] | null;
 }
 
 export interface LeadCreateInput {
@@ -141,6 +164,8 @@ export interface LeadDetail extends Lead {
   reminders_list?: any[];
   contract_parties_list?: any[];
   bonuses_list?: any[];
+  customer_profile?: LeadCustomerProfile | null;
+  customer_profile_history?: LeadCustomerProfileHistoryEntry[] | null;
 }
 
 // Tipos para registro de venta (sale)

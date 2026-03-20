@@ -18,6 +18,39 @@ import { TabSeguimiento } from "./components/TabSeguimiento";
 import { TabVenta } from "./components/TabVenta";
 import { TabNotas } from "./components/TabNotas";
 
+const CUSTOMER_PROFILE_KEYS = [
+  "current_context",
+  "program_interest",
+  "objectives",
+  "niche_project",
+  "relevant_crm_data",
+] as const;
+
+function normalizeCustomerProfile(value: any) {
+  const raw = value && typeof value === "object" ? value : {};
+
+  return {
+    current_context: String(raw.current_context ?? ""),
+    program_interest: String(raw.program_interest ?? ""),
+    objectives: String(raw.objectives ?? ""),
+    niche_project: String(raw.niche_project ?? ""),
+    relevant_crm_data: String(raw.relevant_crm_data ?? ""),
+  };
+}
+
+function serializeCustomerProfile(value: any) {
+  const profile = normalizeCustomerProfile(value);
+  return JSON.stringify(
+    CUSTOMER_PROFILE_KEYS.reduce(
+      (acc, key) => {
+        acc[key] = String(profile[key] ?? "").trim();
+        return acc;
+      },
+      {} as Record<(typeof CUSTOMER_PROFILE_KEYS)[number], string>,
+    ),
+  );
+}
+
 export default function LeadDetailPage({ params }: { params: { id: string } }) {
   return (
     <ProtectedRoute allowedRoles={["admin", "equipo", "sales"]}>
@@ -424,6 +457,8 @@ function Content({ id }: { id: string }) {
   const SNAPSHOT_ONLY_KEYS = [
     "sales_flow",
     "activity_log",
+    "customer_profile",
+    "customer_profile_history",
     "reminders",
     "pipeline_status",
     "customer_type",
@@ -870,7 +905,7 @@ function Content({ id }: { id: string }) {
         toast({
           title: "Falta el motivo",
           description:
-            "Para guardar un lead en Perdido debes seleccionar un motivo (en la pestaña Notas).",
+            "Para guardar un lead en Perdido debes seleccionar un motivo (en la pestaña Perfil de cliente).",
           variant: "destructive",
         });
         return;
@@ -930,6 +965,61 @@ function Content({ id }: { id: string }) {
     const capturedAt = new Date().toISOString();
     const patch = draftToLeadPatch(draft);
     const draftNotes = (draft as any)?.notes;
+    const capturedBy = {
+      id: (user as any)?.id ?? null,
+      name: (user as any)?.name ?? null,
+      email: (user as any)?.email ?? null,
+      role: (user as any)?.role ?? null,
+    };
+    const currentProfile = normalizeCustomerProfile(
+      (record as any)?.customer_profile,
+    );
+    const emptyProfileSerialized = serializeCustomerProfile(null);
+    const existingProfileHistory = Array.isArray(
+      (record as any)?.customer_profile_history,
+    )
+      ? ([...(record as any).customer_profile_history] as any[])
+      : [];
+    const lastProfileEntry = existingProfileHistory.length
+      ? existingProfileHistory[existingProfileHistory.length - 1]
+      : null;
+    const currentProfileSerialized = serializeCustomerProfile(currentProfile);
+    const lastProfileSerialized = lastProfileEntry
+      ? serializeCustomerProfile(lastProfileEntry?.profile)
+      : "";
+    const shouldTrackCustomerProfile =
+      existingProfileHistory.length > 0 ||
+      currentProfileSerialized !== emptyProfileSerialized;
+    const customerProfile = shouldTrackCustomerProfile
+      ? {
+          ...currentProfile,
+          updated_at: capturedAt,
+          updated_by: capturedBy,
+        }
+      : null;
+    const customerProfileHistory =
+      shouldTrackCustomerProfile &&
+      currentProfileSerialized !== lastProfileSerialized
+        ? [
+            ...existingProfileHistory,
+            {
+              at: capturedAt,
+              by: capturedBy,
+              profile: {
+                ...currentProfile,
+              },
+            },
+          ]
+        : existingProfileHistory;
+    const patchWithProfile = {
+      ...(patch ?? {}),
+      ...(customerProfile !== null
+        ? { customer_profile: customerProfile }
+        : {}),
+      ...(customerProfileHistory.length > 0
+        ? { customer_profile_history: customerProfileHistory }
+        : {}),
+    };
     const snapshotSaleBase =
       saleDraftPayload && typeof saleDraftPayload === "object"
         ? saleDraftPayload
@@ -1089,7 +1179,7 @@ function Content({ id }: { id: string }) {
 
     const snapshotPayloadCurrent = buildSnapshotPayloadCurrent({
       leadBase: leadForUi || record,
-      patch,
+      patch: patchWithProfile,
       snapshotSale,
       draftNotes,
       paymentPaidAmount,
@@ -1119,12 +1209,7 @@ function Content({ id }: { id: string }) {
       const snapshot = {
         schema_version: 1 as const,
         captured_at: capturedAt,
-        captured_by: {
-          id: (user as any)?.id ?? null,
-          name: (user as any)?.name ?? null,
-          email: (user as any)?.email ?? null,
-          role: (user as any)?.role ?? null,
-        },
+        captured_by: capturedBy,
         source: {
           record_id: ctx.recordId,
           entity: ctx.entity,
@@ -1844,7 +1929,7 @@ function Content({ id }: { id: string }) {
                 value="notas"
                 className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
               >
-                Notas
+                Perfil de cliente
               </TabsTrigger>
             </TabsList>
           </div>
