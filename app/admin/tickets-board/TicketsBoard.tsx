@@ -767,7 +767,18 @@ export default function TicketsBoard({
   const d4 = String(fourDaysAgo.getDate()).padStart(2, "0");
   const fourDaysAgoStr = `${y4}-${m4}-${d4}`;
 
-  const [fechaDesde, setFechaDesde] = useState<string>(fourDaysAgoStr);
+  const oneYearAgo = new Date(today);
+  oneYearAgo.setFullYear(today.getFullYear() - 1);
+  const y1 = oneYearAgo.getFullYear();
+  const m1 = String(oneYearAgo.getMonth() + 1).padStart(2, "0");
+  const d1 = String(oneYearAgo.getDate()).padStart(2, "0");
+  const oneYearAgoStr = `${y1}-${m1}-${d1}`;
+
+  const shouldUseYearRange = isFeedbackMode && !!studentCode;
+
+  const [fechaDesde, setFechaDesde] = useState<string>(
+    shouldUseYearRange ? oneYearAgoStr : fourDaysAgoStr,
+  );
   const [fechaHasta, setFechaHasta] = useState<string>(todayStr);
 
   // Helper: detectar si un coach del ticket tiene puesto/area de ATC
@@ -1012,13 +1023,19 @@ export default function TicketsBoard({
 
   // Cargar filtros de fecha desde localStorage al montar
   useEffect(() => {
+    if (shouldUseYearRange) {
+      setFechaDesde(oneYearAgoStr);
+      setFechaHasta(todayStr);
+      return;
+    }
+
     try {
       const savedDesde = localStorage.getItem("ticketsBoard_fechaDesde");
       const savedHasta = localStorage.getItem("ticketsBoard_fechaHasta");
       if (savedDesde) setFechaDesde(savedDesde);
       if (savedHasta) setFechaHasta(savedHasta);
     } catch {}
-  }, []);
+  }, [oneYearAgoStr, shouldUseYearRange, todayStr]);
 
   // Cargar opciones de etapa al montar
   useEffect(() => {

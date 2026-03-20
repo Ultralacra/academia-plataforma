@@ -121,7 +121,15 @@ export async function getTickets(opts: {
   };
 
   if (opts.studentCode) {
-    const url = `/client/get/tickets/${encodeURIComponent(opts.studentCode)}`;
+    const q = toQuery({
+      page: opts.page ?? 1,
+      pageSize: opts.pageSize ?? 500,
+      fechaDesde: opts.fechaDesde ?? "",
+      fechaHasta: opts.fechaHasta ?? "",
+      estado: opts.estado ?? "",
+      tipo: opts.tipo ?? "",
+    });
+    const url = `/client/get/tickets/${encodeURIComponent(opts.studentCode)}${q}`;
     const json = await apiFetch<any>(url);
     let rows: any[] = Array.isArray(json?.data) ? json.data : [];
     rows = rows.filter((r) => !isDeleted(r));
