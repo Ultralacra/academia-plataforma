@@ -482,7 +482,21 @@ export function AppSidebar() {
                     "Pagos",
                   ].includes(item.title),
               )
-            : base;
+            : userArea === "VSL"
+              ? base.filter(
+                  (item) =>
+                    ![
+                      "Bonos",
+                      "Solicitud de bonos",
+                      "Pagos",
+                      "CRM",
+                      "Usuarios sistema",
+                      "Estado correos",
+                      "Plantillas de mails",
+                      "Mensajes seguimiento",
+                    ].includes(item.title),
+                )
+              : base;
 
         // Añadir acceso directo al chat del alumno si estamos dentro de una ficha de alumno
         return (

@@ -7,6 +7,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiFetch } from "@/lib/api-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import GenericListModal, { type ListRow } from "./GenericListModal";
 import {
   Megaphone,
@@ -322,10 +330,34 @@ export default function StudentManagement() {
   const [adsListRows, setAdsListRows] = useState<ListRow[]>([]);
   const adsConsoleLoggedRef = useRef(false);
 
+  // Paginación tabla Registros ADS (state only — derived values after adsUiRows)
+  const adsPageSize = 15;
+  const [adsPage, setAdsPage] = useState(1);
+  const adsNf = useMemo(() => new Intl.NumberFormat("es-ES"), []);
+
   const openAdsList = (title: string, rows: ListRow[]) => {
     setAdsListTitle(title);
     setAdsListRows(rows);
     setAdsListOpen(true);
+  };
+
+  /** Normaliza el valor crudo de subfase_color (trascendencia) igual que AdsMetricsForm */
+  const normalizeTrascendencia = (raw: unknown): string | null => {
+    const v = String(raw ?? "").trim();
+    if (!v) return null;
+    switch (v.toLowerCase()) {
+      case "no aplica":
+      case "sin trascendencia":
+        return null;
+      case "por definir":
+      case "en proceso":
+        return "En proceso";
+      case "realizado":
+      case "ejecutado":
+        return "Ejecutado";
+      default:
+        return v;
+    }
   };
 
   type AdsUiRow = {
@@ -335,9 +367,19 @@ export default function StudentManagement() {
     fase: string;
     subfase: string;
     trascendencia: string | null;
+    trascendenciaRaw: string | null;
     pautaActiva: boolean;
     requiereInterv: boolean;
     facturacion: number | null;
+    inversion: number | null;
+    roas: string | null;
+    moneda: string | null;
+    alcance: string | null;
+    clics: string | null;
+    visitas: string | null;
+    coachCopy: string | null;
+    coachPlat: string | null;
+    obs: string | null;
     createdAt: string | null;
   };
 
@@ -388,11 +430,36 @@ export default function StudentManagement() {
 
       const faseRaw = payload?.fase ?? "";
       const subfaseRaw = payload?.subfase ?? "";
-      const trascendenciaRaw = payload?.subfase_color ?? null;
+      const trascendenciaRawValue = payload?.subfase_color ?? null;
 
       const pautaActiva = Boolean(payload?.pauta_activa);
       const requiereInterv = Boolean(payload?.requiere_interv);
       const facturacion = parseAmount(payload?.facturacion);
+      const inversion = parseAmount(payload?.inversion);
+      const roasVal =
+        payload?.roas != null ? String(payload.roas).trim() || null : null;
+      const monedaVal =
+        payload?.moneda != null ? String(payload.moneda).trim() || null : null;
+      const alcanceVal =
+        payload?.alcance != null
+          ? String(payload.alcance).trim() || null
+          : null;
+      const clicsVal =
+        payload?.clics != null ? String(payload.clics).trim() || null : null;
+      const visitasVal =
+        payload?.visitas != null
+          ? String(payload.visitas).trim() || null
+          : null;
+      const coachCopyVal =
+        payload?.coach_copy != null
+          ? String(payload.coach_copy).trim() || null
+          : null;
+      const coachPlatVal =
+        payload?.coach_plat != null
+          ? String(payload.coach_plat).trim() || null
+          : null;
+      const obsVal =
+        payload?.obs != null ? String(payload.obs).trim() || null : null;
 
       const createdAt = (() => {
         const raw =
@@ -411,17 +478,34 @@ export default function StudentManagement() {
         alumnoNombre: alumnoNombreRaw ? String(alumnoNombreRaw) : null,
         fase: String(faseRaw ?? "").trim(),
         subfase: String(subfaseRaw ?? "").trim(),
-        trascendencia:
-          trascendenciaRaw == null
-            ? null
-            : String(trascendenciaRaw).trim() || null,
+        trascendencia: normalizeTrascendencia(trascendenciaRawValue),
+        trascendenciaRaw:
+          trascendenciaRawValue != null
+            ? String(trascendenciaRawValue).trim() || null
+            : null,
         pautaActiva,
         requiereInterv,
         facturacion,
+        inversion,
+        roas: roasVal,
+        moneda: monedaVal,
+        alcance: alcanceVal,
+        clics: clicsVal,
+        visitas: visitasVal,
+        coachCopy: coachCopyVal,
+        coachPlat: coachPlatVal,
+        obs: obsVal,
         createdAt,
       };
     });
   }, [adsItems]);
+
+  // Paginación derivada (depende de adsUiRows)
+  const adsTotalPages = Math.max(1, Math.ceil(adsUiRows.length / adsPageSize));
+  const adsPageRows = useMemo(() => {
+    const start = (adsPage - 1) * adsPageSize;
+    return adsUiRows.slice(start, start + adsPageSize);
+  }, [adsUiRows, adsPage, adsPageSize]);
 
   useEffect(() => {
     if (!adsLoadedOnce) return;
@@ -429,8 +513,65 @@ export default function StudentManagement() {
     if (typeof window === "undefined") return;
 
     adsConsoleLoggedRef.current = true;
-    console.log("[students][ads_metrics] metadata items (shown)", adsItems);
-    console.log("[students][ads_metrics] derived rows (shown)", adsUiRows);
+    console.log("[students][ads_metrics] RAW metadata items", adsItems);
+    console.log("[students][ads_metrics] derived rows", adsUiRows);
+
+    // Desglose trascendencia: valor crudo vs normalizado
+    const trascDesglose = adsUiRows.map((r) => ({
+      nombre: r.alumnoNombre,
+      codigo: r.alumnoCodigo,
+      raw: r.trascendenciaRaw,
+      normalizado: r.trascendencia,
+    }));
+    console.log(
+      "[students][ads_metrics] DESGLOSE trascendencia (raw→normalizado)",
+      trascDesglose,
+    );
+
+    // Conteo de valores crudos de subfase_color
+    const rawCounts: Record<string, number> = {};
+    for (const r of adsUiRows) {
+      const key = r.trascendenciaRaw ?? "(vacío)";
+      rawCounts[key] = (rawCounts[key] ?? 0) + 1;
+    }
+    console.log(
+      "[students][ads_metrics] CONTEO subfase_color crudo",
+      rawCounts,
+    );
+
+    // Conteo normalizado
+    const normCounts: Record<string, number> = {};
+    for (const r of adsUiRows) {
+      const key = r.trascendencia ?? "Sin trascendencia";
+      normCounts[key] = (normCounts[key] ?? 0) + 1;
+    }
+    console.log(
+      "[students][ads_metrics] CONTEO trascendencia normalizada",
+      normCounts,
+    );
+
+    // Desglose campos nuevos
+    console.log(
+      "[students][ads_metrics] SAMPLE con todos los campos",
+      adsUiRows.slice(0, 5).map((r) => ({
+        nombre: r.alumnoNombre,
+        fase: r.fase,
+        subfase: r.subfase,
+        trascendencia: r.trascendencia,
+        moneda: r.moneda,
+        inversion: r.inversion,
+        facturacion: r.facturacion,
+        roas: r.roas,
+        alcance: r.alcance,
+        clics: r.clics,
+        visitas: r.visitas,
+        coachCopy: r.coachCopy,
+        coachPlat: r.coachPlat,
+        obs: r.obs,
+        pautaActiva: r.pautaActiva,
+        requiereInterv: r.requiereInterv,
+      })),
+    );
   }, [adsLoadedOnce, adsItems, adsUiRows]);
 
   const adsSuccessCases = useMemo(() => {
@@ -507,14 +648,14 @@ export default function StudentManagement() {
     >();
 
     for (const r of adsUiRows) {
-      const key = r.fase || "—";
+      const key = r.fase || "Sin fase asignada";
       if (!byFase.has(key)) {
         byFase.set(key, { fase: key, rows: [], bySubfase: new Map() });
       }
       const bucket = byFase.get(key)!;
       bucket.rows.push(r);
 
-      const sfKey = r.subfase || "—";
+      const sfKey = r.subfase || "Sin subfase";
       if (!bucket.bySubfase.has(sfKey)) {
         bucket.bySubfase.set(sfKey, {
           subfase: sfKey,
@@ -578,7 +719,7 @@ export default function StudentManagement() {
     >();
 
     for (const r of adsUiRows) {
-      const key = String(r.trascendencia ?? "").trim() || "—";
+      const key = String(r.trascendencia ?? "").trim() || "Sin trascendencia";
       if (!byTrasc.has(key)) byTrasc.set(key, { key, byUser: new Map() });
       const bucket = byTrasc.get(key)!;
 
@@ -605,11 +746,26 @@ export default function StudentManagement() {
     return buckets;
   }, [adsUiRows]);
 
-  const asListRows = (rows: AdsUiRow[]): ListRow[] =>
-    rows.map((r) => ({
-      name: r.alumnoNombre,
-      subtitle: `${r.fase || "—"} · ${r.subfase || "—"} · Trascendencia: ${r.trascendencia ?? "—"} · ${r.requiereInterv ? "Requiere intervención" : "Sin intervención"}`,
-    }));
+  const asListRows = (rows: AdsUiRow[]): ListRow[] => {
+    const nf = new Intl.NumberFormat("es-ES");
+    return rows.map((r) => {
+      const parts: string[] = [];
+      parts.push(r.fase || "Sin fase");
+      parts.push(r.subfase || "Sin subfase");
+      if (r.trascendencia) parts.push(`Trasc: ${r.trascendencia}`);
+      if (r.moneda || r.inversion != null) {
+        const cur = r.moneda ?? "";
+        const inv = r.inversion != null ? nf.format(r.inversion) : "—";
+        parts.push(`Inv: ${cur} ${inv}`.trim());
+      }
+      if (r.facturacion != null)
+        parts.push(`Fact: ${nf.format(r.facturacion)}`);
+      if (r.roas) parts.push(`ROAS: ${r.roas}`);
+      if (r.pautaActiva) parts.push("Pauta activa");
+      if (r.requiereInterv) parts.push("Requiere intervención");
+      return { name: r.alumnoNombre, subtitle: parts.join(" · ") };
+    });
+  };
 
   const StatCard = ({
     icon,
@@ -1015,58 +1171,185 @@ export default function StudentManagement() {
 
                     <Card className="shadow-none border border-border">
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Registros</CardTitle>
+                        <CardTitle className="text-sm">
+                          Registros
+                          <span className="ml-2 text-xs font-normal text-muted-foreground">
+                            ({adsUiRows.length} total — pág. {adsPage} de{" "}
+                            {adsTotalPages})
+                          </span>
+                        </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        {adsUiRows.map((r) => (
-                          <div
-                            key={r.id}
-                            className="rounded-xl border border-border bg-background p-3"
-                          >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <div>
-                                <div className="text-sm font-medium">
-                                  {r.alumnoNombre ?? "—"}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {r.createdAt
-                                    ? new Date(r.createdAt).toLocaleString(
-                                        "es-ES",
-                                      )
-                                    : ""}
-                                </div>
-                              </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[180px]">
+                                Alumno
+                              </TableHead>
+                              <TableHead>Fase</TableHead>
+                              <TableHead>Subfase</TableHead>
+                              <TableHead>Trasc.</TableHead>
+                              <TableHead className="text-right">
+                                Inversión
+                              </TableHead>
+                              <TableHead className="text-right">
+                                Facturación
+                              </TableHead>
+                              <TableHead className="text-right">ROAS</TableHead>
+                              <TableHead className="text-center">
+                                Pauta
+                              </TableHead>
+                              <TableHead className="text-center">
+                                Interv.
+                              </TableHead>
+                              <TableHead className="w-[120px]">Fecha</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {adsPageRows.length === 0 ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={10}
+                                  className="text-center text-muted-foreground"
+                                >
+                                  Sin registros.
+                                </TableCell>
+                              </TableRow>
+                            ) : (
+                              adsPageRows.map((r) => (
+                                <TableRow key={r.id}>
+                                  <TableCell className="font-medium text-sm">
+                                    <div>{r.alumnoNombre ?? "—"}</div>
+                                    {r.alumnoCodigo ? (
+                                      <div className="text-[11px] text-muted-foreground">
+                                        {r.alumnoCodigo}
+                                      </div>
+                                    ) : null}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-xs"
+                                    >
+                                      {r.fase || "—"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
+                                      {r.subfase || "—"}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    {r.trascendencia ? (
+                                      <Badge className="text-xs bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 dark:bg-indigo-500/15">
+                                        {r.trascendencia}
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">
+                                        —
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums text-sm">
+                                    {r.inversion != null ? (
+                                      `${r.moneda ?? ""} ${adsNf.format(r.inversion)}`.trim()
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        —
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums text-sm">
+                                    {r.facturacion != null ? (
+                                      `${r.moneda ?? ""} ${adsNf.format(r.facturacion)}`.trim()
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        —
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right tabular-nums text-sm">
+                                    {r.roas ?? (
+                                      <span className="text-muted-foreground">
+                                        —
+                                      </span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    {r.pautaActiva ? (
+                                      <span
+                                        className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-500"
+                                        title="Pauta activa"
+                                      />
+                                    ) : (
+                                      <span
+                                        className="inline-block h-2.5 w-2.5 rounded-full bg-slate-300 dark:bg-slate-600"
+                                        title="Sin pauta"
+                                      />
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    {r.requiereInterv ? (
+                                      <span
+                                        className="inline-block h-2.5 w-2.5 rounded-full bg-rose-500"
+                                        title="Requiere intervención"
+                                      />
+                                    ) : (
+                                      <span
+                                        className="inline-block h-2.5 w-2.5 rounded-full bg-sky-400"
+                                        title="Sin intervención"
+                                      />
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {r.createdAt
+                                      ? new Date(
+                                          r.createdAt,
+                                        ).toLocaleDateString("es-ES", {
+                                          day: "2-digit",
+                                          month: "short",
+                                          year: "2-digit",
+                                        })
+                                      : "—"}
+                                  </TableCell>
+                                </TableRow>
+                              ))
+                            )}
+                          </TableBody>
+                        </Table>
 
-                              <div className="flex flex-wrap items-center gap-2">
-                                <Badge variant="secondary">{r.fase}</Badge>
-                                <Badge variant="outline">{r.subfase}</Badge>
-                                {r.trascendencia ? (
-                                  <Badge className="bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 dark:bg-indigo-500/15">
-                                    Trascendencia: {r.trascendencia}
-                                  </Badge>
-                                ) : null}
-                                {r.pautaActiva ? (
-                                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 dark:bg-emerald-500/15">
-                                    Pauta activa
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-slate-500/10 text-slate-700 dark:text-slate-300 dark:bg-slate-500/15">
-                                    Sin pauta
-                                  </Badge>
-                                )}
-                                {r.requiereInterv ? (
-                                  <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-300 dark:bg-rose-500/15">
-                                    Requiere intervención
-                                  </Badge>
-                                ) : (
-                                  <Badge className="bg-sky-500/10 text-sky-700 dark:text-sky-300 dark:bg-sky-500/15">
-                                    Sin intervención
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
+                        {adsTotalPages > 1 && (
+                          <div className="flex items-center justify-between pt-2">
+                            <button
+                              type="button"
+                              disabled={adsPage <= 1}
+                              onClick={() =>
+                                setAdsPage((p) => Math.max(1, p - 1))
+                              }
+                              className="rounded-md border border-border px-3 py-1 text-xs disabled:opacity-40 hover:bg-muted/40 transition-colors"
+                            >
+                              Anterior
+                            </button>
+                            <span className="text-xs text-muted-foreground tabular-nums">
+                              {adsPage} / {adsTotalPages}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={adsPage >= adsTotalPages}
+                              onClick={() =>
+                                setAdsPage((p) =>
+                                  Math.min(adsTotalPages, p + 1),
+                                )
+                              }
+                              className="rounded-md border border-border px-3 py-1 text-xs disabled:opacity-40 hover:bg-muted/40 transition-colors"
+                            >
+                              Siguiente
+                            </button>
                           </div>
-                        ))}
+                        )}
                       </CardContent>
                     </Card>
                   </div>
