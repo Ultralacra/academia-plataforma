@@ -115,15 +115,9 @@ export async function apiFetch<T = unknown>(
         try {
           authService.logout();
         } catch {}
-        if (typeof window !== "undefined") {
-          try {
-            // Evitar loops si ya estamos en /login
-            const here = window.location?.pathname || "";
-            if (!here.startsWith("/login")) {
-              window.location.replace("/login");
-            }
-          } catch {}
-        }
+        // NO hacemos hard redirect (window.location.replace) aquí.
+        // useAuth / ProtectedRoute escuchan el evento auth:changed y
+        // se encargan de redirigir al /login de forma coordinada.
       }
     }
     const text = await res.text().catch(() => "");

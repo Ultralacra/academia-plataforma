@@ -196,18 +196,13 @@ class AuthService {
 
           if (!res.ok) {
             if (res.status === 401) {
-              // 401 real luego de refrescar: limpiar sesión y enviar a login
+              // 401 real luego de refrescar: limpiar sesión.
+              // NO hacemos hard redirect aquí; dejamos que useAuth / ProtectedRoute
+              // manejen la redirección de forma coordinada para evitar loops y
+              // redirecciones múltiples.
               try {
                 this.logout();
               } catch {}
-              if (typeof window !== "undefined") {
-                try {
-                  const here = window.location?.pathname || "";
-                  if (!here.startsWith("/login")) {
-                    window.location.replace("/login");
-                  }
-                } catch {}
-              }
               throw new Error("No autorizado");
             }
             // En 403/otros no redirigimos; devolvemos error genérico

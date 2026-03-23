@@ -29,15 +29,56 @@ export function useAuth() {
           const message = String((e as any)?.message ?? "")
           // Solo cerrar sesión si realmente es no autorizado.
           if (message.toLowerCase().includes("no autorizado")) {
-            authService.logout()
+            // authService.logout() ya fue llamado dentro de me() al recibir 401.
+            // Solo actualizamos el state de React para que ProtectedRoute redirija.
             setAuthState({ user: null, isAuthenticated: false, token: null })
           }
+          // Si el error es de red (fetch failed, timeout, etc.) NO cerramos sesión.
+          // El usuario conserva su sesión y puede reintentar al navegar.
         } finally {
           setIsLoading(false)
         }
       })()
     } else {
       setIsLoading(false)
+    }
+
+    // Listener: cuando otra pestaña o apiFetch cierra sesión, sincronizar estado React.
+    const onAuthChanged = (ev: Event) => {
+      const detail = (ev as CustomEvent)?.detail
+      if (!detail?.token && !detail?.user) {
+        setAuthState({ user: null, isAuthenticated: false, token: null })
+        setIsLoading(false)
+      }
+    }
+    window.addEventListener("auth:changed", onAuthChanged)
+
+    // Listener: al volver a la pestaña, verificar que el token siga vigente.
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return
+      const st = authService.getAuthState()
+      if (!st.token) {
+        // Alguien (otra pestaña) borró la sesión
+        setAuthState({ user: null, isAuthenticated: false, token: null })
+        setIsLoading(false)
+        return
+      }
+      // Re-validar con el backend en segundo plano (sin forzar logout en fallo de red)
+      authService.me().then((me) => {
+        setAuthState({ user: me, isAuthenticated: true, token: st.token })
+      }).catch(() => {
+        // Si falla por red, no expulsamos; si fue 401 → me() ya hizo logout
+        const fresh = authService.getAuthState()
+        if (!fresh.token) {
+          setAuthState({ user: null, isAuthenticated: false, token: null })
+        }
+      })
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange)
+
+    return () => {
+      window.removeEventListener("auth:changed", onAuthChanged)
+      document.removeEventListener("visibilitychange", onVisibilityChange)
     }
   }, [])
 
