@@ -1843,12 +1843,12 @@ export default function CoachDetailPage({
                     {coach?.area ? (
                       <Badge
                         variant="outline"
-                        className="w-fit rounded-md border-neutral-200 bg-neutral-50 text-neutral-700"
+                        className="w-fit rounded-md border-border bg-muted/40 text-foreground"
                       >
                         {coach.area}
                       </Badge>
                     ) : (
-                      <span className="text-neutral-900">—</span>
+                      <span className="text-foreground">—</span>
                     )}
                   </div>
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
@@ -1858,12 +1858,12 @@ export default function CoachDetailPage({
                     {coach?.puesto ? (
                       <Badge
                         variant="outline"
-                        className="w-fit rounded-md border-sky-200 bg-sky-50 text-sky-700"
+                        className="w-fit rounded-md border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/15 dark:text-sky-200"
                       >
                         {coach.puesto}
                       </Badge>
                     ) : (
-                      <span className="text-neutral-900">—</span>
+                      <span className="text-foreground">—</span>
                     )}
                   </div>
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
@@ -1871,7 +1871,7 @@ export default function CoachDetailPage({
                       Contraseña:
                     </span>
                     <div className="flex items-center gap-2">
-                      <span className="text-neutral-900">••••••••</span>
+                      <span className="text-foreground">••••••••</span>
                       {canEditCoach && (
                         <Button
                           size="sm"
@@ -1895,7 +1895,7 @@ export default function CoachDetailPage({
                   size="sm"
                   variant="destructive"
                   onClick={() => setDeleteOpen(true)}
-                  className="bg-rose-100 text-rose-800 hover:bg-rose-200"
+                  className="bg-rose-600 text-white hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400"
                 >
                   Eliminar
                 </Button>
@@ -1909,40 +1909,40 @@ export default function CoachDetailPage({
             className="mt-2 flex flex-col flex-1 min-h-0"
           >
             {!isStandaloneChatRoute && (
-              <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-2xl border border-slate-200/80 bg-gradient-to-r from-white via-slate-50 to-white p-2 shadow-sm">
+              <TabsList className="h-auto w-full flex-wrap justify-start gap-2 rounded-2xl border border-border/60 bg-gradient-to-r from-background via-muted/40 to-background p-2 shadow-sm dark:from-slate-950 dark:via-slate-900/80 dark:to-slate-950">
                 <TabsTrigger
                   value="tickets"
-                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Tickets
                 </TabsTrigger>
                 <TabsTrigger
                   value="metricas"
-                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Métricas
                 </TabsTrigger>
                 <TabsTrigger
                   value="carga"
-                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Carga actual
                 </TabsTrigger>
                 <TabsTrigger
                   value="alumnos"
-                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Alumnos
                 </TabsTrigger>
                 <TabsTrigger
                   value="chat"
-                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Chat
                 </TabsTrigger>
                 <TabsTrigger
                   value="sesiones"
-                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                  className="min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-muted-foreground hover:text-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm dark:data-[state=active]:bg-slate-100 dark:data-[state=active]:text-slate-950"
                 >
                   Sesiones
                 </TabsTrigger>
@@ -1951,11 +1951,11 @@ export default function CoachDetailPage({
 
             {/* Pestaña Tickets: scroll interno, pantalla completa */}
             <TabsContent value="tickets" className="mt-0 flex-1 min-h-0">
-              <div className="h-full overflow-auto rounded-lg border bg-white p-4">
+              <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
                 {loading ? (
                   <div>Cargando...</div>
                 ) : error ? (
-                  <div className="text-sm text-red-600">{error}</div>
+                  <div className="text-sm text-destructive">{error}</div>
                 ) : coach ? (
                   <TicketsPanelCoach
                     student={{
@@ -1966,7 +1966,7 @@ export default function CoachDetailPage({
                     }}
                   />
                 ) : (
-                  <div className="text-sm text-neutral-500">
+                  <div className="text-sm text-muted-foreground">
                     No se encontró información del coach.
                   </div>
                 )}
@@ -1974,18 +1974,18 @@ export default function CoachDetailPage({
             </TabsContent>
 
             <TabsContent value="metricas" className="mt-0 flex-1 min-h-0">
-              <div className="h-full overflow-auto rounded-lg border bg-white p-4">
+              <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
                 {loading ? (
                   <div>Cargando...</div>
                 ) : error ? (
-                  <div className="text-sm text-red-600">{error}</div>
+                  <div className="text-sm text-destructive">{error}</div>
                 ) : coach ? (
                   <PersonalMetrics
                     coachCode={coach.codigo}
                     coachName={coach.nombre}
                   />
                 ) : (
-                  <div className="text-sm text-neutral-500">
+                  <div className="text-sm text-muted-foreground">
                     No se encontró información del coach.
                   </div>
                 )}
@@ -2668,11 +2668,11 @@ export default function CoachDetailPage({
             <TabsContent value="alumnos" className="mt-0 flex-1 min-h-0">
               {/* Detalles: ocupar pantalla completa con scroll interno */}
               <div className="h-full">
-                <div className="h-full overflow-auto p-4 bg-white border rounded-lg">
+                <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
                   {loading ? (
                     <div>Cargando...</div>
                   ) : error ? (
-                    <div className="text-sm text-red-600">{error}</div>
+                    <div className="text-sm text-destructive">{error}</div>
                   ) : coach ? (
                     <div className="space-y-4">
                       <div>
@@ -2681,7 +2681,7 @@ export default function CoachDetailPage({
                       </div>
                     </div>
                   ) : (
-                    <div className="text-sm text-neutral-500">
+                    <div className="text-sm text-muted-foreground">
                       No se encontró información del coach.
                     </div>
                   )}
@@ -2691,11 +2691,11 @@ export default function CoachDetailPage({
 
             <TabsContent value="carga" className="mt-0 flex-1 min-h-0">
               <div className="h-full">
-                <div className="h-full overflow-auto p-4 bg-white border rounded-lg">
+                <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
                   {loading ? (
                     <div>Cargando...</div>
                   ) : error ? (
-                    <div className="text-sm text-red-600">{error}</div>
+                    <div className="text-sm text-destructive">{error}</div>
                   ) : coach ? (
                     <CoachCurrentLoadTab
                       coachCode={coach.codigo}
@@ -2703,7 +2703,7 @@ export default function CoachDetailPage({
                       enabled={activeTab === "carga"}
                     />
                   ) : (
-                    <div className="text-sm text-neutral-500">
+                    <div className="text-sm text-muted-foreground">
                       No se encontró información del coach.
                     </div>
                   )}
@@ -2713,11 +2713,11 @@ export default function CoachDetailPage({
 
             <TabsContent value="sesiones" className="mt-0 flex-1 min-h-0">
               <div className="h-full">
-                <div className="h-full overflow-auto p-4 bg-white border rounded-lg">
+                <div className="h-full overflow-auto rounded-lg border border-border bg-card p-4 text-card-foreground">
                   {loading ? (
                     <div>Cargando...</div>
                   ) : error ? (
-                    <div className="text-sm text-red-600">{error}</div>
+                    <div className="text-sm text-destructive">{error}</div>
                   ) : (
                     <SessionsPanel coachCode={code} />
                   )}

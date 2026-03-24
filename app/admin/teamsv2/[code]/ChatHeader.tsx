@@ -75,7 +75,7 @@ export function ChatHeader({
             </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => setConfirmDeleteOpen(true)}
-              className="text-red-500 focus:text-red-500"
+              className="text-rose-600 focus:bg-rose-50 focus:text-rose-700 dark:text-rose-300 dark:focus:bg-rose-500/10 dark:focus:text-rose-200"
             >
               <Trash2 className="w-4 h-4 mr-2" />
               Eliminar Chat
