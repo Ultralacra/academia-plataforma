@@ -327,6 +327,7 @@ export default function StudentManagement() {
 
   const [adsListOpen, setAdsListOpen] = useState(false);
   const [adsListTitle, setAdsListTitle] = useState("");
+  const [adsListSummary, setAdsListSummary] = useState<string | null>(null);
   const [adsListRows, setAdsListRows] = useState<ListRow[]>([]);
   const adsConsoleLoggedRef = useRef(false);
 
@@ -335,8 +336,13 @@ export default function StudentManagement() {
   const [adsPage, setAdsPage] = useState(1);
   const adsNf = useMemo(() => new Intl.NumberFormat("es-ES"), []);
 
-  const openAdsList = (title: string, rows: ListRow[]) => {
+  const openAdsList = (
+    title: string,
+    rows: ListRow[],
+    summary?: string | null,
+  ) => {
     setAdsListTitle(title);
+    setAdsListSummary(summary ?? null);
     setAdsListRows(rows);
     setAdsListOpen(true);
   };
@@ -1103,12 +1109,21 @@ export default function StudentManagement() {
                                     {f.rows.length} registro
                                     {f.rows.length === 1 ? "" : "s"}
                                   </Badge>
-                                  <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 dark:bg-emerald-500/15">
-                                    Pauta: {f.pautaActivaCount}
-                                  </Badge>
-                                  <Badge className="bg-rose-500/10 text-rose-700 dark:text-rose-300 dark:bg-rose-500/15">
-                                    Interv: {f.requiereCount}
-                                  </Badge>
+                                  {![
+                                    "Sin fase asignada",
+                                    "Fase de testeo",
+                                    "Fase de Escala",
+                                    "Fase de optimización",
+                                  ].includes(f.fase) ? (
+                                    <>
+                                      <Badge className="bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                                        Pauta: {f.pautaActivaCount}
+                                      </Badge>
+                                      <Badge className="bg-rose-500/10 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300">
+                                        Interv: {f.requiereCount}
+                                      </Badge>
+                                    </>
+                                  ) : null}
                                 </div>
                                 <button
                                   type="button"
@@ -1117,6 +1132,14 @@ export default function StudentManagement() {
                                     openAdsList(
                                       `ADS — Fase: ${f.fase} (${f.rows.length})`,
                                       asListRows(f.rows),
+                                      [
+                                        "Sin fase asignada",
+                                        "Fase de testeo",
+                                        "Fase de Escala",
+                                        "Fase de optimización",
+                                      ].includes(f.fase)
+                                        ? `Pauta activa: ${f.pautaActivaCount} · Requiere intervención: ${f.requiereCount}`
+                                        : null,
                                     )
                                   }
                                 >
@@ -1127,42 +1150,52 @@ export default function StudentManagement() {
                                 </button>
                               </div>
 
-                              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                {f.subfases.map((sf) => (
-                                  <button
-                                    key={`${f.fase}::${sf.subfase}`}
-                                    type="button"
-                                    onClick={() =>
-                                      openAdsList(
-                                        `ADS — ${f.fase} · ${sf.subfase} (${sf.rows.length})`,
-                                        asListRows(sf.rows),
-                                      )
-                                    }
-                                    className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
-                                  >
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="text-sm font-medium truncate">
-                                        {sf.subfase}
+                              {![
+                                "Sin fase asignada",
+                                "Fase de testeo",
+                                "Fase de Escala",
+                              ].includes(f.fase) ? (
+                                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {f.subfases.map((sf) => (
+                                    <button
+                                      key={`${f.fase}::${sf.subfase}`}
+                                      type="button"
+                                      onClick={() =>
+                                        openAdsList(
+                                          `ADS — ${f.fase} · ${sf.subfase} (${sf.rows.length})`,
+                                          asListRows(sf.rows),
+                                        )
+                                      }
+                                      className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-left hover:bg-muted/40 transition-colors"
+                                    >
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="text-sm font-medium truncate">
+                                          {sf.subfase}
+                                        </div>
+                                        <div className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground shrink-0">
+                                          <Eye className="h-3.5 w-3.5" />
+                                          {sf.rows.length}
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground shrink-0">
-                                        <Eye className="h-3.5 w-3.5" />
-                                        {sf.rows.length}
-                                      </div>
-                                    </div>
-                                    <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                                      <span>
-                                        <span className="inline-block h-2 w-2 rounded-full bg-rose-500 mr-1" />
-                                        Interv:{" "}
-                                        <strong>{sf.requiere.length}</strong>
-                                      </span>
-                                      <span>
-                                        <span className="inline-block h-2 w-2 rounded-full bg-sky-500 mr-1" />
-                                        OK: <strong>{sf.ok.length}</strong>
-                                      </span>
-                                    </div>
-                                  </button>
-                                ))}
-                              </div>
+                                      {f.fase !== "Fase de optimización" && (
+                                        <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                                          <span>
+                                            <span className="inline-block h-2 w-2 rounded-full bg-rose-500 mr-1" />
+                                            Interv:{" "}
+                                            <strong>
+                                              {sf.requiere.length}
+                                            </strong>
+                                          </span>
+                                          <span>
+                                            <span className="inline-block h-2 w-2 rounded-full bg-sky-500 mr-1" />
+                                            OK: <strong>{sf.ok.length}</strong>
+                                          </span>
+                                        </div>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
                             </div>
                           ))
                         )}
@@ -1360,6 +1393,7 @@ export default function StudentManagement() {
                 open={adsListOpen}
                 onOpenChange={setAdsListOpen}
                 title={adsListTitle}
+                summary={adsListSummary}
                 rows={adsListRows}
                 hideCode
               />

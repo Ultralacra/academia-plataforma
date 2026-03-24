@@ -26,6 +26,7 @@ export default function GenericListModal({
   open,
   onOpenChange,
   title,
+  summary,
   rows,
   hideCode = false,
   hideDetail = false,
@@ -33,6 +34,7 @@ export default function GenericListModal({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   title: string;
+  summary?: string | null;
   rows: ListRow[];
   hideCode?: boolean;
   hideDetail?: boolean;
@@ -42,9 +44,14 @@ export default function GenericListModal({
       <DialogContent className="w-[95vw] sm:max-w-3xl max-h-[85vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <p className="text-xs text-muted-foreground">
-            {rows.length} registro{rows.length === 1 ? "" : "s"}
-          </p>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground">
+              {rows.length} registro{rows.length === 1 ? "" : "s"}
+            </p>
+            {summary ? (
+              <p className="text-xs text-muted-foreground">{summary}</p>
+            ) : null}
+          </div>
         </DialogHeader>
 
         <ScrollArea className="max-h-[70vh] pr-3">
