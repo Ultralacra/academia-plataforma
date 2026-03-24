@@ -37,6 +37,7 @@ import {
   deleteOption,
   type OpcionItem,
 } from "./api";
+import EtiquetasTicketsTab from "./EtiquetasTicketsTab";
 
 const GROUPS = [
   "estado_cliente",
@@ -46,6 +47,7 @@ const GROUPS = [
   "tipo_ticket",
   "puesto",
   "area",
+  "etiquetas_tickets",
 ];
 
 export default function OpcionesPage() {
@@ -70,6 +72,7 @@ export default function OpcionesPage() {
   } | null>(null);
 
   useEffect(() => {
+    if (active === "etiquetas_tickets") return;
     setForm((f) => ({ ...f, opcion_grupo: active }));
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,18 +254,22 @@ export default function OpcionesPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Opciones</h1>
           <div className="flex items-center gap-2">
-            <div className="relative hidden sm:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                className="pl-9 w-64"
-                placeholder="Buscar por key o value..."
-              />
-            </div>
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" /> Crear opción
-            </Button>
+            {active !== "etiquetas_tickets" && (
+              <>
+                <div className="relative hidden sm:block">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    className="pl-9 w-64"
+                    placeholder="Buscar por key o value..."
+                  />
+                </div>
+                <Button onClick={openCreate}>
+                  <Plus className="mr-2 h-4 w-4" /> Crear opción
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
@@ -283,145 +290,151 @@ export default function OpcionesPage() {
             ))}
           </TabsList>
 
-          {groupsTabs.map((g) => (
-            <TabsContent key={g} value={g} className="pt-1 pb-2">
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
-                <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-2 text-sm text-neutral-700">
-                    <span
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${groupBadgeClass(
-                        g,
-                      )}`}
-                    >
-                      {g.replace(/_/g, " ")}
-                    </span>
-                    <span className="hidden sm:inline text-neutral-500">
-                      Gestión de catálogos
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative sm:hidden">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        value={q}
-                        onChange={(e) => setQ(e.target.value)}
-                        className="pl-9 w-[70vw]"
-                        placeholder="Buscar..."
-                      />
-                    </div>
-                    <div className="text-sm text-neutral-500">
-                      Total: <Badge>{visible.length}</Badge>
-                    </div>
-                  </div>
-                </div>
+          <TabsContent value="etiquetas_tickets" className="pt-1 pb-2">
+            <EtiquetasTicketsTab />
+          </TabsContent>
 
-                {error && (
-                  <div className="text-sm text-red-600 mb-2">{error}</div>
-                )}
+          {groupsTabs
+            .filter((g) => g !== "etiquetas_tickets")
+            .map((g) => (
+              <TabsContent key={g} value={g} className="pt-1 pb-2">
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2 text-sm text-neutral-700">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${groupBadgeClass(
+                          g,
+                        )}`}
+                      >
+                        {g.replace(/_/g, " ")}
+                      </span>
+                      <span className="hidden sm:inline text-neutral-500">
+                        Gestión de catálogos
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="relative sm:hidden">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          value={q}
+                          onChange={(e) => setQ(e.target.value)}
+                          className="pl-9 w-[70vw]"
+                          placeholder="Buscar..."
+                        />
+                      </div>
+                      <div className="text-sm text-neutral-500">
+                        Total: <Badge>{visible.length}</Badge>
+                      </div>
+                    </div>
+                  </div>
 
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader className="sticky top-0 z-10">
-                      <TableRow className="bg-gray-50/80 backdrop-blur text-gray-600 text-xs uppercase tracking-wide">
-                        <TableHead className="px-3 py-2 text-left">
-                          Key
-                        </TableHead>
-                        <TableHead className="px-3 py-2 text-left">
-                          Value
-                        </TableHead>
-                        <TableHead className="px-3 py-2 text-left">
-                          Grupo
-                        </TableHead>
-                        <TableHead className="px-3 py-2 text-left">
-                          Acciones
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {loading ? (
-                        Array.from({ length: 5 }).map((_, i) => (
-                          <TableRow
-                            key={`skeleton-${i}`}
-                            className="animate-pulse"
-                          >
-                            <TableCell className="px-3 py-3">
-                              <div className="h-4 w-24 rounded bg-muted" />
-                            </TableCell>
-                            <TableCell className="px-3 py-3">
-                              <div className="h-4 w-40 rounded bg-muted" />
-                            </TableCell>
-                            <TableCell className="px-3 py-3">
-                              <div className="h-4 w-20 rounded bg-muted" />
-                            </TableCell>
-                            <TableCell className="px-3 py-3">
-                              <div className="h-8 w-28 rounded bg-muted" />
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : visible.length === 0 ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={4}
-                            className="px-3 py-4 text-sm text-neutral-500"
-                          >
-                            No hay opciones en este grupo.
-                          </TableCell>
+                  {error && (
+                    <div className="text-sm text-red-600 mb-2">{error}</div>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader className="sticky top-0 z-10">
+                        <TableRow className="bg-gray-50/80 backdrop-blur text-gray-600 text-xs uppercase tracking-wide">
+                          <TableHead className="px-3 py-2 text-left">
+                            Key
+                          </TableHead>
+                          <TableHead className="px-3 py-2 text-left">
+                            Value
+                          </TableHead>
+                          <TableHead className="px-3 py-2 text-left">
+                            Grupo
+                          </TableHead>
+                          <TableHead className="px-3 py-2 text-left">
+                            Acciones
+                          </TableHead>
                         </TableRow>
-                      ) : (
-                        visible.map((it) => (
-                          <TableRow
-                            key={`${it.codigo ?? it.opcion_key}`}
-                            className="border-t border-gray-100 hover:bg-blue-50/40"
-                          >
-                            <TableCell className="px-3 py-2 font-mono">
-                              <span className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs">
-                                {it.opcion_key}
-                              </span>
-                            </TableCell>
-                            <TableCell className="px-3 py-2 truncate">
-                              {it.opcion_value}
-                            </TableCell>
-                            <TableCell className="px-3 py-2">
-                              <span
-                                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${groupBadgeClass(
-                                  it.opcion_grupo,
-                                )}`}
-                              >
-                                {it.opcion_grupo.replace(/_/g, " ")}
-                              </span>
-                            </TableCell>
-                            <TableCell className="px-3 py-2">
-                              <div className="flex gap-2">
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  onClick={() => openEdit(it)}
-                                  title="Editar opción"
-                                  aria-label="Editar opción"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="text-rose-700 hover:bg-rose-50"
-                                  onClick={() => handleDelete(it)}
-                                  title="Eliminar opción"
-                                  aria-label="Eliminar opción"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                      </TableHeader>
+                      <TableBody>
+                        {loading ? (
+                          Array.from({ length: 5 }).map((_, i) => (
+                            <TableRow
+                              key={`skeleton-${i}`}
+                              className="animate-pulse"
+                            >
+                              <TableCell className="px-3 py-3">
+                                <div className="h-4 w-24 rounded bg-muted" />
+                              </TableCell>
+                              <TableCell className="px-3 py-3">
+                                <div className="h-4 w-40 rounded bg-muted" />
+                              </TableCell>
+                              <TableCell className="px-3 py-3">
+                                <div className="h-4 w-20 rounded bg-muted" />
+                              </TableCell>
+                              <TableCell className="px-3 py-3">
+                                <div className="h-8 w-28 rounded bg-muted" />
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : visible.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={4}
+                              className="px-3 py-4 text-sm text-neutral-500"
+                            >
+                              No hay opciones en este grupo.
                             </TableCell>
                           </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
+                        ) : (
+                          visible.map((it) => (
+                            <TableRow
+                              key={`${it.codigo ?? it.opcion_key}`}
+                              className="border-t border-gray-100 hover:bg-blue-50/40"
+                            >
+                              <TableCell className="px-3 py-2 font-mono">
+                                <span className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-xs">
+                                  {it.opcion_key}
+                                </span>
+                              </TableCell>
+                              <TableCell className="px-3 py-2 truncate">
+                                {it.opcion_value}
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
+                                <span
+                                  className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${groupBadgeClass(
+                                    it.opcion_grupo,
+                                  )}`}
+                                >
+                                  {it.opcion_grupo.replace(/_/g, " ")}
+                                </span>
+                              </TableCell>
+                              <TableCell className="px-3 py-2">
+                                <div className="flex gap-2">
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => openEdit(it)}
+                                    title="Editar opción"
+                                    aria-label="Editar opción"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="text-rose-700 hover:bg-rose-50"
+                                    onClick={() => handleDelete(it)}
+                                    title="Eliminar opción"
+                                    aria-label="Eliminar opción"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
                 </div>
-              </div>
-            </TabsContent>
-          ))}
+              </TabsContent>
+            ))}
         </Tabs>
 
         {/* Modal Crear/Editar */}

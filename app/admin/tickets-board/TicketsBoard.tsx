@@ -293,6 +293,7 @@ export default function TicketsBoard({
   const privilegedTicketManagerCodes = new Set<string>([
     "PKBT2jVtzKzN7TpnLZkPj", // Katherine
     "mQ2dwRX3xMzV99e3nh9eb", // Pedro
+    "18SA4S1_J4B-MPEU", // Alejandro
   ]);
   const currentUserCodigo = String((user as any)?.codigo || "");
   const canManageTickets =

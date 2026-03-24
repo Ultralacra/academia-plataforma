@@ -79,3 +79,28 @@ export async function deleteOption(code: string) {
     /* console.log('[opciones api] DELETE response:', json); */
   return json;
 }
+
+// ── Etiquetas de tickets ──────────────────────────────────────────
+export type EtiquetaTicket = {
+  id?: number | string | null;
+  codigo?: string | null;
+  nombre?: string | null;
+  color?: string | null;
+  [key: string]: unknown; // campos adicionales que el backend pueda devolver
+};
+
+export type EtiquetasResponse = {
+  code: number;
+  status: string;
+  data: EtiquetaTicket[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export async function getEtiquetasTickets(page = 1, pageSize = 25) {
+  const qs = `?page=${page}&pageSize=${pageSize}`;
+  const json = await fetchJson<EtiquetasResponse>(`/ticket/get/etiqueta${qs}`);
+  return json;
+}
