@@ -4,6 +4,7 @@ import type React from "react";
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import FullScreenLoader from "@/components/ui/FullScreenLoader";
+import { Button } from "@/components/ui/button";
 
 import { useAuth } from "@/hooks/use-auth";
 import { LoginForm } from "./login-form";
@@ -18,7 +19,7 @@ export function ProtectedRoute({
   children,
   allowedRoles,
 }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, user, hasAnyRole } = useAuth();
+  const { isAuthenticated, isLoading, user, hasAnyRole, logout } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -54,11 +55,14 @@ export function ProtectedRoute({
     }
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center space-y-4">
           <h2 className="text-lg font-semibold">Acceso denegado</h2>
           <p className="text-sm text-muted-foreground mt-1">
             No tienes permisos para ver esta página.
           </p>
+          <Button type="button" onClick={logout}>
+            Volver al login
+          </Button>
         </div>
       </div>
     );
