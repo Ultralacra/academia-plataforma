@@ -2495,10 +2495,20 @@ export default function StudentDetailContent({ code }: { code: string }) {
             {cuotaActivaInfo && cuotaActivaInfo.fechaVencimiento && (
               <Alert
                 variant={cuotaActivaInfo.estaMorosa ? "destructive" : "default"}
-                className="py-3"
+                className={
+                  cuotaActivaInfo.estaMorosa
+                    ? "border-rose-300 bg-rose-50 py-3 text-rose-950 dark:border-rose-400/35 dark:bg-rose-950/70 dark:text-rose-100"
+                    : "py-3"
+                }
               >
                 <AlertTriangle className="h-4 w-4" />
-                <AlertDescription className="text-sm">
+                <AlertDescription
+                  className={
+                    cuotaActivaInfo.estaMorosa
+                      ? "text-sm !text-rose-950 dark:!text-rose-100"
+                      : "text-sm"
+                  }
+                >
                   {cuotaActivaInfo.estaMorosa ? (
                     <>
                       <strong>Cuota vencida</strong> desde el{" "}
@@ -2609,7 +2619,9 @@ export default function StudentDetailContent({ code }: { code: string }) {
                   </div>
                   {accessStats ? (
                     accessStats.isExpired ? (
-                      <Badge variant="destructive">Vencido</Badge>
+                      <Badge className="border border-rose-300 bg-rose-100 text-rose-900 dark:border-rose-400/35 dark:bg-rose-950/70 dark:text-rose-100">
+                        Vencido
+                      </Badge>
                     ) : (
                       <Badge variant="secondary">Vigente</Badge>
                     )
@@ -2738,11 +2750,11 @@ export default function StudentDetailContent({ code }: { code: string }) {
                     </div>
                     {diasInactivoPorPago !== null &&
                       diasInactivoPorPago > 0 && (
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-destructive">
+                        <div className="flex items-center justify-between gap-2 rounded-md border border-rose-300/60 bg-rose-50/80 px-2 py-1 dark:border-rose-400/30 dark:bg-rose-950/50">
+                          <span className="font-medium text-rose-900 dark:text-rose-100">
                             Días INACTIVO_POR_PAGO
                           </span>
-                          <span className="font-medium text-destructive">
+                          <span className="font-semibold text-rose-900 dark:text-rose-100">
                             {diasInactivoPorPago}
                           </span>
                         </div>

@@ -170,7 +170,11 @@ export default function Header({
         {canDelete ? (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm" className="h-7 px-2">
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-7 bg-rose-600 px-2 text-white hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400"
+              >
                 <Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar
               </Button>
             </AlertDialogTrigger>

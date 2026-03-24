@@ -55,7 +55,7 @@ export default function CoachesCard({
                 setCurrentIndex(null);
                 setOpen(true);
               }}
-              className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+              className="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
             >
               Asignar coach
             </button>
@@ -73,7 +73,7 @@ export default function CoachesCard({
                   setCurrentIndex(0);
                   setOpen(true);
                 }}
-                className="ml-3 inline-flex items-center rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+                className="ml-3 inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-400"
               >
                 Asignar coach
               </button>
@@ -139,7 +139,7 @@ export default function CoachesCard({
                     setCurrentIndex(idx);
                     setOpen(true);
                   }}
-                  className="flex-none rounded-md border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted active:scale-[0.98]"
+                  className="flex-none rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted active:scale-[0.98]"
                 >
                   Cambiar
                 </button>
@@ -149,7 +149,7 @@ export default function CoachesCard({
                     setConfirmTarget({ id: coachId, name: c.name });
                     setConfirmOpen(true);
                   }}
-                  className="flex-none rounded-md border border-rose-200 dark:border-rose-500/20 bg-rose-50 dark:bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-500/20"
+                  className="flex-none rounded-md border border-rose-300 bg-rose-100 px-3 py-1.5 text-xs font-medium text-rose-900 hover:bg-rose-200 dark:border-rose-400/35 dark:bg-rose-950/70 dark:text-rose-100 dark:hover:bg-rose-900"
                 >
                   Desvincular
                 </button>
@@ -171,13 +171,13 @@ export default function CoachesCard({
             </DialogHeader>
             <div className="mt-4 flex justify-end gap-2">
               <button
-                className="rounded-md border px-3 py-1.5 text-sm"
+                className="rounded-md border border-input bg-background px-3 py-1.5 text-sm text-foreground"
                 onClick={() => setConfirmOpen(false)}
               >
                 Cancelar
               </button>
               <button
-                className="rounded-md bg-rose-600 px-3 py-1.5 text-sm text-white"
+                className="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-700 dark:bg-rose-500 dark:hover:bg-rose-400"
                 onClick={() => {
                   setConfirmOpen(false);
                   if (confirmTarget) onRemove(confirmTarget.id);
