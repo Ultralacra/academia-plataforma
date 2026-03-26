@@ -62,6 +62,145 @@ const SUBPHASE_OPTIONS = [
 
 const SUBPHASE_COLOR_OPTIONS = ["En proceso", "Ejecutado"] as const;
 
+type AdsMetricsCalloutItem = {
+  title: string;
+  description: string;
+  details?: string[];
+  featured?: boolean;
+};
+
+const MONEY_DISCLAIMER_ITEMS: AdsMetricsCalloutItem[] = [];
+
+const FUNNEL_DISCLAIMER_ITEMS: AdsMetricsCalloutItem[] = [
+  {
+    title: "1. Fase de Testeo",
+    description:
+      "Es la fase inicial. Comienza desde el momento en que lanzas tu pauta y abarca hasta que llevas invertidos entre 150 y 200 dólares.",
+  },
+  {
+    title: "2. Fase de Optimización",
+    description:
+      "Es la fase en la que empiezas a hacer ajustes y mejoras en tu publicidad.",
+    featured: true,
+    details: [
+      "Copy/Ads: Debes crear más anuncios.",
+      "Copy/VSL: Debes hacer modificaciones en los titulares de tu VSL, en el hook, o incluso crear micro VSLs.",
+      "Copy/Página: Realizas ajustes a nivel de copy u oferta directamente en tu página.",
+      "Copy/Oferta: Reformulas la oferta de tu producto carnada.",
+      "Técnica: Corriges problemas de velocidad en tu página o arreglas partes del embudo que están rotas y no permiten que la compra del OTO o el Downsell funcione correctamente.",
+      "Ads: Te dedicas exclusivamente a apagar los anuncios, VSLs y páginas que no están dando resultados.",
+    ],
+  },
+  {
+    title: "3. Fase de Escala",
+    description:
+      "Es la fase en la que ya identificaste qué funciona mejor, ya sea a nivel de anuncios, VSL o página, y comienzas a aumentar significativamente la inversión para potenciar tus resultados publicitarios.",
+  },
+];
+
+function AdsMetricsCallout({
+  eyebrow,
+  title,
+  description,
+  items,
+  tone,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  items: AdsMetricsCalloutItem[];
+  tone: "amber" | "sky";
+}) {
+  const palette =
+    tone === "amber"
+      ? {
+          shell:
+            "border-amber-200/80 bg-gradient-to-br from-amber-50 via-background to-orange-50",
+          badge: "border-amber-300/80 bg-amber-100/80 text-amber-900",
+          accent: "bg-amber-500",
+          card: "border-amber-200/70 bg-white/80",
+        }
+      : {
+          shell:
+            "border-sky-200/80 bg-gradient-to-br from-sky-50 via-background to-cyan-50",
+          badge: "border-sky-300/80 bg-sky-100/80 text-sky-900",
+          accent: "bg-sky-500",
+          card: "border-sky-200/70 bg-white/80",
+        };
+
+  return (
+    <div className={`rounded-2xl border p-4 shadow-sm ${palette.shell}`}>
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${palette.badge}`}
+          >
+            {eyebrow}
+          </span>
+          <div className="h-px flex-1 min-w-12 bg-gradient-to-r from-transparent via-border to-transparent" />
+        </div>
+        <div className="space-y-1">
+          <div className="text-sm font-semibold text-foreground">{title}</div>
+          <div className="rounded-xl border border-white/50 bg-white/60 p-3 backdrop-blur-sm">
+            <p className="whitespace-pre-line text-sm leading-6 text-muted-foreground">
+              {description}
+            </p>
+          </div>
+        </div>
+        <div
+          className={
+            items.length <= 1
+              ? "grid gap-3"
+              : "grid gap-3 lg:grid-cols-2 xl:grid-cols-3"
+          }
+        >
+          {items.map((item) => (
+            <div
+              key={item.title}
+              className={`rounded-xl border p-3 backdrop-blur-sm ${palette.card} ${
+                item.featured ? "lg:col-span-2 xl:col-span-2" : ""
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${palette.accent}`}
+                />
+                <div className="space-y-1.5">
+                  <div className="text-sm font-medium text-foreground">
+                    {item.title}
+                  </div>
+                  <p className="whitespace-pre-line text-xs leading-5 text-muted-foreground">
+                    {item.description}
+                  </p>
+                  {item.details?.length ? (
+                    <ul
+                      className={`text-xs leading-5 text-muted-foreground ${
+                        item.featured
+                          ? "grid gap-x-4 gap-y-2 md:grid-cols-2"
+                          : "space-y-1"
+                      }`}
+                    >
+                      {item.details.map((detail) => (
+                        <li
+                          key={detail}
+                          className="flex gap-2 rounded-lg bg-background/70 px-2.5 py-2"
+                        >
+                          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
+                          <span>{detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function normalizeSubphaseColor(input: unknown): string {
   const value = String(input ?? "").trim();
   if (!value) return "";
@@ -1432,6 +1571,15 @@ export default function AdsMetricsForm({
                     <CardTitle className="text-sm">Rendimiento</CardTitle>
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                    <div className="md:col-span-4">
+                      <AdsMetricsCallout
+                        eyebrow="Importante"
+                        title="Inversión y facturación"
+                        description="En el campo de inversión, debes escribir el monto en la moneda de tu cuenta publicitaria. Lo mismo aplica para la facturación. Para hacer esta conversión, puedes usar Google o cualquier convertidor de moneda en línea. Ejemplo, si mi cuenta publicitaria está en peso Colombiano, la facturación también debería estar en pesos Colombianos"
+                        items={MONEY_DISCLAIMER_ITEMS}
+                        tone="amber"
+                      />
+                    </div>
                     <div className="space-y-1.5">
                       <Label>Moneda</Label>
                       <select
@@ -1530,6 +1678,15 @@ export default function AdsMetricsForm({
                     <CardTitle className="text-sm">Embudo</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <AdsMetricsCallout
+                      eyebrow="Cómo llenar"
+                      title="Embudo"
+                      description={
+                        "En esta sección vas a registrar las métricas acumuladas de todo el periodo que se tuvo pauta activa\n\nTu proceso publicitario se divide en tres grandes fases:"
+                      }
+                      items={FUNNEL_DISCLAIMER_ITEMS}
+                      tone="sky"
+                    />
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <Label>Alcance</Label>
