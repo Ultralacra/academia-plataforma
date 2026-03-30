@@ -77,11 +77,22 @@ export interface ContractData {
   paymentMode: string; // contado, cuotas, reserva
   paymentAmount: string; // monto total
   paymentAmountNumber?: number;
+  paymentPaidAmount?: string;
   paymentPlatform?: string;
   paymentCurrency?: string;
   installmentsCount?: number;
   installmentAmount?: string;
+  paymentInstallmentsSchedule?: Array<{
+    amount?: string;
+    dueDate?: string;
+  }>;
+  paymentCustomInstallments?: Array<{
+    amount?: string;
+    dueDate?: string;
+  }>;
   reserveAmount?: string;
+  reservePaidDate?: string;
+  reserveRemainingDueDate?: string;
   nextChargeDate?: string;
 
   // Fechas
@@ -113,6 +124,14 @@ function formatDateSpanish(dateStr?: string | null): string {
   } catch {
     return dateStr;
   }
+}
+
+function normalizeInstallmentItems(input: unknown) {
+  if (!Array.isArray(input)) return [] as Array<{ amount?: string; dueDate?: string }>;
+  return input.map((item: any) => ({
+    amount: item?.amount != null ? String(item.amount) : "",
+    dueDate: item?.dueDate ?? item?.due_date ?? "",
+  }));
 }
 
 function formatDateToSpanish(d: Date): string {
@@ -186,9 +205,24 @@ function numberToWords(num: number): string {
 // Preparar datos para el template
 export function prepareContractData(data: Partial<ContractData>): Record<string, string> {
   const paymentNum = parseFloat(String(data.paymentAmount || "0").replace(/[^0-9.]/g, ""));
+  const paidNum = parseFloat(String(data.paymentPaidAmount || "0").replace(/[^0-9.]/g, ""));
   const installmentNum = parseFloat(String(data.installmentAmount || "0").replace(/[^0-9.]/g, ""));
   const reserveNum = parseFloat(String(data.reserveAmount || "0").replace(/[^0-9.]/g, ""));
   const durationNum = data.programDurationNumber || 4;
+  const standardSchedule = normalizeInstallmentItems(data.paymentInstallmentsSchedule);
+  const customSchedule = normalizeInstallmentItems(data.paymentCustomInstallments);
+
+  const getScheduleItem = (index: number) => {
+    const fromStandard = standardSchedule[index];
+    if (fromStandard) return fromStandard;
+    const fromCustom = customSchedule[index];
+    if (fromCustom) return fromCustom;
+    return { amount: "", dueDate: "" };
+  };
+
+  const cuota1 = getScheduleItem(0);
+  const cuota2 = getScheduleItem(1);
+  const cuota3 = getScheduleItem(2);
 
   // Bonuses como texto
   const bonusesText = Array.isArray(data.bonuses) && data.bonuses.length > 0
@@ -302,11 +336,25 @@ export function prepareContractData(data: Partial<ContractData>): Record<string,
     MONTO_TOTAL: formatCurrency(data.paymentAmount, data.paymentCurrency),
     MONTO_TOTAL_NUMERO: paymentNum.toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     MONTO_TOTAL_LETRAS: numberToWords(Math.floor(paymentNum)) + " dólares estadounidenses",
+    MONTO_PAGADO: paidNum > 0 ? formatCurrency(data.paymentPaidAmount, data.paymentCurrency) : "___________________________",
     PLATAFORMA_PAGO: data.paymentPlatform || "Por definir",
     MONEDA: data.paymentCurrency || "USD",
     NUM_CUOTAS: String(data.installmentsCount || "—"),
     MONTO_CUOTA: formatCurrency(data.installmentAmount, data.paymentCurrency),
     MONTO_RESERVA: formatCurrency(data.reserveAmount, data.paymentCurrency),
+    MONTO_CUOTA_1: formatCurrency(cuota1.amount || data.paymentPaidAmount || data.installmentAmount, data.paymentCurrency),
+    MONTO_CUOTA_2: formatCurrency(cuota2.amount || data.installmentAmount, data.paymentCurrency),
+    MONTO_CUOTA_3: formatCurrency(cuota3.amount || data.installmentAmount, data.paymentCurrency),
+    FECHA_CUOTA_1: cuota1.dueDate ? formatDateSpanish(cuota1.dueDate) : (data.contractDate ? formatDateSpanish(data.contractDate) : "___________________________"),
+    FECHA_CUOTA_2: cuota2.dueDate ? formatDateSpanish(cuota2.dueDate) : "___________________________",
+    FECHA_CUOTA_3: cuota3.dueDate ? formatDateSpanish(cuota3.dueDate) : "___________________________",
+    MONTO_EXCEPCION_CUOTA_1: formatCurrency(cuota1.amount || data.paymentPaidAmount, data.paymentCurrency),
+    MONTO_EXCEPCION_CUOTA_2: formatCurrency(cuota2.amount || data.installmentAmount, data.paymentCurrency),
+    FECHA_EXCEPCION_CUOTA_1: cuota1.dueDate ? formatDateSpanish(cuota1.dueDate) : (data.contractDate ? formatDateSpanish(data.contractDate) : "___________________________"),
+    FECHA_EXCEPCION_CUOTA_2: cuota2.dueDate ? formatDateSpanish(cuota2.dueDate) : "___________________________",
+    FECHA_RESERVA_PAGO: data.reservePaidDate ? formatDateSpanish(data.reservePaidDate) : "___________________________",
+    FECHA_RESERVA_SALDO: data.reserveRemainingDueDate ? formatDateSpanish(data.reserveRemainingDueDate) : "___________________________",
+    FECHA_PAGO_CONTADO: data.contractDate ? formatDateSpanish(data.contractDate) : "___________________________",
     FECHA_PROXIMO_COBRO: data.nextChargeDate ? formatDateSpanish(data.nextChargeDate) : "___________________________",
 
     // Fechas de inicio (separadas para el contrato)
@@ -700,13 +748,50 @@ export async function loadContractTextFromUrl(url: string): Promise<string> {
   return response.text();
 }
 
+/**
+ * Procesa bloques condicionales en el texto del contrato antes de parsear.
+ *
+ * Sintaxis soportada:
+ *   [[IF:MODO==pago_total]]   → solo si paymentMode es pago_total / contado
+ *   [[IF:MODO==3_cuotas]]     → solo si paymentMode es 3_cuotas
+ *   [[IF:MODO==excepcion_2_cuotas]] → solo si paymentMode es excepcion_2_cuotas o 2_cuotas
+ *   [[IF:TIENE_RESERVA]]      → solo si reserveAmount tiene valor
+ *   [[ENDIF]]                 → cierre del bloque
+ */
+export function applyConditionalBlocks(text: string, data: Partial<ContractData>): string {
+  const mode = String(data.paymentMode ?? "").toLowerCase().trim();
+  const hasReserve = !!data.reserveAmount && String(data.reserveAmount).trim() !== "";
+
+  // Bloques [[IF:MODO==valor]] ... [[ENDIF]]
+  text = text.replace(
+    /\[\[IF:MODO==([^\]]+)\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
+    (_, condition: string, content: string) => {
+      const cond = condition.trim().toLowerCase();
+      const matches =
+        (cond === "pago_total" && (mode === "pago_total" || mode.includes("contado"))) ||
+        (cond === "3_cuotas" && mode === "3_cuotas") ||
+        (cond === "excepcion_2_cuotas" && (mode === "excepcion_2_cuotas" || mode === "2_cuotas"));
+      return matches ? content : "";
+    },
+  );
+
+  // Bloques [[IF:TIENE_RESERVA]] ... [[ENDIF]]
+  text = text.replace(
+    /\[\[IF:TIENE_RESERVA\]\]\r?\n?([\s\S]*?)\[\[ENDIF\]\]\r?\n?/g,
+    (_, content: string) => (hasReserve ? content : ""),
+  );
+
+  return text;
+}
+
 export async function generateContractFromText(
   contractText: string,
   data: Partial<ContractData>,
   filename = "contrato.docx",
 ): Promise<void> {
+  const processedText = applyConditionalBlocks(contractText, data);
   const values = prepareContractData(data);
-  const children = parseContractTextToParagraphs(contractText, values);
+  const children = parseContractTextToParagraphs(processedText, values);
 
   const doc = new DocxDocument({
     styles: {
@@ -778,19 +863,37 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
   const contract = lead?.contract || {};
   const party = contract?.party || {};
   const company = contract?.company || {};
+  const installmentsSchedule = normalizeInstallmentItems(
+    d.paymentInstallmentsSchedule || payment?.installments_schedule || payment?.installments?.schedule,
+  );
+  const customInstallments = normalizeInstallmentItems(
+    d.paymentCustomInstallments || payment?.custom_installments,
+  );
+  const paymentReserve = payment?.reserve || {};
+  const partyName =
+    d.contractPartyName ||
+    party?.name ||
+    lead?.contract_party_name ||
+    d.fullName ||
+    lead?.name ||
+    "";
+  const partyEmail =
+    d.contractPartyEmail || party?.email || d.email || lead?.email || "";
+  const partyPhone =
+    d.contractPartyPhone || party?.phone || d.phone || lead?.phone || "";
 
   // Determinar duración del programa
   const programName = d.program || lead?.program || "HOTSELLING PRO";
   const durationNumber = d.programDurationNumber || lead?.program_duration_number || inferProgramDurationNumber(programName);
 
   return {
-    fullName: d.fullName || lead?.name || "",
-    email: d.email || lead?.email || "",
-    phone: d.phone || lead?.phone || "",
-    address: d.contractPartyAddress || party?.address || lead?.contract_party_address || "",
-    city: d.contractPartyCity || party?.city || lead?.contract_party_city || "",
-    country: d.contractPartyCountry || party?.country || lead?.contract_party_country || "",
-    dni: d.dni || lead?.dni || lead?.document_id || "",
+    fullName: partyName,
+    email: partyEmail,
+    phone: partyPhone,
+    address: d.contractPartyAddress || party?.address || lead?.contract_party_address || lead?.address || "",
+    city: d.contractPartyCity || party?.city || lead?.contract_party_city || lead?.city || "",
+    country: d.contractPartyCountry || party?.country || lead?.contract_party_country || lead?.country || "",
+    dni: d.contractPartyDocumentId || d.dni || lead?.dni || lead?.contract_party_document_id || lead?.document_id || "",
 
     isCompany: d.contractIsCompany || contract?.isCompany || lead?.contract_is_company || false,
     companyName: d.contractCompanyName || company?.name || lead?.contract_company_name || "",
@@ -808,16 +911,22 @@ export function mapLeadToContractData(lead: any, draft?: any): Partial<ContractD
 
     paymentMode: d.paymentMode || payment?.mode || lead?.payment_mode || "",
     paymentAmount: d.paymentAmount || payment?.amount || lead?.payment_amount || "",
+    paymentPaidAmount: d.paymentPaidAmount || payment?.paid_amount || "",
     paymentPlatform: d.paymentPlatform || payment?.platform || lead?.payment_platform || "",
     paymentCurrency: "USD",
     installmentsCount: d.paymentInstallmentsCount || payment?.installments?.count || 3,
     installmentAmount: d.paymentInstallmentAmount || payment?.installments?.amount || "",
+    paymentInstallmentsSchedule: installmentsSchedule,
+    paymentCustomInstallments: customInstallments,
     reserveAmount: d.paymentReserveAmount || payment?.reserveAmount || lead?.payment_reserve_amount || "",
+    reservePaidDate: d.reservePaidDate || paymentReserve?.paid_date || "",
+    reserveRemainingDueDate: d.reserveRemainingDueDate || paymentReserve?.remaining_due_date || "",
     nextChargeDate: d.nextChargeDate || payment?.nextChargeDate || lead?.next_charge_date || "",
 
     contractDate: new Date().toISOString(),
     startDate: d.startDate || lead?.start_date || lead?.program_start_date || "",
     closerName: lead?.closer?.name || lead?.closer_name || "",
+    closerEmail: lead?.closer?.email || "",
     notes: d.notes || lead?.sale_notes || "",
   };
 }

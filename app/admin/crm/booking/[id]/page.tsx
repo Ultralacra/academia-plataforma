@@ -167,6 +167,7 @@ function Content({ id }: { id: string }) {
       contractPartyAddress: any;
       contractPartyCity: any;
       contractPartyCountry: any;
+      contractPartyDocumentId: any;
       capturedAt: string;
       // Nuevos: datos completos de pago y closer
       paymentMode: any;
@@ -195,6 +196,7 @@ function Content({ id }: { id: string }) {
         contractPartyAddress,
         contractPartyCity,
         contractPartyCountry,
+        contractPartyDocumentId,
         capturedAt,
         paymentMode,
         paymentAmount,
@@ -287,6 +289,9 @@ function Content({ id }: { id: string }) {
           : {}),
         ...(contractPartyCountry !== null
           ? { contract_party_country: contractPartyCountry }
+          : {}),
+        ...(contractPartyDocumentId !== null
+          ? { contract_party_document_id: contractPartyDocumentId }
           : {}),
 
         // ── Closer / usuario responsable ────────────────────────────
@@ -513,6 +518,7 @@ function Content({ id }: { id: string }) {
     "contract_party_address",
     "contract_party_city",
     "contract_party_country",
+    "contract_party_document_id",
     "contract_company_name",
     "contract_company_tax_id",
     "contract_company_address",
@@ -647,6 +653,8 @@ function Content({ id }: { id: string }) {
         contract_party_address: (d as any).contractPartyAddress ?? undefined,
         contract_party_city: (d as any).contractPartyCity ?? undefined,
         contract_party_country: (d as any).contractPartyCountry ?? undefined,
+        contract_party_document_id:
+          (d as any).contractPartyDocumentId ?? undefined,
         contract_company_name: (d as any).contractCompanyName ?? undefined,
         contract_company_tax_id: (d as any).contractCompanyTaxId ?? undefined,
         contract_company_address:
@@ -1150,6 +1158,12 @@ function Content({ id }: { id: string }) {
       lui?.contract_party_address,
       rec?.contract_party_address,
     );
+    const contractPartyDocumentId = pickValue(
+      (draft as any)?.contractPartyDocumentId,
+      snapshotSale?.contract?.party?.documentId,
+      lui?.contract_party_document_id,
+      rec?.contract_party_document_id,
+    );
     const contractPartyCity = pickValue(
       (draft as any)?.contractPartyCity,
       snapshotSale?.contract?.party?.city,
@@ -1190,6 +1204,7 @@ function Content({ id }: { id: string }) {
       contractPartyAddress,
       contractPartyCity,
       contractPartyCountry,
+      contractPartyDocumentId,
       capturedAt,
       paymentMode,
       paymentAmount,
@@ -1534,6 +1549,10 @@ function Content({ id }: { id: string }) {
         salePayload?.contract?.party?.phone ||
         (p as any)?.contract_party_phone ||
         p.phone ||
+        "",
+      contractPartyDocumentId:
+        salePayload?.contract?.party?.documentId ||
+        (p as any)?.contract_party_document_id ||
         "",
       contractPartyAddress:
         salePayload?.contract?.party?.address ||

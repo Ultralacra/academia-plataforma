@@ -149,6 +149,7 @@ export interface LeadDetail extends Lead {
   contract_party_address?: string | null;
   contract_party_city?: string | null;
   contract_party_country?: string | null;
+  contract_party_document_id?: string | null;
   contract_company_name?: string | null;
   contract_company_tax_id?: string | null;
   contract_company_address?: string | null;
@@ -166,6 +167,54 @@ export interface LeadDetail extends Lead {
   bonuses_list?: any[];
   customer_profile?: LeadCustomerProfile | null;
   customer_profile_history?: LeadCustomerProfileHistoryEntry[] | null;
+}
+
+export interface LeadContractSignatureSendResponse {
+  code: number;
+  status: string;
+  message?: string;
+  data?: {
+    id?: number;
+    recipient_type?: string;
+    recipient_codigo?: string;
+    contract_source?: string;
+    signature_request_id?: string;
+    title?: string;
+    signer_name?: string;
+    signer_email?: string;
+    status?: string;
+    signing_url?: string;
+    details_url?: string;
+    files_url?: string;
+    is_complete?: boolean;
+    is_declined?: boolean;
+    has_error?: boolean;
+    test_mode?: boolean;
+    last_event_type?: string | null;
+    last_event_time?: string | null;
+    signed_at?: string | null;
+    declined_at?: string | null;
+    canceled_at?: string | null;
+    signed_file_available?: boolean;
+    signed_file_name?: string | null;
+    signed_file_mime?: string | null;
+    signatures?: Array<{
+      signature_id?: string;
+      has_pin?: boolean;
+      has_sms_auth?: boolean;
+      has_sms_delivery?: boolean;
+      sms_phone_number?: string | null;
+      signer_email_address?: string;
+      signer_name?: string;
+      signer_role?: string | null;
+      order?: number | null;
+      status_code?: string;
+      signed_at?: string | null;
+      last_viewed_at?: string | null;
+      last_reminded_at?: string | null;
+      error?: string | null;
+    }>;
+  };
 }
 
 // Tipos para registro de venta (sale)
@@ -579,6 +628,27 @@ export async function updateLead(
     (fullBody as any).source_entity = (current as any).source_entity;
   }
   return await updateLeadFull(codigo, fullBody);
+}
+
+export async function sendLeadContractForSignature(
+  codigo: string,
+  file: File,
+  message: string,
+) {
+  if (!codigo) throw new Error("codigo requerido");
+  if (!(file instanceof File)) throw new Error("file requerido");
+
+  const formData = new FormData();
+  formData.set("file", file);
+  formData.set("message", message);
+
+  return await apiFetch<LeadContractSignatureSendResponse>(
+    `/leads/dropboxsign/send-file/${encodeURIComponent(codigo)}`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
 }
 
 // Eliminar un lead

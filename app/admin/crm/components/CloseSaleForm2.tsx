@@ -92,6 +92,7 @@ export interface CloseSaleInput {
   contractPartyName?: string;
   contractPartyEmail?: string;
   contractPartyPhone?: string;
+  contractPartyDocumentId?: string;
   contractPartyAddress?: string;
   contractPartyCity?: string;
   contractPartyCountry?: string;
@@ -269,6 +270,7 @@ function salePayloadToLeadPatch(salePayload: any): Record<string, any> {
     contract_third_party: contract?.thirdParty ? 1 : 0,
     contract_is_company: contract?.isCompany ? 1 : 0,
     contract_parties: Array.isArray(contract?.parties) ? contract.parties : [],
+    contract_party_document_id: party?.documentId ?? null,
     contract_party_address: party?.address ?? null,
     contract_party_city: party?.city ?? null,
     contract_party_country: party?.country ?? null,
@@ -418,6 +420,7 @@ export function CloseSaleForm({
     contractPartyName: initial?.contractPartyName || initial?.fullName || "",
     contractPartyEmail: initial?.contractPartyEmail || initial?.email || "",
     contractPartyPhone: initial?.contractPartyPhone || initial?.phone || "",
+    contractPartyDocumentId: (initial as any)?.contractPartyDocumentId || "",
     contractPartyAddress: (initial as any)?.contractPartyAddress || "",
     contractPartyCity: (initial as any)?.contractPartyCity || "",
     contractPartyCountry: (initial as any)?.contractPartyCountry || "",
@@ -817,6 +820,7 @@ export function CloseSaleForm({
           name: form.contractPartyName || null,
           email: form.contractPartyEmail || null,
           phone: form.contractPartyPhone || null,
+          documentId: form.contractPartyDocumentId || null,
           address: form.contractPartyAddress || null,
           city: form.contractPartyCity || null,
           country: form.contractPartyCountry || null,
@@ -986,6 +990,9 @@ export function CloseSaleForm({
           initial?.contractPartyEmail ?? prev.contractPartyEmail,
         contractPartyPhone:
           initial?.contractPartyPhone ?? prev.contractPartyPhone,
+        contractPartyDocumentId:
+          (initial as any)?.contractPartyDocumentId ??
+          prev.contractPartyDocumentId,
         contractParties:
           (initial?.contractParties as any) ??
           prev.contractParties ??
@@ -2640,6 +2647,19 @@ export function CloseSaleForm({
                     value={form.contractPartyPhone || ""}
                     onChange={(e) =>
                       setForm({ ...form, contractPartyPhone: e.target.value })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>DNI / Documento</Label>
+                  <Input
+                    className={inputAccent}
+                    value={form.contractPartyDocumentId || ""}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        contractPartyDocumentId: e.target.value,
+                      })
                     }
                   />
                 </div>
