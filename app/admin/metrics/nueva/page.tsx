@@ -287,8 +287,9 @@ export default function MetricasNuevaPage() {
     const map = new Map<string, number>();
     for (const t of tickets) {
       const inf =
-        String(t.informante_nombre ?? t.informante ?? "Sin informante").trim() ||
-        "Sin informante";
+        String(
+          t.informante_nombre ?? t.informante ?? "Sin informante",
+        ).trim() || "Sin informante";
       map.set(inf, (map.get(inf) ?? 0) + 1);
     }
     return Array.from(map.entries())
