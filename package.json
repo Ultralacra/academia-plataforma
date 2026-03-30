@@ -46,6 +46,7 @@
     "docx": "^9.5.1",
     "docxtemplater": "^3.67.6",
     "embla-carousel-react": "8.5.1",
+    "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "geist": "latest",
     "html2pdf.js": "^0.13.0",

@@ -19,6 +19,7 @@ import {
   Filter,
   Calendar as CalendarIcon,
   ChevronDown,
+  FileSpreadsheet,
 } from "lucide-react";
 import { Charts } from "./charts";
 import KPIs from "./kpis";
@@ -26,6 +27,7 @@ import TeamsTable from "./teams-table";
 import { computeTicketMetrics, type TicketsMetrics } from "./metrics";
 import TicketsSummaryCard from "./tickets-summary-card";
 import PersonalMetrics from "@/app/admin/teamsv2/PersonalMetrics";
+import { exportTicketsDashboardExcel } from "./export-tickets-dashboard";
 
 /* ---------------------------------------
   UI helpers lightweight (sin shadcn)
@@ -140,6 +142,7 @@ function Button({
   variant = "default",
   size = "md",
   className = "",
+  disabled = false,
 }: any) {
   const variants: Record<string, string> = {
     default: "bg-sky-600 text-white hover:bg-sky-700 focus:ring-sky-200",
@@ -154,7 +157,8 @@ function Button({
   return (
     <button
       onClick={onClick}
-      className={`inline-flex items-center gap-2 ${variants[variant]} ${sizes[size]} focus:outline-none focus:ring-4 transition ${className}`}
+      disabled={disabled}
+      className={`inline-flex items-center gap-2 ${variants[variant]} ${sizes[size]} focus:outline-none focus:ring-4 transition disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
     >
       {children}
     </button>
@@ -178,6 +182,16 @@ function fmtDateTime(iso?: string | null) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return "-";
   return fmt.format(d);
+}
+
+function stampNow() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}-${hh}${mi}`;
 }
 
 function normText(value?: string | null) {
@@ -236,6 +250,7 @@ export default function TicketsContent() {
   const [descEditing, setDescEditing] = useState(false);
   const [descDraft, setDescDraft] = useState("");
   const [savingDesc, setSavingDesc] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<"xlsx" | null>(null);
 
   // Carga del backend (hasta 10k)
   useEffect(() => {
@@ -418,6 +433,199 @@ export default function TicketsContent() {
     [filtered],
   );
 
+  const exportEstadoRows = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of filtered ?? []) {
+      const key =
+        String(t.estado ?? "SIN ESTADO")
+          .toUpperCase()
+          .trim() || "SIN ESTADO";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([estadoKey, cantidad]) => ({
+        etiqueta: estadoKey,
+        cantidad,
+        porcentaje: metrics.total
+          ? `${Math.round((cantidad / metrics.total) * 100)}%`
+          : "0%",
+      }));
+  }, [filtered, metrics.total]);
+
+  const exportTipoRows = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of filtered ?? []) {
+      const key =
+        String(t.tipo ?? "SIN TIPO")
+          .toUpperCase()
+          .trim() || "SIN TIPO";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([tipoKey, cantidad]) => ({
+        etiqueta: tipoKey,
+        cantidad,
+        porcentaje: metrics.total
+          ? `${Math.round((cantidad / metrics.total) * 100)}%`
+          : "0%",
+      }));
+  }, [filtered, metrics.total]);
+
+  const exportTopAlumnosRows = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of filtered ?? []) {
+      const key =
+        String(t.alumno_nombre ?? "SIN ALUMNO").trim() || "SIN ALUMNO";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([etiqueta, cantidad]) => ({
+        etiqueta,
+        cantidad,
+        porcentaje: metrics.total
+          ? `${Math.round((cantidad / metrics.total) * 100)}%`
+          : "0%",
+      }));
+  }, [filtered, metrics.total]);
+
+  const exportTopInformantesRows = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of filtered ?? []) {
+      const key =
+        String(
+          t.informante_nombre ?? t.informante ?? "SIN INFORMANTE",
+        ).trim() || "SIN INFORMANTE";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([etiqueta, cantidad]) => ({
+        etiqueta,
+        cantidad,
+        porcentaje: metrics.total
+          ? `${Math.round((cantidad / metrics.total) * 100)}%`
+          : "0%",
+      }));
+  }, [filtered, metrics.total]);
+
+  const exportDiaRows = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of filtered ?? []) {
+      const d = new Date(t.creacion);
+      if (Number.isNaN(d.getTime())) continue;
+      const key = d.toISOString().slice(0, 10);
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([fecha, tickets]) => ({ fecha, tickets }));
+  }, [filtered]);
+
+  const exportConfigRows = useMemo(
+    () => [
+      { filtro: "Busqueda", valor: search || "(vacio)" },
+      {
+        filtro: "Estado",
+        valor: estado === "all" ? "Todos" : estado.toUpperCase(),
+      },
+      { filtro: "Tipo", valor: tipo === "all" ? "Todos" : tipo.toUpperCase() },
+      { filtro: "Coach", valor: coachFiltro === "all" ? "Todos" : coachFiltro },
+      {
+        filtro: "Informante",
+        valor: informanteFiltro === "all" ? "Todos" : informanteFiltro,
+      },
+      { filtro: "Fecha desde", valor: fechaDesde || "-" },
+      { filtro: "Fecha hasta", valor: fechaHasta || "-" },
+      { filtro: "Generado", valor: new Date().toLocaleString("es-ES") },
+      { filtro: "Total tickets en vista", valor: metrics.total },
+    ],
+    [
+      search,
+      estado,
+      tipo,
+      coachFiltro,
+      informanteFiltro,
+      fechaDesde,
+      fechaHasta,
+      metrics.total,
+    ],
+  );
+
+  const exportSummaryRows = useMemo(
+    () => [
+      { metrica: "Total tickets", valor: metrics.total },
+      { metrica: "Resueltos", valor: metrics.resueltos },
+      { metrica: "En progreso", valor: metrics.enProgreso },
+      { metrica: "Pendientes", valor: metrics.pendientes },
+      { metrica: "Pendientes de envio", valor: metrics.pendientesDeEnvio },
+      { metrica: "Pausados", valor: metrics.pausados },
+      { metrica: "Tickets hoy", valor: metrics.today },
+      { metrica: "Ultimos 7 dias", valor: metrics.last7 },
+      { metrica: "Ultimos 30 dias", valor: metrics.last30 },
+      {
+        metrica: "Promedio por dia",
+        valor: Number(metrics.avgPerDay || 0).toFixed(2),
+      },
+      {
+        metrica: "Rango",
+        valor:
+          metrics.from && metrics.to
+            ? `${metrics.from} a ${metrics.to} (${metrics.days} dias)`
+            : "Sin rango",
+      },
+      {
+        metrica: "Dia mas cargado",
+        valor: metrics.busiestDay
+          ? `${metrics.busiestDay.date} (${metrics.busiestDay.count})`
+          : "Sin datos",
+      },
+      { metrica: "Dias sin tickets", valor: metrics.quietDays },
+      {
+        metrica: "Informantes con respuesta",
+        valor: `${metrics.informanteRespondedCount} (${Math.round(
+          metrics.informanteRespondedPct || 0,
+        )}%)`,
+      },
+    ],
+    [metrics],
+  );
+
+  const handleExportExcel = async () => {
+    try {
+      setExportingFormat("xlsx");
+      await exportTicketsDashboardExcel({
+        summaryRows: exportSummaryRows,
+        estadoRows: exportEstadoRows,
+        tipoRows: exportTipoRows,
+        topAlumnosRows: exportTopAlumnosRows,
+        topInformantesRows: exportTopInformantesRows,
+        diaRows: exportDiaRows,
+        filterRows: exportConfigRows,
+        fileName: `tickets-dashboard-${stampNow()}.xlsx`,
+      });
+      toast({
+        title: "Excel generado",
+        description:
+          "Se descargo el dashboard en una hoja con Top alumnos, Top informantes, estados y tipos acumulado.",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "No se pudo generar el Excel",
+        description:
+          error instanceof Error ? error.message : "Error desconocido",
+        variant: "destructive",
+      });
+    } finally {
+      setExportingFormat(null);
+    }
+  };
+
   // Paginación local
   const total = (filtered ?? []).length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE_UI));
@@ -469,147 +677,173 @@ export default function TicketsContent() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
-        <p className="text-sm text-muted-foreground">
-          Hasta 10k resultados del backend · Paginación local (25 por página)
-        </p>
-      </div>
-
-      {/* Filtros */}
-      <Card>
-        <CardHeader
-          title="Filtros"
-          icon={<Filter className="h-5 w-5" />}
-          right={<Badge color="blue">{metrics.total} resultados</Badge>}
-        />
-        <CardBody>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
-            <div className="md:col-span-4">
-              <Input
-                placeholder="Buscar por asunto o alumno..."
-                value={search}
-                onChange={(e: any) => {
-                  setPage(1);
-                  setSearch(e.target.value);
-                }}
-                leftIcon={<Search className="h-4 w-4 text-gray-400" />}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Select
-                value={estado}
-                onChange={(v) => {
-                  setPage(1);
-                  setEstado(v);
-                }}
-                options={estadoOpts.map((e) => ({
-                  value: e,
-                  label: e === "all" ? "Todos los estados" : e.toUpperCase(),
-                }))}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Select
-                value={tipo}
-                onChange={(v) => {
-                  setPage(1);
-                  setTipo(v);
-                }}
-                options={tipoOpts.map((t) => ({
-                  value: t,
-                  label: t === "all" ? "Todos los tipos" : t.toUpperCase(),
-                }))}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Select
-                value={coachFiltro}
-                onChange={(v) => {
-                  setPage(1);
-                  setCoachFiltro(v);
-                }}
-                options={[
-                  { value: "all", label: "Todos los coaches" },
-                  ...coaches.map((c) => ({
-                    value: c.codigo,
-                    label: `${c.nombre}${c.puesto ? ` · ${c.puesto}` : ""}${c.area ? ` (${c.area})` : ""}`,
-                  })),
-                ]}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Select
-                value={informanteFiltro}
-                onChange={(v) => {
-                  setPage(1);
-                  setInformanteFiltro(v);
-                }}
-                options={informanteOpts}
-              />
-            </div>
-            <div className="md:col-span-1">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-gray-400" />
-                <input
-                  type="date"
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-4 focus:ring-amber-100"
-                  value={fechaDesde}
-                  onChange={(e) => {
-                    setPage(1);
-                    setFechaDesde(e.target.value);
-                  }}
-                />
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">Desde</p>
-            </div>
-            <div className="md:col-span-1">
-              <div className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4 text-gray-400" />
-                <input
-                  type="date"
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-4 focus:ring-amber-100"
-                  value={fechaHasta}
-                  onChange={(e) => {
-                    setPage(1);
-                    setFechaHasta(e.target.value);
-                  }}
-                />
-              </div>
-              <p className="mt-1 text-[11px] text-muted-foreground">Hasta</p>
-            </div>
+      <div className="space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
+          <p className="text-sm text-muted-foreground">
+            Hasta 10k resultados del backend · Paginación local (25 por página)
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2" data-export-ignore="true">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportExcel}
+              disabled={loading || exportingFormat !== null || total === 0}
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              {exportingFormat === "xlsx"
+                ? "Generando Excel..."
+                : "Descargar Excel"}
+            </Button>
+            {/*
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPdf}
+              disabled={loading || exportingFormat !== null || total === 0}
+            >
+              <FileText className="h-4 w-4" />
+              {exportingFormat === "pdf" ? "Generando PDF..." : "Descargar PDF"}
+            </Button>
+            */}
           </div>
-        </CardBody>
-      </Card>
+        </div>
 
-      {/* KPIs nuevas */}
-      <KPIs metrics={metrics} loading={loading} />
-
-      {/* Métricas completas por coach (solo cuando se filtra un coach específico) */}
-      {coachFiltro !== "all" && selectedCoach && (
+        {/* Filtros */}
         <Card>
           <CardHeader
-            title={`Métricas completas · ${selectedCoach.nombre}`}
-            subtitle="Resumen ampliado por coach seleccionado"
+            title="Filtros"
+            icon={<Filter className="h-5 w-5" />}
+            right={<Badge color="blue">{metrics.total} resultados</Badge>}
           />
           <CardBody>
-            <PersonalMetrics
-              coachCode={selectedCoach.codigo}
-              coachName={selectedCoach.nombre}
-              externalDesde={fechaDesde}
-              externalHasta={fechaHasta}
-              hideDateControls
-            />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-12">
+              <div className="md:col-span-4">
+                <Input
+                  placeholder="Buscar por asunto o alumno..."
+                  value={search}
+                  onChange={(e: any) => {
+                    setPage(1);
+                    setSearch(e.target.value);
+                  }}
+                  leftIcon={<Search className="h-4 w-4 text-gray-400" />}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Select
+                  value={estado}
+                  onChange={(v) => {
+                    setPage(1);
+                    setEstado(v);
+                  }}
+                  options={estadoOpts.map((e) => ({
+                    value: e,
+                    label: e === "all" ? "Todos los estados" : e.toUpperCase(),
+                  }))}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Select
+                  value={tipo}
+                  onChange={(v) => {
+                    setPage(1);
+                    setTipo(v);
+                  }}
+                  options={tipoOpts.map((t) => ({
+                    value: t,
+                    label: t === "all" ? "Todos los tipos" : t.toUpperCase(),
+                  }))}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Select
+                  value={coachFiltro}
+                  onChange={(v) => {
+                    setPage(1);
+                    setCoachFiltro(v);
+                  }}
+                  options={[
+                    { value: "all", label: "Todos los coaches" },
+                    ...coaches.map((c) => ({
+                      value: c.codigo,
+                      label: `${c.nombre}${c.puesto ? ` · ${c.puesto}` : ""}${c.area ? ` (${c.area})` : ""}`,
+                    })),
+                  ]}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Select
+                  value={informanteFiltro}
+                  onChange={(v) => {
+                    setPage(1);
+                    setInformanteFiltro(v);
+                  }}
+                  options={informanteOpts}
+                />
+              </div>
+              <div className="md:col-span-1">
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4 text-gray-400" />
+                  <input
+                    type="date"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-4 focus:ring-amber-100"
+                    value={fechaDesde}
+                    onChange={(e) => {
+                      setPage(1);
+                      setFechaDesde(e.target.value);
+                    }}
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">Desde</p>
+              </div>
+              <div className="md:col-span-1">
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4 text-gray-400" />
+                  <input
+                    type="date"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:ring-4 focus:ring-amber-100"
+                    value={fechaHasta}
+                    onChange={(e) => {
+                      setPage(1);
+                      setFechaHasta(e.target.value);
+                    }}
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">Hasta</p>
+              </div>
+            </div>
           </CardBody>
         </Card>
-      )}
 
-      {/* Resumen adicional (por alumno/tipo) */}
-      <TicketsSummaryCard tickets={filtered} metrics={metrics} />
+        {/* KPIs nuevas */}
+        <KPIs metrics={metrics} loading={loading} />
 
-      {/* Gráficas */}
-      <Charts ticketsPorDia={ticketsPorDia} tickets={filtered} />
+        {/* Métricas completas por coach (solo cuando se filtra un coach específico) */}
+        {coachFiltro !== "all" && selectedCoach && (
+          <Card>
+            <CardHeader
+              title={`Métricas completas · ${selectedCoach.nombre}`}
+              subtitle="Resumen ampliado por coach seleccionado"
+            />
+            <CardBody>
+              <PersonalMetrics
+                coachCode={selectedCoach.codigo}
+                coachName={selectedCoach.nombre}
+                externalDesde={fechaDesde}
+                externalHasta={fechaHasta}
+                hideDateControls
+              />
+            </CardBody>
+          </Card>
+        )}
+
+        {/* Resumen adicional (por alumno/tipo) */}
+        <TicketsSummaryCard tickets={filtered} metrics={metrics} />
+
+        {/* Gráficas */}
+        <Charts ticketsPorDia={ticketsPorDia} tickets={filtered} />
+      </div>
 
       {/* Tabla tickets (paginación local) */}
       <Card>
