@@ -14,12 +14,14 @@ import {
 import {
   Activity,
   CalendarDays,
+  FileSpreadsheet,
   Loader2,
   Table as TableIcon,
   TrendingUp,
   Users,
 } from "lucide-react";
 import { dataService, type StudentItem, type Ticket } from "@/lib/data-service";
+import { exportMetricasNuevaExcel } from "./export-metricas-nueva-excel";
 
 function ymd(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -83,6 +85,16 @@ function statusBadgeClass(status: unknown): string {
   return "bg-gray-50 text-gray-700 border-gray-200";
 }
 
+function stampNow() {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}${mm}${dd}-${hh}${mi}`;
+}
+
 export default function MetricasNuevaPage() {
   const today = useMemo(() => new Date(), []);
   const fechaDesde = useMemo(() => `${today.getFullYear()}-01-01`, [today]);
@@ -91,6 +103,7 @@ export default function MetricasNuevaPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportingExcel, setExportingExcel] = useState(false);
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [students, setStudents] = useState<StudentItem[]>([]);
 
@@ -221,6 +234,123 @@ export default function MetricasNuevaPage() {
     };
   }, [monthsYtd, students, tickets]);
 
+  const distEstados = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tickets) {
+      const key = String(t.estado ?? "Sin estado").trim() || "Sin estado";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([etiqueta, cantidad]) => ({
+        etiqueta,
+        cantidad,
+        porcentaje: tickets.length
+          ? `${Math.round((cantidad / tickets.length) * 100)}%`
+          : "0%",
+      }));
+  }, [tickets]);
+
+  const distTipos = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tickets) {
+      const key = String(t.tipo ?? "Sin tipo").trim() || "Sin tipo";
+      map.set(key, (map.get(key) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([etiqueta, cantidad]) => ({
+        etiqueta,
+        cantidad,
+        porcentaje: tickets.length
+          ? `${Math.round((cantidad / tickets.length) * 100)}%`
+          : "0%",
+      }));
+  }, [tickets]);
+
+  const topAlumnos = useMemo(
+    () =>
+      ticketsByAlumno
+        .map((g) => ({
+          etiqueta: g.alumno,
+          cantidad: g.items.length,
+          porcentaje: tickets.length
+            ? `${Math.round((g.items.length / tickets.length) * 100)}%`
+            : "0%",
+        }))
+        .sort((a, b) => b.cantidad - a.cantidad)
+        .slice(0, 12),
+    [ticketsByAlumno, tickets.length],
+  );
+
+  const topInformantes = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of tickets) {
+      const inf =
+        String(t.informante_nombre ?? t.informante ?? "Sin informante").trim() ||
+        "Sin informante";
+      map.set(inf, (map.get(inf) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([etiqueta, cantidad]) => ({
+        etiqueta,
+        cantidad,
+        porcentaje: tickets.length
+          ? `${Math.round((cantidad / tickets.length) * 100)}%`
+          : "0%",
+      }));
+  }, [tickets]);
+
+  const handleExportExcel = async () => {
+    try {
+      setExportingExcel(true);
+      await exportMetricasNuevaExcel({
+        fileName: `metrica-nueva-dashboard-${stampNow()}.xlsx`,
+        resumen: [
+          { metrica: "Tickets totales", valor: tickets.length },
+          {
+            metrica: "Promedio tickets por mes",
+            valor: metrics.avgTicketsPerMonth.toFixed(1),
+          },
+          {
+            metrica: "Promedio activos por mes",
+            valor: metrics.avgActiveStudentsPerMonth.toFixed(1),
+          },
+          {
+            metrica: "Activos unicos YTD",
+            valor: metrics.ytdActiveStudents,
+          },
+          { metrica: "Total fases detectadas", valor: metrics.stages.length },
+          { metrica: "Total meses YTD", valor: metrics.monthlyRows.length },
+        ],
+        filtros: [
+          { filtro: "Fecha desde", valor: fechaDesde },
+          { filtro: "Fecha hasta", valor: fechaHasta },
+          { filtro: "Tickets cargados", valor: tickets.length },
+          { filtro: "Alumnos cargados", valor: students.length },
+          { filtro: "Generado", valor: new Date().toLocaleString("es-ES") },
+        ],
+        meses: metrics.monthlyRows.map((r) => ({
+          mes: formatMonth(r.month),
+          activos: r.activeStudents,
+          tickets: r.tickets,
+        })),
+        fases: metrics.stages.map((s) => ({
+          fase: s.stage,
+          alumnosActivos: s.count,
+        })),
+        topAlumnos,
+        topInformantes,
+        estados: distEstados,
+        tipos: distTipos,
+      });
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   useEffect(() => {
     let active = true;
     (async () => {
@@ -273,6 +403,17 @@ export default function MetricasNuevaPage() {
               Tickets consultados desde <strong>{fechaDesde}</strong> hasta
               <strong> {fechaHasta}</strong>. Se muestran hasta 10000 registros.
             </p>
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={handleExportExcel}
+                disabled={loading || exportingExcel || tickets.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-sm font-medium text-emerald-800 shadow-sm transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+                {exportingExcel ? "Generando Excel..." : "Descargar Excel"}
+              </button>
+            </div>
           </div>
 
           <Card className="p-5 border-border/60">
