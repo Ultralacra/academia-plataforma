@@ -7,9 +7,42 @@ import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import StudentChatInline from "@/components/chat/StudentChatInline";
 import ChatRealtime from "@/components/chat/ChatRealtime";
 import CoachChatInline from "@/app/admin/teamsv2/[code]/CoachChatInline";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { dataService, type StudentItem } from "@/lib/data-service";
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
+import { AlertTriangle } from "lucide-react";
+
+function getChatTimestamp(chat: any): number {
+  const fields = [
+    chat?.last_message?.fecha_envio_local,
+    chat?.last_message?.fecha_envio,
+    chat?.last_message_at,
+    chat?.fecha_ultimo_mensaje,
+    chat?.updated_at,
+    chat?.fecha_actualizacion,
+    chat?.fecha_creacion_local,
+    chat?.fecha_creacion,
+    chat?.created_at,
+  ];
+
+  for (const field of fields) {
+    const timestamp = Date.parse(String(field || ""));
+    if (!Number.isNaN(timestamp)) return timestamp;
+  }
+
+  return 0;
+}
+
+function formatChatDate(raw: unknown): string | null {
+  const timestamp = Date.parse(String(raw || ""));
+  if (Number.isNaN(timestamp)) return null;
+
+  return new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
+}
 
 export default function ChatByCodePage({
   params,
@@ -19,6 +52,7 @@ export default function ChatByCodePage({
   const { code } = params;
   const [student, setStudent] = useState<StudentItem | null>(null);
   const [loading, setLoading] = useState(false);
+  const [contactChats, setContactChats] = useState<any[]>([]);
   const { user } = useAuth();
   const search = useSearchParams();
   const transport = (search?.get("transport") === "local" ? "local" : "ws") as
@@ -44,7 +78,7 @@ export default function ChatByCodePage({
         const list = res.items ?? [];
         const s =
           list.find(
-            (x) => (x.code ?? "").toLowerCase() === code.toLowerCase()
+            (x) => (x.code ?? "").toLowerCase() === code.toLowerCase(),
           ) ||
           list[0] ||
           null;
@@ -64,6 +98,20 @@ export default function ChatByCodePage({
     senderRole === "alumno" ? "Chat con administración" : "Chat con alumno";
   const subtitle = student ? `${student.name} • ${student.code ?? code}` : code;
   const roomCode = (student?.code || code).toLowerCase();
+  const duplicateChats = useMemo(() => {
+    const uniqueChats = new Map<string, any>();
+
+    for (const chat of contactChats) {
+      const chatId = String(chat?.id_chat ?? chat?.id ?? "").trim();
+      if (!chatId || uniqueChats.has(chatId)) continue;
+      uniqueChats.set(chatId, chat);
+    }
+
+    return Array.from(uniqueChats.values()).sort(
+      (left, right) => getChatTimestamp(right) - getChatTimestamp(left),
+    );
+  }, [contactChats]);
+  const hasDuplicateChats = duplicateChats.length > 1;
 
   return (
     <ProtectedRoute allowedRoles={["admin", "student", "coach"]}>
@@ -88,12 +136,58 @@ export default function ChatByCodePage({
             </div>
           )}
 
+          {hasDuplicateChats && (
+            <div className="px-1 pb-2">
+              <Alert className="border-amber-500/40 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>
+                  Este contacto tiene {duplicateChats.length} conversaciones
+                  abiertas
+                </AlertTitle>
+                <AlertDescription>
+                  <p>
+                    Antes de responder, revisa que estés escribiendo en el chat
+                    correcto para evitar partir el historial.
+                  </p>
+                  <div className="flex flex-wrap gap-2 pt-1 text-xs text-amber-900/90 dark:text-amber-100/90">
+                    {duplicateChats.map((chat) => {
+                      const chatId = String(chat?.id_chat ?? chat?.id ?? "");
+                      const createdAt = formatChatDate(
+                        chat?.fecha_creacion_local ??
+                          chat?.fecha_creacion ??
+                          chat?.created_at,
+                      );
+                      const lastMessageAt = formatChatDate(
+                        chat?.last_message?.fecha_envio_local ??
+                          chat?.last_message?.fecha_envio ??
+                          chat?.last_message_at ??
+                          chat?.fecha_ultimo_mensaje,
+                      );
+
+                      return (
+                        <span
+                          key={chatId}
+                          className="rounded-md border border-amber-500/30 bg-amber-100/70 px-2 py-1 dark:bg-amber-900/30"
+                        >
+                          {chatId}
+                          {createdAt ? ` · creado ${createdAt}` : ""}
+                          {lastMessageAt ? ` · último ${lastMessageAt}` : ""}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+
           <div className="flex-1 min-h-0 overflow-hidden">
             {senderRole === "alumno" ? (
               <StudentChatInline
                 code={roomCode}
                 title={title}
                 subtitle={subtitle}
+                onChatsList={setContactChats}
                 className="h-full"
               />
             ) : senderRole === "admin" && !legacy ? (
@@ -119,6 +213,7 @@ export default function ChatByCodePage({
                   participante_tipo: "cliente",
                   id_cliente: roomCode,
                 }}
+                onChatsList={setContactChats}
               />
             ) : (
               <ChatRealtime
@@ -130,6 +225,11 @@ export default function ChatByCodePage({
                 className="h-full"
                 transport={transport}
                 showRoleSwitch={debug}
+                onChatsList={setContactChats}
+                listParams={{
+                  participante_tipo: "cliente",
+                  id_cliente: roomCode,
+                }}
               />
             )}
           </div>

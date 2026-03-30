@@ -17,12 +17,14 @@ export default function StudentChatInline({
   title = "Chat",
   subtitle,
   coachEquipoId,
+  onChatsList,
   className = "h-full",
 }: {
   code: string; // código/ID del alumno (id_cliente)
   title?: string;
   subtitle?: string;
   coachEquipoId?: string; // opcional: forzar id_equipo destino; por defecto ADMIN_COACH_ID
+  onChatsList?: (list: any[]) => void;
   className?: string;
 }) {
   const room = React.useMemo(() => (code || "").trim().toLowerCase(), [code]);
@@ -159,15 +161,15 @@ export default function StudentChatInline({
             : "ac";
 
         // LOG CRÍTICO: Mostrar proceso de resolución del coach
-                /* console.log("═══════════════════════════════════════════"); */
-                /* console.log(
+        /* console.log("═══════════════════════════════════════════"); */
+        /* console.log(
           "🔎 [CHAT ALUMNO / StudentChatInline] RESOLUCIÓN DE COACHES",
         ); */
-                /* console.log("═══════════════════════════════════════════"); */
-                /* console.log("👤 Alumno:", alumno); */
-                /* console.log("📊 Coaches asignados encontrados:", assigned.length); */
+        /* console.log("═══════════════════════════════════════════"); */
+        /* console.log("👤 Alumno:", alumno); */
+        /* console.log("📊 Coaches asignados encontrados:", assigned.length); */
         assigned.forEach((a, i) => {
-                    /* console.log(
+          /* console.log(
             `  ${i + 1}. ${a.nombre || "(sin nombre)"} [${a.codigo}]`,
             {
               area: a.area || "(sin área)",
@@ -177,21 +179,21 @@ export default function StudentChatInline({
             },
           ); */
         });
-                /* console.log("⭐ Coach AC seleccionado:", {
+        /* console.log("⭐ Coach AC seleccionado:", {
           codigo: codeEquipoAC || "(NINGUNO)",
           nombre: preferredAC?.nombre || "(sin nombre)",
           area: preferredAC?.area || "(sin área)",
           es_atencion_cliente:
             preferredAC?.area && isAC(preferredAC.area) ? "✅ SÍ" : "❌ NO",
         }); */
-                /* console.log("⭐ Coach VSL seleccionado:", {
+        /* console.log("⭐ Coach VSL seleccionado:", {
           codigo: codeEquipoVSL || "(NINGUNO)",
           nombre: preferredVSL?.nombre || "(sin nombre)",
           area: preferredVSL?.area || "(sin área)",
           es_vsl: preferredVSL ? "✅ SÍ" : "❌ NO",
         }); */
-                /* console.log("🏁 Canal inicial:", nextChannel); */
-                /* console.log("═══════════════════════════════════════════"); */
+        /* console.log("🏁 Canal inicial:", nextChannel); */
+        /* console.log("═══════════════════════════════════════════"); */
 
         setResolvedEquipoIdAC(codeEquipoAC);
         setResolvedEquipoIdVSL(codeEquipoVSL);
@@ -269,14 +271,14 @@ export default function StudentChatInline({
     }
 
     // LOG CRÍTICO: Imprimir con quién está intentando chatear el alumno
-        /* console.log("═══════════════════════════════════════════"); */
-        /* console.log("🔍 [CHAT ALUMNO] CONFIGURACIÓN DE PARTICIPANTES"); */
-        /* console.log("═══════════════════════════════════════════"); */
-        /* console.log("📋 Alumno (cliente):", {
+    /* console.log("═══════════════════════════════════════════"); */
+    /* console.log("🔍 [CHAT ALUMNO] CONFIGURACIÓN DE PARTICIPANTES"); */
+    /* console.log("═══════════════════════════════════════════"); */
+    /* console.log("📋 Alumno (cliente):", {
       codigo: code,
       nombre: alumnoName || "(sin nombre)",
     }); */
-        /* console.log("👥 Destinatario (equipo):", {
+    /* console.log("👥 Destinatario (equipo):", {
       codigo_equipo: resolvedEquipoId || "(NO RESUELTO)",
       nombre_equipo: resolvedEquipoName || "(sin nombre)",
       area:
@@ -288,8 +290,8 @@ export default function StudentChatInline({
           ? coachMap[resolvedEquipoId].puesto
           : "(sin puesto)",
     }); */
-        /* console.log("📝 Participantes enviados al servidor:", base); */
-        /* console.log("═══════════════════════════════════════════"); */
+    /* console.log("📝 Participantes enviados al servidor:", base); */
+    /* console.log("═══════════════════════════════════════════"); */
 
     return base as any[];
   }, [code, resolvedEquipoId, alumnoName, resolvedEquipoName, coachMap]);
@@ -392,6 +394,7 @@ export default function StudentChatInline({
                 participante_tipo: "cliente",
                 id_cliente: String(code),
               }}
+              onChatsList={onChatsList}
             />
           </div>
         </div>

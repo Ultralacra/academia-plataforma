@@ -61,6 +61,7 @@ import {
   type CreateDetallePayload,
   type UpdatePaymentPayload,
 } from "./api";
+import { getAllStudentsPaged } from "../alumnos/api";
 import { fetchUsers, type SysUser } from "../users/api";
 import { toast } from "@/components/ui/use-toast";
 import {
@@ -352,6 +353,10 @@ const ALLOWED_PAYMENT_STATUS = [
   "pendiente_confirmar_pago",
 ] as const;
 
+const CUOTA_ALLOWED_STATUS = ALLOWED_PAYMENT_STATUS.filter(
+  (status) => status !== "listo",
+);
+
 const allowedPaymentStatusSet = new Set<string>(ALLOWED_PAYMENT_STATUS);
 
 function normalizePaymentStatus(input: unknown): string {
@@ -382,6 +387,99 @@ function formatPaymentStatusLabel(input: unknown): string {
   if (!s) return "—";
   // Reemplaza _ por espacio y capitaliza cada palabra
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeCuotaEditableStatus(input: unknown): string {
+  const normalized = normalizePaymentStatus(input);
+  if (normalized === "listo" || normalized === "pagada") return "pagado";
+  return normalized;
+}
+
+function toIsoDateOrUndefined(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return undefined;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  return parsed.toISOString();
+}
+
+type StudentLifecycleFilter =
+  | "todos"
+  | "activo"
+  | "en_progreso"
+  | "pausa"
+  | "inactivo_pago"
+  | "inactivo"
+  | "sin_estado"
+  | "otro";
+
+function normalizeText(value: string | null | undefined) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toUpperCase();
+}
+
+function classifyStudentLifecycleStatus(
+  value: string | null | undefined,
+): Exclude<StudentLifecycleFilter, "todos"> {
+  const normalized = normalizeText(value);
+  if (!normalized) return "sin_estado";
+  if (normalized.includes("INACTIVO POR PAGO")) return "inactivo_pago";
+  if (normalized.includes("PAUSA") || normalized.includes("PAUSADO")) {
+    return "pausa";
+  }
+  if (normalized.includes("PROGRESO")) return "en_progreso";
+  if (normalized.includes("INACTIVO")) return "inactivo";
+  if (normalized.includes("ACTIVO") || normalized.includes("EN CURSO")) {
+    return "activo";
+  }
+  return "otro";
+}
+
+function getStudentLifecycleLabel(filter: StudentLifecycleFilter) {
+  if (filter === "activo") return "Activo";
+  if (filter === "en_progreso") return "En progreso";
+  if (filter === "pausa") return "Pausa";
+  if (filter === "inactivo_pago") return "Inactivo por pago";
+  if (filter === "inactivo") return "Inactivo";
+  if (filter === "sin_estado") return "Sin estado";
+  if (filter === "otro") return "Otro";
+  return "Todos";
+}
+
+function getStudentLifecycleStateLabel(value: string | null | undefined) {
+  const kind = classifyStudentLifecycleStatus(value);
+  if (kind === "otro") {
+    const raw = String(value || "").trim();
+    return raw || "Sin estado";
+  }
+  return getStudentLifecycleLabel(kind);
+}
+
+function getStudentLifecycleBadgeClass(filter: StudentLifecycleFilter) {
+  if (filter === "activo") {
+    return "border bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/35 dark:text-emerald-200 dark:border-emerald-900/60";
+  }
+  if (filter === "en_progreso") {
+    return "border bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/35 dark:text-violet-200 dark:border-violet-900/60";
+  }
+  if (filter === "pausa" || filter === "inactivo_pago") {
+    return "border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/35 dark:text-amber-200 dark:border-amber-900/60";
+  }
+  if (filter === "inactivo") {
+    return "border bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/35 dark:text-rose-200 dark:border-rose-900/60";
+  }
+  return "border bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950/35 dark:text-slate-200 dark:border-slate-900/60";
+}
+
+function matchesStudentLifecycleFilter(
+  filter: StudentLifecycleFilter,
+  stateValue: string | null | undefined,
+) {
+  if (filter === "todos") return true;
+  return classifyStudentLifecycleStatus(stateValue) === filter;
 }
 
 function getStatusChipClass(status?: string | null) {
@@ -493,6 +591,9 @@ function PaymentsContent() {
   // Reserva no está en los query params indicados; lo filtramos localmente.
   const [reservaMin, setReservaMin] = useState<string>("");
   const [reservaMax, setReservaMax] = useState<string>("");
+  const [reservaFilter, setReservaFilter] = useState<
+    "todos" | "con_reserva" | "sin_reserva"
+  >("todos");
 
   const [pageChanging, setPageChanging] = useState(false);
 
@@ -557,12 +658,21 @@ function PaymentsContent() {
   );
   const [cuotasRows, setCuotasRows] = useState<PaymentCuotaRow[]>([]);
   const [cuotasStatusFilter, setCuotasStatusFilter] = useState<string>("todos");
+  const [paymentsStudentFilter, setPaymentsStudentFilter] =
+    useState<StudentLifecycleFilter>("todos");
+  const [cuotasStudentFilter, setCuotasStudentFilter] =
+    useState<StudentLifecycleFilter>("todos");
   const [cuotasPage, setCuotasPage] = useState<number>(1);
   const [cuotasTotalPages, setCuotasTotalPages] = useState<number>(1);
   const [cuotasTotal, setCuotasTotal] = useState<number>(0);
   const [cuotasLoading, setCuotasLoading] = useState(false);
   const [cuotasError, setCuotasError] = useState<string | null>(null);
   const cuotasReqIdRef = useRef(0);
+  const [studentStateByCode, setStudentStateByCode] = useState<
+    Record<string, string>
+  >({});
+  const [studentStatesLoading, setStudentStatesLoading] = useState(false);
+  const studentStatesReqIdRef = useRef(0);
 
   function exportPayments(format: "csv" | "xlsx") {
     if (!filtered.length) {
@@ -684,12 +794,67 @@ function PaymentsContent() {
   }, [cuotasRows]);
 
   const filteredCuotasRows = useMemo(() => {
-    if (cuotasStatusFilter === "todos") return cuotasRows;
     return cuotasRows.filter((r) => {
+      const studentCode = String(r?.cliente_codigo ?? "")
+        .trim()
+        .toLowerCase();
+      const studentState = studentCode ? studentStateByCode[studentCode] : "";
+      if (!matchesStudentLifecycleFilter(cuotasStudentFilter, studentState)) {
+        return false;
+      }
+      if (cuotasStatusFilter === "todos") return true;
       const effective = getEffectiveCuotaStatus(r?.estatus, r?.fecha_pago);
       return effective === cuotasStatusFilter;
     });
-  }, [cuotasRows, cuotasStatusFilter]);
+  }, [cuotasRows, cuotasStatusFilter, cuotasStudentFilter, studentStateByCode]);
+
+  async function loadStudentStates() {
+    const reqId = ++studentStatesReqIdRef.current;
+    setStudentStatesLoading(true);
+
+    try {
+      const first = await getAllStudentsPaged({ page: 1, pageSize: 1000 });
+      if (studentStatesReqIdRef.current !== reqId) return;
+
+      const map: Record<string, string> = {};
+      for (const item of first.items || []) {
+        const key = String(item?.code ?? "")
+          .trim()
+          .toLowerCase();
+        if (!key) continue;
+        map[key] = String(item?.state ?? "").trim();
+      }
+
+      const totalPagesFromApi = Number(first?.totalPages ?? 1) || 1;
+      for (
+        let currentPage = 2;
+        currentPage <= totalPagesFromApi;
+        currentPage++
+      ) {
+        const next = await getAllStudentsPaged({
+          page: currentPage,
+          pageSize: 1000,
+        });
+        if (studentStatesReqIdRef.current !== reqId) return;
+        for (const item of next.items || []) {
+          const key = String(item?.code ?? "")
+            .trim()
+            .toLowerCase();
+          if (!key) continue;
+          map[key] = String(item?.state ?? "").trim();
+        }
+      }
+
+      setStudentStateByCode(map);
+    } catch {
+      if (studentStatesReqIdRef.current !== reqId) return;
+      setStudentStateByCode({});
+    } finally {
+      if (studentStatesReqIdRef.current === reqId) {
+        setStudentStatesLoading(false);
+      }
+    }
+  }
 
   async function loadCuotas(opts: { page: number; append?: boolean }) {
     const range = getMonthRange(cuotasMonth);
@@ -907,7 +1072,7 @@ function PaymentsContent() {
         cuota_codigo: cuota.cuota_codigo || "",
         monto: cuota.monto != null ? String(cuota.monto) : "",
         moneda: cuota.moneda || detail?.moneda || "USD",
-        estatus: normalizePaymentStatus(cuota.estatus) || "pendiente",
+        estatus: normalizeCuotaEditableStatus(cuota.estatus) || "pendiente",
         fecha_pago: cuota.fecha_pago ? cuota.fecha_pago.slice(0, 16) : "",
         metodo: cuota.metodo || "",
         referencia: cuota.referencia || "",
@@ -969,22 +1134,22 @@ function PaymentsContent() {
     setCuotaSaving(true);
     try {
       if (cuotaEditing) {
+        const fechaPagoIso = toIsoDateOrUndefined(cuotaForm.fecha_pago);
         // Actualizar existente
         const payload = {
           codigo: cuotaEditing.codigo ?? null,
           cuota_codigo: cuotaForm.cuota_codigo.trim(),
           monto: monto,
           moneda: cuotaForm.moneda || "USD",
-          estatus: normalizePaymentStatus(cuotaForm.estatus) || "pendiente",
-          fecha_pago: cuotaForm.fecha_pago
-            ? new Date(cuotaForm.fecha_pago).toISOString()
-            : null,
+          estatus:
+            normalizeCuotaEditableStatus(cuotaForm.estatus) || "pendiente",
           // El backend valida strings; evitar null (manda "" como en otras pantallas)
           metodo: cuotaForm.metodo.trim() || "",
           referencia: cuotaForm.referencia.trim() || "",
           concepto: cuotaForm.concepto.trim() || "",
           notas: cuotaForm.notas.trim() || "",
         };
+        if (fechaPagoIso) payload.fecha_pago = fechaPagoIso;
 
         await upsertPaymentDetalle(
           paymentCodigo,
@@ -997,20 +1162,20 @@ function PaymentsContent() {
           description: `Se actualizó la cuota ${cuotaForm.cuota_codigo}`,
         });
       } else {
+        const fechaPagoIso = toIsoDateOrUndefined(cuotaForm.fecha_pago);
         // Crear nueva
         const payload: CreateDetallePayload = {
           cuota_codigo: cuotaForm.cuota_codigo.trim(),
           monto: monto,
           moneda: cuotaForm.moneda || "USD",
-          estatus: normalizePaymentStatus(cuotaForm.estatus) || "pendiente",
-          fecha_pago: cuotaForm.fecha_pago
-            ? new Date(cuotaForm.fecha_pago).toISOString()
-            : undefined,
+          estatus:
+            normalizeCuotaEditableStatus(cuotaForm.estatus) || "pendiente",
           metodo: cuotaForm.metodo.trim() || "",
           referencia: cuotaForm.referencia.trim() || "",
           concepto: cuotaForm.concepto.trim() || "",
           notas: cuotaForm.notas.trim() || "",
         };
+        if (fechaPagoIso) payload.fecha_pago = fechaPagoIso;
 
         await createPaymentDetalle(paymentCodigo, payload);
 
@@ -1360,8 +1525,26 @@ function PaymentsContent() {
       return true;
     });
 
+    const withReservaType = withReserva.filter((r) => {
+      if (reservaFilter === "todos") return true;
+      const reserva = r?.monto_reserva;
+      const reservaNum =
+        reserva === null || reserva === undefined ? null : Number(reserva);
+      const hasReserva =
+        reservaNum !== null && !Number.isNaN(reservaNum) && reservaNum > 0;
+      return reservaFilter === "con_reserva" ? hasReserva : !hasReserva;
+    });
+
+    const withStudentState = withReservaType.filter((r) => {
+      const studentCode = String(r?.cliente_codigo ?? "")
+        .trim()
+        .toLowerCase();
+      const studentState = studentCode ? studentStateByCode[studentCode] : "";
+      return matchesStudentLifecycleFilter(paymentsStudentFilter, studentState);
+    });
+
     // 8. Ordenar por fecha de creación (más recientes primero)
-    withReserva.sort((a, b) => {
+    withStudentState.sort((a, b) => {
       const da = a.created_at ? new Date(a.created_at).getTime() : 0;
       const db = b.created_at ? new Date(b.created_at).getTime() : 0;
       return db - da;
@@ -1369,8 +1552,8 @@ function PaymentsContent() {
 
     // 9. Filtro por sincronización
     const withLinkFilter = onlyUnlinked
-      ? withReserva.filter((r) => !isPaymentSynced(r))
-      : withReserva;
+      ? withStudentState.filter((r) => !isPaymentSynced(r))
+      : withStudentState;
 
     return withLinkFilter;
   }, [
@@ -1387,6 +1570,9 @@ function PaymentsContent() {
     debouncedMontoMax,
     debouncedReservaMin,
     debouncedReservaMax,
+    reservaFilter,
+    paymentsStudentFilter,
+    studentStateByCode,
     onlyUnlinked,
   ]);
 
@@ -1588,7 +1774,7 @@ function PaymentsContent() {
     const nextNotes = String(
       detailEditNotesByKeyRef.current[key] ?? d?.notas ?? "",
     );
-    const normalizedNextStatus = normalizePaymentStatus(nextStatus);
+    const normalizedNextStatus = normalizeCuotaEditableStatus(nextStatus);
     if (!normalizedNextStatus) {
       toast({
         title: "Selecciona un estatus",
@@ -1616,13 +1802,14 @@ function PaymentsContent() {
         estatus: normalizedNextStatus,
         monto: d?.monto ?? null,
         moneda: d?.moneda ?? detail?.moneda ?? null,
-        fecha_pago: d?.fecha_pago ?? null,
         metodo: d?.metodo ? String(d.metodo) : "",
         referencia: d?.referencia ? String(d.referencia) : "",
         concepto: nextConcept || "",
         // Evitar null: el backend rechaza notas=null (manda "")
         notas: nextNotes.trim() ? nextNotes : "",
       };
+      const fechaPagoIso = toIsoDateOrUndefined(d?.fecha_pago);
+      if (fechaPagoIso) payload.fecha_pago = fechaPagoIso;
 
       try {
         console.debug("[payments] saveDetalle:request", {
@@ -1748,6 +1935,9 @@ function PaymentsContent() {
   useEffect(() => {
     // Carga inicial: traer todos los registros una sola vez
     void loadList({ page: 1, pageSize: 25 });
+    if (!isStudent) {
+      void loadStudentStates();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1778,6 +1968,7 @@ function PaymentsContent() {
     debouncedMontoMax,
     debouncedReservaMin,
     debouncedReservaMax,
+    paymentsStudentFilter,
   ]);
 
   useEffect(() => {
@@ -1927,76 +2118,99 @@ function PaymentsContent() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div className="grid gap-3 md:grid-cols-4 w-full">
+            <div className="grid gap-3 xl:grid-cols-[minmax(260px,1.8fr)_minmax(170px,1fr)_minmax(220px,1fr)_minmax(170px,1fr)_auto_auto] xl:items-end">
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Buscar</Label>
+                <Input
+                  placeholder="Nombre, código, estatus, moneda…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Estatus</Label>
+                <Select
+                  value={normalizePaymentStatus(estatus) || "__ALL__"}
+                  onValueChange={(v) => {
+                    setEstatus(
+                      v === "__ALL__" ? "" : normalizePaymentStatus(v),
+                    );
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos">
+                      {estatus ? formatPaymentStatusLabel(estatus) : "Todos"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__ALL__">Todos</SelectItem>
+                    {statusOptions.length ? (
+                      statusOptions.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {formatPaymentStatusLabel(s)}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="pagado">Pagado</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              {!isStudent ? (
                 <div className="grid gap-1">
                   <Label className="text-xs text-muted-foreground">
-                    Buscar
-                  </Label>
-                  <Input
-                    placeholder="Nombre, código, estatus, moneda…"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Cliente código
-                  </Label>
-                  <Input
-                    placeholder="KrTVx8TnoVSUcFZn"
-                    value={clienteCodigo}
-                    onChange={(e) => setClienteCodigo(e.target.value)}
-                    readOnly={isStudent}
-                  />
-                </div>
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Estatus
+                    Estado alumno
                   </Label>
                   <Select
-                    value={normalizePaymentStatus(estatus) || "__ALL__"}
-                    onValueChange={(v) => {
-                      setEstatus(
-                        v === "__ALL__" ? "" : normalizePaymentStatus(v),
-                      );
+                    value={paymentsStudentFilter}
+                    onValueChange={(value) => {
+                      setPaymentsStudentFilter(value as StudentLifecycleFilter);
                       setPage(1);
                     }}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Todos">
-                        {estatus ? formatPaymentStatusLabel(estatus) : "Todos"}
-                      </SelectValue>
+                      <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__ALL__">Todos</SelectItem>
-                      {statusOptions.length ? (
-                        statusOptions.map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {formatPaymentStatusLabel(s)}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="pagado">Pagado</SelectItem>
-                      )}
+                      <SelectItem value="todos">Todos</SelectItem>
+                      <SelectItem value="activo">Activo</SelectItem>
+                      <SelectItem value="en_progreso">En progreso</SelectItem>
+                      <SelectItem value="pausa">Pausa</SelectItem>
+                      <SelectItem value="inactivo_pago">
+                        Inactivo por pago
+                      </SelectItem>
+                      <SelectItem value="inactivo">Inactivo</SelectItem>
+                      <SelectItem value="sin_estado">Sin estado</SelectItem>
+                      <SelectItem value="otro">Otro</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid gap-1">
-                  <Label className="text-xs text-muted-foreground">
-                    Método
-                  </Label>
-                  <Input
-                    placeholder="Transferencia / Tarjeta…"
-                    value={metodo}
-                    onChange={(e) => setMetodo(e.target.value)}
-                  />
-                </div>
+              ) : null}
+              <div className="grid gap-1">
+                <Label className="text-xs text-muted-foreground">Reserva</Label>
+                <Select
+                  value={reservaFilter}
+                  onValueChange={(value) =>
+                    setReservaFilter(
+                      value as "todos" | "con_reserva" | "sin_reserva",
+                    )
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="con_reserva">Con reserva</SelectItem>
+                    <SelectItem value="sin_reserva">Sin reserva</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-
-              <div className="flex items-center gap-2 self-start md:self-end">
+              <div className="flex items-end">
                 <Button
                   variant="outline"
+                  className="w-full xl:w-auto"
                   onClick={() => {
                     setSearch("");
                     setClienteCodigo(isStudent ? ownStudentCode : "");
@@ -2008,6 +2222,9 @@ function PaymentsContent() {
                     setMontoMax("");
                     setReservaMin("");
                     setReservaMax("");
+                    setReservaFilter("todos");
+                    setPaymentsStudentFilter("todos");
+                    setCuotasStudentFilter("todos");
                     setOnlyUnlinked(false);
                     setPage(1);
                   }}
@@ -2015,8 +2232,11 @@ function PaymentsContent() {
                 >
                   Limpiar filtros
                 </Button>
+              </div>
+              <div className="flex items-end">
                 <Button
                   variant="secondary"
+                  className="w-full xl:w-auto"
                   onClick={() => loadList({ page: 1, pageSize })}
                   disabled={isLoading}
                 >
@@ -2110,6 +2330,15 @@ function PaymentsContent() {
                 <span className="text-foreground">
                   {page}/{totalPages}
                 </span>
+                {!isStudent && paymentsStudentFilter !== "todos" ? (
+                  <>
+                    {" "}
+                    · Estado alumno:{" "}
+                    <span className="text-foreground">
+                      {getStudentLifecycleLabel(paymentsStudentFilter)}
+                    </span>
+                  </>
+                ) : null}
                 {unlinkedCount ? (
                   <>
                     {" "}
@@ -2237,6 +2466,28 @@ function PaymentsContent() {
                               {r.cliente_nombre && r.cliente_codigo ? (
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                   <span>{fixMojibake(r.cliente_codigo)}</span>
+                                  {!isStudent ? (
+                                    <Badge
+                                      variant="outline"
+                                      className={getStudentLifecycleBadgeClass(
+                                        classifyStudentLifecycleStatus(
+                                          studentStateByCode[
+                                            String(r.cliente_codigo ?? "")
+                                              .trim()
+                                              .toLowerCase()
+                                          ],
+                                        ),
+                                      )}
+                                    >
+                                      {getStudentLifecycleStateLabel(
+                                        studentStateByCode[
+                                          String(r.cliente_codigo ?? "")
+                                            .trim()
+                                            .toLowerCase()
+                                        ],
+                                      )}
+                                    </Badge>
+                                  ) : null}
                                   {!isStudent && synced ? (
                                     <Button
                                       asChild
@@ -2308,7 +2559,7 @@ function PaymentsContent() {
         {!isStudent ? (
           <TabsContent value="cuotas" className="space-y-4">
             <div className="rounded-lg border bg-card p-4">
-              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto] lg:items-end">
                 <div className="grid gap-1">
                   <Label>Mes</Label>
                   <Input
@@ -2327,13 +2578,13 @@ function PaymentsContent() {
                     }}
                   />
                 </div>
-                <div className="grid gap-1 min-w-[220px]">
+                <div className="grid gap-1 min-w-0">
                   <Label>Estatus</Label>
                   <Select
                     value={cuotasStatusFilter}
                     onValueChange={setCuotasStatusFilter}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="w-full">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent>
@@ -2346,9 +2597,35 @@ function PaymentsContent() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="grid gap-1 min-w-0">
+                  <Label>Estado alumno</Label>
+                  <Select
+                    value={cuotasStudentFilter}
+                    onValueChange={(value) =>
+                      setCuotasStudentFilter(value as StudentLifecycleFilter)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos</SelectItem>
+                      <SelectItem value="activo">Activo</SelectItem>
+                      <SelectItem value="en_progreso">En progreso</SelectItem>
+                      <SelectItem value="pausa">Pausa</SelectItem>
+                      <SelectItem value="inactivo_pago">
+                        Inactivo por pago
+                      </SelectItem>
+                      <SelectItem value="inactivo">Inactivo</SelectItem>
+                      <SelectItem value="sin_estado">Sin estado</SelectItem>
+                      <SelectItem value="otro">Otro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
                   <Button
                     variant="secondary"
+                    className="w-full lg:w-auto"
                     onClick={() => loadCuotas({ page: 1 })}
                     disabled={cuotasLoading}
                   >
@@ -2383,7 +2660,13 @@ function PaymentsContent() {
                   {cuotasStatusFilter !== "todos"
                     ? ` (filtrado por: ${formatPaymentStatusLabel(cuotasStatusFilter)})`
                     : ""}
+                  {cuotasStudentFilter !== "todos"
+                    ? ` (alumnos: ${getStudentLifecycleLabel(cuotasStudentFilter)})`
+                    : ""}
                   {cuotasTotal ? ` (total API: ${cuotasTotal})` : ""}
+                  {!isStudent && studentStatesLoading
+                    ? " • actualizando estados de alumnos…"
+                    : ""}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -2478,8 +2761,28 @@ function PaymentsContent() {
                               <div className="flex flex-col">
                                 <div className="text-sm">{clientName}</div>
                                 {r.cliente_codigo ? (
-                                  <div className="text-xs text-muted-foreground">
-                                    {fixMojibake(r.cliente_codigo)}
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span>{fixMojibake(r.cliente_codigo)}</span>
+                                    <Badge
+                                      variant="outline"
+                                      className={getStudentLifecycleBadgeClass(
+                                        classifyStudentLifecycleStatus(
+                                          studentStateByCode[
+                                            String(r.cliente_codigo ?? "")
+                                              .trim()
+                                              .toLowerCase()
+                                          ],
+                                        ),
+                                      )}
+                                    >
+                                      {getStudentLifecycleStateLabel(
+                                        studentStateByCode[
+                                          String(r.cliente_codigo ?? "")
+                                            .trim()
+                                            .toLowerCase()
+                                        ],
+                                      )}
+                                    </Badge>
                                   </div>
                                 ) : null}
                               </div>
@@ -3438,13 +3741,19 @@ function PaymentsContent() {
                                   const current = normalizePaymentStatus(
                                     d?.estatus ?? "",
                                   );
-                                  const value = normalizePaymentStatus(
+                                  const currentEditable =
+                                    normalizeCuotaEditableStatus(current);
+                                  const value = normalizeCuotaEditableStatus(
                                     detailEditStatusByKey[key] ?? current,
                                   );
 
                                   const opts = (() => {
-                                    const set = new Set<string>(statusOptions);
-                                    if (current) set.add(current);
+                                    const set = new Set<string>(
+                                      CUOTA_ALLOWED_STATUS,
+                                    );
+                                    if (currentEditable) {
+                                      set.add(currentEditable);
+                                    }
                                     return Array.from(set).sort((a, b) =>
                                       a.localeCompare(b),
                                     );
@@ -3458,7 +3767,7 @@ function PaymentsContent() {
                                         disabled={!canManagePayments}
                                         onValueChange={(v) => {
                                           const vLower =
-                                            normalizePaymentStatus(v);
+                                            normalizeCuotaEditableStatus(v);
                                           try {
                                             console.debug(
                                               "[payments] detalle estatus changed",
@@ -3718,7 +4027,7 @@ function PaymentsContent() {
                     <SelectValue placeholder="Estatus" />
                   </SelectTrigger>
                   <SelectContent>
-                    {ALLOWED_PAYMENT_STATUS.map((s) => (
+                    {CUOTA_ALLOWED_STATUS.map((s) => (
                       <SelectItem key={s} value={s}>
                         {formatPaymentStatusLabel(s)}
                       </SelectItem>

@@ -5,8 +5,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useRouter, usePathname } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { ProtectedRoute } from "@/components/auth/protected-route";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Edit, Eye, EyeOff, Search } from "lucide-react";
+import { AlertTriangle, Edit, Eye, EyeOff, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/use-toast";
 import { Label } from "@/components/ui/label";
@@ -167,6 +168,9 @@ export default function CoachDetailPage({
   const [lastMsgBump, setLastMsgBump] = useState<number>(0);
   // Chat abierto (por chatId) — opcional, solo informativo
   const [currentOpenChatId, setCurrentOpenChatId] = useState<
+    string | number | null
+  >(null);
+  const [selectedThreadChatId, setSelectedThreadChatId] = useState<
     string | number | null
   >(null);
 
@@ -806,6 +810,44 @@ export default function CoachDetailPage({
     });
   }, [chatList, code]);
 
+  const selectedDuplicateChats = useMemo(() => {
+    const duplicateIds = new Set(
+      duplicateChatIds.map((chatId) => String(chatId).trim()),
+    );
+    if (duplicateIds.size === 0) return [] as any[];
+
+    const expectedSignature = targetStudentCode
+      ? `student:${String(targetStudentCode).toLowerCase()}`
+      : targetTeamCode
+        ? `team:${String(targetTeamCode).toLowerCase()}`
+        : null;
+
+    if (!expectedSignature) return [] as any[];
+
+    const filtered = (Array.isArray(chatList) ? chatList : []).filter(
+      (chat) => {
+        const chatId = String(chat?.id_chat ?? chat?.id ?? "").trim();
+        if (!chatId || !duplicateIds.has(chatId)) return false;
+        return getDuplicateChatSignature(chat) === expectedSignature;
+      },
+    );
+
+    const unique = new Map<string, any>();
+    for (const chat of filtered) {
+      const chatId = String(chat?.id_chat ?? chat?.id ?? "").trim();
+      if (!chatId || unique.has(chatId)) continue;
+      unique.set(chatId, chat);
+    }
+
+    return Array.from(unique.values()).sort(
+      (left, right) => getChatTimestamp(right) - getChatTimestamp(left),
+    );
+  }, [chatList, duplicateChatIds, targetStudentCode, targetTeamCode]);
+
+  useEffect(() => {
+    setSelectedThreadChatId(null);
+  }, [targetStudentCode, targetTeamCode]);
+
   // Handler para eventos de typing desde el chat
   const handleTypingChange = useMemo(() => {
     return ({
@@ -1028,6 +1070,34 @@ export default function CoachDetailPage({
       if (name && name.trim()) localStorage.setItem(k, name.trim());
     } catch {}
   }
+
+  const selectedChatsForTarget = useMemo(() => {
+    const list = Array.isArray(chatList) ? chatList : [];
+    if (targetStudentCode) {
+      const studentCode = String(targetStudentCode).toLowerCase();
+      return list
+        .filter(
+          (chat) =>
+            getDuplicateChatSignature(chat) === `student:${studentCode}`,
+        )
+        .sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
+    }
+    if (targetTeamCode) {
+      const teamCode = String(targetTeamCode).toLowerCase();
+      return list
+        .filter(
+          (chat) => getDuplicateChatSignature(chat) === `team:${teamCode}`,
+        )
+        .sort((a, b) => getChatTimestamp(b) - getChatTimestamp(a));
+    }
+    return [] as any[];
+  }, [chatList, targetStudentCode, targetTeamCode]);
+
+  const canAutoCreateSelectedChat = useMemo(() => {
+    if (targetStudentCode == null && targetTeamCode == null) return false;
+    if (chatsLoading) return false;
+    return selectedChatsForTarget.length === 0;
+  }, [chatsLoading, selectedChatsForTarget, targetStudentCode, targetTeamCode]);
 
   const chatsByStudent = useMemo(() => {
     const list = Array.isArray(chatList) ? chatList : [];
@@ -2468,6 +2538,76 @@ export default function CoachDetailPage({
 
                     {/* Pestañas de contactos/alumnos abiertos (ELIMINADAS POR SOLICITUD) */}
 
+                    {selectedDuplicateChats.length > 1 && (
+                      <div className="px-2 pb-2">
+                        <Alert className="border-amber-500/40 bg-amber-50 text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertTitle>
+                            Este contacto tiene {selectedDuplicateChats.length}{" "}
+                            conversaciones duplicadas
+                          </AlertTitle>
+                          <AlertDescription>
+                            <p>
+                              Revisa el hilo correcto antes de responder para no
+                              dividir el historial entre varias conversaciones
+                              del mismo contacto.
+                            </p>
+                            <div className="flex flex-wrap gap-2 pt-1 text-xs text-amber-900/90 dark:text-amber-100/90">
+                              {selectedDuplicateChats.map((chat) => {
+                                const chatId = String(
+                                  chat?.id_chat ?? chat?.id ?? "",
+                                );
+                                const createdAt = formatBackendLocalLabel(
+                                  chat?.fecha_creacion_local ??
+                                    chat?.fecha_creacion ??
+                                    chat?.created_at ??
+                                    null,
+                                  { showDate: true, showTime: true },
+                                );
+                                const lastMessageAt = formatBackendLocalLabel(
+                                  chat?.last_message?.fecha_envio_local ??
+                                    chat?.last_message?.fecha_envio ??
+                                    chat?.last_message_at ??
+                                    chat?.fecha_ultimo_mensaje ??
+                                    null,
+                                  { showDate: true, showTime: true },
+                                );
+
+                                const isActive =
+                                  String(currentOpenChatId ?? "") === chatId;
+
+                                return (
+                                  <button
+                                    type="button"
+                                    key={chatId}
+                                    onClick={() => {
+                                      setSelectedThreadChatId(chatId);
+                                      setChatInfo((prev) => ({
+                                        ...prev,
+                                        chatId,
+                                      }));
+                                      setCurrentOpenChatId(chatId);
+                                    }}
+                                    className={
+                                      isActive
+                                        ? "rounded-md border border-amber-600 bg-amber-200 px-2 py-1 text-left dark:bg-amber-800/60"
+                                        : "rounded-md border border-amber-500/30 bg-amber-100/70 px-2 py-1 text-left hover:bg-amber-200/80 dark:bg-amber-900/30 dark:hover:bg-amber-800/40"
+                                    }
+                                  >
+                                    {chatId}
+                                    {createdAt ? ` · creado ${createdAt}` : ""}
+                                    {lastMessageAt
+                                      ? ` · último ${lastMessageAt}`
+                                      : ""}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      </div>
+                    )}
+
                     <CoachChatInline
                       onBack={() => setMobileChatOpen(false)}
                       onTypingChange={handleTypingChange}
@@ -2529,7 +2669,7 @@ export default function CoachDetailPage({
                                 },
                               ]
                             : undefined,
-                        autoCreate: true,
+                        autoCreate: canAutoCreateSelectedChat,
                         autoJoin: chatInfo.chatId != null,
                         chatId: chatInfo.chatId ?? undefined,
                       }}
@@ -2628,8 +2768,20 @@ export default function CoachDetailPage({
                         setChatsLoading(false);
                         try {
                           if (targetTeamCode) {
-                            const existing =
-                              pickExistingChatIdForTarget(targetTeamCode);
+                            const preferred =
+                              selectedThreadChatId != null
+                                ? fullList.find(
+                                    (chat) =>
+                                      String(
+                                        chat?.id_chat ?? chat?.id ?? "",
+                                      ) === String(selectedThreadChatId) &&
+                                      getDuplicateChatSignature(chat) ===
+                                        `team:${String(targetTeamCode).toLowerCase()}`,
+                                  )
+                                : null;
+                            const existing = preferred
+                              ? (preferred?.id_chat ?? preferred?.id ?? null)
+                              : pickExistingChatIdForTarget(targetTeamCode);
                             if (existing != null) {
                               if (decisionStamp !== `exist:${targetTeamCode}`) {
                                 setDecisionStamp(`exist:${targetTeamCode}`);
@@ -2638,10 +2790,23 @@ export default function CoachDetailPage({
                                 chatId: existing,
                                 myParticipantId: null,
                               });
+                              setCurrentOpenChatId(existing);
                             }
                           } else if (targetStudentCode) {
-                            const existingStu =
-                              pickExistingChatIdForStudent(targetStudentCode);
+                            const preferred =
+                              selectedThreadChatId != null
+                                ? fullList.find(
+                                    (chat) =>
+                                      String(
+                                        chat?.id_chat ?? chat?.id ?? "",
+                                      ) === String(selectedThreadChatId) &&
+                                      getDuplicateChatSignature(chat) ===
+                                        `student:${String(targetStudentCode).toLowerCase()}`,
+                                  )
+                                : null;
+                            const existingStu = preferred
+                              ? (preferred?.id_chat ?? preferred?.id ?? null)
+                              : pickExistingChatIdForStudent(targetStudentCode);
                             if (existingStu != null) {
                               if (
                                 decisionStamp !==
@@ -2655,6 +2820,7 @@ export default function CoachDetailPage({
                                 chatId: existingStu,
                                 myParticipantId: null,
                               });
+                              setCurrentOpenChatId(existingStu);
                             }
                           }
                         } catch {}
