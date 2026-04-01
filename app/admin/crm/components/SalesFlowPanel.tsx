@@ -382,10 +382,6 @@ export function SalesFlowPanel({
      FASE 1 — Seguimiento Pre-llamada
   ═══════════════════════════════════════════════════════════════════ */
   const Fase1 = () => {
-    const [agendaInput, setAgendaInput] = React.useState(
-      flow.agendaCalendlyAt?.slice(0, 16) ?? "",
-    );
-
     return (
       <div className="space-y-4">
         {/* Registro */}
@@ -409,7 +405,7 @@ export function SalesFlowPanel({
           icon={<MessageSquare className="h-4 w-4" />}
           readOnly={readOnly}
           actions={
-            !readOnly && flow.primerContactoRespondido === undefined ? (
+            !readOnly ? (
               <div className="flex gap-2">
                 <Button
                   size="sm"
@@ -427,51 +423,22 @@ export function SalesFlowPanel({
                 >
                   <UserX className="h-3.5 w-3.5" /> No
                 </Button>
+                {flow.primerContactoRespondido !== undefined ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 gap-1 text-xs text-slate-600 hover:bg-slate-100"
+                    onClick={() =>
+                      update({ primerContactoRespondido: undefined })
+                    }
+                  >
+                    Limpiar
+                  </Button>
+                ) : null}
               </div>
             ) : undefined
           }
         />
-
-        {/* Lead agenda llamada mediante Calendly */}
-        <StepRow
-          done={!!flow.leadAgendoLlamada}
-          label="Lead agendó llamada mediante Calendly"
-          sublabel={
-            flow.agendaCalendlyAt
-              ? `Agenda: ${fmt(flow.agendaCalendlyAt)}`
-              : "Fecha y hora de llamada registradas"
-          }
-          icon={<Calendar className="h-4 w-4" />}
-          readOnly={readOnly}
-        >
-          {!readOnly && (
-            <div className="mt-3 flex items-end gap-2">
-              <div className="flex-1 space-y-1">
-                <Label className="text-xs">Fecha y hora de la llamada</Label>
-                <Input
-                  type="datetime-local"
-                  value={agendaInput}
-                  onChange={(e) => setAgendaInput(e.target.value)}
-                  className="h-8 text-xs"
-                />
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() => {
-                  if (!agendaInput) return;
-                  update({
-                    leadAgendoLlamada: true,
-                    agendaCalendlyAt: new Date(agendaInput).toISOString(),
-                  });
-                }}
-              >
-                <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Confirmar agenda
-              </Button>
-            </div>
-          )}
-        </StepRow>
 
         <StepRow
           done={!!flow.templatesInicioEnviados}
@@ -482,12 +449,20 @@ export function SalesFlowPanel({
               : "Enviar templates de apertura antes de la llamada"
           }
           icon={<MessageSquare className="h-4 w-4" />}
-          onMark={() => update({ templatesInicioEnviados: true })}
+          onMark={() =>
+            update({
+              templatesInicioEnviados: !flow.templatesInicioEnviados,
+            })
+          }
           readOnly={readOnly}
         />
 
         {/* Recordatorios pre-llamada */}
-        {flow.leadAgendoLlamada && (
+        {(flow.primerContactoRespondido !== undefined ||
+          flow.templatesInicioEnviados ||
+          flow.precallReminderEnviado24h ||
+          flow.precallReminderEnviado1h ||
+          flow.precallReminderEnviadoManual) && (
           <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 space-y-3">
             <div className="flex items-center gap-2 text-sm font-semibold text-indigo-800">
               <Bell className="h-4 w-4" />
@@ -495,17 +470,26 @@ export function SalesFlowPanel({
             </div>
             <div className="grid gap-2 sm:grid-cols-3">
               <ReminderCheck
-                label="Recordatorio automático (Calendly)"
+                label="Recordatorio automático"
                 sublabel="Recordatorio automático configurado"
-                done={true}
+                done={!!flow.precallReminderEnviadoManual}
                 auto
+                onMark={() =>
+                  update({
+                    precallReminderEnviadoManual:
+                      !flow.precallReminderEnviadoManual,
+                  })
+                }
               />
               <ReminderCheck
                 label="Mensaje pre-llamada 24 hrs antes"
                 sublabel="Envío manual al Lead"
                 done={!!flow.precallReminderEnviado24h}
                 onMark={() =>
-                  !readOnly && update({ precallReminderEnviado24h: true })
+                  !readOnly &&
+                  update({
+                    precallReminderEnviado24h: !flow.precallReminderEnviado24h,
+                  })
                 }
               />
               <ReminderCheck
@@ -513,7 +497,10 @@ export function SalesFlowPanel({
                 sublabel="Envío manual al Lead"
                 done={!!flow.precallReminderEnviado1h}
                 onMark={() =>
-                  !readOnly && update({ precallReminderEnviado1h: true })
+                  !readOnly &&
+                  update({
+                    precallReminderEnviado1h: !flow.precallReminderEnviado1h,
+                  })
                 }
               />
             </div>
@@ -521,7 +508,7 @@ export function SalesFlowPanel({
         )}
 
         {/* Avanzar a Fase 2 */}
-        {!readOnly && flow.leadAgendoLlamada && faseActual === 1 && (
+        {!readOnly && faseActual === 1 && (
           <Button
             size="sm"
             className="gap-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white"

@@ -2,7 +2,8 @@
 // Endpoints CRUD para Leads del CRM
 // Se asume existencia de apiFetch (configurado con baseURL y Bearer token)
 
-import { apiFetch } from "@/lib/api-config";
+import { getAuthToken } from "@/lib/auth";
+import { apiFetch, buildUrl } from "@/lib/api-config";
 
 // Tipos básicos de Lead según los campos provistos y algunos adicionales comunes
 export type LeadStatus = "new" | "contacted" | "qualified" | "won" | "lost" | string;
@@ -714,6 +715,58 @@ export async function listLeadDropboxSignDocuments() {
       method: "GET",
     },
   );
+}
+
+export async function downloadLeadDropboxSignSignedDocument(
+  signatureRequestId: string,
+) {
+  const normalizedId = String(signatureRequestId ?? "").trim();
+  if (!normalizedId) throw new Error("signature_request_id requerido");
+
+  const token = getAuthToken();
+  const response = await fetch(
+    buildUrl(
+      `/leads/dropboxsign/documents/${encodeURIComponent(normalizedId)}/download`,
+    ),
+    {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    try {
+      const parsed = text ? JSON.parse(text) : null;
+      const message =
+        (parsed as any)?.message ||
+        (parsed as any)?.error ||
+        (parsed as any)?.details?.message;
+      if (message) {
+        throw new Error(String(message));
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message) {
+        throw error;
+      }
+    }
+
+    throw new Error(text || "No se pudo descargar el contrato firmado");
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const fileNameMatch = disposition.match(
+    /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+  );
+  const rawFileName = fileNameMatch?.[1] || fileNameMatch?.[2] || "";
+
+  return {
+    blob,
+    fileName: rawFileName ? decodeURIComponent(rawFileName) : null,
+    contentType: response.headers.get("content-type"),
+  };
 }
 
 // Eliminar un lead

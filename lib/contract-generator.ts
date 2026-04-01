@@ -10,6 +10,7 @@ import {
   BorderStyle,
   Document as DocxDocument,
   HeadingLevel,
+  ImageRun,
   Packer,
   Paragraph,
   Table,
@@ -452,7 +453,10 @@ function underlineParagraph(
   });
 }
 
-function buildSignatureTable(values: Record<string, string>): Table {
+function buildSignatureTable(
+  values: Record<string, string>,
+  signatureImageData?: Uint8Array | null,
+): Table {
   const noCellBorders = {
     top: { style: BorderStyle.NONE, color: "FFFFFF", size: 0 },
     bottom: { style: BorderStyle.NONE, color: "FFFFFF", size: 0 },
@@ -527,7 +531,24 @@ function buildSignatureTable(values: Record<string, string>): Table {
             width: { size: 50, type: WidthType.PERCENTAGE },
             children: [
               new Paragraph({ children: [run("JAVIER MIRANDA", { bold: true })], alignment: AlignmentType.CENTER }),
-              new Paragraph({ children: [run("MHF GROUP LLC", { bold: true })], alignment: AlignmentType.CENTER, spacing: { after: 200 } }),
+              new Paragraph({ children: [run("MHF GROUP LLC", { bold: true })], alignment: AlignmentType.CENTER, spacing: { after: 80 } }),
+              ...(signatureImageData
+                ? [
+                    new Paragraph({
+                      children: [
+                        new ImageRun({
+                          data: signatureImageData,
+                          transformation: {
+                            width: 180,
+                            height: 52,
+                          },
+                        }),
+                      ],
+                      alignment: AlignmentType.CENTER,
+                      spacing: { after: 200 },
+                    }),
+                  ]
+                : []),
             ],
           }),
           new TableCell({
@@ -567,6 +588,7 @@ function looksLikeClauseHeading(line: string): boolean {
 function parseContractTextToParagraphs(
   contractText: string,
   values: Record<string, string>,
+  signatureImageData?: Uint8Array | null,
 ): ContractBlock[] {
   const lines = contractText
     .split(/\r?\n/)
@@ -633,7 +655,7 @@ function parseContractTextToParagraphs(
     if (trimmed === "[[FIRMAS]]") {
       flushBuffer();
       resetNumberDepth();
-      paragraphs.push(buildSignatureTable(values));
+      paragraphs.push(buildSignatureTable(values, signatureImageData));
       continue;
     }
 
@@ -791,7 +813,22 @@ export async function generateContractFromText(
 ): Promise<void> {
   const processedText = applyConditionalBlocks(contractText, data);
   const values = prepareContractData(data);
-  const children = parseContractTextToParagraphs(processedText, values);
+  let signatureImageData: Uint8Array | null = null;
+
+  try {
+    const response = await fetch("/firma_hotselling.png", {
+      cache: "force-cache",
+    });
+    if (response.ok) {
+      signatureImageData = new Uint8Array(await response.arrayBuffer());
+    }
+  } catch {}
+
+  const children = parseContractTextToParagraphs(
+    processedText,
+    values,
+    signatureImageData,
+  );
 
   const doc = new DocxDocument({
     styles: {

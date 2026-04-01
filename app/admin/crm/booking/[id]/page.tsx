@@ -892,6 +892,40 @@ function Content({ id }: { id: string }) {
     const ctx = buildSnapshotContext();
     if (!ctx) return;
 
+    const salesFlow =
+      record && typeof (record as any).sales_flow === "object"
+        ? ((record as any).sales_flow as Record<string, any>)
+        : null;
+    const resultadoLlamada = String(salesFlow?.resultadoLlamada ?? "")
+      .trim()
+      .toLowerCase();
+    const evidenciaNoShow = Array.isArray(salesFlow?.evidenciaNoShow)
+      ? salesFlow.evidenciaNoShow
+      : [];
+    const evidenciaCancelada = Array.isArray(salesFlow?.evidenciaCancelada)
+      ? salesFlow.evidenciaCancelada
+      : [];
+
+    if (resultadoLlamada === "no_show" && evidenciaNoShow.length === 0) {
+      toast({
+        title: "Debes adjuntar una evidencia",
+        description:
+          "Si marcas la llamada de venta como no show, debes seleccionar al menos una evidencia antes de guardar cambios.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (resultadoLlamada === "cancelada" && evidenciaCancelada.length === 0) {
+      toast({
+        title: "Debes adjuntar una evidencia",
+        description:
+          "Si marcas la llamada de venta como cancelada, debes seleccionar al menos una evidencia antes de guardar cambios.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const operationalPipeline = String((record as any)?.pipeline_status ?? "")
       .trim()
       .toLowerCase();

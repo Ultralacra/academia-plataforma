@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
+  Download,
   ExternalLink,
   Eye,
   FileSignature,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 
 import {
+  downloadLeadDropboxSignSignedDocument,
   type LeadDropboxSignDocument,
   listLeadDropboxSignDocuments,
 } from "@/app/admin/crm/api";
@@ -51,6 +53,57 @@ const STATUS_STYLES: Record<string, string> = {
   canceled: "border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-100",
   error: "border-red-200 bg-red-50 text-red-700 hover:bg-red-50",
 };
+
+const DROPBOX_SIGN_LABELS: Record<string, string> = {
+  awaiting_signature: "Pendiente de firma",
+  signed: "Firmado",
+  declined: "Rechazado",
+  canceled: "Cancelado",
+  cancelled: "Cancelado",
+  error: "Con error",
+  signature_request_sent: "Solicitud enviada",
+  signature_request_viewed: "Solicitud visualizada",
+  signature_request_signed: "Solicitud firmada",
+  signature_request_all_signed: "Solicitud completamente firmada",
+  signature_request_declined: "Solicitud rechazada",
+  signature_request_canceled: "Solicitud cancelada",
+  signature_request_cancelled: "Solicitud cancelada",
+  signature_request_downloadable: "Documento listo para descargar",
+  signature_request_reassigned: "Solicitud reasignada",
+  signature_request_invalid: "Solicitud inválida",
+  reminder_sent: "Recordatorio enviado",
+  email_delivered: "Correo entregado",
+  unknown: "Desconocido",
+};
+
+function translateDropboxSignLabel(value: string | null | undefined) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return "—";
+  if (DROPBOX_SIGN_LABELS[normalized]) return DROPBOX_SIGN_LABELS[normalized];
+
+  return normalized
+    .split("_")
+    .map((chunk) => {
+      if (chunk === "signature") return "firma";
+      if (chunk === "request") return "solicitud";
+      if (chunk === "signed") return "firmada";
+      if (chunk === "sent") return "enviada";
+      if (chunk === "viewed") return "visualizada";
+      if (chunk === "declined") return "rechazada";
+      if (chunk === "canceled" || chunk === "cancelled") return "cancelada";
+      if (chunk === "downloadable") return "lista para descargar";
+      if (chunk === "download") return "descarga";
+      if (chunk === "all") return "completamente";
+      if (chunk === "email") return "correo";
+      if (chunk === "delivered") return "entregado";
+      if (chunk === "reminder") return "recordatorio";
+      return chunk;
+    })
+    .join(" ");
+}
 
 function normalizeStatus(status: string | null | undefined) {
   const value = String(status ?? "")
@@ -121,6 +174,7 @@ function ContractsContent() {
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const loadDocuments = async () => {
     setLoading(true);
@@ -142,6 +196,50 @@ function ContractsContent() {
   useEffect(() => {
     loadDocuments();
   }, []);
+
+  const handleDownloadSignedDocument = async (
+    document: LeadDropboxSignDocument,
+  ) => {
+    const signatureRequestId = String(
+      document.signature_request_id ?? "",
+    ).trim();
+
+    if (!signatureRequestId) {
+      toast({
+        title: "Contrato sin identificador",
+        description:
+          "Este registro no tiene signature_request_id para descargar el firmado.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setDownloadingId(signatureRequestId);
+    try {
+      const { blob, fileName } =
+        await downloadLeadDropboxSignSignedDocument(signatureRequestId);
+      const objectUrl = window.URL.createObjectURL(blob);
+      const anchor = window.document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download =
+        fileName ||
+        document.signed_file_name ||
+        `contrato-firmado-${signatureRequestId}.pdf`;
+      window.document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    } catch (error) {
+      toast({
+        title: "No se pudo descargar el contrato",
+        description:
+          error instanceof Error ? error.message : "Error desconocido",
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingId(null);
+    }
+  };
 
   const metrics = useMemo(() => {
     const totals = {
@@ -356,7 +454,7 @@ function ContractsContent() {
                     "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-50";
                   const statusLabel =
                     STATUS_LABELS[summary.normalizedStatus] ??
-                    document.status ??
+                    translateDropboxSignLabel(document.status) ??
                     "Sin estado";
 
                   return (
@@ -465,7 +563,9 @@ function ContractsContent() {
                                         <Eye className="h-3 w-3" />
                                       )}
                                       {STATUS_LABELS[signatureStatus] ??
-                                        signature.status_code ??
+                                        translateDropboxSignLabel(
+                                          signature.status_code,
+                                        ) ??
                                         "Sin estado"}
                                     </span>
                                   </div>
@@ -499,7 +599,13 @@ function ContractsContent() {
                       </TableCell>
                       <TableCell className="align-top">
                         <div className="space-y-1 whitespace-normal text-sm text-slate-700">
-                          <div>{document.last_event_type || "Sin evento"}</div>
+                          <div>
+                            {document.last_event_type
+                              ? translateDropboxSignLabel(
+                                  document.last_event_type,
+                                )
+                              : "Sin evento"}
+                          </div>
                           <div className="text-xs text-slate-500">
                             {formatDateTime(document.last_event_time)}
                           </div>
@@ -526,6 +632,26 @@ function ContractsContent() {
                       </TableCell>
                       <TableCell className="align-top text-right">
                         <div className="flex flex-col items-end gap-2">
+                          {document.signature_request_id ? (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={() =>
+                                handleDownloadSignedDocument(document)
+                              }
+                              disabled={
+                                downloadingId === document.signature_request_id
+                              }
+                            >
+                              {downloadingId ===
+                              document.signature_request_id ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="mr-2 h-4 w-4" />
+                              )}
+                              Descargar firmado
+                            </Button>
+                          ) : null}
                           {document.signing_url ? (
                             <Button asChild variant="outline" size="sm">
                               <Link

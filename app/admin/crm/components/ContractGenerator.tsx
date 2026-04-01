@@ -97,8 +97,13 @@ export function ContractGenerator({
   triggerClassName,
   onOpenChange: parentOnOpenChange,
 }: ContractGeneratorProps) {
+  const COMPANY_SIGNATURE_PATH = "/firma_hotselling.png";
   const { toast } = useToast();
   const [open, setOpenInternal] = useState(false);
+  const signatureAssetRef = React.useRef<{
+    dataUrl: string | null;
+    bytes: Uint8Array | null;
+  } | null>(null);
 
   // Sincroniza con el padre al cambiar open
   const setOpen = React.useCallback(
@@ -459,13 +464,48 @@ export function ContractGenerator({
     return parsePreviewBlocks(processedText, preparedData);
   }, [baseContractText, mergedData, parsePreviewBlocks, preparedData]);
 
-  const buildPreviewHtml = React.useCallback((): string => {
+  const loadCompanySignatureAsset = React.useCallback(async () => {
+    if (signatureAssetRef.current) {
+      return signatureAssetRef.current;
+    }
+
+    const response = await fetch(COMPANY_SIGNATURE_PATH, {
+      cache: "force-cache",
+    });
+    if (!response.ok) {
+      throw new Error("No se pudo cargar la firma de Javier Miranda.");
+    }
+
+    const blob = await response.blob();
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () =>
+        reject(new Error("No se pudo leer la imagen de la firma."));
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.readAsDataURL(blob);
+    });
+
+    const asset = { dataUrl, bytes };
+    signatureAssetRef.current = asset;
+    return asset;
+  }, []);
+
+  const buildPreviewHtml = React.useCallback(async (): Promise<string> => {
     const esc = (s: string) =>
       String(s)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/\"/g, "&quot;");
+
+    let signatureSrc = COMPANY_SIGNATURE_PATH;
+    try {
+      const asset = await loadCompanySignatureAsset();
+      if (asset.dataUrl) {
+        signatureSrc = asset.dataUrl;
+      }
+    } catch {}
 
     const blocks = previewBlocks;
     const body = blocks
@@ -495,6 +535,9 @@ export function ContractGenerator({
     <div class="sigLeft">
       <div class="sigName">JAVIER MIRANDA</div>
       <div class="sigName">MHF GROUP LLC</div>
+      <div class="sigImageWrap">
+        <img class="sigImage" src="${signatureSrc}" alt="Firma de Javier Miranda" />
+      </div>
     </div>
     <div class="sigRight">
       <div class="sigLine">${esc(preparedData.NOMBRE_COMPLETO || "")}</div>
@@ -542,6 +585,8 @@ export function ContractGenerator({
     .sigGrid{display:grid; grid-template-columns:1fr 1fr; gap:32px; align-items:start;}
     .sigLeft{text-align:center;}
     .sigName{font-weight:700;}
+    .sigImageWrap{margin-top:12px; display:flex; justify-content:center;}
+    .sigImage{max-width:170px; width:100%; height:auto; object-fit:contain;}
     .sigLine{text-align:center; font-weight:700; border-bottom:1px solid #000; padding-bottom:4px;}
     .sigHint{text-align:center; font-weight:700; font-size:12px; margin-top:6px;}
     .sigFields{margin-top:16px; display:flex; flex-direction:column; gap:8px;}
@@ -557,10 +602,17 @@ export function ContractGenerator({
   </div>
 </body>
 </html>`;
-  }, [mergedData.fullName, mergedData, previewBlocks, preparedData]);
+  }, [
+    COMPANY_SIGNATURE_PATH,
+    loadCompanySignatureAsset,
+    mergedData.fullName,
+    mergedData,
+    previewBlocks,
+    preparedData,
+  ]);
 
-  const downloadPreviewHtml = React.useCallback(() => {
-    const html = buildPreviewHtml();
+  const downloadPreviewHtml = React.useCallback(async () => {
+    const html = await buildPreviewHtml();
     const blob = new Blob([html], { type: "text/html;charset=utf-8" });
     const clientName = (mergedData.fullName || "cliente").replace(
       /[^a-zA-Z0-9]/g,
@@ -594,6 +646,16 @@ export function ContractGenerator({
     const pdfDoc = await PDFDocument.create();
     const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    let companySignatureImage: Awaited<
+      ReturnType<typeof pdfDoc.embedPng>
+    > | null = null;
+
+    try {
+      const asset = await loadCompanySignatureAsset();
+      if (asset.bytes) {
+        companySignatureImage = await pdfDoc.embedPng(asset.bytes);
+      }
+    } catch {}
 
     const pageWidth = 595.28;
     const pageHeight = 841.89;
@@ -756,7 +818,7 @@ export function ContractGenerator({
       }
 
       if (block.type === "signatures") {
-        const sigHeight = 150;
+        const sigHeight = 190;
         ensureSpace(sigHeight);
 
         const colGap = 28;
@@ -782,6 +844,20 @@ export function ContractGenerator({
           font: fontBold,
           color: rgb(0, 0, 0),
         });
+
+        if (companySignatureImage) {
+          const targetWidth = Math.min(150, colWidth - 24);
+          const targetHeight =
+            (companySignatureImage.height / companySignatureImage.width) *
+            targetWidth;
+
+          page.drawImage(companySignatureImage, {
+            x: leftX + (colWidth - targetWidth) / 2,
+            y: cursorY - 28 - targetHeight,
+            width: targetWidth,
+            height: targetHeight,
+          });
+        }
 
         const signLineY = cursorY - 12;
         page.drawLine({
@@ -853,7 +929,12 @@ export function ContractGenerator({
       filename,
       file: new File([bytes], filename, { type: "application/pdf" }),
     };
-  }, [mergedData.fullName, preparedData, previewBlocks]);
+  }, [
+    loadCompanySignatureAsset,
+    mergedData.fullName,
+    preparedData,
+    previewBlocks,
+  ]);
 
   const downloadPreviewPdf = React.useCallback(async () => {
     setDownloadingPdf(true);
@@ -2068,6 +2149,13 @@ export function ContractGenerator({
                             <div className="text-center">
                               <div className="font-bold">JAVIER MIRANDA</div>
                               <div className="font-bold">MHF GROUP LLC</div>
+                              <div className="mt-3 flex justify-center">
+                                <img
+                                  src={COMPANY_SIGNATURE_PATH}
+                                  alt="Firma de Javier Miranda"
+                                  className="h-auto max-w-[170px] object-contain"
+                                />
+                              </div>
                             </div>
                             <div>
                               <div className="text-center">
