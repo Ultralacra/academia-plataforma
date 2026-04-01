@@ -181,7 +181,7 @@ export function TabNotas({ p, user, applyRecordPatch }: TabNotasProps) {
             </div>
             <div>
               <CardTitle className="text-slate-800">
-                Perfil de cliente
+                Especificaciones del cliente
               </CardTitle>
               <CardDescription className="text-slate-500">
                 Contexto comercial editable con registro en el snapshot del lead

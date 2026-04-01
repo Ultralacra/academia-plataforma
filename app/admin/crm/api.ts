@@ -217,6 +217,61 @@ export interface LeadContractSignatureSendResponse {
   };
 }
 
+export interface LeadDropboxSignSignature {
+  signature_id?: string;
+  has_pin?: boolean;
+  has_sms_auth?: boolean;
+  has_sms_delivery?: boolean;
+  sms_phone_number?: string | null;
+  signer_email_address?: string;
+  signer_name?: string;
+  signer_role?: string | null;
+  order?: number | null;
+  status_code?: string;
+  signed_at?: string | number | null;
+  last_viewed_at?: string | number | null;
+  last_reminded_at?: string | number | null;
+  error?: string | null;
+}
+
+export interface LeadDropboxSignDocument {
+  id: number;
+  recipient_type?: string;
+  recipient_codigo?: string;
+  contract_source?: string;
+  signature_request_id?: string;
+  title?: string;
+  signer_name?: string;
+  signer_email?: string;
+  status?: string;
+  signing_url?: string;
+  details_url?: string;
+  files_url?: string;
+  is_complete?: boolean;
+  is_declined?: boolean;
+  has_error?: boolean;
+  test_mode?: boolean;
+  last_event_type?: string | null;
+  last_event_time?: string | number | null;
+  signed_at?: string | null;
+  declined_at?: string | null;
+  canceled_at?: string | null;
+  signed_file_available?: boolean;
+  signed_file_name?: string | null;
+  signed_file_mime?: string | null;
+  signatures?: LeadDropboxSignSignature[];
+}
+
+export interface LeadDropboxSignDocumentsResponse {
+  code: number;
+  status: string;
+  data: LeadDropboxSignDocument[];
+  total?: number;
+  page?: number;
+  pageSize?: number;
+  totalPages?: number;
+}
+
 // Tipos para registro de venta (sale)
 export type PaymentPlatform =
   | "hotmart"
@@ -224,6 +279,7 @@ export type PaymentPlatform =
   | "binance"
   | "payoneer"
   | "zelle"
+  | "nequi"
   | "bancolombia"
   | "boa"
   | "otra";
@@ -647,6 +703,15 @@ export async function sendLeadContractForSignature(
     {
       method: "POST",
       body: formData,
+    },
+  );
+}
+
+export async function listLeadDropboxSignDocuments() {
+  return await apiFetch<LeadDropboxSignDocumentsResponse>(
+    "/leads/dropboxsign/documents",
+    {
+      method: "GET",
     },
   );
 }

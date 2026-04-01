@@ -25,6 +25,7 @@ export type PaymentPlatform =
   | "binance"
   | "payoneer"
   | "zelle"
+  | "nequi"
   | "bancolombia"
   | "boa"
   | "otra";
@@ -195,7 +196,7 @@ export interface CloseSaleInput {
                   </Select>
                 </div>
                 <div className="md:col-span-3">
-                  <Label>Fecha prevista de cobro futuro</Label>
+                  <Label>Fecha de pago</Label>
                   <Input
                     type="date"
                     value={form.nextChargeDate || ""}
@@ -439,6 +440,7 @@ export type PaymentPlatform =
   | "binance"
   | "payoneer"
   | "zelle"
+  | "nequi"
   | "bancolombia"
   | "boa"
   | "otra";
@@ -731,7 +733,8 @@ export function CloseSaleForm({
     { value: "payoneer", label: "Payoneer" },
     { value: "zelle", label: "Zelle" },
     { value: "bancolombia", label: "Bancolombia" },
-    { value: "boa", label: "BoA" },
+    { value: "nequi", label: "Nequi" },
+    { value: "boa", label: "BOFA" },
     { value: "otra", label: "Otra" },
   ];
   const BONUS_OPTIONS = [
@@ -898,7 +901,7 @@ export function CloseSaleForm({
                   </Select>
                 </div>
                 <div className="md:col-span-3">
-                  <Label>Fecha prevista de cobro futuro</Label>
+                  <Label>Fecha de pago</Label>
                   <Input
                     type="date"
                     value={form.nextChargeDate || ""}
@@ -1141,7 +1144,8 @@ export function CloseSaleForm({
     { value: "payoneer", label: "Payoneer" },
     { value: "zelle", label: "Zelle" },
     { value: "bancolombia", label: "Bancolombia" },
-    { value: "boa", label: "BoA" },
+    { value: "nequi", label: "Nequi" },
+    { value: "boa", label: "BOFA" },
     { value: "otra", label: "Otra" },
   ];
   const BONUS_OPTIONS = [

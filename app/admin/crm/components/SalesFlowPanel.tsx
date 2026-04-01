@@ -180,6 +180,15 @@ function fmtDate(iso?: string | null) {
   });
 }
 
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("No se pudo leer el archivo"));
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.readAsDataURL(file);
+  });
+}
+
 function defaultFlowState(): SalesFlowState {
   return {
     fase: 1,
@@ -430,7 +439,7 @@ export function SalesFlowPanel({
           sublabel={
             flow.agendaCalendlyAt
               ? `Agenda: ${fmt(flow.agendaCalendlyAt)}`
-              : "A través de Calendly (email y SMS de recordatorio automático)"
+              : "Fecha y hora de llamada registradas"
           }
           icon={<Calendar className="h-4 w-4" />}
           readOnly={readOnly}
@@ -487,7 +496,7 @@ export function SalesFlowPanel({
             <div className="grid gap-2 sm:grid-cols-3">
               <ReminderCheck
                 label="Recordatorio automático (Calendly)"
-                sublabel="Automático vía email y SMS de Calendly"
+                sublabel="Recordatorio automático configurado"
                 done={true}
                 auto
               />
@@ -548,8 +557,53 @@ export function SalesFlowPanel({
     const [cancelReagendaInput, setCancelReagendaInput] = React.useState(
       flow.canceladaFechaReagenda?.slice(0, 16) ?? "",
     );
+    const evidenciaNoShow = Array.isArray(flow.evidenciaNoShow)
+      ? flow.evidenciaNoShow
+      : [];
+    const evidenciaCancelada = Array.isArray(flow.evidenciaCancelada)
+      ? flow.evidenciaCancelada
+      : [];
 
     const resultado = flow.resultadoLlamada;
+
+    const handleEvidenceUpload = async (
+      kind: "evidenciaNoShow" | "evidenciaCancelada",
+      files: FileList | null,
+    ) => {
+      if (readOnly || !files?.length) return;
+
+      const mapped = await Promise.all(
+        Array.from(files).map(async (file) => ({
+          id: `evidence-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          dataUrl: await fileToDataUrl(file),
+          created_at: nowIso(),
+        })),
+      );
+
+      update({
+        [kind]: [
+          ...((Array.isArray(flow[kind]) ? flow[kind] : []) as NonNullable<
+            SalesFlowState[typeof kind]
+          >),
+          ...mapped,
+        ],
+      } as Partial<SalesFlowState>);
+    };
+
+    const removeEvidence = (
+      kind: "evidenciaNoShow" | "evidenciaCancelada",
+      id: string,
+    ) => {
+      if (readOnly) return;
+      update({
+        [kind]: (Array.isArray(flow[kind]) ? flow[kind] : []).filter(
+          (item) => item?.id !== id,
+        ),
+      } as Partial<SalesFlowState>);
+    };
 
     return (
       <div className="space-y-5">
@@ -646,6 +700,17 @@ export function SalesFlowPanel({
               Envía los mensajes de seguimiento según los tiempos del protocolo.
             </p>
             <div className="space-y-2">
+              <EvidenceUploadBlock
+                title="Evidencia obligatoria"
+                description="Adjunta conversación de WhatsApp o intentos de contacto al lead."
+                files={evidenciaNoShow}
+                required
+                readOnly={readOnly}
+                onUpload={(files) =>
+                  handleEvidenceUpload("evidenciaNoShow", files)
+                }
+                onRemove={(id) => removeEvidence("evidenciaNoShow", id)}
+              />
               <ReminderCheck
                 label="Mensaje Reagenda: 10 min después de la hora agendada"
                 done={!!flow.noShowMensajes?.enviado10m}
@@ -683,7 +748,7 @@ export function SalesFlowPanel({
                 }
               />
             </div>
-            {flow.noShowMensajes?.enviado24h && (
+            {flow.noShowMensajes?.enviado24h && evidenciaNoShow.length > 0 && (
               <div className="pt-2 border-t border-rose-200">
                 <p className="text-[11px] text-rose-700 mb-2">
                   Tras 72 hrs sin resultado → activar Seguimiento Estratégico
@@ -725,6 +790,17 @@ export function SalesFlowPanel({
               El cliente respondió que no asistirá. Coordina una nueva fecha y
               hora.
             </p>
+            <EvidenceUploadBlock
+              title="Evidencia obligatoria"
+              description="Adjunta conversación de WhatsApp o intentos de contacto al lead."
+              files={evidenciaCancelada}
+              required
+              readOnly={readOnly}
+              onUpload={(files) =>
+                handleEvidenceUpload("evidenciaCancelada", files)
+              }
+              onRemove={(id) => removeEvidence("evidenciaCancelada", id)}
+            />
             <div className="flex items-end gap-2">
               <div className="flex-1 space-y-1">
                 <Label className="text-xs">Nueva fecha propuesta</Label>
@@ -753,7 +829,7 @@ export function SalesFlowPanel({
                 </Button>
               )}
             </div>
-            {flow.canceladaFechaReagenda && (
+            {flow.canceladaFechaReagenda && evidenciaCancelada.length > 0 && (
               <p className="text-[11px] text-amber-800 font-medium">
                 Nueva cita: {fmt(flow.canceladaFechaReagenda)}
               </p>
@@ -1880,6 +1956,89 @@ export function SalesFlowPanel({
       <div className="text-[11px] text-slate-400 text-right">
         Última actualización: {fmt(flow.updatedAt)}
       </div>
+    </div>
+  );
+}
+
+function EvidenceUploadBlock({
+  title,
+  description,
+  files,
+  required,
+  readOnly,
+  onUpload,
+  onRemove,
+}: {
+  title: string;
+  description: string;
+  files: Array<{
+    id: string;
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl: string;
+    created_at: string;
+  }>;
+  required?: boolean;
+  readOnly?: boolean;
+  onUpload: (files: FileList | null) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white/80 p-3 space-y-3">
+      <div>
+        <div className="text-sm font-semibold text-slate-800">
+          {title} {required ? <span className="text-rose-600">*</span> : null}
+        </div>
+        <p className="text-[11px] text-slate-500">{description}</p>
+      </div>
+      {!readOnly ? (
+        <Input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => onUpload(e.target.files)}
+        />
+      ) : null}
+      {files.length > 0 ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {files.map((file) => (
+            <div
+              key={file.id}
+              className="rounded-lg border border-slate-200 bg-slate-50 p-2"
+            >
+              <img
+                src={file.dataUrl}
+                alt={file.name || "Evidencia"}
+                className="h-32 w-full rounded object-cover"
+              />
+              <div className="mt-2 flex items-start justify-between gap-2">
+                <div className="min-w-0 text-[11px] text-slate-600">
+                  <div className="truncate font-medium text-slate-800">
+                    {file.name || "Evidencia"}
+                  </div>
+                  <div>{fmt(file.created_at)}</div>
+                </div>
+                {!readOnly ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 px-2 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                    onClick={() => onRemove(file.id)}
+                  >
+                    Quitar
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-[11px] text-rose-700">
+          Debes adjuntar al menos una evidencia para continuar con este caso.
+        </div>
+      )}
     </div>
   );
 }

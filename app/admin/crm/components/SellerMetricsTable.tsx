@@ -8,7 +8,7 @@ export function SellerMetricsTable({ data }: { data: SellerMetricsResult }) {
       <table className="min-w-full text-sm">
         <thead className="bg-white/80 text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="text-left px-4 py-3">Owner</th>
+            <th className="text-left px-4 py-3">Closer</th>
             <th className="text-right px-4 py-3">Total</th>
             <th className="text-right px-4 py-3">Contactados</th>
             <th className="text-right px-4 py-3">Calificados</th>

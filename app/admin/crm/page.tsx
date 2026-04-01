@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
-  Calendar,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -46,11 +45,10 @@ import { crmAutomations } from "@/lib/crm-service";
 import { apiFetch } from "@/lib/api-config";
 import { cn } from "@/lib/utils";
 
-import { type Lead, type LeadOrigin, listLeadOrigins, listLeads } from "./api";
+import { type Lead, listLeads } from "./api";
 import { CrmTabsLayout, CrmTabsList } from "./components/TabsLayout";
 import { CreateLeadDialog } from "./components/CreateLeadDialog";
 import { DeleteLeadConfirmDialog } from "./components/DeleteLeadConfirmDialog";
-import { EventsOriginsManager } from "./components/EventsOriginsManager";
 import { MetricsOverview } from "./components/MetricsOverview";
 import { MetricsTabs } from "./components/MetricsTabs";
 import { ProspectFilters } from "./components/ProspectFilters";
@@ -121,7 +119,6 @@ const PIPELINE_STAGES: ProspectStage[] = [
   "Perdido",
 ];
 
-const HOURS = Array.from({ length: 17 }, (_, idx) => 6 + idx);
 const MAX_LEADS_FETCH = 5000;
 const DEFAULT_PIPELINE_PAGE_SIZE = 25;
 const PIPELINE_PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const;
@@ -260,21 +257,13 @@ function CrmContent() {
   const { toast } = useToast();
 
   const isAdmin = authState?.user?.role === "admin";
-  const isSalesUser = ["sales", "equipo"].includes(
-    String(authState?.user?.role ?? ""),
-  );
   const userCodigo = authState?.user?.codigo ?? "";
 
   const ownerFilterRef = useRef<string>("");
 
   const [rows, setRows] = useState<Prospect[]>([]);
   const [loadingLeads, setLoadingLeads] = useState<boolean>(false);
-  const [leadOrigins, setLeadOrigins] = useState<LeadOrigin[]>([]);
-  const [selectedCampaignForMetrics, setSelectedCampaignForMetrics] =
-    useState<string>("all");
-
   const [salesUsers, setSalesUsers] = useState<UserSummary[]>([]);
-  const [salesUsersLoading, setSalesUsersLoading] = useState(false);
 
   const [allUsers, setAllUsers] = useState<UserSummary[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -289,31 +278,18 @@ function CrmContent() {
   const [userSearchQuery, setUserSearchQuery] = useState<string>("");
   const [assigning, setAssigning] = useState(false);
 
-  const [availabilityOpen, setAvailabilityOpen] = useState(false);
-  const [availabilityLoading, setAvailabilityLoading] = useState(false);
-  const [availability, setAvailability] = useState<CalendarAvailability | null>(
-    null,
-  );
-  const [availabilityDay, setAvailabilityDay] = useState<Date>(new Date());
-
-  const [calendarStatus, setCalendarStatus] = useState<CalendarStatus>({
-    connected: false,
-    loading: true,
-  });
-  const [syncingCalendar, setSyncingCalendar] = useState(false);
-
   const [deleteTarget, setDeleteTarget] = useState<{
     id: string;
     nombre: string;
   } | null>(null);
 
   const [q, setQ] = useState("");
+  const [emailQ, setEmailQ] = useState("");
+  const [phoneQ, setPhoneQ] = useState("");
   const [questionsQ, setQuestionsQ] = useState("");
   const [view, setView] = useState<"lista" | "kanban">("lista");
   const [closerFiltro, setCloserFiltro] = useState<string>("all");
   const [etapaFiltro, setEtapaFiltro] = useState<string>("all");
-  const [canalFiltro, setCanalFiltro] = useState<string>("all");
-  const [ownerFiltro, setOwnerFiltro] = useState<string>("all");
   const [createdFrom, setCreatedFrom] = useState<string>("");
   const [createdTo, setCreatedTo] = useState<string>("");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -325,9 +301,6 @@ function CrmContent() {
   const [pipelinePageSize, setPipelinePageSize] = useState<number>(
     DEFAULT_PIPELINE_PAGE_SIZE,
   );
-
-  const showingMyLeads =
-    Boolean(userCodigo) && ownerFilterRef.current === userCodigo;
 
   const fetchUsers = useCallback(async (): Promise<UserSummary[]> => {
     try {
@@ -345,15 +318,14 @@ function CrmContent() {
   }, [toast]);
 
   const loadSalesUsers = useCallback(async () => {
-    setSalesUsersLoading(true);
     try {
       const users = await fetchUsers();
       const filtered = users.filter((user) =>
         ["sales", "equipo", "admin"].includes(String(user.role ?? "")),
       );
       setSalesUsers(filtered);
-    } finally {
-      setSalesUsersLoading(false);
+    } catch (error) {
+      console.error("Error al cargar usuarios de ventas", error);
     }
   }, [fetchUsers]);
 
@@ -366,19 +338,6 @@ function CrmContent() {
       setUsersLoading(false);
     }
   }, [fetchUsers]);
-
-  const loadOrigins = useCallback(async () => {
-    try {
-      const origins = await listLeadOrigins();
-      setLeadOrigins(origins);
-    } catch (error) {
-      console.error("Error al cargar campañas", error);
-      toast({
-        title: "No se pudieron cargar campañas",
-        variant: "destructive",
-      });
-    }
-  }, [toast]);
 
   const reload = useCallback(
     async (owner?: string) => {
@@ -441,357 +400,33 @@ function CrmContent() {
 
   useEffect(() => {
     reload();
-    loadOrigins();
     if (isAdmin) {
       loadSalesUsers();
     }
-  }, [isAdmin, loadOrigins, loadSalesUsers, reload]);
-
-  useEffect(() => {
-    const fetchCalendarStatus = async () => {
-      try {
-        const response = await apiFetch<{
-          connected: boolean;
-          google_email?: string;
-        }>("/calendar/status");
-        setCalendarStatus({
-          connected: response.connected,
-          google_email: response.google_email,
-          loading: false,
-        });
-      } catch (error) {
-        console.error("Estado de calendario", error);
-        setCalendarStatus({ connected: false, loading: false });
-      }
-    };
-
-    fetchCalendarStatus();
-    const interval = setInterval(fetchCalendarStatus, 120000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleSyncCalendar = async () => {
-    try {
-      setSyncingCalendar(true);
-      const response = await apiFetch<{ url: string }>("/calendar/auth");
-      if (response.url) {
-        window.location.href = response.url;
-      } else {
-        toast({
-          title: "No se pudo iniciar la sincronización",
-          variant: "destructive",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error al sincronizar",
-        description: error?.message ?? "Intenta nuevamente",
-        variant: "destructive",
-      });
-    } finally {
-      setSyncingCalendar(false);
-    }
-  };
-
-  const loadAvailability = useCallback(async () => {
-    setAvailabilityLoading(true);
-    try {
-      const response = await apiFetch<{
-        success: boolean;
-        google_email: string;
-        busy: Array<{ start: string; end: string }>;
-      }>("/calendar/availability");
-      setAvailability({
-        google_email: response.google_email,
-        busy: response.busy,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error?.message ?? "No se pudo cargar la disponibilidad",
-        variant: "destructive",
-      });
-    } finally {
-      setAvailabilityLoading(false);
-    }
-  }, [toast]);
-
-  const handleViewAvailability = () => {
-    setAvailabilityDay(new Date());
-    setAvailabilityOpen(true);
-    void loadAvailability();
-  };
-
-  const getDayRange = useCallback((day: Date) => {
-    const start = new Date(
-      day.getFullYear(),
-      day.getMonth(),
-      day.getDate(),
-      0,
-      0,
-      0,
-      0,
-    );
-    const end = new Date(
-      day.getFullYear(),
-      day.getMonth(),
-      day.getDate(),
-      23,
-      59,
-      59,
-      999,
-    );
-    return { start, end };
-  }, []);
-
-  const renderCalendar = useCallback(() => {
-    if (!availability) return null;
-
-    const now = new Date();
-    const selectedDay = availabilityDay || now;
-    const isToday = selectedDay.toDateString() === now.toDateString();
-
-    const goToPrevDay = () => {
-      const prev = new Date(selectedDay);
-      prev.setDate(prev.getDate() - 1);
-      setAvailabilityDay(prev);
-    };
-
-    const goToNextDay = () => {
-      const next = new Date(selectedDay);
-      next.setDate(next.getDate() + 1);
-      setAvailabilityDay(next);
-    };
-
-    const goToToday = () => {
-      setAvailabilityDay(new Date());
-    };
-
-    const { start: dayStart, end: dayEnd } = getDayRange(selectedDay);
-
-    const busyForDay = availability.busy
-      .map((slot) => ({
-        start: new Date(slot.start),
-        end: new Date(slot.end),
-      }))
-      .filter(
-        (slot) =>
-          !Number.isNaN(slot.start.getTime()) &&
-          !Number.isNaN(slot.end.getTime()) &&
-          slot.end >= dayStart &&
-          slot.start <= dayEnd,
-      )
-      .sort((a, b) => a.start.getTime() - b.start.getTime());
-
-    const rowHeightPx = 48;
-    const timelineHeightPx = rowHeightPx * HOURS.length;
-    const visibleStart = new Date(selectedDay);
-    visibleStart.setHours(HOURS[0], 0, 0, 0);
-    const visibleEnd = new Date(selectedDay);
-    visibleEnd.setHours(HOURS[HOURS.length - 1] + 1, 0, 0, 0);
-
-    const splitIntoHourlySegments = (start: Date, end: Date) => {
-      const segments: { start: Date; end: Date }[] = [];
-      let cursor = new Date(start);
-      // Guardrail ante datos raros
-      for (let i = 0; i < 48 && cursor.getTime() < end.getTime(); i++) {
-        const nextHour = new Date(cursor);
-        nextHour.setMinutes(0, 0, 0);
-        nextHour.setHours(nextHour.getHours() + 1);
-        const segEnd = nextHour.getTime() < end.getTime() ? nextHour : end;
-        segments.push({ start: new Date(cursor), end: new Date(segEnd) });
-        cursor = new Date(segEnd);
-      }
-      return segments;
-    };
-
-    const visibleBusy = busyForDay
-      .map((slot) => {
-        const start = slot.start > visibleStart ? slot.start : visibleStart;
-        const end = slot.end < visibleEnd ? slot.end : visibleEnd;
-        return { start, end };
-      })
-      .filter((slot) => slot.end.getTime() > slot.start.getTime())
-      .sort((a, b) => a.start.getTime() - b.start.getTime())
-      .flatMap((slot) => splitIntoHourlySegments(slot.start, slot.end));
-
-    return (
-      <div className="flex flex-col h-full">
-        <div className="flex items-center justify-between mb-4 pb-3 border-b">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={goToPrevDay}
-              className="h-8 w-8"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="text-sm font-medium text-slate-700">
-              {selectedDay.toLocaleDateString("es-ES", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}
-            </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={goToNextDay}
-              className="h-8 w-8"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={goToToday}>
-              Hoy
-            </Button>
-            <Badge variant={isToday ? "default" : "outline"}>
-              {isToday ? "Hoy" : "Otro día"}
-            </Badge>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
-          <div>
-            Disponibilidad de:{" "}
-            <span className="font-medium text-slate-700">
-              {availability.google_email || "Google Calendar"}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1">
-              <span className="h-3 w-3 rounded bg-blue-500" /> Ocupado
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="h-3 w-3 rounded border border-slate-300 bg-white" />
-              Libre
-            </span>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto border rounded-lg">
-          <div className="grid grid-cols-[64px_1fr]">
-            <div className="border-r bg-slate-50">
-              {HOURS.map((hour) => (
-                <div
-                  key={hour}
-                  className="h-12 px-2 text-xs text-slate-500 flex items-center justify-end border-b last:border-b-0"
-                >
-                  {`${hour.toString().padStart(2, "0")}:00`}
-                </div>
-              ))}
-            </div>
-
-            <div
-              className="relative"
-              style={{ height: `${timelineHeightPx}px` }}
-            >
-              {HOURS.map((_, idx) => (
-                <div
-                  key={idx}
-                  className="absolute left-0 right-0 border-b"
-                  style={{ top: `${(idx + 1) * rowHeightPx}px` }}
-                />
-              ))}
-
-              {visibleBusy.map((slot, idx) => {
-                const minutesFromStart =
-                  (slot.start.getTime() - visibleStart.getTime()) / 60000;
-                const minutesDuration =
-                  (slot.end.getTime() - slot.start.getTime()) / 60000;
-                const pxPerMinute = rowHeightPx / 60;
-                const topPxRaw = Math.max(0, minutesFromStart * pxPerMinute);
-                const heightPxRaw = Math.max(12, minutesDuration * pxPerMinute);
-                const topPx = topPxRaw + 1;
-                const heightPx = Math.max(10, heightPxRaw - 2);
-
-                const showFull = heightPx >= 36;
-                const showCompact = heightPx >= 22;
-
-                const startLabel = formatHourLabel(slot.start);
-                const endLabel = formatHourLabel(slot.end);
-
-                return (
-                  <div
-                    key={`${slot.start.toISOString()}-${idx}`}
-                    className="absolute left-2 right-2 bg-blue-500/80 text-white rounded-md shadow overflow-hidden"
-                    style={{ top: `${topPx}px`, height: `${heightPx}px` }}
-                  >
-                    {showFull ? (
-                      <div className="px-2 py-1">
-                        <div className="text-[11px] font-medium leading-none">
-                          Ocupado
-                        </div>
-                        <div className="text-[10px] text-white/90 leading-none mt-1">
-                          {startLabel}–{endLabel}
-                        </div>
-                      </div>
-                    ) : showCompact ? (
-                      <div className="h-full px-2 flex items-center">
-                        <div className="text-[10px] font-medium leading-none truncate">
-                          {startLabel}–{endLabel}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="h-full px-1 flex items-center">
-                        <span className="h-1.5 w-1.5 rounded-full bg-white/90" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 pt-3 border-t">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-900">
-                Bloqueos del día
-              </p>
-              <p className="text-xs text-slate-500">
-                {busyForDay.length > 0
-                  ? "Tramos ocupados en el calendario."
-                  : "No hay horas ocupadas para este día."}
-              </p>
-            </div>
-            <Badge variant={busyForDay.length > 0 ? "muted" : "outline"}>
-              {busyForDay.length}{" "}
-              {busyForDay.length === 1 ? "bloqueo" : "bloqueos"}
-            </Badge>
-          </div>
-
-          {busyForDay.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {busyForDay.map((slot, idx) => (
-                <Badge
-                  key={`${slot.start.toISOString()}-${idx}`}
-                  variant="muted"
-                  className="font-mono"
-                >
-                  {formatHourLabel(slot.start)}–{formatHourLabel(slot.end)}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }, [availability, availabilityDay, getDayRange]);
+  }, [isAdmin, loadSalesUsers, reload]);
 
   const filtrados = useMemo(() => {
     return rows.filter((prospect) => {
       const normalizedSearch = q.trim().toLowerCase();
+      const normalizedEmail = emailQ.trim().toLowerCase();
+      const normalizedPhone = phoneQ.trim().toLowerCase();
       const normalizedQuestionsSearch = questionsQ.trim().toLowerCase();
       const matchesSearch = q.trim()
-        ? [prospect.nombre, prospect.email, prospect.telefono]
+        ? [prospect.nombre]
             .filter(Boolean)
             .some((value) =>
               String(value).toLowerCase().includes(normalizedSearch),
             )
+        : true;
+      const matchesEmail = normalizedEmail
+        ? String(prospect.email ?? "")
+            .toLowerCase()
+            .includes(normalizedEmail)
+        : true;
+      const matchesPhone = normalizedPhone
+        ? String(prospect.telefono ?? "")
+            .toLowerCase()
+            .includes(normalizedPhone)
         : true;
       const matchesQuestions = normalizedQuestionsSearch
         ? getProspectQuestionSearchText(prospect).includes(
@@ -803,10 +438,6 @@ function CrmContent() {
         String(prospect.closerName ?? "") === closerFiltro;
       const matchesStage =
         etapaFiltro === "all" || prospect.etapa === etapaFiltro;
-      const matchesChannel =
-        canalFiltro === "all" || prospect.canal === canalFiltro;
-      const matchesOwner =
-        ownerFiltro === "all" || (prospect.ownerCodigo ?? "") === ownerFiltro;
 
       const createdAt = prospect.creado ? new Date(prospect.creado) : null;
       const from = createdFrom ? new Date(`${createdFrom}T00:00:00`) : null;
@@ -820,22 +451,22 @@ function CrmContent() {
 
       return (
         matchesSearch &&
+        matchesEmail &&
+        matchesPhone &&
         matchesQuestions &&
         matchesCloser &&
         matchesStage &&
-        matchesChannel &&
-        matchesOwner &&
         matchesDate
       );
     });
   }, [
     rows,
     q,
+    emailQ,
+    phoneQ,
     questionsQ,
     closerFiltro,
     etapaFiltro,
-    canalFiltro,
-    ownerFiltro,
     createdFrom,
     createdTo,
   ]);
@@ -854,11 +485,11 @@ function CrmContent() {
     setPipelinePage(1);
   }, [
     q,
+    emailQ,
+    phoneQ,
     questionsQ,
     closerFiltro,
     etapaFiltro,
-    canalFiltro,
-    ownerFiltro,
     createdFrom,
     createdTo,
   ]);
@@ -928,11 +559,16 @@ function CrmContent() {
       }
     >();
     rows.forEach((row) => {
-      const key = row.ownerCodigo || "(Sin owner)";
+      const displayName =
+        normalizeQuestionText(row.closerName) ||
+        salesUsers.find((user) => user.codigo === row.ownerCodigo)?.name ||
+        row.ownerCodigo ||
+        "(Sin closer)";
+      const key = displayName;
       if (!store.has(key)) {
         store.set(key, {
           ownerId: row.ownerCodigo ?? null,
-          ownerNombre: row.ownerCodigo ?? "(Sin owner)",
+          ownerNombre: displayName,
           total: 0,
           contacted: 0,
           qualified: 0,
@@ -951,32 +587,7 @@ function CrmContent() {
       rows: Array.from(store.values()),
       totalOwners: store.size,
     };
-  }, [rows]);
-
-  const canales = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((row) => {
-      if (row.canal) set.add(row.canal);
-    });
-    return Array.from(set.values());
-  }, [rows]);
-
-  const owners = useMemo(() => {
-    const map = new Map<string, string>();
-    salesUsers.forEach((user) => {
-      if (user.codigo)
-        map.set(user.codigo, user.name || user.email || user.codigo);
-    });
-    rows.forEach((row) => {
-      const codigo = row.ownerCodigo ?? "";
-      if (!codigo) return;
-      if (!map.has(codigo)) map.set(codigo, codigo);
-    });
-    return Array.from(map.entries()).map(([value, label]) => ({
-      value,
-      label,
-    }));
-  }, [salesUsers, rows]);
+  }, [rows, salesUsers]);
 
   const closers = useMemo(() => {
     return Array.from(
@@ -1026,55 +637,24 @@ function CrmContent() {
   const activeFilterCount = useMemo(() => {
     return [
       q,
+      emailQ,
+      phoneQ,
       questionsQ,
       closerFiltro !== "all" ? closerFiltro : "",
       etapaFiltro !== "all" ? etapaFiltro : "",
-      canalFiltro !== "all" ? canalFiltro : "",
-      ownerFiltro !== "all" ? ownerFiltro : "",
       createdFrom,
       createdTo,
     ].filter(Boolean).length;
   }, [
     q,
+    emailQ,
+    phoneQ,
     questionsQ,
     closerFiltro,
     etapaFiltro,
-    canalFiltro,
-    ownerFiltro,
     createdFrom,
     createdTo,
   ]);
-
-  const getOriginName = useCallback(
-    (originId?: string | null) => {
-      if (!originId) return "—";
-      const found = leadOrigins.find((origin) => origin.codigo === originId);
-      return found?.name || originId;
-    },
-    [leadOrigins],
-  );
-
-  const campaignSummary = useMemo(() => {
-    const filtered =
-      selectedCampaignForMetrics === "all"
-        ? rows
-        : rows.filter((row) => row.canal === selectedCampaignForMetrics);
-    const byStage = filtered.reduce(
-      (acc, row) => {
-        acc[row.etapa] = (acc[row.etapa] ?? 0) + 1;
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
-    return {
-      total: filtered.length,
-      byStage,
-      label:
-        selectedCampaignForMetrics === "all"
-          ? "Todas las campañas"
-          : getOriginName(selectedCampaignForMetrics),
-    };
-  }, [rows, selectedCampaignForMetrics, getOriginName]);
 
   return (
     <div className="relative h-full flex flex-col overflow-hidden bg-slate-50">
@@ -1103,7 +683,7 @@ function CrmContent() {
           <CrmTabsList
             value={activeTab}
             onValueChange={setActiveTab}
-            hasCampanas={true}
+            hasCampanas={false}
           />
 
           {/* Acciones */}
@@ -1113,61 +693,6 @@ function CrmContent() {
                 void reload(ownerFilterRef.current || undefined);
               }}
             />
-
-            {/* Google Calendar Status */}
-            {calendarStatus.connected ? (
-              <div className="flex items-center gap-0.5 sm:gap-1">
-                <span
-                  className="inline-flex h-5 w-5 sm:h-6 sm:w-6 items-center justify-center rounded-full bg-green-100 text-green-600"
-                  title={`Sincronizado: ${calendarStatus.google_email || "Google Calendar"}`}
-                >
-                  <svg
-                    className="h-2.5 w-2.5 sm:h-3 sm:w-3"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                  </svg>
-                </span>
-                <Button
-                  onClick={handleViewAvailability}
-                  variant="outline"
-                  size="sm"
-                  className="h-5 sm:h-6 px-1.5 sm:px-2 text-[9px] sm:text-[11px]"
-                >
-                  <span className="hidden sm:inline">Horarios</span>
-                  <Calendar className="h-3 w-3 sm:hidden" />
-                </Button>
-              </div>
-            ) : (
-              !calendarStatus.loading && (
-                <button
-                  onClick={handleSyncCalendar}
-                  disabled={syncingCalendar}
-                  className="inline-flex h-5 sm:h-6 items-center gap-0.5 sm:gap-1 rounded-md border border-slate-200 bg-white px-1.5 sm:px-2 text-[9px] sm:text-[11px] text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                  title="Conectar Google Calendar"
-                >
-                  {syncingCalendar ? (
-                    <Loader2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 animate-spin" />
-                  ) : (
-                    <svg
-                      className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-slate-400"
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                    >
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                    </svg>
-                  )}
-                  <span className="hidden sm:inline">Sync</span>
-                </button>
-              )
-            )}
           </div>
         </div>
       </div>
@@ -1195,19 +720,6 @@ function CrmContent() {
               </div>
             </div>
           ))}
-          {calendarStatus.connected && calendarStatus.google_email && (
-            <div className="flex items-center gap-1 sm:gap-2 px-1.5 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-green-50 border border-green-200/70 shadow-sm ml-auto">
-              <Calendar className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5 text-green-600" />
-              <div className="min-w-0">
-                <p className="text-[8px] sm:text-[10px] text-green-600 uppercase tracking-wide">
-                  Calendario
-                </p>
-                <p className="text-[9px] sm:text-xs font-medium text-green-700 truncate max-w-[100px] sm:max-w-[150px]">
-                  {calendarStatus.google_email}
-                </p>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -1251,38 +763,29 @@ function CrmContent() {
                 <ProspectFilters
                   q={q}
                   setQ={setQ}
+                  emailQ={emailQ}
+                  setEmailQ={setEmailQ}
+                  phoneQ={phoneQ}
+                  setPhoneQ={setPhoneQ}
                   questionsQ={questionsQ}
                   setQuestionsQ={setQuestionsQ}
                   closer={closerFiltro}
                   setCloser={setCloserFiltro}
                   etapa={etapaFiltro}
                   setEtapa={setEtapaFiltro}
-                  canal={canalFiltro}
-                  setCanal={setCanalFiltro}
-                  owner={ownerFiltro}
-                  setOwner={(value) => {
-                    setOwnerFiltro(value);
-                    if (isAdmin) {
-                      const code = value === "all" ? "" : value;
-                      ownerFilterRef.current = code;
-                      void reload(code || undefined);
-                    }
-                  }}
                   createdFrom={createdFrom}
                   setCreatedFrom={setCreatedFrom}
                   createdTo={createdTo}
                   setCreatedTo={setCreatedTo}
                   etapas={PIPELINE_STAGES}
-                  canales={canales}
                   closers={closers}
-                  owners={owners}
                   onClear={() => {
                     setQ("");
+                    setEmailQ("");
+                    setPhoneQ("");
                     setQuestionsQ("");
                     setCloserFiltro("all");
                     setEtapaFiltro("all");
-                    setCanalFiltro("all");
-                    setOwnerFiltro("all");
                     setCreatedFrom("");
                     setCreatedTo("");
                   }}
@@ -1422,7 +925,7 @@ function CrmContent() {
                                         variant="secondary"
                                         className="text-[9px] px-1 py-0 bg-indigo-50 text-indigo-600 border-indigo-200"
                                       >
-                                        Sync
+                                        Remoto
                                       </Badge>
                                     ) : null}
                                   </div>
@@ -1459,7 +962,7 @@ function CrmContent() {
                                         variant="secondary"
                                         className="text-[9px] px-1 py-0 bg-indigo-50 text-indigo-600 border-indigo-200"
                                       >
-                                        Sync
+                                        Remoto
                                       </Badge>
                                     ) : null}
                                   </div>
@@ -1647,7 +1150,12 @@ function CrmContent() {
                             ? "ganado"
                             : "perdido",
                   ownerId: p.ownerCodigo,
-                  ownerNombre: p.ownerCodigo ?? "(Sin owner)",
+                  ownerNombre:
+                    normalizeQuestionText(p.closerName) ||
+                    salesUsers.find((user) => user.codigo === p.ownerCodigo)
+                      ?.name ||
+                    p.ownerCodigo ||
+                    "(Sin closer)",
                   pais: p.pais,
                   ciudad: p.ciudad,
                   tags: [],
@@ -1663,11 +1171,12 @@ function CrmContent() {
                 }))}
               />
               <SalesPersonalMetrics />
-            </div>
-          }
-          campanas={
-            <div className="h-full">
-              <EventsOriginsManager />
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white/70 p-4 text-sm text-slate-600">
+                KPIs exactos pendientes para la pestaña de métricas: tasa de
+                cierre, ventas en llamada, ventas en seguimiento, clientes por
+                producto, reservas, revenue mensual por closer y leads en
+                seguimiento.
+              </div>
             </div>
           }
         />
@@ -1690,29 +1199,6 @@ function CrmContent() {
         }}
         leadCode={selectedLeadQuestionsCode}
       />
-
-      <Dialog open={availabilityOpen} onOpenChange={setAvailabilityOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Disponibilidad del Calendario</DialogTitle>
-            <DialogDescription>
-              {availability?.google_email &&
-                `Mostrando disponibilidad de ${availability.google_email}`}
-            </DialogDescription>
-          </DialogHeader>
-          {availabilityLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-            </div>
-          ) : availability ? (
-            renderCalendar()
-          ) : (
-            <div className="text-center py-12 text-slate-500">
-              No se pudo cargar la disponibilidad del calendario
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={assignModalOpen} onOpenChange={setAssignModalOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[600px] flex flex-col">

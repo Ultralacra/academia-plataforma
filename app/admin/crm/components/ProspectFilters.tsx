@@ -14,24 +14,22 @@ import { Search, X, CalendarDays, SlidersHorizontal } from "lucide-react";
 interface ProspectFiltersProps {
   q: string;
   setQ: (v: string) => void;
+  emailQ: string;
+  setEmailQ: (v: string) => void;
+  phoneQ: string;
+  setPhoneQ: (v: string) => void;
   questionsQ: string;
   setQuestionsQ: (v: string) => void;
   closer: string;
   setCloser: (v: string) => void;
   etapa: string;
   setEtapa: (v: string) => void;
-  canal: string;
-  setCanal: (v: string) => void;
-  owner: string;
-  setOwner: (v: string) => void;
   createdFrom: string;
   setCreatedFrom: (v: string) => void;
   createdTo: string;
   setCreatedTo: (v: string) => void;
   etapas: string[];
-  canales: string[];
   closers: string[];
-  owners: Array<{ value: string; label: string }>;
   onClear: () => void;
 }
 
@@ -79,33 +77,31 @@ function FilterSelect({
 export function ProspectFilters({
   q,
   setQ,
+  emailQ,
+  setEmailQ,
+  phoneQ,
+  setPhoneQ,
   questionsQ,
   setQuestionsQ,
   closer,
   setCloser,
   etapa,
   setEtapa,
-  canal,
-  setCanal,
-  owner,
-  setOwner,
   createdFrom,
   setCreatedFrom,
   createdTo,
   setCreatedTo,
   etapas,
-  canales,
   closers,
-  owners,
   onClear,
 }: ProspectFiltersProps) {
   const activeCount = [
     q,
+    emailQ,
+    phoneQ,
     questionsQ,
     closer !== "all" ? closer : "",
     etapa !== "all" ? etapa : "",
-    canal !== "all" ? canal : "",
-    owner !== "all" ? owner : "",
     createdFrom,
     createdTo,
   ].filter(Boolean).length;
@@ -150,6 +146,32 @@ export function ProspectFilters({
         </div>
       </div>
 
+      <div className="flex flex-col">
+        <FilterLabel>Correo electrónico</FilterLabel>
+        <div className="relative">
+          <Search className="absolute left-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Input
+            className="h-7 w-full pl-5 text-[11px] bg-white placeholder:text-slate-400"
+            placeholder="Filtrar por email"
+            value={emailQ}
+            onChange={(e) => setEmailQ(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-col">
+        <FilterLabel>Teléfono</FilterLabel>
+        <div className="relative">
+          <Search className="absolute left-1.5 top-1/2 h-2.5 w-2.5 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <Input
+            className="h-7 w-full pl-5 text-[11px] bg-white placeholder:text-slate-400"
+            placeholder="Filtrar por teléfono"
+            value={phoneQ}
+            onChange={(e) => setPhoneQ(e.target.value)}
+          />
+        </div>
+      </div>
+
       {/* Búsqueda preguntas */}
       <div className="flex flex-col">
         <FilterLabel>Preguntas</FilterLabel>
@@ -179,36 +201,6 @@ export function ProspectFilters({
           </SelectItem>
         ))}
       </FilterSelect>
-
-      <FilterSelect
-        label="Canal"
-        value={canal}
-        onChange={setCanal}
-        placeholder="Canal"
-      >
-        <SelectItem value="all">Todos los canales</SelectItem>
-        {canales.map((c) => (
-          <SelectItem key={c} value={c}>
-            {c}
-          </SelectItem>
-        ))}
-      </FilterSelect>
-
-      {owners.length > 0 && (
-        <FilterSelect
-          label="Owner"
-          value={owner}
-          onChange={setOwner}
-          placeholder="Owner"
-        >
-          <SelectItem value="all">Todos los owners</SelectItem>
-          {owners.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
-        </FilterSelect>
-      )}
 
       {closers.length > 0 && (
         <FilterSelect

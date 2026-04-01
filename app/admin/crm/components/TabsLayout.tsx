@@ -48,7 +48,7 @@ export function CrmTabsList({
       >
         Métricas
       </button>
-      {hasCampanas && (
+      {/* {hasCampanas && (
         <button
           type="button"
           onClick={() => onValueChange("campanas")}
@@ -56,7 +56,7 @@ export function CrmTabsList({
         >
           Campañas
         </button>
-      )}
+      )} */}
     </div>
   );
 }

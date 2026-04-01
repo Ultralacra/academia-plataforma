@@ -9,6 +9,7 @@ import {
   MessageSquare,
   BarChart3,
   ChevronDown,
+  Sparkles,
   Settings,
   CalendarClock,
   Moon,
@@ -19,6 +20,7 @@ import {
   Mail,
   CircleHelp,
   FileText,
+  FileSignature,
 } from "lucide-react";
 import {
   Sidebar,
@@ -55,6 +57,19 @@ type MenuItem = {
   isSeparator?: boolean;
 };
 
+const agentsMenuItem: MenuItem = {
+  title: "Agentes",
+  url: "/admin/agentes",
+  icon: Sparkles,
+  children: [
+    {
+      title: "Copy",
+      url: "/admin/agentes/copy",
+      icon: MessageSquare,
+    },
+  ],
+};
+
 /* ====================== Menús (admin con top-level Coachs/Alumnos/Tickets + grupo “Métricas”) ====================== */
 const adminItems: MenuItem[] = [
   /*  { title: "Dashboard", url: "/admin", icon: Home },
@@ -75,6 +90,11 @@ const adminItems: MenuItem[] = [
   // { title: "Brevo", url: "/admin/brevo", icon: Mail },
   { title: "Roles y permisos", url: "/admin/access/roles", icon: Settings },
   { title: "CRM", url: "/admin/crm", icon: Users },
+  {
+    title: "Contratos enviados",
+    url: "/admin/crm/contracts",
+    icon: FileSignature,
+  },
   {
     title: "Estado correos",
     url: "/admin/brevo/events",
@@ -100,6 +120,7 @@ const adminItems: MenuItem[] = [
     url: "/admin/mensajes-seguimiento",
     icon: MessageSquare,
   },
+  agentsMenuItem,
 
   /*  { title: "Tickets", url: "/admin/ticketsv2", icon: MessageSquare }, */
 
@@ -163,7 +184,14 @@ export function AppSidebar() {
 
     switch (userRole) {
       case "sales":
-        return [{ title: "CRM", url: "/admin/crm", icon: Users }] as MenuItem[];
+        return [
+          { title: "CRM", url: "/admin/crm", icon: Users },
+          {
+            title: "Contratos enviados",
+            url: "/admin/crm/contracts",
+            icon: FileSignature,
+          },
+        ] as MenuItem[];
       case "admin": {
         // Filtrar ítems para admins que son de equipo con área específica
         const adminTipo = ((user as any)?.tipo || "").toLowerCase();
@@ -327,6 +355,7 @@ export function AppSidebar() {
                 url: `/admin/teamsv2/${code}`,
                 icon: Users,
               },
+              agentsMenuItem,
               {
                 title: "Métricas",
                 icon: BarChart3,
@@ -405,6 +434,7 @@ export function AppSidebar() {
                 url: "/admin/alumnos",
                 icon: GraduationCap,
               },
+              agentsMenuItem,
               {
                 title: "Métricas",
                 icon: BarChart3,
@@ -620,7 +650,7 @@ export function AppSidebar() {
   };
   const areaLabel = formatArea(user?.area);
 
-  const [metricsOpen, setMetricsOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const roleKey = (
     userRoleForLabel === "student"
       ? "alumno"
@@ -670,9 +700,29 @@ export function AppSidebar() {
 
   useEffect(() => {
     if (!pathname) return;
-    // Abre “Métricas” si navegamos a alguna subruta de métricas
-    if (pathname.startsWith("/admin/metrics")) setMetricsOpen(true);
-  }, [pathname]);
+    setOpenGroups((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      for (const item of menuItems) {
+        if (!item.children?.length) continue;
+        const hasActiveChild = item.children.some((child) => {
+          if (!child.url) return false;
+          if (pathname === child.url) return true;
+          return pathname.startsWith(
+            child.url.endsWith("/") ? child.url : `${child.url}/`,
+          );
+        });
+
+        if (hasActiveChild && !next[item.title]) {
+          next[item.title] = true;
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [menuItems, pathname]);
 
   const bestActiveUrl = useMemo(() => {
     try {
@@ -870,58 +920,114 @@ export function AppSidebar() {
                       );
                     }
 
-                    // Grupo “Métricas”
+                    // Grupo colapsable
                     const isAnyChildActive = item.children?.some(
                       (c) => !!c.url && bestActiveUrl === c.url,
                     );
+                    const isParentActive =
+                      !!item.url &&
+                      !!pathname &&
+                      (pathname === item.url ||
+                        pathname.startsWith(
+                          item.url.endsWith("/") ? item.url : `${item.url}/`,
+                        ));
+                    const isGroupActive = isParentActive || isAnyChildActive;
+                    const isGroupOpen = !!openGroups[item.title];
 
                     return (
                       <SidebarMenuItem key={item.title}>
-                        <button
-                          type="button"
-                          onClick={() => setMetricsOpen((v) => !v)}
+                        <div
                           className={cn(
                             "group flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm transition-all duration-150",
-                            metricsOpen || isAnyChildActive
+                            isGroupOpen || isGroupActive
                               ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
                               : "hover:bg-sidebar-accent/40 text-sidebar-foreground",
                           )}
                         >
-                          <span className="flex items-center gap-3">
-                            <span
-                              className={cn(
-                                "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
-                                metricsOpen || isAnyChildActive
-                                  ? "bg-foreground/10"
-                                  : "bg-transparent group-hover:bg-sidebar-accent/60",
-                              )}
+                          {item.url ? (
+                            <Link
+                              href={item.url}
+                              className="flex min-w-0 flex-1 items-center gap-3"
                             >
-                              <Icon
+                              <span
                                 className={cn(
-                                  "h-4 w-4 transition-colors duration-150",
-                                  metricsOpen || isAnyChildActive
-                                    ? "text-sidebar-accent-foreground"
-                                    : "text-muted-foreground group-hover:text-sidebar-foreground",
+                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
+                                  isGroupOpen || isGroupActive
+                                    ? "bg-foreground/10"
+                                    : "bg-transparent group-hover:bg-sidebar-accent/60",
                                 )}
-                              />
-                            </span>
-                            <span className="truncate font-medium">
-                              {item.title}
-                            </span>
-                          </span>
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 transition-transform duration-200 text-muted-foreground/60",
-                              metricsOpen ? "rotate-180" : "rotate-0",
-                            )}
-                          />
-                        </button>
+                              >
+                                <Icon
+                                  className={cn(
+                                    "h-4 w-4 transition-colors duration-150",
+                                    isGroupOpen || isGroupActive
+                                      ? "text-sidebar-accent-foreground"
+                                      : "text-muted-foreground group-hover:text-sidebar-foreground",
+                                  )}
+                                />
+                              </span>
+                              <span className="truncate font-medium">
+                                {item.title}
+                              </span>
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOpenGroups((prev) => ({
+                                  ...prev,
+                                  [item.title]: !prev[item.title],
+                                }))
+                              }
+                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            >
+                              <span
+                                className={cn(
+                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-150",
+                                  isGroupOpen || isGroupActive
+                                    ? "bg-foreground/10"
+                                    : "bg-transparent group-hover:bg-sidebar-accent/60",
+                                )}
+                              >
+                                <Icon
+                                  className={cn(
+                                    "h-4 w-4 transition-colors duration-150",
+                                    isGroupOpen || isGroupActive
+                                      ? "text-sidebar-accent-foreground"
+                                      : "text-muted-foreground group-hover:text-sidebar-foreground",
+                                  )}
+                                />
+                              </span>
+                              <span className="truncate font-medium">
+                                {item.title}
+                              </span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setOpenGroups((prev) => ({
+                                ...prev,
+                                [item.title]: !prev[item.title],
+                              }))
+                            }
+                            aria-label={`Expandir ${item.title}`}
+                            className="ml-2 flex h-8 w-8 items-center justify-center rounded-md hover:bg-sidebar-accent/60"
+                          >
+                            <ChevronDown
+                              className={cn(
+                                "h-4 w-4 transition-transform duration-200 text-muted-foreground/60",
+                                isGroupOpen ? "rotate-180" : "rotate-0",
+                              )}
+                            />
+                          </button>
+                        </div>
 
                         {/* Submenú colapsable */}
                         <div
                           className={cn(
                             "mt-1 grid overflow-hidden transition-all duration-200",
-                            metricsOpen
+                            isGroupOpen
                               ? "grid-rows-[1fr] opacity-100"
                               : "grid-rows-[0fr] opacity-0",
                           )}

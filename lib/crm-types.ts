@@ -378,6 +378,22 @@ export interface SalesFlowState {
 
   // ─── FASE 2: LLAMADA DE VENTA ────────────────────────────────────────
   resultadoLlamada?: ResultadoLlamada | null;
+  evidenciaNoShow?: Array<{
+    id: ID;
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl: string;
+    created_at: string;
+  }>;
+  evidenciaCancelada?: Array<{
+    id: ID;
+    name?: string;
+    type?: string;
+    size?: number;
+    dataUrl: string;
+    created_at: string;
+  }>;
   noShowMensajes?: {                // mensajes de reagenda automáticos tras no-show
     enviado10m?: boolean;
     enviado1h?: boolean;

@@ -47,6 +47,7 @@ export type PaymentPlatform =
   | "binance"
   | "payoneer"
   | "zelle"
+  | "nequi"
   | "bancolombia"
   | "boa"
   | "otra";
@@ -1175,7 +1176,8 @@ export function CloseSaleForm({
     { value: "payoneer", label: "Payoneer" },
     { value: "zelle", label: "Zelle" },
     { value: "bancolombia", label: "Bancolombia" },
-    { value: "boa", label: "BoA" },
+    { value: "nequi", label: "Nequi" },
+    { value: "boa", label: "BOFA" },
     { value: "otra", label: "Otra" },
   ];
   // Bonos centralizados (usamos las claves para persistir en metadata)
@@ -1797,7 +1799,7 @@ export function CloseSaleForm({
                       </div>
 
                       <div className="md:col-span-2 space-y-1.5">
-                        <Label>Fecha prevista del siguiente pago</Label>
+                        <Label>Fecha de pago</Label>
                         <Input
                           type="date"
                           className={inputAccent}
