@@ -2,27 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  Bot,
-  Loader2,
-  SendHorizonal,
-  Sparkles,
-  WandSparkles,
-} from "lucide-react";
+import { ArrowLeft, Bot, Loader2, SendHorizonal, Sparkles } from "lucide-react";
 
 import { getOptions, type OpcionItem } from "../../opciones/api";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 
 type StageOption = {
@@ -39,7 +23,6 @@ type ChatMessage = {
 
 type StageVisual = {
   model: string;
-  assistantBubbleClassName: string;
   suggestions: string[];
 };
 
@@ -64,8 +47,6 @@ const fallbackStages: StageOption[] = [
 const stageVisuals: StageVisual[] = [
   {
     model: "Copy Base",
-    assistantBubbleClassName:
-      "border border-slate-200 bg-white text-slate-900 shadow-sm",
     suggestions: [
       "Dame 3 aperturas para WhatsApp",
       "Necesito un mensaje corto para reactivar conversación",
@@ -74,8 +55,6 @@ const stageVisuals: StageVisual[] = [
   },
   {
     model: "Copy Focus",
-    assistantBubbleClassName:
-      "border border-slate-200 bg-white text-slate-900 shadow-sm",
     suggestions: [
       "Quiero un mensaje que detecte dolor sin sonar vendedor",
       "Escríbeme una respuesta para una objeción suave",
@@ -84,8 +63,6 @@ const stageVisuals: StageVisual[] = [
   },
   {
     model: "Copy Close",
-    assistantBubbleClassName:
-      "border border-slate-200 bg-white text-slate-900 shadow-sm",
     suggestions: [
       "Redáctame un copy con urgencia real",
       "Necesito una versión más premium y segura",
@@ -94,8 +71,6 @@ const stageVisuals: StageVisual[] = [
   },
   {
     model: "Copy Follow-up",
-    assistantBubbleClassName:
-      "border border-slate-200 bg-white text-slate-900 shadow-sm",
     suggestions: [
       "Necesito seguimiento sin sonar insistente",
       "Reescribe esto con más claridad comercial",
@@ -137,7 +112,8 @@ function CopyAgentWorkspace() {
   const [loadingStages, setLoadingStages] = useState(true);
   const [isThinking, setIsThinking] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
   const thinkingTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -216,12 +192,7 @@ function CopyAgentWorkspace() {
   }, [selectedStage]);
 
   useEffect(() => {
-    const viewport = scrollRef.current?.querySelector(
-      "[data-radix-scroll-area-viewport]",
-    );
-    if (viewport instanceof HTMLElement) {
-      viewport.scrollTop = viewport.scrollHeight;
-    }
+    bottomAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isThinking]);
 
   useEffect(() => {
@@ -261,203 +232,181 @@ function CopyAgentWorkspace() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2 text-slate-900">
-                <Sparkles className="h-5 w-5 text-slate-500" />
-                <h1 className="text-3xl font-semibold tracking-tight">
-                  Agente Copy
-                </h1>
-              </div>
-              <p className="max-w-3xl text-sm text-slate-600">
-                Esta vista ahora funciona como chat. La fase activa se toma
-                desde Opciones y el agente responde en modo conversacional
-                dentro de una interfaz más limpia, sin paneles de prompt ni
-                configuración pesada.
-              </p>
-            </div>
-          </div>
+    <div className="flex h-[calc(100vh-6rem)] overflow-hidden rounded-2xl border border-slate-200 shadow-md">
+      {/* ── Sidebar ───────────────────────────────────────────── */}
+      <div className="flex w-60 shrink-0 flex-col bg-[#0f0f0f] text-white">
+        {/* Back link */}
+        <div className="border-b border-white/10 px-4 py-4">
+          <Link
+            href="/admin/agentes"
+            className="inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-white/60 transition hover:bg-white/10 hover:text-white"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Agentes
+          </Link>
+        </div>
 
-          <Button asChild variant="outline" className="bg-white">
-            <Link
-              href="/admin/agentes"
-              className="inline-flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Volver a agentes
-            </Link>
-          </Button>
+        {/* Title + model badge */}
+        <div className="border-b border-white/10 px-5 py-5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-400/20">
+              <Sparkles className="h-4 w-4 text-amber-400" />
+            </div>
+            <span className="text-sm font-semibold">Agente Copy</span>
+          </div>
+          <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-white/50">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            {selectedVisual.model}
+          </div>
+        </div>
+
+        {/* Phase list */}
+        <div className="flex-1 overflow-auto px-3 py-4">
+          <p className="mb-2 px-2 text-[10px] font-medium uppercase tracking-widest text-white/30">
+            Tipo de agente
+          </p>
+
+          {loadingStages ? (
+            <div className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-xs text-white/40">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Cargando...
+            </div>
+          ) : null}
+
+          {loadError ? (
+            <div className="mb-2 rounded-lg bg-white/5 px-3 py-2 text-[11px] text-white/40">
+              {loadError}
+            </div>
+          ) : null}
+
+          <div className="space-y-0.5">
+            {stages.map((stage) => {
+              const isActive = stage.id === selectedStageId;
+              return (
+                <button
+                  key={stage.id}
+                  type="button"
+                  onClick={() => setSelectedStageId(stage.id)}
+                  className={`w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                    isActive
+                      ? "bg-white/10 font-medium text-white"
+                      : "text-white/55 hover:bg-white/6 hover:text-white"
+                  }`}
+                >
+                  {stage.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <Card className="border-slate-200 bg-white shadow-sm">
-          <CardHeader>
-            <CardTitle>Fases</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {loadingStages ? (
-              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-4 text-sm text-slate-600">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Cargando fases reales...
-              </div>
-            ) : null}
+      {/* ── Chat panel ────────────────────────────────────────── */}
+      <div className="flex flex-1 flex-col bg-[#f7f7f8]">
+        {/* Chat header */}
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-6 py-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-100">
+            <Bot className="h-4 w-4 text-amber-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-slate-900">
+              {selectedVisual.model}
+            </p>
+            <p className="text-xs text-slate-500">{selectedStage.label}</p>
+          </div>
+        </div>
 
-            {loadError ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-xs text-slate-600">
-                {loadError}
-              </div>
-            ) : null}
+        {/* Messages */}
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
+            {messages.map((message) => {
+              const isAssistant = message.role === "assistant";
+              return (
+                <div
+                  key={message.id}
+                  className={`flex gap-3 ${isAssistant ? "" : "justify-end"}`}
+                >
+                  {isAssistant && (
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                      <Bot className="h-4 w-4 text-amber-600" />
+                    </div>
+                  )}
 
-            <div className="space-y-2">
-              {stages.map((stage, index) => {
-                const isActive = stage.id === selectedStageId;
-
-                return (
-                  <button
-                    key={stage.id}
-                    type="button"
-                    onClick={() => setSelectedStageId(stage.id)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition-all ${
-                      isActive
-                        ? "border-slate-900 bg-slate-900 text-white shadow-sm"
-                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                  <div
+                    className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      isAssistant
+                        ? "bg-white text-slate-900 shadow-sm"
+                        : "bg-slate-900 text-white"
                     }`}
                   >
-                    <div
-                      className={`text-sm font-medium ${isActive ? "text-white" : "text-slate-900"}`}
-                    >
-                      {stage.label}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden border-slate-200 bg-white shadow-sm">
-          <CardHeader className="border-b border-slate-200 bg-white">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="space-y-2">
-                <div>
-                  <CardTitle className="text-2xl">Chat del agente</CardTitle>
-                  <CardDescription>{selectedStage.label}</CardDescription>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right">
-                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                  Modelo
-                </div>
-                <div className="mt-1 text-sm font-medium text-slate-900">
-                  {selectedVisual.model}
-                </div>
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-0">
-            <ScrollArea
-              ref={scrollRef}
-              className="h-[560px] bg-white px-6 py-8"
-            >
-              <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 pb-2">
-                {messages.map((message) => {
-                  const isAssistant = message.role === "assistant";
-
-                  return (
-                    <div
-                      key={message.id}
-                      className={`flex ${isAssistant ? "justify-start" : "justify-end"}`}
-                    >
-                      <div
-                        className={`max-w-[82%] rounded-[26px] px-5 py-4 text-sm leading-7 ${
-                          isAssistant
-                            ? selectedVisual.assistantBubbleClassName
-                            : "bg-slate-900 text-white shadow-sm"
-                        }`}
-                      >
-                        <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] opacity-50">
-                          {isAssistant ? (
-                            <Bot className="h-3.5 w-3.5" />
-                          ) : (
-                            <WandSparkles className="h-3.5 w-3.5" />
-                          )}
-                          {isAssistant ? selectedVisual.model : "Tu mensaje"}
-                        </div>
-                        <p className="whitespace-pre-wrap">{message.content}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {isThinking ? (
-                  <div className="flex justify-start">
-                    <div
-                      className={`rounded-[26px] px-5 py-4 ${selectedVisual.assistantBubbleClassName}`}
-                    >
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        El agente está escribiendo...
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </ScrollArea>
-
-            <div className="border-t border-slate-200 bg-white p-5">
-              <div className="mx-auto flex w-full max-w-4xl flex-col gap-4">
-                <div className="flex flex-wrap gap-2">
-                  {selectedVisual.suggestions.map((suggestion) => (
-                    <button
-                      key={suggestion}
-                      type="button"
-                      onClick={() => handleSend(suggestion)}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:bg-white"
-                    >
-                      {suggestion}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="rounded-[28px] border border-slate-200 bg-white p-3">
-                  <Textarea
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder={`Escribe aquí qué copy necesitas para ${selectedStage.label}...`}
-                    className="min-h-[104px] resize-none border-0 bg-transparent px-2 py-2 text-sm leading-7 shadow-none focus-visible:ring-0"
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && !event.shiftKey) {
-                        event.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                  />
-
-                  <div className="mt-3 flex items-center justify-between gap-3 px-2">
-                    <div className="text-xs text-slate-500">
-                      Enter envía. Shift + Enter hace salto de línea.
-                    </div>
-
-                    <Button
-                      onClick={() => handleSend()}
-                      disabled={!draft.trim() || isThinking}
-                      className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-5 text-white hover:bg-slate-800"
-                    >
-                      <SendHorizonal className="h-4 w-4" />
-                      Enviar
-                    </Button>
+                    <p className="whitespace-pre-wrap">{message.content}</p>
                   </div>
                 </div>
+              );
+            })}
+
+            {isThinking ? (
+              <div className="flex gap-3">
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                  <Bot className="h-4 w-4 text-amber-600" />
+                </div>
+                <div className="flex items-center gap-1.5 rounded-2xl bg-white px-4 py-3.5 shadow-sm">
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.3s]" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400 [animation-delay:-0.15s]" />
+                  <span className="h-2 w-2 animate-bounce rounded-full bg-slate-400" />
+                </div>
               </div>
+            ) : null}
+            <div ref={bottomAnchorRef} />
+          </div>
+        </div>
+
+        {/* Input area */}
+        <div className="border-t border-slate-200 bg-white px-4 py-4">
+          <div className="mx-auto max-w-3xl">
+            {/* Suggestions */}
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {selectedVisual.suggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => handleSend(suggestion)}
+                  className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 transition hover:border-slate-300 hover:bg-white"
+                >
+                  {suggestion}
+                </button>
+              ))}
             </div>
-          </CardContent>
-        </Card>
+
+            {/* Textarea + send */}
+            <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 transition-colors focus-within:border-slate-400 focus-within:bg-white">
+              <Textarea
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                placeholder={`Mensaje al ${selectedVisual.model}…`}
+                className="max-h-40 min-h-[44px] flex-1 resize-none border-0 bg-transparent p-0 text-sm leading-6 shadow-none focus-visible:ring-0"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    handleSend();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => handleSend()}
+                disabled={!draft.trim() || isThinking}
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <SendHorizonal className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="mt-2 text-center text-[11px] text-slate-400">
+              Enter envía · Shift + Enter = nueva línea
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
