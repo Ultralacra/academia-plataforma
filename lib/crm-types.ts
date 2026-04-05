@@ -405,6 +405,7 @@ export interface SalesFlowState {
   objetivoIdentificado?: string | null;
   situacionActual?: string | null;
   califica?: boolean | null;              // ¿lead califica?
+  motivoNoCalifica?: string | null;       // motivo por el que el lead no califica
   // cierre
   ofertaPresentada?: TipoVentaOferta | null;
   resultadoCierre?: ResultadoCierre | null;

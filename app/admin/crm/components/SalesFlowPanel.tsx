@@ -293,6 +293,7 @@ export function SalesFlowPanel({
   const faseActual = flow.fase;
   const cfg = FASE_CONFIG[faseActual];
   const FaseIcon = cfg.icon;
+  const visibleFases = [faseActual] as const;
 
   /* Pasos de las fases como colapsables */
   const [openFases, setOpenFases] = React.useState<Set<number>>(
@@ -320,12 +321,12 @@ export function SalesFlowPanel({
 
   /* Texto del estado del cierre */
   const cierreLabel: Record<NonNullable<ResultadoCierre>, string> = {
-    ganado_hpro: "Cierre HPro",
-    ganado_starter: "Cierre Starter",
-    ganado_downsell: "Cierre Downsell",
-    pendiente_pago: "Pendiente pago restante",
-    objecion_activa: "Objeción en negociación",
-    perdido: "Perdido",
+    ganado_hpro: "CIERRE HPRO",
+    ganado_starter: "CIERRE H STARTER",
+    ganado_downsell: "CIERRE DOWNSELL",
+    pendiente_pago: "RESERVA",
+    objecion_activa: "SEGUIMIENTO",
+    perdido: "CIERRE PERDIDO",
   };
 
   /* ── Indicadores arriba ─────────────────────────────────────────────── */
@@ -534,6 +535,9 @@ export function SalesFlowPanel({
     );
     const [situacionInput, setSituacionInput] = React.useState(
       flow.situacionActual ?? "",
+    );
+    const [motivoNoCalificaInput, setMotivoNoCalificaInput] = React.useState(
+      flow.motivoNoCalifica ?? "",
     );
     const [fechaPagoInput, setFechaPagoInput] = React.useState(
       flow.fechaPagoRestanteAcordada?.slice(0, 10) ?? "",
@@ -881,7 +885,7 @@ export function SalesFlowPanel({
                 <div className="text-xs font-semibold text-slate-600 mb-2">
                   ¿Lead califica?
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
                     type="button"
@@ -892,7 +896,10 @@ export function SalesFlowPanel({
                         ? "bg-emerald-600 text-white hover:bg-emerald-600"
                         : "text-emerald-700 border-emerald-300 hover:bg-emerald-50"
                     }
-                    onClick={() => update({ califica: true })}
+                    onClick={() => {
+                      setMotivoNoCalificaInput("");
+                      update({ califica: true, motivoNoCalifica: null });
+                    }}
                   >
                     <UserCheck className="h-3.5 w-3.5 mr-1" /> Sí califica
                   </Button>
@@ -906,26 +913,55 @@ export function SalesFlowPanel({
                         ? "bg-rose-600 text-white hover:bg-rose-600"
                         : "text-rose-700 border-rose-300 hover:bg-rose-50"
                     }
-                    onClick={() => update({ califica: false })}
+                    onClick={() =>
+                      update({
+                        califica: false,
+                        ofertaPresentada: null,
+                        tipoObjecion: null,
+                        resultadoCierre:
+                          flow.resultadoCierre === "perdido" ? "perdido" : null,
+                      })
+                    }
                   >
                     <UserX className="h-3.5 w-3.5 mr-1" /> No califica
                   </Button>
                 </div>
                 {flow.califica === false && (
-                  <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-                    LEAD NO CALIFICA — Registrar como Perdido
-                    {!readOnly && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="ml-2 h-6 px-2 text-xs border-rose-300 text-rose-700"
-                        onClick={() =>
-                          update({ resultadoCierre: "perdido", fase: 4 })
-                        }
-                      >
-                        Registrar perdido
-                      </Button>
-                    )}
+                  <div className="mt-3 space-y-2 rounded-lg border border-rose-200 bg-rose-50 p-3">
+                    <Label className="text-xs font-semibold text-rose-800">
+                      Especifica motivo de por qué no califica
+                    </Label>
+                    <Textarea
+                      value={motivoNoCalificaInput}
+                      onChange={(e) => setMotivoNoCalificaInput(e.target.value)}
+                      onBlur={() =>
+                        update({
+                          motivoNoCalifica:
+                            motivoNoCalificaInput.trim() || null,
+                        })
+                      }
+                      placeholder="Ej: no cumple perfil, no tiene presupuesto o no existe urgencia real."
+                      className="min-h-24 border-rose-200 bg-white text-xs"
+                      disabled={readOnly}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100">
+                        Lead no califica
+                      </Badge>
+                      {!readOnly && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 border-rose-300 text-xs text-rose-700 hover:bg-rose-100"
+                          onClick={() =>
+                            update({ resultadoCierre: "perdido", fase: 2 })
+                          }
+                        >
+                          <UserX className="mr-1 h-3.5 w-3.5" /> Marcar como
+                          cierre perdido
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -941,7 +977,7 @@ export function SalesFlowPanel({
                     Calificación, Pitch y Cierre
                   </div>
                   <p className="text-[11px] text-slate-500">
-                    Califica y presenta solución → pitch → cierre
+                    Selecciona el resultado comercial de la llamada.
                   </p>
 
                   {!readOnly && (
@@ -969,8 +1005,7 @@ export function SalesFlowPanel({
                     </div>
                   )}
 
-                  {/* Botones de cierre */}
-                  <div className="grid gap-2 sm:grid-cols-3 pt-1">
+                  <div className="grid gap-2 pt-1 sm:grid-cols-2 xl:grid-cols-5">
                     <CierreButton
                       label="CIERRE HPRO"
                       sublabel="Venta Hotselling PRO"
@@ -982,14 +1017,15 @@ export function SalesFlowPanel({
                         !readOnly &&
                         update({
                           resultadoCierre: "ganado_hpro",
+                          ofertaPresentada: "hotselling_pro",
                           ventaIngresadaCrm: false,
                           fase: 2,
                         })
                       }
                     />
                     <CierreButton
-                      label="CIERRE STARTER"
-                      sublabel="Reserva cupo Hotselling Starter"
+                      label="CIERRE H STARTER"
+                      sublabel="Venta Hotselling Starter"
                       value="ganado_starter"
                       current={flow.resultadoCierre}
                       color="blue"
@@ -1004,36 +1040,49 @@ export function SalesFlowPanel({
                       }
                     />
                     <CierreButton
-                      label="CIERRE DOWNSELL"
-                      sublabel="Se ofrece downsell en la llamada"
-                      value="ganado_downsell"
+                      label="RESERVA"
+                      sublabel="Pendiente de pago con apartado"
+                      value="pendiente_pago"
                       current={flow.resultadoCierre}
-                      color="purple"
-                      icon={<ArrowRight className="h-4 w-4" />}
+                      color="amber"
+                      icon={<DollarSign className="h-4 w-4" />}
                       onClick={() =>
                         !readOnly &&
                         update({
-                          resultadoCierre: "ganado_downsell",
-                          ofertaPresentada: "downsell",
+                          resultadoCierre: "pendiente_pago",
+                          ofertaPresentada: "hotselling_starter",
+                          fase: 2,
+                        })
+                      }
+                    />
+                    <CierreButton
+                      label="CIERRE PERDIDO"
+                      sublabel="El lead no avanza en esta llamada"
+                      value="perdido"
+                      current={flow.resultadoCierre}
+                      color="rose"
+                      icon={<UserX className="h-4 w-4" />}
+                      onClick={() =>
+                        !readOnly &&
+                        update({ resultadoCierre: "perdido", fase: 4 })
+                      }
+                    />
+                    <CierreButton
+                      label="SEGUIMIENTO"
+                      sublabel="Continuar gestión comercial posterior"
+                      value="objecion_activa"
+                      current={flow.resultadoCierre}
+                      color="purple"
+                      icon={<MessageCircle className="h-4 w-4" />}
+                      onClick={() =>
+                        !readOnly &&
+                        update({
+                          resultadoCierre: "objecion_activa",
                           fase: 2,
                         })
                       }
                     />
                   </div>
-
-                  {/* Perdido */}
-                  {!readOnly && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="w-full text-xs text-rose-700 border-rose-200 hover:bg-rose-50"
-                      onClick={() =>
-                        update({ resultadoCierre: "perdido", fase: 4 })
-                      }
-                    >
-                      <UserX className="h-3.5 w-3.5 mr-1" /> Cierre Perdido
-                    </Button>
-                  )}
                 </div>
 
                 {/* OBJECIONES */}
@@ -1127,11 +1176,14 @@ export function SalesFlowPanel({
 
                 {/* STARTER: acuerda pago restante */}
                 {(flow.resultadoCierre === "ganado_starter" ||
+                  flow.resultadoCierre === "pendiente_pago" ||
                   flow.ofertaPresentada === "hotselling_starter") && (
                   <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-sm font-semibold text-blue-800">
                       <DollarSign className="h-4 w-4" />
-                      Reserva Hotselling Starter
+                      {flow.resultadoCierre === "pendiente_pago"
+                        ? "Reserva"
+                        : "Cierre Hotselling Starter"}
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div className="space-y-1">
@@ -1182,11 +1234,17 @@ export function SalesFlowPanel({
                     <div className="pt-2 border-t border-blue-200">
                       <StepRow
                         done={!!flow.ventaIngresadaCrm}
-                        label="Registrar Reserva en CRM"
+                        label={
+                          flow.resultadoCierre === "pendiente_pago"
+                            ? "Registrar reserva en CRM"
+                            : "Registrar venta en CRM"
+                        }
                         sublabel={
                           flow.ventaIngresadaAt
                             ? `Registrada ${fmt(flow.ventaIngresadaAt)}`
-                            : "Ingreso de venta (reserva) al CRM"
+                            : flow.resultadoCierre === "pendiente_pago"
+                              ? "Ingreso de la reserva al CRM"
+                              : "Ingreso de la venta Starter al CRM"
                         }
                         icon={<CheckCircle2 className="h-4 w-4" />}
                         onMark={() =>
@@ -1869,8 +1927,8 @@ export function SalesFlowPanel({
         />
       </div>
 
-      {/* Fases como colapsables */}
-      {([1, 2, 3, 4, 5] as const).map((n) => {
+      {/* Solo se muestra la fase actual; al avanzar cambia la fase visible */}
+      {visibleFases.map((n) => {
         const cfg2 = FASE_CONFIG[n];
         const FIcon = cfg2.icon;
         const isOpen = openFases.has(n);
@@ -2171,7 +2229,7 @@ function CierreButton({
   sublabel: string;
   value: NonNullable<ResultadoCierre>;
   current: ResultadoCierre | null | undefined;
-  color: "emerald" | "blue" | "purple";
+  color: "emerald" | "blue" | "purple" | "amber" | "rose";
   icon: React.ReactNode;
   onClick: () => void;
 }) {
@@ -2191,6 +2249,16 @@ function CierreButton({
       border: active ? "border-purple-500" : "border-slate-200",
       bg: active ? "bg-purple-50" : "hover:border-purple-300",
       text: "text-purple-700",
+    },
+    amber: {
+      border: active ? "border-amber-500" : "border-slate-200",
+      bg: active ? "bg-amber-50" : "hover:border-amber-300",
+      text: "text-amber-700",
+    },
+    rose: {
+      border: active ? "border-rose-500" : "border-slate-200",
+      bg: active ? "bg-rose-50" : "hover:border-rose-300",
+      text: "text-rose-700",
     },
   };
   const cc = colorMap[color];

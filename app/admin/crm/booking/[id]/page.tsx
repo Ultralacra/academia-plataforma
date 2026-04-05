@@ -7,6 +7,14 @@ import { type CloseSaleInput } from "../../components/CloseSaleForm2";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Loader2, ArrowLeft, Save } from "lucide-react";
 import Link from "next/link";
 import { toast } from "@/components/ui/use-toast";
@@ -25,6 +33,182 @@ const CUSTOMER_PROFILE_KEYS = [
   "niche_project",
   "relevant_crm_data",
 ] as const;
+
+const CRM_PIPELINE_OPTIONS = [
+  { value: "agendado", label: "Agendado" },
+  { value: "confirmado", label: "Confirmado" },
+  { value: "no_show", label: "No Show" },
+  { value: "llamada_realizada", label: "Llamada realizada" },
+  { value: "decision", label: "Decisión" },
+  { value: "seguimiento", label: "Seguimiento" },
+  { value: "recuperacion", label: "Recuperación" },
+  { value: "lead_dormido", label: "Lead dormido" },
+  { value: "cerrado_ganado", label: "Cerrado ganado" },
+  { value: "cerrado_perdido", label: "Cerrado perdido" },
+];
+
+const CUSTOMER_TYPE_OPTIONS = [
+  { value: "pro", label: "Pro" },
+  { value: "starter", label: "Starter" },
+  { value: "no_califica", label: "No califica" },
+];
+
+const PRODUCT_PRESENTED_OPTIONS = [
+  { value: "hotselling_pro", label: "Hotselling PRO" },
+  { value: "hotselling_foundation", label: "Hotselling Foundation" },
+];
+
+const OBJECTION_OPTIONS = [
+  { value: "financiera", label: "Financiera" },
+  { value: "momento", label: "Momento" },
+  { value: "confianza", label: "Confianza" },
+  { value: "falta_claridad", label: "Falta de claridad" },
+  { value: "contractual", label: "Contractual" },
+  { value: "consulta_socio", label: "Consulta con socio" },
+  { value: "otro", label: "Otro" },
+];
+
+const LOST_REASON_OPTIONS = [
+  { value: "no_califica", label: "No califica" },
+  { value: "precio_alto", label: "Precio alto" },
+  { value: "sin_urgencia", label: "Sin urgencia" },
+  { value: "decision_externa", label: "Decisión externa" },
+  { value: "sin_respuesta", label: "Sin respuesta" },
+  { value: "competencia", label: "Eligió otra opción" },
+  { value: "otro", label: "Otro" },
+];
+
+const LEAD_STATUS_OPTIONS = [
+  { value: "new", label: "Lead Nuevo" },
+  { value: "contacted", label: "Contactado" },
+  { value: "appointment_attended", label: "Cita Atendida" },
+  { value: "active_follow_up", label: "Seguimiento Activo" },
+  { value: "pending_payment", label: "Pendiente de Pago" },
+  { value: "won", label: "Cerrado – Ganado" },
+  { value: "lost", label: "Cerrado – Perdido" },
+];
+
+const LEAD_DISPOSITION_OPTIONS = [
+  {
+    value: "conversation_started",
+    label: "Contactado · Conversación iniciada",
+  },
+  { value: "appointment_scheduled", label: "Contactado · Cita agendada" },
+  { value: "appointment_cancelled", label: "Contactado · Cita cancelada" },
+  {
+    value: "appointment_rescheduled",
+    label: "Contactado · Cita reprogramada",
+  },
+  { value: "no_response", label: "Contactado · No responde" },
+  { value: "no_show", label: "Contactado · No show" },
+  {
+    value: "diagnosis_done",
+    label: "Cita atendida · Diagnóstico realizado",
+  },
+  {
+    value: "offer_not_presented",
+    label: "Cita atendida · Oferta no presentada",
+  },
+  {
+    value: "offer_presented",
+    label: "Cita atendida · Oferta presentada",
+  },
+  {
+    value: "interested_evaluating",
+    label: "Seguimiento · Interesado (evaluando)",
+  },
+  {
+    value: "waiting_response",
+    label: "Seguimiento · Esperando respuesta",
+  },
+  {
+    value: "waiting_approval",
+    label: "Seguimiento · Esperando aprobación",
+  },
+  { value: "cold", label: "Seguimiento · Frío" },
+  { value: "reserve", label: "Pendiente de pago · Reserva" },
+  {
+    value: "card_unlocking",
+    label: "Pendiente de pago · Gestión de tarjetas/límite",
+  },
+  {
+    value: "getting_money",
+    label: "Pendiente de pago · Consiguiendo el dinero",
+  },
+  { value: "lost_price_too_high", label: "Perdido · Precio muy alto" },
+  { value: "lost_no_urgency", label: "Perdido · No tiene urgencia" },
+  { value: "lost_trust", label: "Perdido · Confianza" },
+  {
+    value: "lost_external_decision",
+    label: "Perdido · Decisión externa",
+  },
+  {
+    value: "lost_no_response_exhausted",
+    label: "Perdido · No respondió (proceso agotado)",
+  },
+];
+
+function pipelineLevel(status: string): number {
+  switch (status) {
+    case "agendado":
+      return 1;
+    case "confirmado":
+      return 2;
+    case "no_show":
+    case "llamada_realizada":
+      return 3;
+    case "decision":
+      return 4;
+    case "seguimiento":
+      return 5;
+    case "recuperacion":
+      return 6;
+    case "lead_dormido":
+      return 7;
+    case "cerrado_ganado":
+    case "cerrado_perdido":
+      return 8;
+    default:
+      return 0;
+  }
+}
+
+function HeaderSelectField({
+  label,
+  value,
+  onValueChange,
+  options,
+  allowEmpty = true,
+}: {
+  label: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
+  allowEmpty?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </Label>
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger className="h-10 border-slate-200 bg-white text-sm text-slate-700">
+          <SelectValue placeholder="Seleccionar" />
+        </SelectTrigger>
+        <SelectContent>
+          {allowEmpty ? (
+            <SelectItem value="__empty__">Sin definir</SelectItem>
+          ) : null}
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 function normalizeCustomerProfile(value: any) {
   const raw = value && typeof value === "object" ? value : {};
@@ -1628,6 +1812,65 @@ function Content({ id }: { id: string }) {
     setFrozenSaleInitial(initialBase);
   }, [draft, frozenSaleInitial, initialBase, record]);
 
+  React.useEffect(() => {
+    if (loading || !record) return;
+
+    const normalizedLeadStatus = (() => {
+      const value = String((record as any)?.status ?? "")
+        .trim()
+        .toLowerCase();
+
+      if (!value) return "new";
+      if (
+        value === "new" ||
+        value === "contacted" ||
+        value === "appointment_attended" ||
+        value === "active_follow_up" ||
+        value === "pending_payment" ||
+        value === "won" ||
+        value === "lost"
+      ) {
+        return value;
+      }
+      if (value === "nuevo") return "new";
+      if (value === "contactado") return "contacted";
+      if (value === "cita atendida" || value === "cita_atendida") {
+        return "appointment_attended";
+      }
+      if (value === "seguimiento activo" || value === "seguimiento_activo") {
+        return "active_follow_up";
+      }
+      if (value === "pendiente de pago" || value === "pendiente_pago") {
+        return "pending_payment";
+      }
+      if (value === "ganado") return "won";
+      if (value === "perdido") return "lost";
+      return "new";
+    })();
+
+    const salesFlowState = (record as any)?.sales_flow ?? null;
+    const resultadoCierreActual = String(
+      salesFlowState?.resultadoCierre ?? "",
+    ).trim();
+    const showVentaTab =
+      resultadoCierreActual === "ganado_hpro" ||
+      resultadoCierreActual === "ganado_starter" ||
+      resultadoCierreActual === "ganado_downsell" ||
+      resultadoCierreActual === "pendiente_pago" ||
+      normalizedLeadStatus === "won" ||
+      normalizedLeadStatus === "pending_payment";
+    const showSeguimientoTab = !!salesFlowState && !showVentaTab;
+
+    if (activeTab === "venta" && !showVentaTab) {
+      setActiveTab("resumen");
+      return;
+    }
+
+    if (activeTab === "seguimiento" && !showSeguimientoTab) {
+      setActiveTab("resumen");
+    }
+  }, [activeTab, loading, record]);
+
   if (loading) {
     return (
       <div className="p-6 min-h-screen bg-gradient-to-br from-slate-50 via-cyan-50/30 to-teal-50/40">
@@ -1870,84 +2113,228 @@ function Content({ id }: { id: string }) {
       .trim();
   })();
 
+  const sourceValue = String(p?.source ?? record?.source ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const crmPipelineStatus = String(p.pipeline_status ?? "").trim();
+  const pipelineStageLevel = pipelineLevel(crmPipelineStatus);
+  const customerType = String(p.customer_type ?? "").trim();
+  const productPresented = String(p.product_presented ?? "").trim();
+  const objectionType = String(p.objection_type ?? "").trim();
+  const lostReason = String(p.lost_reason ?? "").trim();
+  const wonRecovered =
+    p.won_recovered === true ||
+    p.won_recovered === 1 ||
+    String(p.won_recovered ?? "").toLowerCase() === "true";
+  const salesFlowState = (p as any)?.sales_flow ?? null;
+  const resultadoCierreActual = String(
+    salesFlowState?.resultadoCierre ?? "",
+  ).trim();
+  const hasSalesFlowSelection = !!salesFlowState;
+  const showVentaTab =
+    resultadoCierreActual === "ganado_hpro" ||
+    resultadoCierreActual === "ganado_starter" ||
+    resultadoCierreActual === "ganado_downsell" ||
+    resultadoCierreActual === "pendiente_pago" ||
+    leadStatus === "won" ||
+    leadStatus === "pending_payment";
+  const showSeguimientoTab = hasSalesFlowSelection && !showVentaTab;
+  const visibleTabsCount =
+    2 + Number(showVentaTab) + Number(showSeguimientoTab);
+
   return (
     <div className="min-h-screen bg-white px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
-        <div className="flex flex-col gap-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-start sm:justify-between sm:p-6">
-          <div className="min-w-0 space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <StageBadge stage={leadStageLabel} />
-              {!!leadDispositionLabel && (
-                <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">
-                  Estado: {leadDispositionLabel}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <StageBadge stage={leadStageLabel} />
+                {!!leadDispositionLabel && (
+                  <Badge className="bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-100">
+                    Estado: {leadDispositionLabel}
+                  </Badge>
+                )}
+                <Badge className="border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-100 capitalize">
+                  Venta: {statusLabel}
                 </Badge>
-              )}
-              <Badge className="border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-100 capitalize">
-                Venta: {statusLabel}
-              </Badge>
-            </div>
-
-            <div className="space-y-1.5 min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                Ficha del lead
-              </p>
-              <h1 className="truncate text-2xl font-semibold text-slate-900 sm:text-[30px]">
-                {displayName}
-              </h1>
-            </div>
-
-            <div className="flex flex-wrap gap-2 text-sm text-slate-600">
-              <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-                Lead
               </div>
-              <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-                Código:{" "}
-                <span className="ml-1 font-medium text-slate-900">
-                  {record.codigo || "—"}
-                </span>
+
+              <div className="space-y-1.5 min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                  Ficha del lead
+                </p>
+                <h1 className="truncate text-2xl font-semibold text-slate-900 sm:text-[30px]">
+                  {displayName}
+                </h1>
               </div>
-              {record.record_id ? (
-                <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5">
-                  Record:{" "}
-                  <span className="ml-1 font-medium text-slate-900">
-                    {record.record_entity || "—"} #{record.record_id}
-                  </span>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                  Lead
                 </div>
-              ) : null}
+                {sourceValue ? (
+                  <div className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                    Fuente:{" "}
+                    <span className="ml-1 font-medium text-slate-700">
+                      {sourceValue}
+                    </span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+              <Button
+                asChild
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-lg text-slate-600 hover:bg-white hover:text-slate-900"
+              >
+                <Link
+                  href="/admin/crm"
+                  aria-label="Volver al CRM"
+                  title="Volver al CRM"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Link>
+              </Button>
+              <Button
+                onClick={handleSaveChanges}
+                disabled={snapshotSaving}
+                size="icon"
+                aria-label={
+                  snapshotSaving ? "Guardando cambios" : "Guardar cambios"
+                }
+                title={snapshotSaving ? "Guardando cambios" : "Guardar cambios"}
+                className="h-10 w-10 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
+              >
+                {snapshotSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-slate-50 p-1.5">
-            <Button
-              asChild
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 rounded-lg text-slate-600 hover:bg-white hover:text-slate-900"
-            >
-              <Link
-                href="/admin/crm"
-                aria-label="Volver al CRM"
-                title="Volver al CRM"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button
-              onClick={handleSaveChanges}
-              disabled={snapshotSaving}
-              size="icon"
-              aria-label={
-                snapshotSaving ? "Guardando cambios" : "Guardar cambios"
-              }
-              title={snapshotSaving ? "Guardando cambios" : "Guardar cambios"}
-              className="h-10 w-10 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
-            >
-              {snapshotSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-            </Button>
+          <div
+            id="gestion-lead"
+            className="mt-5 border-t border-slate-200 pt-5"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
+                  Gestión del lead
+                </p>
+                <p className="text-sm text-slate-500">
+                  Campos disponibles para esta fase
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              <HeaderSelectField
+                label="Pipeline CRM"
+                value={crmPipelineStatus || "__empty__"}
+                onValueChange={(next) =>
+                  applyRecordPatch({
+                    pipeline_status: next === "__empty__" ? null : next,
+                  })
+                }
+                options={CRM_PIPELINE_OPTIONS}
+              />
+
+              <HeaderSelectField
+                label="Etapa del lead"
+                value={leadStatus}
+                onValueChange={(next) => applyRecordPatch({ status: next })}
+                options={LEAD_STATUS_OPTIONS}
+                allowEmpty={false}
+              />
+
+              {pipelineStageLevel >= 3 ? (
+                <HeaderSelectField
+                  label="Estado comercial actual"
+                  value={leadDisposition || "__empty__"}
+                  onValueChange={(next) =>
+                    applyRecordPatch({
+                      lead_disposition: next === "__empty__" ? null : next,
+                    })
+                  }
+                  options={LEAD_DISPOSITION_OPTIONS}
+                />
+              ) : null}
+
+              {pipelineStageLevel >= 3 ? (
+                <HeaderSelectField
+                  label="Tipo de cliente"
+                  value={customerType || "__empty__"}
+                  onValueChange={(next) =>
+                    applyRecordPatch({
+                      customer_type: next === "__empty__" ? null : next,
+                    })
+                  }
+                  options={CUSTOMER_TYPE_OPTIONS}
+                />
+              ) : null}
+
+              {pipelineStageLevel >= 3 ? (
+                <HeaderSelectField
+                  label="Producto presentado"
+                  value={productPresented || "__empty__"}
+                  onValueChange={(next) =>
+                    applyRecordPatch({
+                      product_presented: next === "__empty__" ? null : next,
+                    })
+                  }
+                  options={PRODUCT_PRESENTED_OPTIONS}
+                />
+              ) : null}
+
+              {pipelineStageLevel >= 3 ? (
+                <HeaderSelectField
+                  label="Tipo de objeción"
+                  value={objectionType || "__empty__"}
+                  onValueChange={(next) =>
+                    applyRecordPatch({
+                      objection_type: next === "__empty__" ? null : next,
+                    })
+                  }
+                  options={OBJECTION_OPTIONS}
+                />
+              ) : null}
+
+              {crmPipelineStatus === "cerrado_perdido" ? (
+                <HeaderSelectField
+                  label="Motivo de pérdida"
+                  value={lostReason || "__empty__"}
+                  onValueChange={(next) =>
+                    applyRecordPatch({
+                      lost_reason: next === "__empty__" ? null : next,
+                    })
+                  }
+                  options={LOST_REASON_OPTIONS}
+                />
+              ) : null}
+
+              {crmPipelineStatus === "recuperacion" ||
+              crmPipelineStatus === "lead_dormido" ||
+              crmPipelineStatus === "cerrado_ganado" ? (
+                <HeaderSelectField
+                  label="Venta recuperada"
+                  value={wonRecovered ? "si" : "no"}
+                  onValueChange={(next) =>
+                    applyRecordPatch({ won_recovered: next === "si" ? 1 : 0 })
+                  }
+                  options={[
+                    { value: "no", label: "No" },
+                    { value: "si", label: "Sí" },
+                  ]}
+                  allowEmpty={false}
+                />
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -1959,30 +2346,42 @@ function Content({ id }: { id: string }) {
           className="w-full space-y-6"
         >
           <div className="sticky top-0 z-30 rounded-xl border border-slate-200 bg-white/95 p-1.5 sm:p-2 backdrop-blur shadow-sm">
-            <TabsList className="grid h-auto w-full grid-cols-2 gap-1.5 rounded-lg bg-transparent p-0 sm:grid-cols-4">
+            <TabsList
+              className={`grid h-auto w-full gap-1.5 rounded-lg bg-transparent p-0 ${
+                visibleTabsCount === 2
+                  ? "grid-cols-2"
+                  : visibleTabsCount === 3
+                    ? "grid-cols-3"
+                    : "grid-cols-4"
+              }`}
+            >
               <TabsTrigger
                 value="resumen"
                 className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
               >
                 Resumen
               </TabsTrigger>
-              <TabsTrigger
-                value="venta"
-                className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
-              >
-                Venta
-              </TabsTrigger>
-              <TabsTrigger
-                value="seguimiento"
-                className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
-              >
-                Seguimiento
-              </TabsTrigger>
+              {showVentaTab ? (
+                <TabsTrigger
+                  value="venta"
+                  className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                >
+                  Venta
+                </TabsTrigger>
+              ) : null}
+              {showSeguimientoTab ? (
+                <TabsTrigger
+                  value="seguimiento"
+                  className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
+                >
+                  Seguimiento
+                </TabsTrigger>
+              ) : null}
               <TabsTrigger
                 value="notas"
                 className="min-h-10 w-full rounded-lg px-3 py-2 text-xs font-medium text-slate-600 data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-sm"
               >
-                Especificaciones del cliente
+                Perfil de cliente
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2011,38 +2410,42 @@ function Content({ id }: { id: string }) {
             />
           </TabsContent>
 
-          <TabsContent
-            value="venta"
-            className="mt-0 focus-visible:outline-none"
-          >
-            <TabVenta
-              id={id}
-              effectiveSalePayload={effectiveSalePayload}
-              draft={draft}
-              initial={initial}
-              hasReserva={hasReserva}
-              reserveAmountRaw={reserveAmountRaw}
-              lead={leadForUi}
-              setDraft={setDraft}
-              setSaleDraftPayload={setSaleDraftPayload}
-            />
-          </TabsContent>
+          {showVentaTab ? (
+            <TabsContent
+              value="venta"
+              className="mt-0 focus-visible:outline-none"
+            >
+              <TabVenta
+                id={id}
+                effectiveSalePayload={effectiveSalePayload}
+                draft={draft}
+                initial={initial}
+                hasReserva={hasReserva}
+                reserveAmountRaw={reserveAmountRaw}
+                lead={leadForUi}
+                setDraft={setDraft}
+                setSaleDraftPayload={setSaleDraftPayload}
+              />
+            </TabsContent>
+          ) : null}
 
-          <TabsContent
-            value="seguimiento"
-            className="mt-0 focus-visible:outline-none"
-          >
-            <TabSeguimiento
-              id={id}
-              p={p}
-              applyRecordPatch={applyRecordPatch}
-              navigationTarget={
-                navigationTarget?.tab === "seguimiento"
-                  ? navigationTarget
-                  : null
-              }
-            />
-          </TabsContent>
+          {showSeguimientoTab ? (
+            <TabsContent
+              value="seguimiento"
+              className="mt-0 focus-visible:outline-none"
+            >
+              <TabSeguimiento
+                id={id}
+                p={p}
+                applyRecordPatch={applyRecordPatch}
+                navigationTarget={
+                  navigationTarget?.tab === "seguimiento"
+                    ? navigationTarget
+                    : null
+                }
+              />
+            </TabsContent>
+          ) : null}
 
           <TabsContent
             value="notas"

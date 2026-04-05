@@ -426,44 +426,66 @@ function getCloserChecklist(pipelineStatus: string, p: any): ChecklistItem[] {
           actionLabel: "Ir a llamada",
           required: true,
         },
-        {
-          label: "Calificar lead (tipo de cliente)",
-          done: !!p.customer_type,
-          scrollTo: "seccion-tipo-cliente",
-          actionLabel: "Ir a clasificar",
-          required: true,
-        },
-        {
-          label: "Presentar solución — Pitch",
-          done: !!p.sales_flow?.ofertaPresentada,
-          scrollTo: "seccion-producto",
-          actionLabel: "Ir a completar",
-          required: true,
-          sublabel: "Seleccionar producto presentado",
-        },
-        {
-          label: "Clasificar tipo de objeción",
-          done: !!p.objection_type,
-          scrollTo: "seccion-objecion",
-          actionLabel: "Ir a objeción",
-          required: true,
-        },
-        {
-          label: "Rebatir objeciones — enviar recurso",
-          done: !!p.last_resource_sent_name,
-          scrollTo: "seccion-plantillas",
-          actionLabel: "Ir a recursos",
-          sublabel: "Seleccionar recurso enviado según tipo de objeción",
-        },
-        {
-          label: "Registrar resultado de cierre",
-          done: !!p.sales_flow?.resultadoCierre,
-          scrollTo: "gestion-lead",
-          actionLabel: "Ir a completar",
-          required: true,
-          sublabel: "Avanzar pipeline según resultado",
-        },
       );
+
+      if (p.sales_flow?.califica === false) {
+        items.push(
+          {
+            label: "Especificar motivo de por qué no califica",
+            done: !!p.sales_flow?.motivoNoCalifica?.trim(),
+            scrollTo: "seccion-notas",
+            actionLabel: "Ir a completar",
+            required: true,
+          },
+          {
+            label: "Registrar cierre perdido",
+            done: p.sales_flow?.resultadoCierre === "perdido",
+            scrollTo: "gestion-lead",
+            actionLabel: "Ir a completar",
+          },
+        );
+      } else {
+        items.push(
+          {
+            label: "Calificar lead (tipo de cliente)",
+            done: !!p.customer_type,
+            scrollTo: "seccion-tipo-cliente",
+            actionLabel: "Ir a clasificar",
+            required: true,
+          },
+          {
+            label: "Seleccionar resultado comercial",
+            done: !!p.sales_flow?.resultadoCierre,
+            scrollTo: "gestion-lead",
+            actionLabel: "Ir a completar",
+            required: true,
+            sublabel:
+              "CIERRE HPRO, H STARTER, RESERVA, CIERRE PERDIDO o SEGUIMIENTO",
+          },
+        );
+
+        if (
+          !p.sales_flow?.resultadoCierre ||
+          p.sales_flow?.resultadoCierre === "objecion_activa"
+        ) {
+          items.push(
+            {
+              label: "Clasificar tipo de objeción",
+              done: !!p.objection_type,
+              scrollTo: "seccion-objecion",
+              actionLabel: "Ir a objeción",
+              required: true,
+            },
+            {
+              label: "Rebatir objeciones — enviar recurso",
+              done: !!p.last_resource_sent_name,
+              scrollTo: "seccion-plantillas",
+              actionLabel: "Ir a recursos",
+              sublabel: "Seleccionar recurso enviado según tipo de objeción",
+            },
+          );
+        }
+      }
     }
     return items;
   }
@@ -1085,8 +1107,8 @@ export function TabResumen({
   ];
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
-      <div className="xl:col-span-3 space-y-8">
+    <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
+      <div className="space-y-8">
         <Card className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm">
           <div className="h-1 bg-gradient-to-r from-teal-500 to-cyan-500" />
           <CardHeader className="pb-5">
@@ -1336,9 +1358,141 @@ export function TabResumen({
             </div>
           </CardContent>
         </Card>
+
+        <Card
+          id="seccion-notas"
+          className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm scroll-mt-4"
+        >
+          <div className="h-1 bg-gradient-to-r from-teal-500 to-emerald-500" />
+          <CardHeader className="pb-5">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
+                <MessageSquare className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <CardTitle className="text-slate-800">Actividad</CardTitle>
+                <CardDescription className="text-slate-500">
+                  Historial de notas registradas en el lead
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Nueva nota
+                  </span>
+                </div>
+                <textarea
+                  className="min-h-[100px] w-full rounded-xl border border-slate-200 bg-white p-4 text-sm focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 outline-none transition-all resize-none"
+                  placeholder="Escribe una nota para el historial (queda con fecha y usuario al guardar)…"
+                  value={newActivityNote}
+                  onChange={(e) => setNewActivityNote(e.target.value)}
+                />
+                <div className="flex items-center justify-between mt-3">
+                  <div className="text-xs text-slate-500">
+                    Se guarda al presionar &quot;Guardar cambios&quot;.
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const message = String(newActivityNote || "").trim();
+                      if (!message) return;
+                      const entry = {
+                        type: "note",
+                        at: new Date().toISOString(),
+                        by: {
+                          id: user?.id ?? null,
+                          name: user?.name ?? null,
+                          email: user?.email ?? null,
+                          role: user?.role ?? null,
+                        },
+                        message,
+                      };
+                      applyRecordPatch({
+                        activity_log: [...activityLog, entry],
+                      });
+                      setNewActivityNote("");
+                    }}
+                    className="gap-2 bg-slate-900 hover:bg-slate-800 text-white"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Agregar al historial
+                  </Button>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Historial
+                  </span>
+                </div>
+                {activityLog.length ? (
+                  <ul className="space-y-3">
+                    {activityLog
+                      .slice()
+                      .reverse()
+                      .slice(0, 12)
+                      .map((item: any, idx: number) => (
+                        <li
+                          key={`${item?.at || idx}-${idx}`}
+                          className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-white hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
+                            <User className="h-4 w-4 text-slate-600" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                              <span>
+                                {item?.at
+                                  ? String(item.at)
+                                      .replace("T", " ")
+                                      .slice(0, 19)
+                                  : "—"}
+                              </span>
+                              {item?.by?.name || item?.by?.email ? (
+                                <>
+                                  <span>·</span>
+                                  <span className="font-medium text-slate-700">
+                                    {String(item.by.name || item.by.email)}
+                                  </span>
+                                </>
+                              ) : null}
+                            </div>
+                            <div className="text-sm text-slate-700 whitespace-pre-wrap">
+                              {String(item?.message ?? "").trim() || "—"}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    {activityLog.length > 12 ? (
+                      <li className="text-xs text-slate-500 text-center py-2">
+                        +{activityLog.length - 12} más…
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="h-14 w-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                      <MessageSquare className="h-7 w-7 text-slate-400" />
+                    </div>
+                    <span className="text-sm text-slate-500">
+                      Sin actividad registrada.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="xl:col-span-2 space-y-8">
+      <div className="space-y-8">
         {/* ── CHECKLIST DEL CLOSER ──────────────────────────────────── */}
         <Card className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm">
           <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
@@ -1503,270 +1657,6 @@ export function TabResumen({
         </Card>
 
         {/* ── CONTROL COMERCIAL — Condicional por fase ──────────────── */}
-        <Card
-          id="gestion-lead"
-          className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm scroll-mt-4"
-        >
-          <div className="h-1 bg-slate-200" />
-          <CardHeader className="pb-5">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center">
-                <Target className="h-5 w-5 text-slate-700" />
-              </div>
-              <div>
-                <CardTitle className="text-slate-800">
-                  Gestión del Lead
-                </CardTitle>
-                <CardDescription className="text-slate-500">
-                  Campos disponibles para esta fase
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-6">
-              <SelectField
-                label="Pipeline CRM"
-                value={crmPipelineStatus || "__empty__"}
-                onValueChange={(next) =>
-                  applyRecordPatch({
-                    pipeline_status: next === "__empty__" ? null : next,
-                  })
-                }
-                options={CRM_PIPELINE_OPTIONS}
-              />
-
-              {/* Tipo de cliente + Producto → solo desde llamada (nivel ≥ 3) */}
-              {level >= 3 && (
-                <div
-                  id="seccion-tipo-cliente"
-                  className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-                >
-                  <SelectField
-                    label="Tipo de cliente"
-                    value={customerType || "__empty__"}
-                    onValueChange={(next) =>
-                      applyRecordPatch({
-                        customer_type: next === "__empty__" ? null : next,
-                      })
-                    }
-                    options={CUSTOMER_TYPE_OPTIONS}
-                  />
-                  <div id="seccion-producto">
-                    <SelectField
-                      label="Producto presentado"
-                      value={productPresented || "__empty__"}
-                      onValueChange={(next) =>
-                        applyRecordPatch({
-                          product_presented: next === "__empty__" ? null : next,
-                        })
-                      }
-                      options={PRODUCT_PRESENTED_OPTIONS}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Objeción → desde llamada realizada (nivel ≥ 3) */}
-              {level >= 3 && (
-                <div id="seccion-objecion">
-                  <SelectField
-                    label="Tipo de objeción"
-                    value={objectionType || "__empty__"}
-                    onValueChange={(next) =>
-                      applyRecordPatch({
-                        objection_type: next === "__empty__" ? null : next,
-                      })
-                    }
-                    options={OBJECTION_OPTIONS}
-                  />
-                </div>
-              )}
-
-              {/* Motivo pérdida → solo cerrado_perdido */}
-              {crmPipelineStatus === "cerrado_perdido" && (
-                <SelectField
-                  label="Motivo de pérdida"
-                  value={lostReason || "__empty__"}
-                  onValueChange={(next) =>
-                    applyRecordPatch({
-                      lost_reason: next === "__empty__" ? null : next,
-                    })
-                  }
-                  options={LOST_REASON_OPTIONS}
-                />
-              )}
-
-              {/* Venta recuperada → solo recuperación+ o cerrado ganado */}
-              {(crmPipelineStatus === "recuperacion" ||
-                crmPipelineStatus === "lead_dormido" ||
-                crmPipelineStatus === "cerrado_ganado") && (
-                <SelectField
-                  label="Venta recuperada"
-                  value={wonRecovered ? "si" : "no"}
-                  onValueChange={(next) =>
-                    applyRecordPatch({ won_recovered: next === "si" ? 1 : 0 })
-                  }
-                  options={[
-                    { value: "no", label: "No" },
-                    { value: "si", label: "Sí" },
-                  ]}
-                  allowEmpty={false}
-                />
-              )}
-
-              {/* Templates y recursos → desde llamada realizada (nivel ≥ 3) */}
-              {level >= 3 && (
-                <div
-                  id="seccion-plantillas"
-                  className="grid grid-cols-1 gap-4 sm:grid-cols-2 scroll-mt-4"
-                >
-                  <SelectField
-                    label="Última plantilla enviada"
-                    value={lastTemplateSent || "__empty__"}
-                    onValueChange={(next) =>
-                      applyRecordPatch({
-                        last_template_sent_name:
-                          next === "__empty__" ? null : next,
-                      })
-                    }
-                    options={TEMPLATE_OPTIONS}
-                  />
-                  <SelectField
-                    label="Último recurso enviado"
-                    value={lastResourceSent || "__empty__"}
-                    onValueChange={(next) =>
-                      applyRecordPatch({
-                        last_resource_sent_name:
-                          next === "__empty__" ? null : next,
-                      })
-                    }
-                    options={RESOURCE_OPTIONS}
-                  />
-                </div>
-              )}
-
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
-                  <Activity className="h-3.5 w-3.5" />
-                  Etapa del lead
-                </div>
-                <div className="mt-4 grid gap-5">
-                  <SelectField
-                    label="Etapa actual del lead"
-                    value={leadStatus}
-                    onValueChange={(next) => applyRecordPatch({ status: next })}
-                    options={[
-                      { value: "new", label: "Lead Nuevo" },
-                      { value: "contacted", label: "Contactado" },
-                      { value: "appointment_attended", label: "Cita Atendida" },
-                      {
-                        value: "active_follow_up",
-                        label: "Seguimiento Activo",
-                      },
-                      { value: "pending_payment", label: "Pendiente de Pago" },
-                      { value: "won", label: "Cerrado – Ganado" },
-                      { value: "lost", label: "Cerrado – Perdido" },
-                    ]}
-                    allowEmpty={false}
-                  />
-
-                  {/* Estado comercial solo si nivel >= 3 */}
-                  {level >= 3 && (
-                    <SelectField
-                      label="Estado comercial actual"
-                      value={leadDisposition || "__empty__"}
-                      onValueChange={(next) =>
-                        applyRecordPatch({
-                          lead_disposition: next === "__empty__" ? null : next,
-                        })
-                      }
-                      options={[
-                        {
-                          value: "conversation_started",
-                          label: "Contactado · Conversación iniciada",
-                        },
-                        {
-                          value: "appointment_scheduled",
-                          label: "Contactado · Cita agendada",
-                        },
-                        {
-                          value: "appointment_cancelled",
-                          label: "Contactado · Cita cancelada",
-                        },
-                        {
-                          value: "appointment_rescheduled",
-                          label: "Contactado · Cita reprogramada",
-                        },
-                        {
-                          value: "no_response",
-                          label: "Contactado · No responde",
-                        },
-                        { value: "no_show", label: "Contactado · No show" },
-                        {
-                          value: "diagnosis_done",
-                          label: "Cita atendida · Diagnóstico realizado",
-                        },
-                        {
-                          value: "offer_not_presented",
-                          label: "Cita atendida · Oferta no presentada",
-                        },
-                        {
-                          value: "offer_presented",
-                          label: "Cita atendida · Oferta presentada",
-                        },
-                        {
-                          value: "interested_evaluating",
-                          label: "Seguimiento · Interesado (evaluando)",
-                        },
-                        {
-                          value: "waiting_response",
-                          label: "Seguimiento · Esperando respuesta",
-                        },
-                        {
-                          value: "waiting_approval",
-                          label: "Seguimiento · Esperando aprobación",
-                        },
-                        { value: "cold", label: "Seguimiento · Frío" },
-                        {
-                          value: "reserve",
-                          label: "Pendiente de pago · Reserva",
-                        },
-                        {
-                          value: "card_unlocking",
-                          label:
-                            "Pendiente de pago · Gestión de tarjetas/límite",
-                        },
-                        {
-                          value: "getting_money",
-                          label: "Pendiente de pago · Consiguiendo el dinero",
-                        },
-                        {
-                          value: "lost_price_too_high",
-                          label: "Perdido · Precio muy alto",
-                        },
-                        {
-                          value: "lost_no_urgency",
-                          label: "Perdido · No tiene urgencia",
-                        },
-                        { value: "lost_trust", label: "Perdido · Confianza" },
-                        {
-                          value: "lost_external_decision",
-                          label: "Perdido · Decisión externa",
-                        },
-                        {
-                          value: "lost_no_response_exhausted",
-                          label: "Perdido · No respondió (proceso agotado)",
-                        },
-                      ]}
-                    />
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         {/* ── CONVERSACIÓN Y PROTOCOLO ────────────────────────────── */}
         <Card
           id="seccion-conversacion"
@@ -1909,138 +1799,6 @@ export function TabResumen({
                 <TrendingUp className="h-3.5 w-3.5" />
                 Se guarda al presionar &quot;Guardar cambios&quot;.
               </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          id="seccion-notas"
-          className="overflow-hidden rounded-2xl border-slate-200/60 bg-white/80 backdrop-blur shadow-sm scroll-mt-4"
-        >
-          <div className="h-1 bg-gradient-to-r from-teal-500 to-emerald-500" />
-          <CardHeader className="pb-5">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center">
-                <MessageSquare className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <CardTitle className="text-slate-800">Actividad</CardTitle>
-                <CardDescription className="text-slate-500">
-                  Historial de notas registradas en el lead
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="h-1.5 w-1.5 rounded-full bg-teal-500" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Nueva nota
-                  </span>
-                </div>
-                <textarea
-                  className="min-h-[100px] w-full rounded-xl border border-slate-200 bg-white p-4 text-sm focus:border-teal-400 focus:ring-2 focus:ring-teal-400/20 outline-none transition-all resize-none"
-                  placeholder="Escribe una nota para el historial (queda con fecha y usuario al guardar)…"
-                  value={newActivityNote}
-                  onChange={(e) => setNewActivityNote(e.target.value)}
-                />
-                <div className="flex items-center justify-between mt-3">
-                  <div className="text-xs text-slate-500">
-                    Se guarda al presionar &quot;Guardar cambios&quot;.
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      const message = String(newActivityNote || "").trim();
-                      if (!message) return;
-                      const entry = {
-                        type: "note",
-                        at: new Date().toISOString(),
-                        by: {
-                          id: user?.id ?? null,
-                          name: user?.name ?? null,
-                          email: user?.email ?? null,
-                          role: user?.role ?? null,
-                        },
-                        message,
-                      };
-                      applyRecordPatch({
-                        activity_log: [...activityLog, entry],
-                      });
-                      setNewActivityNote("");
-                    }}
-                    className="gap-2 bg-slate-900 hover:bg-slate-800 text-white"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Agregar al historial
-                  </Button>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50/50 p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Historial
-                  </span>
-                </div>
-                {activityLog.length ? (
-                  <ul className="space-y-3">
-                    {activityLog
-                      .slice()
-                      .reverse()
-                      .slice(0, 12)
-                      .map((item: any, idx: number) => (
-                        <li
-                          key={`${item?.at || idx}-${idx}`}
-                          className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-white hover:bg-slate-50 transition-colors"
-                        >
-                          <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center flex-shrink-0">
-                            <User className="h-4 w-4 text-slate-600" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-                              <span>
-                                {item?.at
-                                  ? String(item.at)
-                                      .replace("T", " ")
-                                      .slice(0, 19)
-                                  : "—"}
-                              </span>
-                              {item?.by?.name || item?.by?.email ? (
-                                <>
-                                  <span>·</span>
-                                  <span className="font-medium text-slate-700">
-                                    {String(item.by.name || item.by.email)}
-                                  </span>
-                                </>
-                              ) : null}
-                            </div>
-                            <div className="text-sm text-slate-700 whitespace-pre-wrap">
-                              {String(item?.message ?? "").trim() || "—"}
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    {activityLog.length > 12 ? (
-                      <li className="text-xs text-slate-500 text-center py-2">
-                        +{activityLog.length - 12} más…
-                      </li>
-                    ) : null}
-                  </ul>
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="h-14 w-14 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3">
-                      <MessageSquare className="h-7 w-7 text-slate-400" />
-                    </div>
-                    <span className="text-sm text-slate-500">
-                      Sin actividad registrada.
-                    </span>
-                  </div>
-                )}
-              </div>
             </div>
           </CardContent>
         </Card>
