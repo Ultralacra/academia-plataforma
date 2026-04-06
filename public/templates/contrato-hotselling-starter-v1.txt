@@ -1,0 +1,304 @@
+CONTRATO DE PRESTACIÓN DE SERVICIOS DEL PROGRAMA
+"HOTSELLING STARTER"
+
+Entre los suscritos, de una parte, MHF GROUP LLC, con EIN 85-4320656, domiciliada a efectos de notificaciones en 13728 Lagoon Isle Way Apt 205 Orlando, FL 32824, Estados Unidos (en adelante "LA EMPRESA"), y de otra parte, {{NOMBRE_COMPLETO}}, identificado(a) con número {{DNI}}, domiciliado(a) en {{DIRECCION}} (en adelante "EL CLIENTE"), acuerdan celebrar el presente contrato conforme a las siguientes cláusulas:
+
+PRIMERA. OBJETO
+
+El presente contrato tiene por objeto regular la prestación del servicio educativo denominado "Hotselling Starter", mediante el cual LA EMPRESA proporcionará a EL CLIENTE el material, contenidos, plantillas, recursos y estrategias necesarias para que EL CLIENTE los aplique y desarrolle por su propia cuenta, siendo de su exclusiva responsabilidad la implementación de las acciones formativas y estrategias enseñadas.
+
+SEGUNDA. ALCANCE DEL SERVICIO
+
+2.1 El servicio incluye:
+
+● Acceso a la plataforma en Skool durante cuatro (4) meses.
+● Desarrollo del programa estructurado en 4 fases:
+● Fase 1. Ecosistema y Oferta: Construcción de la escalera de valor y diseño de un ecosistema de ultra recompra.
+● Fase 2. VSL, Embudo y Estrategia: Entrega de plantilla de VSL de 7 cifras y ensamblaje completo de embudos.
+● Fase 3. Pauta y Escala: Configuración y activación de campañas publicitarias con estrategia probada de anuncios.
+● Fase 4. Optimización: Análisis y mejora del embudo, implementación de métricas y ajustes estratégicos.
+● Acceso a biblioteca de tutoriales paso a paso.
+● Clases grupales en vivo semanales:
+● 1 clase de copywriting
+● 1 clase de ads
+● 1 clase de implementación técnica
+● Acceso a plantillas y recursos estratégicos:
+● Plantilla VSL de 7 cifras.
+● Plantillas de anuncios y guiones de ventas.
+● Plantillas de páginas y copywriting.
+● Macros de análisis de métricas.
+● Acceso a la comunidad privada de Hotselling y networking.
+● Acceso a eventos especiales y ofertas exclusivas.
+● Oportunidad de ascenso a Hotselling Pro pagando solo la diferencia.
+
+2.2 Soporte: El CLIENTE tiene acceso a las sesiones grupales en vivo para aclarar las dudas que se le presenten. El soporte incluido comprende atención grupal en las sesiones en vivo, y consultas en la comunidad digital.
+
+No se incluye soporte técnico personalizado, salvo contratación adicional. Tiempo de respuesta máximo: 72 horas hábiles. Canales oficiales: correo institucional y plataforma Skool.
+
+2.3 Suspensión o terminación del servicio: LA EMPRESA podrá suspender o terminar la participación del CLIENTE, sin derecho a reembolso, en caso de:
+
+● Incumplimiento de pago.
+● Faltas de respeto, difamación o conducta inapropiada.
+● Violación de confidencialidad o propiedad intelectual.
+● Utilización indebida de contenidos.
+
+Parágrafo - Régimen de suspensión: Las suspensiones (pausas) no son automáticas, no son retroactivas y requieren aprobación previa y expresa de LA EMPRESA. No procederán solicitudes de suspensión cuando exista mora, garantía en curso, ni cuando el CLIENTE mantenga accesos activos y disponibles para ejecución.
+
+TERCERA. VIGENCIA Y EJECUCIÓN
+
+3.1 El servicio tendrá una duración de cuatro (4) meses, contados a partir de la fecha solicitada por el CLIENTE, la cual corresponde al día {{DIA_INICIO}} del mes {{MES_INICIO}} del año {{ANIO_INICIO}}, fecha en la cual el CLIENTE iniciará el programa y se habilitarán los accesos y/o acompañamiento correspondiente, siempre y cuando para dicha fecha se haya verificado y cumplido:
+
+(i) la firma del presente contrato, y
+(ii) el pago correspondiente, así:
+
+1. Si el pago se pacta en una sola exhibición, deberá encontrarse acreditado el pago total del valor del programa; y
+2. Si el pago se pacta en cuotas, el CLIENTE deberá tener acreditado, a más tardar en la Fecha de Inicio, el pago de la primera cuota y de cualquier otra cuota que, conforme al cronograma pactado, se encuentre vencida o exigible a dicha fecha.
+
+Parágrafo - Responsabilidad por tiempos y vencimientos: EL CLIENTE reconoce que el plazo de acceso, la vigencia del contrato y los términos de garantía corren conforme a las reglas aquí pactadas, aun cuando no ingrese a la plataforma o no utilice el servicio. Cualquier recordatorio o aviso por parte de LA EMPRESA será una cortesía y no constituirá renuncia, modificación o extensión de plazos.
+
+CUARTA. HONORARIOS Y FORMA DE PAGO
+
+EL CLIENTE se obliga a pagar a LA EMPRESA el valor del programa "HOTSELLING STARTER", el cual deberá cancelarse únicamente mediante la siguiente forma y modalidad:
+
+[[IF:MODO==pago_total]]
+PAGO AL CONTADO (PAGO ÚNICO)
+
+● Valor total: {{MONTO_TOTAL}}
+● Fecha de pago: {{FECHA_PAGO_CONTADO}}
+● Fecha de inicio del programa: {{FECHA_INICIO}}
+
+[[ENDIF]]
+[[IF:MODO==3_cuotas]]
+PAGO EN TRES (3) CUOTAS
+
+● Valor total: {{MONTO_TOTAL}}
+● Número de cuotas: tres (3)
+● Valor de cada cuota: {{MONTO_CUOTA}}
+● Periodicidad: cada treinta (30) días
+
+Calendario de pagos:
+
+Primera cuota     {{MONTO_CUOTA_1}}    {{FECHA_CUOTA_1}}
+Segunda cuota     {{MONTO_CUOTA_2}}    {{FECHA_CUOTA_2}}
+Tercera cuota     {{MONTO_CUOTA_3}}    {{FECHA_CUOTA_3}}
+
+● Fecha de inicio del programa: {{FECHA_INICIO}}
+
+[[ENDIF]]
+[[IF:TIENE_RESERVA]]
+Conforme a la modalidad de pago anteriormente discriminada que regirá el presente contrato, EL CLIENTE ha acordado con LA EMPRESA, realizar un pago anticipado por concepto de reserva del actual programa objeto del presente contrato, correspondiente a un valor de: {{MONTO_RESERVA}}, el cual se hará efectivo máximo el día _____ del mes de ________________ del año {{ANIO_INICIO}}.
+
+[[ENDIF]]
+
+4.2 Moneda y variación cambiaria: Todas las sumas se expresan en USD; el CLIENTE asume cualquier variación cambiaria.
+
+4.3 El retraso en los pagos generará suspensión automática de acceso.
+
+4.4 No se aceptan solicitudes de reembolso por inasistencia o no utilización de recursos proporcionados.
+
+4.5 El acceso al programa "Hotselling Starter", incluyendo la plataforma, materiales, comunidad y sesiones en vivo, se habilitará únicamente una vez verificado el pago correspondiente, según la modalidad elegida por EL CLIENTE, bajo los siguientes términos:
+
+a. Pago único (pago completo): Cuando EL CLIENTE haya realizado el pago total del valor del programa y este haya sido verificado por LA EMPRESA, se liberará de forma inmediata el acceso completo al programa, conforme a lo descrito en la Cláusula Segunda del presente contrato.
+
+b. Pago en cuotas: El acceso al programa se liberará únicamente tras la verificación del primer pago y la firma del contrato. Los pagos subsiguientes deberán realizarse en las fechas establecidas. En caso de retraso o incumplimiento, LA EMPRESA podrá suspender de forma automática el acceso del CLIENTE al programa, sin derecho a reembolso de la suma abonada.
+
+c. No se considerará como pago válido el abono parcial o el pago en calidad de reserva. Solo se entenderá cumplido el pago cuando el monto pactado (ya sea total o la primera cuota según el plan elegido) se haya recibido y verificado por LA EMPRESA.
+
+QUINTA. OBLIGACIONES
+
+5.1. Obligaciones de LA EMPRESA se obliga únicamente a:
+
+a) Proporcionar el acceso a los materiales, contenidos digitales, recursos, plantillas, tutoriales, plataformas, comunidad y sesiones grupales en vivo exclusivamente durante el período de vigencia del contrato, conforme a lo descrito en la Cláusula Segunda.
+b) Garantizar que los accesos se mantengan operativos, salvo mantenimientos programados, fallas técnicas ajenas a su control o casos de fuerza mayor.
+c) Poner a disposición del CLIENTE los recursos académicos en los tiempos y formatos definidos por LA EMPRESA, sin que esto implique obligación de personalización, asesoría individual ni acompañamiento distinto al descrito en el contrato.
+
+Se aclara expresamente que LA EMPRESA no adquiere obligación de resultado, ni garantiza retornos económicos ni logros comerciales, ya que la ejecución depende exclusivamente del CLIENTE.
+
+5.2 Obligaciones de EL CLIENTE
+
+EL CLIENTE reconoce y acepta que la correcta aplicación del programa depende estrictamente de su compromiso, disciplina y ejecución. En consecuencia, se obliga a:
+
+A. Pagar el precio pactado en los honorarios en los tiempos y fechas pactados en este contrato.
+B. Implementar por su propia cuenta las estrategias, metodologías y recomendaciones entregadas en el programa, siendo plenamente responsable de sus decisiones, acciones y resultados.
+C. Utilizar de manera diligente y adecuada el acceso otorgado, entendiendo que las sesiones grupales permiten resolver inquietudes puntuales, mas no constituyen asesoría personalizada, consultoría específica ni acompañamiento uno a uno.
+D. Mantener absoluta confidencialidad respecto de todo contenido, material, recurso, método, estrategia, guión, plantilla o información entregada por LA EMPRESA, incluyendo información compartida en la comunidad o durante las sesiones en vivo.
+E. Abstenerse de compartir accesos, recursos, materiales, credenciales, enlaces privados, contenidos o información sensible con terceros, bajo cualquier modalidad. El acceso es estrictamente personal, intransferible y limitado al CLIENTE.
+F. Mantener una conducta respetuosa, profesional y colaborativa en todas las interacciones dentro de la comunidad, sesiones grupales y plataformas internas. Cualquier comportamiento inapropiado, ofensivo o disruptivo podrá ser causal de suspensión o terminación del acceso, sin derecho a reembolso.
+G. Cumplir con todas las obligaciones contractuales, incluyendo las financieras, tecnológicas y de uso adecuado de los contenidos.
+
+5.3 Responsabilidad Exclusiva del Cliente
+
+EL CLIENTE acepta que:
+
+● Es el único responsable del uso que dé al contenido.
+● Los resultados dependen de su esfuerzo personal, habilidades, constancia y nivel de implementación.
+● LA EMPRESA no será responsable por fallas del CLIENTE en la ejecución de las instrucciones o herramientas entregadas.
+
+SEXTA. CONFIDENCIALIDAD
+
+Las obligaciones de confidencialidad tendrán una vigencia de cinco (5) años posteriores a la terminación del contrato.
+
+Se entenderá por información confidencial:
+
+a. Contenidos académicos.
+b. Procesos internos.
+c. Plantillas, guiones, estrategias y recursos.
+d. Información comercial o técnica.
+
+El CLIENTE no podrá copiar, distribuir, re-vender ni compartir el material con terceros.
+
+SÉPTIMA. PROPIEDAD INTELECTUAL
+
+Todos los contenidos, materiales, videos, documentos, guías, plantillas, recursos, estrategias, metodologías, procesos, textos, diseños, estructuras, modelos, audios, grabaciones, software, plataformas, sesiones y cualquier otro elemento entregado o puesto a disposición del CLIENTE en el marco del programa "Hotselling Starter" son y seguirán siendo propiedad exclusiva y absoluta de LA EMPRESA, encontrándose protegidos por las normas de derechos de autor, propiedad intelectual y legislación aplicable.
+
+LA EMPRESA concede al CLIENTE una licencia limitada, personal, individual, revocable, no exclusiva, no transferible y estrictamente no comercial, cuyo único propósito es permitirle acceder y utilizar los materiales durante la vigencia del contrato y únicamente para su formación personal.
+
+Queda expresamente prohibido al CLIENTE:
+
+1. Reproducir, copiar, modificar, adaptar, transmitir, distribuir, publicar, revender, sublicenciar o explotar comercialmente, total o parcialmente, cualquier contenido del programa.
+2. Crear productos, cursos, entrenamientos, servicios o materiales derivados de los contenidos proporcionados por LA EMPRESA.
+3. Permitir el acceso de terceros, compartir claves, facilitar descargas no autorizadas o divulgar información interna del programa.
+
+El incumplimiento de esta cláusula constituye una violación grave a los derechos de autor y faculta a LA EMPRESA para:
+
+● Terminar de manera inmediata el contrato sin derecho a reembolso.
+● Iniciar acciones legales civiles, comerciales y penales según corresponda.
+● Exigir la indemnización por daños y perjuicios ocasionados.
+
+La participación del CLIENTE en el programa no le otorga ningún derecho de propiedad intelectual sobre los contenidos ni sobre la metodología utilizada por LA EMPRESA.
+
+OCTAVA. PROTECCIÓN DE DATOS PERSONALES
+
+LA EMPRESA realizará el tratamiento de los datos personales del CLIENTE conforme a la normativa aplicable en materia de protección de datos, y exclusivamente para las finalidades relacionadas con la ejecución del presente contrato, la prestación del programa, la facturación, la verificación de identidad, el control de accesos y la mejora del servicio.
+
+El CLIENTE autoriza de manera previa, expresa e informada a LA EMPRESA para:
+
+a) Recopilar, almacenar, gestionar, utilizar y procesar sus datos personales, incluyendo información de identificación, contacto, transaccional y académica.
+b) Enviarle comunicaciones relacionadas con el programa, recordatorios, información administrativa y contenidos del servicio.
+c) Realizar análisis internos, estudios de mejora y validaciones operativas.
+
+LA EMPRESA implementará medidas razonables de seguridad administrativa, técnica y digital para garantizar la confidencialidad, integridad y disponibilidad de los datos personales, sin asumir responsabilidad por eventos de fuerza mayor, ataques cibernéticos, fallas tecnológicas externas o acciones de terceros ajenos a su control.
+
+El CLIENTE podrá ejercer sus derechos de acceso, actualización, rectificación o supresión de datos mediante solicitud escrita dirigida a los canales oficiales de LA EMPRESA.
+
+NOVENA. CESIÓN DE IMAGEN
+
+9.1 Autorización delimitada
+
+EL CLIENTE autoriza de manera previa, expresa y escrita, a LA EMPRESA, para el uso de su nombre, voz, imagen, fotografías, videos y testimonios exclusivamente con fines comerciales, educativos, testimoniales y promocionales del programa "Hotselling Starter".
+
+9.2 Medios autorizados
+
+La autorización se limita a:
+
+a. Sitio web corporativo.
+b. Redes sociales oficiales.
+c. Material publicitario digital.
+d. Piezas educativas del programa.
+
+9.3 Vigencia de la autorización
+
+La cesión tendrá una vigencia de un (1) año contado a partir de la firma del contrato, prorrogable automáticamente por períodos iguales, salvo manifestación en contrario del CLIENTE.
+
+9.4 Revocatoria
+
+El CLIENTE podrá revocar esta autorización en cualquier momento mediante comunicación escrita con 30 días de antelación, con efectos únicamente hacia futuro.
+
+DÉCIMA. CARÁCTER PERSONAL
+
+El presente contrato es estrictamente personal y su cesión o transferencia, total o parcial, queda prohibida sin autorización previa y escrita de LA EMPRESA. Cualquier intento de cesión no autorizada será nulo y facultará a LA EMPRESA para terminar el contrato de inmediato, sin derecho a reembolso.
+
+DÉCIMA PRIMERA. LEGISLACIÓN APLICABLE
+
+Este contrato se rige por las leyes del Estado de Florida, EE.UU., sometiéndose las partes expresamente a la jurisdicción y competencia de sus tribunales para cualquier controversia.
+
+DÉCIMA SEGUNDA. MODIFICACIONES DEL PROGRAMA
+
+LA EMPRESA podrá realizar ajustes o mejoras al contenido del programa, siempre que estas no afecten negativamente los beneficios esenciales ofrecidos al CLIENTE al momento de la contratación. En caso de modificación sustancial, LA EMPRESA deberá informar con 10 días de anticipación.
+
+DÉCIMA TERCERA. RESOLUCIÓN DE CONFLICTOS
+
+Antes de acudir a tribunales del Estado de Florida, las partes deberán agotar previamente un mecanismo de resolución alternativa de conflictos, consistente en una etapa de conciliación por medios electrónicos. De no lograrse acuerdo en un término de 15 días calendario, la controversia se someterá a los tribunales de Florida.
+
+DÉCIMA CUARTA. GARANTÍA
+
+La ejecución y los resultados del programa dependen directamente de la implementación personal y activa de EL CLIENTE. LA EMPRESA garantiza que su metodología ha sido probada y funciona siempre que el participante aplique de manera diligente los contenidos y estrategias enseñadas.
+
+En consecuencia, si transcurridos cuatro (4) meses de duración inicial del programa EL CLIENTE no ha logrado crear su negocio aplicando los conocimientos impartidos, LA EMPRESA otorgará de manera gratuita una extensión de cuatro (4) meses adicionales de acceso al programa y sus recursos, sin costo extra.
+
+La garantía consiste exclusivamente en la ampliación gratuita del acceso por cuatro (4) meses adicionales, sin que ello implique reembolso, compensación o indemnización de ninguna naturaleza.
+
+DÉCIMA QUINTA. PENALIDADES E INTERESES
+
+En caso de mora en cualquier pago, se generará un interés moratorio del uno punto cinco por ciento (1.5%) mensual sobre el saldo adeudado.
+
+Adicionalmente, el incumplimiento del CLIENTE dará lugar al pago de una cláusula penal equivalente al 10% del valor total del programa.
+
+DÉCIMA SEXTA. NO COMPETENCIA
+
+EL CLIENTE se obliga a no crear, comercializar, distribuir, ofertar, asesorar, replicar ni participar directa o indirectamente en la elaboración, venta o difusión de programas, cursos, mentorías, productos educativos o servicios que reproduzcan total o parcialmente la metodología, estructura, contenidos, plantillas, estrategias, guiones, recursos o materiales proporcionados por LA EMPRESA dentro del programa "Hotselling Starter".
+
+Esta restricción aplicará por un término de seis (6) meses contados a partir de la finalización del programa, independientemente de que EL CLIENTE haya culminado o no el acceso otorgado. Se permite únicamente el uso personal y no comercial de la información recibida.
+
+El incumplimiento de esta disposición facultará a LA EMPRESA para iniciar las acciones legales correspondientes y exigir las indemnizaciones a que haya lugar por competencia desleal, apropiación indebida de contenidos o uso no autorizado de propiedad intelectual.
+
+DÉCIMA SÉPTIMA. USO PROHIBIDO DEL PROGRAMA Y DE LOS CONTENIDOS
+
+EL CLIENTE reconoce que todos los materiales, videos, plantillas, recursos, estrategias, documentos, guiones, lecciones y contenidos entregados en el marco del programa "Hotselling Starter" son propiedad exclusiva de LA EMPRESA, y se compromete a:
+
+1. No copiar, reproducir, distribuir, retransmitir, vender, subarrendar, sublicenciar o transferir los contenidos a terceros.
+2. No compartir accesos, claves, enlaces privados, sesiones, grabaciones o cualquier material del programa con personas no autorizadas.
+3. No crear "grupos espejo", repositorios externos, carpetas compartidas, cursos derivados, entrenamientos paralelos o cualquier contenido basado en el material del programa.
+4. No utilizar la información para fines distintos a los estrictamente personales.
+
+Cualquier uso indebido dará lugar a la terminación inmediata del contrato sin derecho a reembolso y a la activación de acciones legales por violación de derechos de autor, propiedad intelectual y confidencialidad.
+
+DÉCIMA OCTAVA. VERACIDAD Y EXACTITUD DE LA INFORMACIÓN SUMINISTRADA POR EL CLIENTE
+
+EL CLIENTE declara que toda la información proporcionada a LA EMPRESA al momento de la contratación es veraz, completa, comprobable y exacta. EL CLIENTE se compromete a actualizar oportunamente cualquier dato que cambie durante la vigencia del contrato.
+
+La entrega de información falsa, incompleta o engañosa faculta a LA EMPRESA para:
+
+a) Suspender el acceso al programa;
+b) Terminar el contrato de manera inmediata sin derecho a reembolso;
+c) Adelantar las acciones legales necesarias en caso de fraude, suplantación de identidad o perjuicio comercial.
+
+DÉCIMA NOVENA. LIMITACIÓN DE RESPONSABILIDAD
+
+EL CLIENTE reconoce que los resultados derivados del programa "Hotselling Starter" dependen exclusivamente de su dedicación, ejecución, implementación personal y cumplimiento del proceso formativo.
+
+LA EMPRESA no garantiza resultados económicos, financieros, comerciales ni de retorno de inversión. La responsabilidad de LA EMPRESA se limita exclusivamente a:
+
+1. Proveer los contenidos, materiales y recursos del programa según lo pactado;
+2. Brindar acceso a las plataformas y sesiones incluidas;
+3. Cumplir con las condiciones establecidas en el presente contrato.
+
+En ningún caso LA EMPRESA será responsable por:
+
+● Pérdidas económicas o comerciales del CLIENTE;
+● Falta de resultados por no implementación del contenido;
+● Decisiones de negocio tomadas por el CLIENTE;
+● Daños indirectos, consecuenciales, lucro cesante o pérdida de oportunidades.
+
+La responsabilidad máxima de LA EMPRESA, en cualquier circunstancia, no excederá el valor efectivamente pagado por EL CLIENTE por el programa contratado.
+
+VIGÉSIMA. MEMBRESÍA MENSUAL POSTERIOR A LA VIGENCIA INICIAL
+
+Vencido el término de vigencia y ejecución previsto en la Cláusula Tercera del presente contrato, la continuidad del servicio Hotselling Starter será opcional y se gestionará exclusivamente mediante el pago anticipado de la membresía mensual que se encuentre vigente al momento del pago. Una vez la EMPRESA verifique y confirme la recepción efectiva del pago, el servicio se entenderá activado de forma automática para el período correspondiente, sin necesidad de suscribir anexos, aceptaciones adicionales o compromisos distintos a los derivados de la membresía durante su vigencia.
+
+El pago de la membresía permitirá:
+
+a) Mantener o reactivar los accesos al servicio, aun cuando el período inicial del programa ya haya finalizado; y
+b) Reactivar el servicio en cualquier momento, siempre que la membresía se encuentre pagada y vigente, y se cumplan las condiciones técnicas de acceso de la plataforma.
+
+La prestación del servicio bajo membresía se mantendrá únicamente durante el período efectivamente cubierto por el pago realizado. En caso de no pago oportuno de la membresía, el servicio quedará suspendido y finalizará automáticamente al vencimiento del período pagado, sin que exista obligación de continuidad por parte de la EMPRESA.
+
+En señal de aceptación y conformidad, las partes firman el presente contrato:
+
+FIRMAN:
+
+[[FIRMAS]]
+
+FECHA DEL ACUERDO: {{FECHA_CONTRATO}}
+FECHA DE LIBERACIÓN DE ACCESOS:
+Tras validación de la firma, sujeta a horario laboral.

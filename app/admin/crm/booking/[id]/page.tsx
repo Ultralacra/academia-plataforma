@@ -302,18 +302,35 @@ function Content({ id }: { id: string }) {
     if (!record) return;
     const t = window.setTimeout(() => {
       try {
-        const next = {
+        // Preservar last_snapshot del guardado anterior para que load()
+        // siempre tenga acceso al payload_current completo más reciente.
+        let lastSnapshot: any = undefined;
+        try {
+          const existing = localStorage.getItem(localStorageKey);
+          if (existing) {
+            const parsed = JSON.parse(existing);
+            lastSnapshot = parsed?.last_snapshot;
+          }
+        } catch {}
+        const next: Record<string, any> = {
           version: 1,
           saved_at: new Date().toISOString(),
           record,
           draft,
           saleDraftPayload,
         };
+        if (lastSnapshot !== undefined) next.last_snapshot = lastSnapshot;
         localStorage.setItem(localStorageKey, JSON.stringify(next));
       } catch {}
     }, 250);
     return () => window.clearTimeout(t);
   }, [draft, localStorageKey, record, saleDraftPayload]);
+
+  React.useEffect(() => {
+    if (record) {
+      console.log("[CRM] Lead detail:", record);
+    }
+  }, [record]);
 
   const applyRecordPatch = React.useCallback((patch: Record<string, any>) => {
     setRecord((prev: any | null) => {
@@ -598,7 +615,14 @@ function Content({ id }: { id: string }) {
       program: lead.program ?? "",
       bonuses: Array.isArray(lead.bonuses) ? lead.bonuses : [],
       status: lead.payment_status ?? "",
-      notes: lead.sale_notes ?? null,
+      notes: (() => {
+        const raw = lead.sale_notes ?? null;
+        if (!raw) return null;
+        // Si el contenido es datos crudos de Calendly, no mostrarlo como nota editable
+        if (/\[Calendly:https?:\/\/[^\]]*calendly\.com\//.test(raw))
+          return null;
+        return raw;
+      })(),
       payment: {
         mode: lead.payment_mode ?? "",
         amount: lead.payment_amount ?? "",
@@ -641,100 +665,25 @@ function Content({ id }: { id: string }) {
     };
   }, [record]);
 
-  // Campos del flujo del closer / seguimiento que el backend no almacena
-  // en la tabla leads pero sí en el snapshot. Los preservamos del localStorage.
-  const SNAPSHOT_ONLY_KEYS = [
-    "sales_flow",
-    "activity_log",
-    "customer_profile",
-    "customer_profile_history",
-    "reminders",
-    "pipeline_status",
-    "customer_type",
-    "product_presented",
-    "objection_type",
-    "objection_detail",
-    "lost_reason",
-    "won_recovered",
-    "lead_disposition",
-    "conversation_status",
-    "last_interaction_channel",
-    "last_interaction_at",
-    "next_contact_at",
-    "next_task_due_at",
-    "followup_started_at",
-    "recovery_started_at",
-    "sleeping_started_at",
-    "protocol_name",
-    "protocol_step",
-    "protocol_paused",
-    "last_template_sent_name",
-    "last_resource_sent_name",
-    "call_outcome",
-    "call_result_at",
-    "call_reschedule_date",
-    "call_reschedule_time",
-    "call_negotiation_active",
-    "call_negotiation_until",
-    "text_messages",
-    "call",
-    "payment_paid_amount",
-    "payment_plan_type",
-    "payment_mode",
-    "payment_amount",
-    "payment_platform",
-    "payment_has_reserve",
-    "payment_reserve_amount",
-    "payment_installments_count",
-    "payment_installment_amount",
-    "payment_installments_schedule",
-    "payment_custom_installments",
-    "payment_exception_notes",
-    "payment_attachments",
-    "payment_proof",
-    "payment_plans_json",
-    "next_charge_date",
-    "payment_status",
-    "contract_status",
-    "contract_third_party",
-    "contract_is_company",
-    "contract_parties",
-    "contract_party_address",
-    "contract_party_city",
-    "contract_party_country",
-    "contract_party_document_id",
-    "contract_company_name",
-    "contract_company_tax_id",
-    "contract_company_address",
-    "contract_company_city",
-    "contract_company_country",
-    "closer",
-    "closer_name",
-    "bonuses",
-    "sale_notes",
-    "status",
-  ];
-
   /** Mergea datos frescos del backend con campos del snapshot/localStorage que
    * el backend no devuelve (sales_flow, pipeline_status, activity_log, etc.)  */
   const mergeWithPreserved = React.useCallback(
     (fresh: any, source: Record<string, any> | null | undefined): any => {
-      if (!fresh || !source) return fresh;
-      const preserved: Record<string, any> = {};
-      for (const k of SNAPSHOT_ONLY_KEYS) {
-        const backendVal = fresh[k];
-        const srcVal = source[k];
-        // Si el backend no lo devuelve (o lo devuelve vacío) pero existía en la fuente, preservar
-        if (
-          (backendVal === undefined || backendVal === null) &&
-          srcVal !== undefined &&
-          srcVal !== null
-        ) {
-          preserved[k] = srcVal;
+      if (!fresh) return fresh;
+      if (!source) return fresh;
+      // El snapshot (payload_current) es la fuente de verdad para todos los
+      // campos operativos del CRM. El backend solo aporta lo que no exista
+      // en el snapshot (campos de la tabla leads que nunca pasaron por el CRM).
+      // Estrategia: spread del backend primero, luego el snapshot encima —
+      // así el snapshot siempre gana en cualquier campo que haya registrado,
+      // y el backend complementa los campos que el snapshot no tiene.
+      const merged = { ...fresh };
+      for (const [k, v] of Object.entries(source)) {
+        if (v !== undefined && v !== null) {
+          merged[k] = v;
         }
       }
-      if (Object.keys(preserved).length === 0) return fresh;
-      return { ...fresh, ...preserved };
+      return merged;
     },
     [],
   );
@@ -1551,15 +1500,10 @@ function Content({ id }: { id: string }) {
         localStorage.setItem(localStorageKey, JSON.stringify(next));
       } catch {}
 
-      // Reload desde backend y preservar campos del snapshot
+      // Reload desde backend — load() leerá el localStorage actualizado y
+      // mergeWithPreserved dará prioridad al snapshot recién guardado.
       try {
-        const savedPayloadCurrent = snapshotPayloadCurrent;
         await load({ silent: true });
-        // Re-inyectar campos que load() pudo no restaurar si localStorage
-        // aún no tenía el nuevo snapshot al momento del reload
-        setRecord((fresh: any) =>
-          fresh ? mergeWithPreserved(fresh, savedPayloadCurrent) : fresh,
-        );
       } catch {}
 
       toast({

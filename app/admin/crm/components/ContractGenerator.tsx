@@ -86,6 +86,14 @@ const BUILTIN_CONTRACT_TEMPLATES: BuiltinContractTemplate[] = [
     textUrl: "/templates/contrato-hotselling-pro-closer-v1.txt",
     metadataKey: "hotselling-pro-closer-v1",
   },
+  {
+    key: "hotselling-starter-v1",
+    label: "Hotselling Starter v1",
+    description:
+      "Contrato para el programa HOTSELLING STARTER (4 meses, acceso Skool).",
+    textUrl: "/templates/contrato-hotselling-starter-v1.txt",
+    metadataKey: "hotselling-starter-v1",
+  },
 ];
 
 export function ContractGenerator({

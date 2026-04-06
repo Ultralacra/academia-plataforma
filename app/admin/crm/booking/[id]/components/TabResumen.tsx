@@ -777,6 +777,99 @@ interface TabResumenProps {
   }) => void;
 }
 
+/* ── Helpers Calendly ─────────────────────────────────────────────── */
+interface CalendlyBlock {
+  inviteeUri: string;
+  event: string;
+  start: string;
+  end: string;
+  status: string;
+  answers: Array<{ question: string; answer: string }>;
+}
+
+// Campos de metadatos que no son preguntas del lead
+const CALENDLY_META_FIELDS = new Set([
+  "Evento",
+  "Inicio",
+  "Fin",
+  "Estado invitado",
+  "Invitee URI",
+  "Scheduled Event URI",
+  "Respuestas",
+  "Answers",
+]);
+
+function isCalendlyNotes(notes: string): boolean {
+  return /\[Calendly:https?:\/\/[^\]]*calendly\.com\//.test(notes);
+}
+
+function parseCalendlyBlocks(notes: string): CalendlyBlock[] {
+  // Normalizar saltos de línea (Windows \r\n → \n)
+  const normalized = notes.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  const blockRegex =
+    /\[Calendly:(https?:\/\/[^\]]+)\]([\s\S]*?)(?=\[Calendly:|$)/g;
+  const blocks: CalendlyBlock[] = [];
+  let match;
+  while ((match = blockRegex.exec(normalized)) !== null) {
+    const inviteeUri = match[1].trim();
+    const body = match[2].trim();
+    const event = (body.match(/^Evento:\s*(.+)$/m) || [])[1]?.trim() || "";
+    const start = (body.match(/^Inicio:\s*(.+)$/m) || [])[1]?.trim() || "";
+    const end = (body.match(/^Fin:\s*(.+)$/m) || [])[1]?.trim() || "";
+    const status =
+      (body.match(/^Estado invitado:\s*(.+)$/m) || [])[1]?.trim() || "";
+
+    // Encontrar inicio de la sección de respuestas (acepta "Respuestas" o "Answers")
+    const headerIdx = body.search(/^(?:Respuestas|Answers)\s*:/im);
+    // Tomar todo lo que viene DESPUÉS de la línea de encabezado
+    const answersText =
+      headerIdx >= 0 ? body.slice(body.indexOf("\n", headerIdx) + 1) : "";
+
+    const answers: Array<{ question: string; answer: string }> = [];
+
+    if (answersText.trim()) {
+      // Formato primario: "- pregunta: respuesta" o "• pregunta: respuesta"
+      // Permite respuesta vacía (\s*.*) para capturar igual la pregunta
+      const bulletRegex = /^[-–•]\s*(.+?)\s*:\s*(.*)/gm;
+      let m;
+      while ((m = bulletRegex.exec(answersText)) !== null) {
+        const q = m[1].trim();
+        const a = m[2].trim();
+        if (q) answers.push({ question: q, answer: a || "—" });
+      }
+
+      // Fallback: líneas "pregunta: respuesta" sin bullet (excluye metadatos)
+      if (answers.length === 0) {
+        const lineRegex = /^(.+?)\s*:\s*(.*)/gm;
+        let lm;
+        while ((lm = lineRegex.exec(answersText)) !== null) {
+          const q = lm[1].trim();
+          const a = lm[2].trim();
+          if (q && !CALENDLY_META_FIELDS.has(q)) {
+            answers.push({ question: q, answer: a || "—" });
+          }
+        }
+      }
+    } else {
+      // Sin sección "Respuestas:" — extraer pares clave:valor del cuerpo
+      // que no sean campos de metadatos conocidos
+      const lineRegex = /^[-–•]?\s*(.+?)\s*:\s*(.*)/gm;
+      let lm;
+      while ((lm = lineRegex.exec(body)) !== null) {
+        const q = lm[1].trim();
+        const a = lm[2].trim();
+        if (q && !CALENDLY_META_FIELDS.has(q) && !a.startsWith("http")) {
+          answers.push({ question: q, answer: a || "—" });
+        }
+      }
+    }
+
+    blocks.push({ inviteeUri, event, start, end, status, answers });
+  }
+  return blocks;
+}
+
 export function TabResumen({
   p,
   user,
@@ -1060,7 +1153,15 @@ export function TabResumen({
     p.main_obstacle ?? hubspot?.main_obstacle?.respuesta ?? null;
   const hsInvite = p.invite_others ?? hubspot?.invite_others?.respuesta ?? null;
   const hsCloser = p.closer_name ?? hubspot?.closer_name?.respuesta ?? null;
-  const hsSaleNotes = p.sale_notes ?? hubspot?.sale_notes?.respuesta ?? null;
+  const hsSaleNotesRaw = p.sale_notes ?? hubspot?.sale_notes?.respuesta ?? null;
+  const calendlyBlocks = React.useMemo(() => {
+    if (!hsSaleNotesRaw || !isCalendlyNotes(String(hsSaleNotesRaw))) return [];
+    return parseCalendlyBlocks(String(hsSaleNotesRaw));
+  }, [hsSaleNotesRaw]);
+  const hsSaleNotes =
+    hsSaleNotesRaw && !isCalendlyNotes(String(hsSaleNotesRaw))
+      ? hsSaleNotesRaw
+      : null;
   const hsWhatsapp = p.whatsapp ?? p.phone ?? null;
   const hsArea = p.area_contacto ?? hubspot?.area_contacto?.respuesta ?? null;
   const hsAtendidoPor =
@@ -1181,7 +1282,8 @@ export function TabResumen({
                 hsBudget ||
                 hsObstacle ||
                 hsInvite ||
-                hsWhatsapp) && (
+                hsWhatsapp ||
+                calendlyBlocks.length > 0) && (
                 <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
                   <div className="flex items-center gap-2 mb-3">
                     <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
@@ -1227,6 +1329,80 @@ export function TabResumen({
                       />
                     )}
                   </div>
+                  {/* Preguntas del formulario Calendly */}
+                  {calendlyBlocks.length > 0 && (
+                    <div className="mt-4 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                      <div className="px-4 py-2.5 bg-slate-50 border-b">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          Respuestas del formulario (Calendly)
+                        </span>
+                      </div>
+                      {calendlyBlocks.map((block, idx) => (
+                        <div key={idx}>
+                          {block.event && (
+                            <div className="px-4 py-2 bg-violet-50/60 border-b border-violet-100 flex items-center gap-2">
+                              <div className="h-1.5 w-1.5 rounded-full bg-violet-400 flex-shrink-0" />
+                              <span className="text-xs font-medium text-violet-700">
+                                {block.event}
+                              </span>
+                              {block.start && (
+                                <span className="text-[11px] text-slate-400 ml-1">
+                                  {new Date(block.start).toLocaleString(
+                                    "es-ES",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    },
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {block.answers.length > 0 ? (
+                            <div className="divide-y divide-slate-100">
+                              {block.answers.map((qa, qIdx) => (
+                                <div
+                                  key={qIdx}
+                                  className="px-4 py-3 flex items-start gap-3"
+                                >
+                                  <div className="mt-0.5 flex-shrink-0 rounded-lg p-1.5 bg-indigo-50 text-indigo-500">
+                                    <svg
+                                      className="h-3.5 w-3.5"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                      strokeWidth={2}
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-[11px] font-semibold text-slate-700">
+                                      {qa.question}
+                                    </span>
+                                    <p className="mt-1 text-sm text-slate-800 leading-relaxed break-words">
+                                      {qa.answer}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="px-4 py-3 text-xs text-slate-400 italic">
+                              Sin respuestas registradas
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 
