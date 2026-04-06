@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,7 @@ export default function PauseDatesModal({
   onOpenChange,
   onConfirm,
   initialRange,
+  diasContractualesDisponibles,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -40,6 +41,7 @@ export default function PauseDatesModal({
     motivo: string;
   }) => void;
   initialRange?: { start?: string; end?: string } | null;
+  diasContractualesDisponibles?: number;
 }) {
   const [range, setRange] = useState<DateRange>({});
   const [tipo, setTipo] = useState<"CONTRACTUAL" | "EXTRAORDINARIA" | "">("");
@@ -66,6 +68,21 @@ export default function PauseDatesModal({
     setMotivo("");
   }, [open, initialRange?.start, initialRange?.end]);
 
+  // Días calendario en el rango seleccionado (inclusivo)
+  const diasEnRango = useMemo(() => {
+    if (!range.from || !range.to) return 0;
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const diff = Math.round(
+      (range.to.getTime() - range.from.getTime()) / msPerDay,
+    );
+    return diff >= 0 ? diff + 1 : 0;
+  }, [range]);
+
+  const excedeLimiteContractual =
+    tipo === "CONTRACTUAL" &&
+    typeof diasContractualesDisponibles === "number" &&
+    diasEnRango > diasContractualesDisponibles;
+
   const canSave =
     !!(
       range.from &&
@@ -74,7 +91,8 @@ export default function PauseDatesModal({
       !isNaN(range.to.getTime())
     ) &&
     (tipo === "CONTRACTUAL" || tipo === "EXTRAORDINARIA") &&
-    motivo.trim().length > 0;
+    motivo.trim().length > 0 &&
+    !excedeLimiteContractual;
 
   function toISO(d: Date) {
     // Normalizar a 00:00:00 UTC del día (sin corrimiento por zona horaria)
@@ -126,6 +144,55 @@ export default function PauseDatesModal({
               locale={es}
             />
           </div>
+          {/* ── Contador de días seleccionados y validación de cuota contractual ── */}
+          {diasEnRango > 0 && (
+            <div
+              className={`rounded-md border p-2.5 text-xs space-y-0.5 ${
+                excedeLimiteContractual
+                  ? "border-rose-300 bg-rose-50 dark:border-rose-700 dark:bg-rose-950/40"
+                  : "border-border bg-muted/30"
+              }`}
+            >
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">
+                  Días seleccionados:
+                </span>
+                <span className="font-semibold">{diasEnRango} días</span>
+              </div>
+              {tipo === "CONTRACTUAL" &&
+                typeof diasContractualesDisponibles === "number" && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">
+                        Días disponibles contractuales:
+                      </span>
+                      <span
+                        className={`font-semibold ${diasContractualesDisponibles <= 0 ? "text-rose-600 dark:text-rose-400" : ""}`}
+                      >
+                        {diasContractualesDisponibles} días
+                      </span>
+                    </div>
+                    {excedeLimiteContractual && (
+                      <p className="font-semibold text-rose-600 dark:text-rose-300 pt-0.5">
+                        ⚠ Excede el límite contractual. Reduce el rango o elige
+                        tipo Extraordinaria.
+                      </p>
+                    )}
+                    {!excedeLimiteContractual &&
+                      diasContractualesDisponibles > 0 && (
+                        <div className="flex justify-between pt-0.5">
+                          <span className="text-muted-foreground">
+                            Quedarán disponibles:
+                          </span>
+                          <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                            {diasContractualesDisponibles - diasEnRango} días
+                          </span>
+                        </div>
+                      )}
+                  </>
+                )}
+            </div>
+          )}
         </div>
         <DialogFooter className="gap-2">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>

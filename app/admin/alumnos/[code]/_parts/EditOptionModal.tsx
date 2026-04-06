@@ -31,6 +31,7 @@ export default function EditOptionModal({
   current,
   mode = "all",
   onSaved,
+  diasContractualesDisponibles,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -38,6 +39,7 @@ export default function EditOptionModal({
   current: { estado?: string; etapa?: string; nicho?: string } | null;
   mode?: "estado" | "etapa" | "nicho" | "all";
   onSaved?: () => void;
+  diasContractualesDisponibles?: number;
 }) {
   const [estados, setEstados] = useState<any[]>([]);
   const [etapas, setEtapas] = useState<any[]>([]);
@@ -429,6 +431,7 @@ export default function EditOptionModal({
           setPauseOpen(v);
         }}
         initialRange={pauseRange || undefined}
+        diasContractualesDisponibles={diasContractualesDisponibles}
         onConfirm={(r) => {
           console.debug("PauseDatesModal onConfirm", {
             r,

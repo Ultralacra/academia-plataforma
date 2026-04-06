@@ -1734,6 +1734,60 @@ export default function StudentDetailContent({ code }: { code: string }) {
     return merged;
   }, [pausesFromStatusHistory]);
 
+  // ── Cuota de pausa contractual (máx. 30 días calendario) ──────────────────
+  const pausaContractualStats = useMemo(() => {
+    const MAX_DIAS = 30;
+    const today = toDayDate(new Date());
+
+    let diasUsados = 0;
+    let pausaActiva: (typeof pausesFromStatusHistory)[0] | null = null;
+    let pausaVencidaSinReactivar = false;
+
+    for (const p of pausesFromStatusHistory) {
+      // Solo contar pausas CONTRACTUALES para el límite
+      const esContractual =
+        !p.tipo || String(p.tipo).toUpperCase() === "CONTRACTUAL";
+      if (esContractual) {
+        const s = parseMaybe(p.start);
+        const e = parseMaybe(p.end);
+        if (s && e) {
+          const startD = toDayDate(s);
+          const endD = toDayDate(e);
+          diasUsados += daysBetweenInclusive(startD, endD);
+        }
+      }
+
+      // Detectar pausa activa (cualquier tipo)
+      const s0 = parseMaybe(p.start);
+      const e0 = parseMaybe(p.end);
+      if (s0 && e0) {
+        const startD = toDayDate(s0);
+        const endD = toDayDate(e0);
+        if (today >= startD && today <= endD) {
+          if (!pausaActiva) pausaActiva = p;
+        }
+        // Pausa vencida: fecha_fin < hoy y el alumno sigue en estado PAUSA
+        if (endD < today) {
+          const estadoActual = String(
+            student?.state || student?.raw?.estado || "",
+          ).toUpperCase();
+          if (estadoActual.includes("PAUS") && !pausaActiva) {
+            pausaVencidaSinReactivar = true;
+          }
+        }
+      }
+    }
+
+    return {
+      diasUsados,
+      diasDisponibles: Math.max(0, MAX_DIAS - diasUsados),
+      porcentaje: Math.min(100, Math.round((diasUsados / MAX_DIAS) * 100)),
+      excedido: diasUsados > MAX_DIAS,
+      pausaActiva,
+      pausaVencidaSinReactivar,
+    };
+  }, [pausesFromStatusHistory, student]);
+
   const accessStats = useMemo(() => {
     const ingresoIso = pIngreso || student?.ingreso || student?.raw?.ingreso;
     const start = parseMaybe(asDateOnly(ingresoIso));
@@ -2842,6 +2896,123 @@ export default function StudentDetailContent({ code }: { code: string }) {
                     ) : null}
 
                     <div className="pt-2 border-t border-border">
+                      {/* ── Banner: pausa activa ── */}
+                      {pausaContractualStats.pausaActiva ? (
+                        <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40 p-3 space-y-1">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-200">
+                            <span>⏸</span>
+                            <span>Pausa activa</span>
+                            {pausaContractualStats.pausaActiva.tipo ? (
+                              <Badge
+                                variant="outline"
+                                className="h-4 text-[10px] border-amber-400 text-amber-700 dark:text-amber-300"
+                              >
+                                {String(
+                                  pausaContractualStats.pausaActiva.tipo,
+                                ).toUpperCase()}
+                              </Badge>
+                            ) : null}
+                          </div>
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            Inicio:{" "}
+                            <span className="font-medium">
+                              {fmtES(pausaContractualStats.pausaActiva.start)}
+                            </span>
+                            {" · "}
+                            Fin:{" "}
+                            <span className="font-medium">
+                              {fmtES(pausaContractualStats.pausaActiva.end)}
+                            </span>
+                          </p>
+                          {(() => {
+                            const endD = parseMaybe(
+                              pausaContractualStats.pausaActiva.end,
+                            );
+                            if (!endD) return null;
+                            const diasRestantes = daysBetweenInclusive(
+                              toDayDate(new Date()),
+                              toDayDate(endD),
+                            );
+                            return (
+                              <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                                El acceso se reanuda automáticamente en{" "}
+                                <span className="font-bold">
+                                  {diasRestantes} día
+                                  {diasRestantes !== 1 ? "s" : ""}
+                                </span>
+                              </p>
+                            );
+                          })()}
+                        </div>
+                      ) : null}
+
+                      {/* ── Alerta: pausa vencida sin reactivar ── */}
+                      {!pausaContractualStats.pausaActiva &&
+                      pausaContractualStats.pausaVencidaSinReactivar ? (
+                        <div className="mb-3 rounded-md border border-rose-300 bg-rose-50 dark:border-rose-700 dark:bg-rose-950/40 p-3">
+                          <p className="text-xs font-semibold text-rose-700 dark:text-rose-300">
+                            ⚠ La pausa ha finalizado pero el estado del alumno
+                            sigue en PAUSA. Reactivar perfil manualmente o
+                            verificar el proceso de reactivación automática.
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {/* ── Cuota de pausa contractual ── */}
+                      <div className="mb-3 rounded-md border border-border bg-muted/20 p-3 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-muted-foreground uppercase tracking-wide">
+                            Cuota contractual
+                          </span>
+                          <span
+                            className={
+                              pausaContractualStats.excedido
+                                ? "font-bold text-rose-600 dark:text-rose-400"
+                                : "font-medium text-foreground"
+                            }
+                          >
+                            {pausaContractualStats.diasUsados} / 30 días
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              pausaContractualStats.excedido
+                                ? "bg-rose-500"
+                                : pausaContractualStats.porcentaje >= 70
+                                  ? "bg-amber-500"
+                                  : "bg-emerald-500"
+                            }`}
+                            style={{
+                              width: `${Math.min(100, pausaContractualStats.porcentaje)}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[11px] text-muted-foreground">
+                          <span>
+                            {pausaContractualStats.excedido ? (
+                              <span className="text-rose-600 dark:text-rose-400 font-medium">
+                                Límite superado (
+                                {pausaContractualStats.diasUsados - 30} días
+                                extra)
+                              </span>
+                            ) : (
+                              <span>
+                                <span className="font-medium text-foreground">
+                                  {pausaContractualStats.diasDisponibles} días
+                                  disponibles
+                                </span>{" "}
+                                (máx. 30 días totales)
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          Los días de pausa se suman automáticamente a la
+                          vigencia del contrato.
+                        </p>
+                      </div>
+
                       <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Historial de pausas ({pausesFromStatusHistory.length})
                       </div>
@@ -3087,6 +3258,7 @@ export default function StudentDetailContent({ code }: { code: string }) {
             nicho: student.raw?.nicho,
           }}
           mode={editMode}
+          diasContractualesDisponibles={pausaContractualStats.diasDisponibles}
           onSaved={async () => {
             // refresh student tras guardar (estado/etapa/nicho)
             const url = `/client/get/clients?page=1&search=${encodeURIComponent(
