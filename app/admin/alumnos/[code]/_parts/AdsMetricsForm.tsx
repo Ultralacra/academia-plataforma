@@ -73,6 +73,14 @@ const MONEY_DISCLAIMER_ITEMS: AdsMetricsCalloutItem[] = [];
 
 const FUNNEL_DISCLAIMER_ITEMS: AdsMetricsCalloutItem[] = [
   {
+    title: "Registro acumulado",
+    description:
+      "En esta sección vas a registrar las métricas acumuladas de todo el periodo que se tuvo pauta activa.",
+  },
+];
+
+const STATUS_DISCLAIMER_ITEMS: AdsMetricsCalloutItem[] = [
+  {
     title: "1. Fase de Testeo",
     description:
       "Es la fase inicial. Comienza desde el momento en que lanzas tu pauta y abarca hasta que llevas invertidos entre 150 y 200 dólares.",
@@ -1681,9 +1689,7 @@ export default function AdsMetricsForm({
                     <AdsMetricsCallout
                       eyebrow="Cómo llenar"
                       title="Embudo"
-                      description={
-                        "En esta sección vas a registrar las métricas acumuladas de todo el periodo que se tuvo pauta activa\n\nTu proceso publicitario se divide en tres grandes fases:"
-                      }
+                      description="Registra aquí las métricas acumuladas de todo el periodo en el que la pauta estuvo activa."
                       items={FUNNEL_DISCLAIMER_ITEMS}
                       tone="sky"
                     />
@@ -1901,6 +1907,13 @@ export default function AdsMetricsForm({
                     <CardTitle className="text-sm">Estado</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
+                    <AdsMetricsCallout
+                      eyebrow="Cómo llenar"
+                      title="Estado"
+                      description="Tu proceso publicitario se divide en tres grandes fases. Usa esta caja para identificar en cuál se encuentra el alumno y qué tipo de intervención corresponde."
+                      items={STATUS_DISCLAIMER_ITEMS}
+                      tone="sky"
+                    />
                     <div className="flex items-center justify-between">
                       <Label>Pauta activa</Label>
                       <Switch
