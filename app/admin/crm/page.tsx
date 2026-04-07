@@ -121,6 +121,33 @@ const PIPELINE_STAGES: ProspectStage[] = [
 const MAX_LEADS_FETCH = 5000;
 const DEFAULT_PIPELINE_PAGE_SIZE = 25;
 const PIPELINE_PAGE_SIZE_OPTIONS = [25, 50, 100, 250] as const;
+const CRM_FILTERS_STORAGE_KEY = "crm:pipeline-filters:v1";
+
+type CrmStoredFilters = {
+  q?: string;
+  emailQ?: string;
+  phoneQ?: string;
+  questionsQ?: string;
+  closerFiltro?: string;
+  etapaFiltro?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  view?: "lista" | "kanban";
+  activeTab?: string;
+  pipelinePageSize?: number;
+};
+
+function readStoredCrmFilters(): CrmStoredFilters {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(CRM_FILTERS_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as CrmStoredFilters;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 const mapLeadStatusToEtapa = (status?: string | null): ProspectStage => {
   switch (String(status ?? "").toLowerCase()) {
@@ -257,6 +284,7 @@ function CrmContent() {
 
   const isAdmin = authState?.user?.role === "admin";
   const userCodigo = authState?.user?.codigo ?? "";
+  const initialFiltersRef = useRef<CrmStoredFilters>(readStoredCrmFilters());
 
   const ownerFilterRef = useRef<string>("");
 
@@ -282,24 +310,106 @@ function CrmContent() {
     nombre: string;
   } | null>(null);
 
-  const [q, setQ] = useState("");
-  const [emailQ, setEmailQ] = useState("");
-  const [phoneQ, setPhoneQ] = useState("");
-  const [questionsQ, setQuestionsQ] = useState("");
-  const [view, setView] = useState<"lista" | "kanban">("lista");
-  const [closerFiltro, setCloserFiltro] = useState<string>("all");
-  const [etapaFiltro, setEtapaFiltro] = useState<string>("all");
-  const [createdFrom, setCreatedFrom] = useState<string>("");
-  const [createdTo, setCreatedTo] = useState<string>("");
+  const [q, setQ] = useState(() =>
+    typeof initialFiltersRef.current.q === "string"
+      ? initialFiltersRef.current.q
+      : "",
+  );
+  const [emailQ, setEmailQ] = useState(() =>
+    typeof initialFiltersRef.current.emailQ === "string"
+      ? initialFiltersRef.current.emailQ
+      : "",
+  );
+  const [phoneQ, setPhoneQ] = useState(() =>
+    typeof initialFiltersRef.current.phoneQ === "string"
+      ? initialFiltersRef.current.phoneQ
+      : "",
+  );
+  const [questionsQ, setQuestionsQ] = useState(() =>
+    typeof initialFiltersRef.current.questionsQ === "string"
+      ? initialFiltersRef.current.questionsQ
+      : "",
+  );
+  const [view, setView] = useState<"lista" | "kanban">(() =>
+    initialFiltersRef.current.view === "kanban" ? "kanban" : "lista",
+  );
+  const [closerFiltro, setCloserFiltro] = useState<string>(() =>
+    typeof initialFiltersRef.current.closerFiltro === "string" &&
+    initialFiltersRef.current.closerFiltro
+      ? initialFiltersRef.current.closerFiltro
+      : "all",
+  );
+  const [etapaFiltro, setEtapaFiltro] = useState<string>(() =>
+    typeof initialFiltersRef.current.etapaFiltro === "string" &&
+    initialFiltersRef.current.etapaFiltro
+      ? initialFiltersRef.current.etapaFiltro
+      : "all",
+  );
+  const [createdFrom, setCreatedFrom] = useState<string>(() =>
+    typeof initialFiltersRef.current.createdFrom === "string"
+      ? initialFiltersRef.current.createdFrom
+      : "",
+  );
+  const [createdTo, setCreatedTo] = useState<string>(() =>
+    typeof initialFiltersRef.current.createdTo === "string"
+      ? initialFiltersRef.current.createdTo
+      : "",
+  );
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>("pipeline");
+  const [activeTab, setActiveTab] = useState<string>(() =>
+    typeof initialFiltersRef.current.activeTab === "string" &&
+    initialFiltersRef.current.activeTab
+      ? initialFiltersRef.current.activeTab
+      : "pipeline",
+  );
   const [selectedLeadQuestionsCode, setSelectedLeadQuestionsCode] = useState<
     string | null
   >(null);
   const [pipelinePage, setPipelinePage] = useState<number>(1);
-  const [pipelinePageSize, setPipelinePageSize] = useState<number>(
-    DEFAULT_PIPELINE_PAGE_SIZE,
+  const [pipelinePageSize, setPipelinePageSize] = useState<number>(() =>
+    typeof initialFiltersRef.current.pipelinePageSize === "number" &&
+    PIPELINE_PAGE_SIZE_OPTIONS.includes(
+      initialFiltersRef.current
+        .pipelinePageSize as (typeof PIPELINE_PAGE_SIZE_OPTIONS)[number],
+    )
+      ? initialFiltersRef.current.pipelinePageSize
+      : DEFAULT_PIPELINE_PAGE_SIZE,
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const payload: CrmStoredFilters = {
+      q,
+      emailQ,
+      phoneQ,
+      questionsQ,
+      closerFiltro,
+      etapaFiltro,
+      createdFrom,
+      createdTo,
+      view,
+      activeTab,
+      pipelinePageSize,
+    };
+
+    window.localStorage.setItem(
+      CRM_FILTERS_STORAGE_KEY,
+      JSON.stringify(payload),
+    );
+  }, [
+    q,
+    emailQ,
+    phoneQ,
+    questionsQ,
+    closerFiltro,
+    etapaFiltro,
+    createdFrom,
+    createdTo,
+    view,
+    activeTab,
+    pipelinePageSize,
+  ]);
 
   const fetchUsers = useCallback(async (): Promise<UserSummary[]> => {
     try {
