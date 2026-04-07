@@ -717,6 +717,55 @@ export async function listLeadDropboxSignDocuments() {
   );
 }
 
+/**
+ * Devuelve todos los documentos Dropbox Sign vinculados a un recipient_codigo
+ * (código del alumno). Reutiliza el mismo endpoint global y filtra en cliente.
+ */
+export async function listDropboxSignDocumentsByRecipient(
+  recipientCodigo: string,
+): Promise<LeadDropboxSignDocument[]> {
+  const res = await listLeadDropboxSignDocuments();
+  const all = Array.isArray(res.data) ? res.data : [];
+  const normalized = String(recipientCodigo ?? "").trim().toLowerCase();
+  if (!normalized) return all;
+  return all.filter(
+    (d) =>
+      String(d.recipient_codigo ?? "").trim().toLowerCase() === normalized,
+  );
+}
+
+/**
+ * Envía un Otrosí a firma digital usando el mismo endpoint de contratos de leads.
+ * recipient_codigo = código del alumno (el mismo que se usa como lead_codigo).
+ * subject = título del documento (ej: "Otrosí Nº 1 — Extensión con garantía")
+ * message = mensaje introductorio al firmante
+ * file = archivo PDF/HTML del otrosí generado
+ */
+export async function sendOtrosiForSignature(
+  recipientCodigo: string,
+  file: File,
+  subject: string,
+  message: string,
+) {
+  if (!recipientCodigo) throw new Error("recipientCodigo requerido");
+  if (!(file instanceof File)) throw new Error("file requerido");
+
+  const formData = new FormData();
+  formData.set("file", file);
+  formData.set("message", message);
+  // El campo title/subject puede ir como parámetro extra si el backend lo soporta
+  formData.set("title", subject);
+  formData.set("subject", subject);
+
+  return await apiFetch<LeadContractSignatureSendResponse>(
+    `/leads/dropboxsign/send-file/${encodeURIComponent(recipientCodigo)}`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
+}
+
 export async function downloadLeadDropboxSignSignedDocument(
   signatureRequestId: string,
 ) {

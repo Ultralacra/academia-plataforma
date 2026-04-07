@@ -1,8 +1,7 @@
 "use client";
 import React from "react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Mail, Phone, Users } from "lucide-react";
+import { Mail, Phone } from "lucide-react";
 import { crmService } from "@/lib/crm-service";
 import type { PipelineStageId, ProspectCore } from "@/lib/crm-types";
 import { StageBadge } from "./StageBadge";
@@ -130,21 +129,15 @@ export function ProspectKanban({
                     canMove ? "cursor-move" : "cursor-default"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <h4
-                      className="flex-1 text-xs font-semibold text-slate-800 line-clamp-2"
-                      title={p.nombre}
+                  <div className="mb-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onOpenDetail(p)}
+                      className="text-left text-xs font-semibold text-slate-800 line-clamp-2 hover:text-indigo-600 hover:underline"
+                      title={`Abrir detalle de ${p.nombre}`}
                     >
                       {p.nombre}
-                    </h4>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 w-6 p-0"
-                      onClick={() => onOpenDetail(p)}
-                    >
-                      <Users className="h-3 w-3" />
-                    </Button>
+                    </button>
                   </div>
                   {p.saleStatus ? (
                     <div className="mb-1.5">

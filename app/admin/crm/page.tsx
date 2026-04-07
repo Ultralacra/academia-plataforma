@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  Eye,
   LayoutGrid,
   List,
   Loader2,
@@ -914,12 +913,13 @@ function CrmContent() {
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1.5">
-                                    <span
-                                      className="truncate text-sm font-semibold text-slate-800"
-                                      title={prospect.nombre}
+                                    <Link
+                                      href={`/admin/crm/booking/${encodeURIComponent(prospect.id)}`}
+                                      className="truncate text-sm font-semibold text-slate-800 hover:text-indigo-600 hover:underline"
+                                      title={`Abrir detalle de ${prospect.nombre}`}
                                     >
                                       {prospect.nombre}
-                                    </span>
+                                    </Link>
                                     {prospect.remote ? (
                                       <Badge
                                         variant="secondary"
@@ -951,12 +951,13 @@ function CrmContent() {
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-1">
-                                    <span
-                                      className="text-xs font-medium truncate text-slate-800"
-                                      title={prospect.nombre}
+                                    <Link
+                                      href={`/admin/crm/booking/${encodeURIComponent(prospect.id)}`}
+                                      className="text-xs font-medium truncate text-slate-800 hover:text-indigo-600 hover:underline"
+                                      title={`Abrir detalle de ${prospect.nombre}`}
                                     >
                                       {prospect.nombre}
-                                    </span>
+                                    </Link>
                                     {prospect.remote ? (
                                       <Badge
                                         variant="secondary"
@@ -1063,14 +1064,6 @@ function CrmContent() {
                                 >
                                   <User className="h-3.5 w-3.5" />
                                 </button>
-                                <Link
-                                  href={`/admin/crm/booking/${encodeURIComponent(prospect.id)}`}
-                                  aria-label={`Ver detalle de ${prospect.nombre}`}
-                                  title="Ver detalle"
-                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                                >
-                                  <Eye className="h-3.5 w-3.5" />
-                                </Link>
                                 <button
                                   type="button"
                                   aria-label={`Eliminar lead ${prospect.nombre}`}

@@ -30,6 +30,7 @@ import BonosPanel from "./_parts/BonosPanel";
 import EditOptionModal from "./_parts/EditOptionModal";
 import TareasCard from "./_parts/TareasCard";
 import EditPauseRangeModal from "./_parts/EditPauseRangeModal";
+import StudentContractsPanel from "./_parts/StudentContractsPanel";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -2541,6 +2542,15 @@ export default function StudentDetailContent({ code }: { code: string }) {
               alumnoId={String(student.code || code)}
               canEdit={(user?.role ?? "").toLowerCase() !== "student"}
             />
+
+            {/* Historial contractual (Dropbox Sign) — debajo de Observaciones */}
+            <div className="rounded-xl border border-border bg-card p-4">
+              <StudentContractsPanel
+                studentCode={student.code || code}
+                studentName={student.name || ""}
+              />
+            </div>
+
             {/* Tickets movidos a la sección Feedback */}
           </div>
           {/* Columna lateral: equipo y contrato (sticky) */}
