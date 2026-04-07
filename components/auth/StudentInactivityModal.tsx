@@ -10,9 +10,23 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, MessageCircle } from "lucide-react";
+import { AlertTriangle, BarChart3, MessageCircle } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/api-config";
+import { listMetadata } from "@/lib/metadata";
+
+const FOLLOWUP_ENTITY = "mensajes_seguimiento";
+const F5_METRICS_CODE = "F5_METRICAS_ADS";
+const F5_METRICS_INTERVAL_MS = 4 * 24 * 60 * 60 * 1000;
+const F5_TUTORIAL_URL =
+  "https://www.skool.com/hotselling-pro/classroom/35c3544e?md=ebd947b99fc544a786d7b7fe4c752187";
+
+type ReminderMode = "inactivity" | "f5_metrics";
+type FollowupMetadataPayload = {
+  codigo?: string;
+  mensaje?: string;
+  activo?: boolean | string | number;
+};
 
 function toNumberOrNull(value: unknown): number | null {
   const n = typeof value === "number" ? value : Number(value);
@@ -53,6 +67,64 @@ function extractRows(json: any): any[] {
   return [];
 }
 
+function isActiveMetadata(value: unknown) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  if (!normalized) return true;
+  return !["false", "0", "no", "off"].includes(normalized);
+}
+
+function getF5MetricsStorageKey(studentKey: string) {
+  return `student:f5-metrics-reminder:${studentKey}`;
+}
+
+function shouldShowF5MetricsReminder(studentKey: string) {
+  if (typeof window === "undefined") return false;
+  const raw = window.localStorage.getItem(getF5MetricsStorageKey(studentKey));
+  if (!raw) return true;
+  const lastShown = Number(raw);
+  if (!Number.isFinite(lastShown) || lastShown <= 0) return true;
+  return Date.now() - lastShown >= F5_METRICS_INTERVAL_MS;
+}
+
+function markF5MetricsReminderShown(studentKey: string) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(
+    getF5MetricsStorageKey(studentKey),
+    String(Date.now()),
+  );
+}
+
+async function fetchF5MetricsReminderMessage() {
+  try {
+    const res = await listMetadata<FollowupMetadataPayload>();
+    const record = (res.items || []).find((item) => {
+      if (item.entity !== FOLLOWUP_ENTITY) return false;
+      const payload = (item.payload || {}) as FollowupMetadataPayload;
+      const code = String(payload.codigo || item.entity_id || "")
+        .trim()
+        .toUpperCase();
+      if (code !== F5_METRICS_CODE) return false;
+      return isActiveMetadata(payload.activo);
+    });
+
+    const message = String(record?.payload?.mensaje || "").trim();
+    return message || null;
+  } catch {
+    return null;
+  }
+}
+
+function stripTutorialUrl(message: string) {
+  return message
+    .replace(F5_TUTORIAL_URL, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function resolvePhaseKey(phaseRaw: string): string {
   const phase = normalizeText(phaseRaw);
   if (!phase) return "GENERIC";
@@ -78,6 +150,47 @@ function resolvePhaseKey(phaseRaw: string): string {
   if (phase.startsWith("F5")) return "F5";
 
   return "GENERIC";
+}
+
+function isF5Phase(value: unknown) {
+  return resolvePhaseKey(String(value ?? "")) === "F5";
+}
+
+async function fetchResolvedStudentPhase(
+  studentCode: string,
+  fallback: string,
+) {
+  const fallbackPhase = String(fallback || "").trim();
+  if (!studentCode) return fallbackPhase;
+
+  try {
+    const json = await apiFetch<any>(
+      `/client/get/cliente-etapas/${encodeURIComponent(studentCode)}`,
+      undefined,
+      { background: true },
+    );
+    const rows = Array.isArray(json?.data)
+      ? json.data
+      : Array.isArray(json)
+        ? json
+        : [];
+
+    if (!rows.length) return fallbackPhase;
+
+    const latest = [...rows]
+      .map((row) => ({
+        phase: String(
+          row?.etapa_id ?? row?.etapa ?? row?.fase ?? row?.stage ?? "",
+        ).trim(),
+        createdAt: Date.parse(String(row?.created_at ?? row?.fecha ?? "")) || 0,
+      }))
+      .filter((row) => row.phase)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+
+    return latest?.phase || fallbackPhase;
+  } catch {
+    return fallbackPhase;
+  }
 }
 
 function hasTraffickerBonus(
@@ -158,8 +271,10 @@ export function StudentInactivityModal() {
     Array<{ codigo: string; nombre: string }>
   >([]);
   const [message, setMessage] = React.useState<string>("");
+  const [mode, setMode] = React.useState<ReminderMode>("inactivity");
   const [loadingDays, setLoadingDays] = React.useState(false);
   const openedForRef = React.useRef<string | null>(null);
+  const reminderKeyRef = React.useRef<string>("");
 
   const role = String(user?.role || "").toLowerCase();
   const code = String((user as any)?.codigo || "").trim();
@@ -257,7 +372,7 @@ export function StudentInactivityModal() {
         const resolvedCodeBase = first?.codigo ?? first?.code ?? code;
         const resolvedCode = String(resolvedCodeBase ?? "").trim();
         const inactivityDays = first ? parseInactivityFromRow(first) : null;
-        const resolvedPhase = String(
+        const basePhase = String(
           first?.fase ??
             first?.etapa ??
             first?.stage ??
@@ -265,6 +380,10 @@ export function StudentInactivityModal() {
             first?.current_stage ??
             "",
         ).trim();
+        const resolvedPhase = await fetchResolvedStudentPhase(
+          resolvedCode || code,
+          basePhase,
+        );
         const resolvedName = String(
           first?.nombre ?? first?.name ?? user?.name ?? "Alumno",
         ).trim();
@@ -292,6 +411,27 @@ export function StudentInactivityModal() {
         setPhase(resolvedPhase);
         setStudentName(resolvedName || "Alumno");
         setBonos(bonosParsed);
+        const phaseKey = resolvePhaseKey(resolvedPhase);
+        const reminderIdentity =
+          resolvedCode || code || email || userId || identity;
+        reminderKeyRef.current = reminderIdentity;
+
+        if (
+          isF5Phase(resolvedPhase) &&
+          reminderIdentity &&
+          shouldShowF5MetricsReminder(reminderIdentity)
+        ) {
+          const f5Message =
+            (await fetchF5MetricsReminderMessage()) ||
+            "Recuerda actualizar tus métricas publicitarias\n\nMantén tus métricas al día para que los coaches podamos hacer un seguimiento cercano de tu progreso. Puedes hacerlo directamente en la sección Métricas ADS dentro de la plataforma.\n\n¿No sabes cómo hacerlo? Mira este video tutorial: https://www.skool.com/hotselling-pro/classroom/35c3544e?md=ebd947b99fc544a786d7b7fe4c752187";
+
+          setMode("f5_metrics");
+          setMessage(f5Message);
+          setOpen(true);
+          return;
+        }
+
+        setMode("inactivity");
         setMessage(resolvedMessage.message);
 
         // Regla solicitada: mostrar modal solo cuando hay + de 8 días de inactividad.
@@ -300,6 +440,7 @@ export function StudentInactivityModal() {
           resolvedPhase,
           resolvedName,
           resolvedCode,
+          basePhase,
           withTrafficker,
           phaseKey: resolvedMessage.phaseKey,
         });
@@ -323,9 +464,11 @@ export function StudentInactivityModal() {
         if (!cancelled) {
           setDays(null);
           setPhase("");
+          setMode("inactivity");
           setStudentName(String(user?.name || "Alumno"));
           setBonos([]);
           setMessage("");
+          reminderKeyRef.current = "";
           setOpen(false);
         }
       } finally {
@@ -344,6 +487,13 @@ export function StudentInactivityModal() {
     <Dialog
       open={open && !isOnStudentChat}
       onOpenChange={(next) => {
+        if (!next && mode === "f5_metrics") {
+          const reminderIdentity =
+            reminderKeyRef.current || code || email || userId;
+          if (reminderIdentity) markF5MetricsReminderShown(reminderIdentity);
+          setOpen(false);
+          return;
+        }
         if (!next && !isOnStudentChat) {
           setOpen(true);
           return;
@@ -359,35 +509,121 @@ export function StudentInactivityModal() {
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-amber-100 text-amber-700">
-              <AlertTriangle className="h-5 w-5" />
+            <span
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
+                mode === "f5_metrics"
+                  ? "bg-sky-100 text-sky-700"
+                  : "bg-amber-100 text-amber-700"
+              }`}
+            >
+              {mode === "f5_metrics" ? (
+                <BarChart3 className="h-5 w-5" />
+              ) : (
+                <AlertTriangle className="h-5 w-5" />
+              )}
             </span>
-            Seguimiento de tu proceso
+            {mode === "f5_metrics"
+              ? "Actualiza tus métricas ADS"
+              : "Seguimiento de tu proceso"}
           </DialogTitle>
           <DialogDescription>
-            {loadingDays
-              ? "Consultando tu información..."
-              : days == null
-                ? "Queremos ayudarte a retomar tu avance."
-                : `Hemos notado ${days} día(s) de inactividad en tu proceso.`}
+            {mode === "f5_metrics"
+              ? ""
+              : loadingDays
+                ? "Consultando tu información..."
+                : days == null
+                  ? "Queremos ayudarte a retomar tu avance."
+                  : `Hemos notado ${days} día(s) de inactividad en tu proceso.`}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-xl border border-amber-200 bg-gradient-to-b from-amber-50 to-background p-4 text-sm whitespace-pre-wrap leading-relaxed shadow-sm">
-          {message ||
+        <div
+          className={`rounded-xl border p-4 text-sm whitespace-pre-wrap leading-relaxed shadow-sm ${
+            mode === "f5_metrics"
+              ? "border-sky-200 bg-gradient-to-b from-sky-50 to-background"
+              : "border-amber-200 bg-gradient-to-b from-amber-50 to-background"
+          }`}
+        >
+          {(mode === "f5_metrics" ? stripTutorialUrl(message) : message) ||
             `Hola ${studentName || "Alumno"}, cómo estás? Espero que estes muy bien. Te escribo por acá para saber como va tu proceso. Hay algo en lo que te podamos apoyar?`}
         </div>
 
+        {mode === "f5_metrics" ? (
+          <div className="rounded-xl border border-sky-200 bg-sky-50/70 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-sky-900">
+                  ¿No sabes cómo hacerlo?
+                </p>
+                <p className="text-xs leading-5 text-sky-700">
+                  Abre el tutorial paso a paso para actualizar tus métricas ADS.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-sky-300 bg-white text-sky-700 hover:bg-sky-100 hover:text-sky-800"
+                onClick={() => {
+                  if (typeof window !== "undefined") {
+                    window.open(
+                      F5_TUTORIAL_URL,
+                      "_blank",
+                      "noopener,noreferrer",
+                    );
+                  }
+                }}
+              >
+                Ver video tutorial
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="pt-1">
-          <Button
-            onClick={() => {
-              router.push(`/admin/alumnos/${code}/chat`);
-            }}
-            className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
-          >
-            <MessageCircle className="h-4 w-4" />
-            Sí, comunicarme con soporte
-          </Button>
+          {mode === "f5_metrics" ? (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button
+                onClick={() => {
+                  const reminderIdentity =
+                    reminderKeyRef.current || code || email || userId;
+                  if (reminderIdentity) {
+                    markF5MetricsReminderShown(reminderIdentity);
+                  }
+                  setOpen(false);
+                  router.push(`/admin/alumnos/${code}/ads`);
+                }}
+                className="flex-1 gap-2 bg-sky-600 text-white hover:bg-sky-700"
+              >
+                <BarChart3 className="h-4 w-4" />
+                Actualizar mis métricas
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  const reminderIdentity =
+                    reminderKeyRef.current || code || email || userId;
+                  if (reminderIdentity) {
+                    markF5MetricsReminderShown(reminderIdentity);
+                  }
+                  setOpen(false);
+                }}
+              >
+                Cerrar
+              </Button>
+            </div>
+          ) : (
+            <Button
+              onClick={() => {
+                router.push(`/admin/alumnos/${code}/chat`);
+              }}
+              className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Sí, comunicarme con soporte
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
