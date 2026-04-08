@@ -277,6 +277,14 @@ function normalizeStageLabel(stage?: string | null) {
     .toUpperCase();
 }
 
+function normalizeSearchText(value?: string | null) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 export default function StudentsContent() {
   const [coach, setCoach] = useState<string>("todos"); // formato: "todos" | `id:${id}` | `name:${name}`
   const [loading, setLoading] = useState(true);
@@ -803,15 +811,15 @@ export default function StudentsContent() {
   }, [coach]);
 
   const filtered = useMemo(() => {
-    const q = (search || "").trim().toLowerCase();
+    const q = normalizeSearchText(search);
 
     // Nota: el filtro por coach ahora es server-side; aquí solo buscamos localmente.
     if (!q) return all;
     return all.filter((s) => {
-      const name = (s.name ?? "").toString().toLowerCase();
-      const code = (s.code ?? "").toString().toLowerCase();
-      const state = (s.state ?? "").toString().toLowerCase();
-      const stage = (s.stage ?? "").toString().toLowerCase();
+      const name = normalizeSearchText(s.name);
+      const code = normalizeSearchText(s.code);
+      const state = normalizeSearchText(s.state);
+      const stage = normalizeSearchText(s.stage);
       return (
         name.includes(q) ||
         code.includes(q) ||
@@ -1430,7 +1438,7 @@ export default function StudentsContent() {
     new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 
   const buildExportRowsFromSource = (sourceAll: StudentRow[]) => {
-    const q = (search || "").trim().toLowerCase();
+    const q = normalizeSearchText(search);
     const NO_STAGE = "Sin fase";
     const NO_STATE = "Sin estado";
     const NO_META_FASE = "sin fase";
@@ -1440,10 +1448,10 @@ export default function StudentsContent() {
     const sourceFiltered = !q
       ? sourceAll
       : sourceAll.filter((s) => {
-          const name = (s.name ?? "").toString().toLowerCase();
-          const code = (s.code ?? "").toString().toLowerCase();
-          const state = (s.state ?? "").toString().toLowerCase();
-          const stage = (s.stage ?? "").toString().toLowerCase();
+          const name = normalizeSearchText(s.name);
+          const code = normalizeSearchText(s.code);
+          const state = normalizeSearchText(s.state);
+          const stage = normalizeSearchText(s.stage);
           return (
             name.includes(q) ||
             code.includes(q) ||
